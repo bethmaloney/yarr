@@ -1,0 +1,94 @@
+{
+  "trace_id": "c0a1aafb0dce445caff3593323517dda",
+  "root_span_id": "77429c3f64f34708",
+  "session_id": "ca95341b-bc5d-4a54-b012-0466dcdfd89a",
+  "repo_path": "/mock/project",
+  "prompt": "Mock prompt: implement tasks and signal completion.",
+  "start_time": "2026-03-06T21:20:39.656199723Z",
+  "end_time": "2026-03-06T21:20:41.198438192Z",
+  "outcome": "completed",
+  "iterations": [
+    {
+      "trace_id": "c0a1aafb0dce445caff3593323517dda",
+      "span_id": "74aa8df0cb3f4754",
+      "parent_span_id": "77429c3f64f34708",
+      "operation_name": "ralph.iteration.1",
+      "start_time": "2026-03-06T21:20:39.656765493Z",
+      "end_time": "2026-03-06T21:20:39.965867627Z",
+      "duration_ms": 309,
+      "status": "OK",
+      "attributes": {
+        "iteration": 1,
+        "claude_session_id": "7dd0d736-7d35-493c-8353-e713e2575bc4",
+        "cost_usd": 0.002,
+        "num_turns": 1,
+        "api_duration_ms": 560,
+        "completion_signal_found": false,
+        "exit_code": 0,
+        "result_preview": "Working on task... iteration 1"
+      }
+    },
+    {
+      "trace_id": "c0a1aafb0dce445caff3593323517dda",
+      "span_id": "c55fe6f2af164c37",
+      "parent_span_id": "77429c3f64f34708",
+      "operation_name": "ralph.iteration.2",
+      "start_time": "2026-03-06T21:20:40.067228160Z",
+      "end_time": "2026-03-06T21:20:40.375432978Z",
+      "duration_ms": 308,
+      "status": "OK",
+      "attributes": {
+        "iteration": 2,
+        "claude_session_id": "2619fc0e-733b-4c8e-a8cf-f2c1b54c3cb5",
+        "cost_usd": 0.004,
+        "num_turns": 2,
+        "api_duration_ms": 1120,
+        "completion_signal_found": false,
+        "exit_code": 0,
+        "result_preview": "Working on task... iteration 2"
+      }
+    },
+    {
+      "trace_id": "c0a1aafb0dce445caff3593323517dda",
+      "span_id": "79bc92d859a2475e",
+      "parent_span_id": "77429c3f64f34708",
+      "operation_name": "ralph.iteration.3",
+      "start_time": "2026-03-06T21:20:40.476876282Z",
+      "end_time": "2026-03-06T21:20:40.786124565Z",
+      "duration_ms": 309,
+      "status": "OK",
+      "attributes": {
+        "iteration": 3,
+        "claude_session_id": "c5e998ee-e5f7-40ee-bf4b-cdacb4eda510",
+        "cost_usd": 0.006,
+        "num_turns": 3,
+        "api_duration_ms": 1680,
+        "completion_signal_found": false,
+        "exit_code": 0,
+        "result_preview": "Working on task... iteration 3"
+      }
+    },
+    {
+      "trace_id": "c0a1aafb0dce445caff3593323517dda",
+      "span_id": "0afbd951ea174503",
+      "parent_span_id": "77429c3f64f34708",
+      "operation_name": "ralph.iteration.4",
+      "start_time": "2026-03-06T21:20:40.888304666Z",
+      "end_time": "2026-03-06T21:20:41.198092742Z",
+      "duration_ms": 309,
+      "status": "OK",
+      "attributes": {
+        "iteration": 4,
+        "claude_session_id": "0d626e87-fd62-41ea-bbfe-062ab6b27ab5",
+        "cost_usd": 0.008,
+        "num_turns": 4,
+        "api_duration_ms": 2240,
+        "completion_signal_found": true,
+        "exit_code": 0,
+        "result_preview": "All tasks complete. <promise>COMPLETE</promise>"
+      }
+    }
+  ],
+  "total_cost_usd": 0.02,
+  "total_iterations": 4
+}

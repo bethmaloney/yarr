@@ -46,7 +46,8 @@ pub enum SessionState {
 }
 
 /// Events emitted during a session for UI consumption
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SessionEvent {
     /// Session has started
     SessionStarted { session_id: String },

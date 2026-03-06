@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Events emitted by `claude -p --output-format stream-json --verbose`
@@ -109,7 +109,7 @@ pub struct RateLimitInfo {
 
 // ── result (final) ───────────────────────────────────────────
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultEvent {
     pub subtype: Option<String>,
     pub is_error: bool,
