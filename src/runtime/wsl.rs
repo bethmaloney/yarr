@@ -1,9 +1,11 @@
 use anyhow::Result;
-use std::path::Path;
 use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
+use tokio::sync::mpsc;
 
-use super::{ProcessOutput, RuntimeProvider};
+use super::{ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider};
+use crate::output::StreamEvent;
 
 pub struct WslRuntime {
     claude_bin: String,
@@ -21,19 +23,28 @@ impl WslRuntime {
         self
     }
 
-    /// Convert a Windows-style path to a WSL path if needed
-    fn to_wsl_path(path: &Path) -> String {
-        let s = path.to_string_lossy();
-        if s.starts_with('/') {
-            return s.to_string();
+    /// Build the shell command string for the Claude invocation.
+    /// The prompt is piped via stdin, so it's not included in the command.
+    fn build_command(&self, invocation: &ClaudeInvocation) -> String {
+        let wsl_dir = to_wsl_path(&invocation.working_dir);
+
+        let mut parts = vec![
+            format!("cd {}", shell_escape(&wsl_dir)),
+            format!(
+                "&& {} -p --output-format stream-json --verbose",
+                shell_escape(&self.claude_bin)
+            ),
+        ];
+
+        if let Some(ref model) = invocation.model {
+            parts.push(format!("--model {}", shell_escape(model)));
         }
-        // Convert C:\foo\bar -> /mnt/c/foo/bar
-        if s.len() >= 3 && s.as_bytes()[1] == b':' {
-            let drive = s.as_bytes()[0].to_ascii_lowercase() as char;
-            let rest = &s[3..].replace('\\', "/");
-            return format!("/mnt/{drive}/{rest}");
+
+        for arg in &invocation.extra_args {
+            parts.push(shell_escape(arg));
         }
-        s.to_string()
+
+        parts.join(" ")
     }
 }
 
@@ -43,43 +54,83 @@ impl RuntimeProvider for WslRuntime {
         "wsl"
     }
 
-    async fn run_claude(
-        &self,
-        prompt: &str,
-        working_dir: &Path,
-        extra_args: &[String],
-    ) -> Result<ProcessOutput> {
-        let wsl_dir = Self::to_wsl_path(working_dir);
+    async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess> {
+        let cmd_str = self.build_command(invocation);
+        let prompt = invocation.prompt.clone();
         let start = std::time::Instant::now();
 
-        let mut claude_cmd = format!(
-            "cd {} && {} -p {} --output-format json",
-            shell_escape(&wsl_dir),
-            shell_escape(&self.claude_bin),
-            shell_escape(prompt),
-        );
-        for arg in extra_args {
-            claude_cmd.push(' ');
-            claude_cmd.push_str(&shell_escape(arg));
-        }
-
-        let output = Command::new("wsl")
-            .args(["-e", "bash", "-c", &claude_cmd])
+        let mut child = Command::new("wsl")
+            .args(["-e", "bash", "-c", &cmd_str])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
-            .spawn()?
-            .wait_with_output()
-            .await?;
+            .spawn()?;
 
-        let elapsed = start.elapsed();
+        // Pipe prompt via stdin, then close it
+        let mut stdin = child.stdin.take().expect("stdin was piped");
+        let stdin_task = tokio::spawn(async move {
+            let _ = stdin.write_all(prompt.as_bytes()).await;
+            let _ = stdin.shutdown().await;
+        });
 
-        Ok(ProcessOutput {
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-            exit_code: output.status.code().unwrap_or(-1),
-            wall_time_ms: elapsed.as_millis() as u64,
+        let stdout = child.stdout.take().expect("stdout was piped");
+        let stderr = child.stderr.take().expect("stderr was piped");
+
+        let (tx, rx) = mpsc::channel::<StreamEvent>(64);
+
+        // Spawn a task that reads stdout line-by-line and sends parsed events
+        let reader_task = tokio::spawn(async move {
+            let mut lines = BufReader::new(stdout).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let line = line.trim().to_string();
+                if line.is_empty() {
+                    continue;
+                }
+                match StreamEvent::parse_line(&line) {
+                    Ok(event) => {
+                        if tx.send(event).await.is_err() {
+                            break; // receiver dropped
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse stream-json line: {e}\n  line: {line}");
+                    }
+                }
+            }
+        });
+
+        // Spawn a task that waits for process exit
+        let completion = tokio::spawn(async move {
+            // Wait for stdin to finish writing
+            let _ = stdin_task.await;
+
+            // Collect stderr
+            let mut stderr_buf = String::new();
+            let mut stderr_reader = BufReader::new(stderr);
+            let mut stderr_line = String::new();
+            while let Ok(n) = stderr_reader.read_line(&mut stderr_line).await {
+                if n == 0 {
+                    break;
+                }
+                stderr_buf.push_str(&stderr_line);
+                stderr_line.clear();
+            }
+
+            let status = child.wait().await?;
+            let _ = reader_task.await;
+            let elapsed = start.elapsed();
+
+            Ok(ProcessExit {
+                exit_code: status.code().unwrap_or(-1),
+                wall_time_ms: elapsed.as_millis() as u64,
+                stderr: stderr_buf,
+            })
+        });
+
+        Ok(RunningProcess {
+            events: rx,
+            completion,
         })
     }
 
@@ -97,6 +148,21 @@ impl RuntimeProvider for WslRuntime {
         }
         Ok(())
     }
+}
+
+/// Convert a Windows-style path to a WSL path if needed
+fn to_wsl_path(path: &std::path::Path) -> String {
+    let s = path.to_string_lossy();
+    if s.starts_with('/') {
+        return s.to_string();
+    }
+    // Convert C:\foo\bar -> /mnt/c/foo/bar
+    if s.len() >= 3 && s.as_bytes()[1] == b':' {
+        let drive = s.as_bytes()[0].to_ascii_lowercase() as char;
+        let rest = &s[3..].replace('\\', "/");
+        return format!("/mnt/{drive}/{rest}");
+    }
+    s.to_string()
 }
 
 fn shell_escape(s: &str) -> String {

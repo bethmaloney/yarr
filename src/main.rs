@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use yarr::runtime::{MockRuntime, WslRuntime};
-use yarr::session::{SessionConfig, SessionRunner};
+use yarr::session::{SessionConfig, SessionEvent, SessionRunner};
 use yarr::trace::TraceCollector;
 
 #[tokio::main]
@@ -40,20 +40,28 @@ async fn run_mock_demo() -> anyhow::Result<()> {
         .to_string(),
         max_iterations: 10,
         completion_signal: "<promise>COMPLETE</promise>".to_string(),
+        model: None,
         extra_args: vec!["--allowedTools".to_string(), "Bash,Read,Write".to_string()],
         inter_iteration_delay_ms: 100,
     };
 
     let collector = TraceCollector::new("./traces");
 
-    let runner = SessionRunner::new(config, collector).on_iteration_complete(Box::new(
-        |iteration, output| {
+    let runner = SessionRunner::new(config, collector).on_event(Box::new(|event| match event {
+        SessionEvent::ToolUse {
+            iteration,
+            tool_name,
+        } => {
+            println!("  [callback] Iteration {iteration} using tool: {tool_name}");
+        }
+        SessionEvent::IterationComplete { iteration, result } => {
             println!(
                 "  [callback] Iteration {iteration} → session={}",
-                output.session_id.as_deref().unwrap_or("n/a")
+                result.session_id.as_deref().unwrap_or("n/a")
             );
-        },
-    ));
+        }
+        _ => {}
+    }));
 
     let trace = runner.run(&runtime).await?;
 
@@ -88,6 +96,7 @@ async fn run_wsl_demo() -> anyhow::Result<()> {
         .to_string(),
         max_iterations: 5,
         completion_signal: "<promise>COMPLETE</promise>".to_string(),
+        model: Some("opus".to_string()),
         extra_args: vec![
             "--allowedTools".to_string(),
             "Bash,Read,Write".to_string(),
@@ -98,14 +107,15 @@ async fn run_wsl_demo() -> anyhow::Result<()> {
 
     let collector = TraceCollector::new("./traces");
 
-    let runner = SessionRunner::new(config, collector).on_iteration_complete(Box::new(
-        |iteration, output| {
+    let runner = SessionRunner::new(config, collector).on_event(Box::new(|event| match event {
+        SessionEvent::IterationComplete { iteration, result } => {
             println!(
                 "  [callback] Iteration {iteration}: cost=${:.4}",
-                output.total_cost_usd.unwrap_or(0.0)
+                result.total_cost_usd.unwrap_or(0.0)
             );
-        },
-    ));
+        }
+        _ => {}
+    }));
 
     let trace = runner.run(&runtime).await?;
 

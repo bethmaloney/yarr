@@ -5,15 +5,33 @@ pub use mock::MockRuntime;
 pub use wsl::WslRuntime;
 
 use anyhow::Result;
-use std::path::Path;
+use tokio::sync::mpsc;
 
-/// Output captured from a single `claude -p` invocation
+use crate::output::StreamEvent;
+
+/// Configuration for a single `claude -p` invocation
 #[derive(Debug, Clone)]
-pub struct ProcessOutput {
-    pub stdout: String,
-    pub stderr: String,
+pub struct ClaudeInvocation {
+    pub prompt: String,
+    pub working_dir: std::path::PathBuf,
+    pub model: Option<String>,
+    pub extra_args: Vec<String>,
+}
+
+/// A handle to a running Claude process.
+/// Provides a channel of streaming events and a way to wait for completion.
+pub struct RunningProcess {
+    /// Receive stream-json events as they arrive
+    pub events: mpsc::Receiver<StreamEvent>,
+    /// Wait for the process to exit. Returns (exit_code, wall_time_ms).
+    pub completion: tokio::task::JoinHandle<Result<ProcessExit>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessExit {
     pub exit_code: i32,
     pub wall_time_ms: u64,
+    pub stderr: String,
 }
 
 /// Abstraction over execution environments.
@@ -23,13 +41,9 @@ pub trait RuntimeProvider: Send + Sync {
     /// Human-readable name for this runtime
     fn name(&self) -> &str;
 
-    /// Execute `claude -p` with the given prompt in the given working directory.
-    async fn run_claude(
-        &self,
-        prompt: &str,
-        working_dir: &Path,
-        extra_args: &[String],
-    ) -> Result<ProcessOutput>;
+    /// Spawn `claude -p` and return a handle for streaming events.
+    /// The prompt is piped via stdin to avoid argument length limits.
+    async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess>;
 
     /// Check if the runtime is available and claude is installed
     async fn health_check(&self) -> Result<()>;

@@ -1,39 +1,45 @@
 use anyhow::Result;
-use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::sync::mpsc;
 
-use super::{ProcessOutput, RuntimeProvider};
+use super::{ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider};
+use crate::output::*;
 
 pub struct MockRuntime {
-    responses: Vec<String>,
+    scenarios: Vec<MockScenario>,
     call_count: AtomicUsize,
 }
 
-impl MockRuntime {
-    pub fn new(responses: Vec<String>) -> Self {
-        assert!(!responses.is_empty(), "MockRuntime needs at least one response");
-        Self {
-            responses,
-            call_count: AtomicUsize::new(0),
-        }
-    }
+/// What a single mock invocation should emit
+struct MockScenario {
+    text: String,
+    is_error: bool,
+    num_turns: u32,
+    tool_uses: Vec<String>,
+}
 
+impl MockRuntime {
     /// Create a mock that simulates N working iterations then a completion
     pub fn completing_after(iterations: usize) -> Self {
-        let mut responses = Vec::new();
+        let mut scenarios = Vec::new();
         for i in 0..iterations {
-            responses.push(mock_json_response(
-                &format!("Working on task... iteration {}", i + 1),
-                false,
-                i as u32 + 1,
-            ));
+            scenarios.push(MockScenario {
+                text: format!("Working on task... iteration {}", i + 1),
+                is_error: false,
+                num_turns: i as u32 + 1,
+                tool_uses: vec!["Read".to_string(), "Edit".to_string()],
+            });
         }
-        responses.push(mock_json_response(
-            "All tasks complete. <promise>COMPLETE</promise>",
-            false,
-            iterations as u32 + 1,
-        ));
-        Self::new(responses)
+        scenarios.push(MockScenario {
+            text: "All tasks complete. <promise>COMPLETE</promise>".to_string(),
+            is_error: false,
+            num_turns: iterations as u32 + 1,
+            tool_uses: vec!["Read".to_string(), "Write".to_string()],
+        });
+        Self {
+            scenarios,
+            call_count: AtomicUsize::new(0),
+        }
     }
 }
 
@@ -43,47 +49,107 @@ impl RuntimeProvider for MockRuntime {
         "mock"
     }
 
-    async fn run_claude(
-        &self,
-        _prompt: &str,
-        _working_dir: &Path,
-        _extra_args: &[String],
-    ) -> Result<ProcessOutput> {
+    async fn spawn_claude(&self, _invocation: &ClaudeInvocation) -> Result<RunningProcess> {
         let idx = self.call_count.fetch_add(1, Ordering::SeqCst);
-        let response_idx = idx.min(self.responses.len() - 1);
+        let scenario = &self.scenarios[idx.min(self.scenarios.len() - 1)];
 
-        // Simulate some processing time
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let cost = 0.002 * scenario.num_turns as f64;
+        let duration = 800 * scenario.num_turns as u64;
 
-        Ok(ProcessOutput {
-            stdout: self.responses[response_idx].clone(),
-            stderr: String::new(),
-            exit_code: 0,
-            wall_time_ms: 200,
+        // Build the events this mock invocation will emit
+        let mut events: Vec<StreamEvent> = Vec::new();
+
+        // 1. system/init
+        events.push(StreamEvent::System(SystemEvent {
+            subtype: Some("init".to_string()),
+            session_id: Some(session_id.clone()),
+            cwd: Some("/mock/repo".to_string()),
+            model: Some("mock-model".to_string()),
+            tools: Some(vec!["Read".to_string(), "Write".to_string(), "Bash".to_string()]),
+        }));
+
+        // 2. assistant tool_use events
+        for tool in &scenario.tool_uses {
+            events.push(StreamEvent::Assistant(AssistantEvent {
+                message: AssistantMessage {
+                    id: Some(format!("msg_{}", uuid::Uuid::new_v4())),
+                    role: Some("assistant".to_string()),
+                    model: Some("mock-model".to_string()),
+                    content: vec![ContentBlock::ToolUse {
+                        id: format!("toolu_{}", uuid::Uuid::new_v4()),
+                        name: tool.clone(),
+                        input: serde_json::json!({}),
+                    }],
+                    stop_reason: None,
+                    usage: None,
+                },
+                session_id: Some(session_id.clone()),
+            }));
+        }
+
+        // 3. assistant text response
+        events.push(StreamEvent::Assistant(AssistantEvent {
+            message: AssistantMessage {
+                id: Some(format!("msg_{}", uuid::Uuid::new_v4())),
+                role: Some("assistant".to_string()),
+                model: Some("mock-model".to_string()),
+                content: vec![ContentBlock::Text {
+                    text: scenario.text.clone(),
+                }],
+                stop_reason: Some("end_turn".to_string()),
+                usage: Some(Usage {
+                    input_tokens: Some(100),
+                    output_tokens: Some(50),
+                    cache_read_input_tokens: None,
+                    cache_creation_input_tokens: None,
+                }),
+            },
+            session_id: Some(session_id.clone()),
+        }));
+
+        // 4. result
+        let subtype = if scenario.is_error { "error" } else { "success" };
+        events.push(StreamEvent::Result(ResultEvent {
+            subtype: Some(subtype.to_string()),
+            is_error: scenario.is_error,
+            duration_ms: Some(duration),
+            duration_api_ms: Some((duration as f64 * 0.7) as u64),
+            num_turns: Some(scenario.num_turns),
+            result: Some(scenario.text.clone()),
+            session_id: Some(session_id),
+            total_cost_usd: Some(cost),
+            stop_reason: Some("end_turn".to_string()),
+            usage: None,
+            model_usage: None,
+        }));
+
+        let (tx, rx) = mpsc::channel(64);
+
+        let completion = tokio::spawn(async move {
+            // Emit events with small delays to simulate streaming
+            for event in events {
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                if tx.send(event).await.is_err() {
+                    break;
+                }
+            }
+            // Small delay to simulate process exit
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            Ok(ProcessExit {
+                exit_code: 0,
+                wall_time_ms: 200,
+                stderr: String::new(),
+            })
+        });
+
+        Ok(RunningProcess {
+            events: rx,
+            completion,
         })
     }
 
     async fn health_check(&self) -> Result<()> {
         Ok(())
     }
-}
-
-fn mock_json_response(result_text: &str, is_error: bool, num_turns: u32) -> String {
-    let subtype = if is_error { "error" } else { "success" };
-    let cost = 0.002 * num_turns as f64;
-    let duration = 800 * num_turns as u64;
-    let session_id = uuid::Uuid::new_v4();
-
-    serde_json::json!({
-        "type": "result",
-        "subtype": subtype,
-        "total_cost_usd": cost,
-        "is_error": is_error,
-        "duration_ms": duration,
-        "duration_api_ms": (duration as f64 * 0.7) as u64,
-        "num_turns": num_turns,
-        "result": result_text,
-        "session_id": session_id.to_string()
-    })
-    .to_string()
 }

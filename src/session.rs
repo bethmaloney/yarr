@@ -2,8 +2,8 @@ use anyhow::Result;
 use chrono::Utc;
 use std::path::PathBuf;
 
-use crate::output::ClaudeOutput;
-use crate::runtime::RuntimeProvider;
+use crate::output::{ContentBlock, ResultEvent, StreamEvent};
+use crate::runtime::{ClaudeInvocation, RuntimeProvider};
 use crate::trace::{self, SessionOutcome, SpanAttributes, TraceCollector};
 
 /// Configuration for a Ralph loop session
@@ -13,6 +13,7 @@ pub struct SessionConfig {
     pub prompt: String,
     pub max_iterations: u32,
     pub completion_signal: String,
+    pub model: Option<String>,
     pub extra_args: Vec<String>,
     /// Delay between iterations (rate limit protection)
     pub inter_iteration_delay_ms: u64,
@@ -25,6 +26,7 @@ impl Default for SessionConfig {
             prompt: String::new(),
             max_iterations: 20,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
             extra_args: Vec::new(),
             inter_iteration_delay_ms: 1000,
         }
@@ -43,14 +45,31 @@ pub enum SessionState {
     Cancelled { iteration: u32 },
 }
 
-/// Callback for receiving iteration updates (Tauri IPC hookpoint)
-pub type OnIterationComplete = Box<dyn Fn(u32, &ClaudeOutput) + Send + Sync>;
+/// Events emitted during a session for UI consumption
+#[derive(Debug, Clone)]
+pub enum SessionEvent {
+    /// Session has started
+    SessionStarted { session_id: String },
+    /// A new iteration is beginning
+    IterationStarted { iteration: u32 },
+    /// Claude is using a tool
+    ToolUse { iteration: u32, tool_name: String },
+    /// Claude produced text output
+    AssistantText { iteration: u32, text: String },
+    /// An iteration completed with its result
+    IterationComplete { iteration: u32, result: ResultEvent },
+    /// The entire session finished
+    SessionComplete { outcome: SessionOutcome },
+}
+
+/// Callback for receiving session events (Tauri IPC hookpoint)
+pub type OnSessionEvent = Box<dyn Fn(&SessionEvent) + Send + Sync>;
 
 /// Runs a Ralph loop session end-to-end
 pub struct SessionRunner {
     config: SessionConfig,
     collector: TraceCollector,
-    on_iteration: Option<OnIterationComplete>,
+    on_event: Option<OnSessionEvent>,
 }
 
 impl SessionRunner {
@@ -58,13 +77,28 @@ impl SessionRunner {
         Self {
             config,
             collector,
-            on_iteration: None,
+            on_event: None,
         }
     }
 
-    pub fn on_iteration_complete(mut self, cb: OnIterationComplete) -> Self {
-        self.on_iteration = Some(cb);
+    pub fn on_event(mut self, cb: OnSessionEvent) -> Self {
+        self.on_event = Some(cb);
         self
+    }
+
+    fn emit(&self, event: SessionEvent) {
+        if let Some(ref cb) = self.on_event {
+            cb(&event);
+        }
+    }
+
+    fn build_invocation(&self) -> ClaudeInvocation {
+        ClaudeInvocation {
+            prompt: self.config.prompt.clone(),
+            working_dir: self.config.repo_path.clone(),
+            model: self.config.model.clone(),
+            extra_args: self.config.extra_args.clone(),
+        }
     }
 
     /// Execute the Ralph loop. Returns the finalized trace.
@@ -86,68 +120,36 @@ impl SessionRunner {
             "[harness] Completion signal: {}",
             self.config.completion_signal
         );
+        if let Some(ref model) = self.config.model {
+            println!("[harness] Model: {model}");
+        }
         println!();
 
+        self.emit(SessionEvent::SessionStarted {
+            session_id: trace.session_id.clone(),
+        });
+
         let mut state = SessionState::Idle;
+        let invocation = self.build_invocation();
 
         for iteration in 1..=self.config.max_iterations {
-            state = SessionState::Running { iteration };
+            let _ = SessionState::Running { iteration };
             println!(
                 "[harness] === Iteration {}/{} ===",
                 iteration, self.config.max_iterations
             );
 
+            self.emit(SessionEvent::IterationStarted { iteration });
+
             let iter_start = Utc::now();
 
-            let process_output = runtime
-                .run_claude(
-                    &self.config.prompt,
-                    &self.config.repo_path,
-                    &self.config.extra_args,
-                )
-                .await;
-
-            let iter_end = Utc::now();
-
-            match process_output {
-                Ok(proc) => {
-                    let claude_output = match ClaudeOutput::from_json(&proc.stdout) {
-                        Ok(parsed) => parsed,
-                        Err(e) => {
-                            eprintln!(
-                                "[harness] Failed to parse JSON output: {e}\n  stdout: {}",
-                                &proc.stdout[..proc.stdout.len().min(200)]
-                            );
-
-                            self.collector.record_iteration(
-                                &mut trace,
-                                iter_start,
-                                iter_end,
-                                SpanAttributes {
-                                    iteration,
-                                    claude_session_id: None,
-                                    cost_usd: 0.0,
-                                    num_turns: None,
-                                    api_duration_ms: None,
-                                    completion_signal_found: false,
-                                    exit_code: proc.exit_code,
-                                    result_preview: format!("JSON parse error: {e}"),
-                                },
-                                true,
-                            );
-
-                            state = SessionState::Failed {
-                                iteration,
-                                error: format!("JSON parse error: {e}"),
-                            };
-                            break;
-                        }
-                    };
-
+            match self.run_iteration(runtime, &invocation, iteration).await {
+                Ok(result) => {
+                    let iter_end = Utc::now();
                     let has_signal =
-                        claude_output.has_completion_signal(&self.config.completion_signal);
-                    let is_error = claude_output.is_error || proc.exit_code != 0;
-                    let result_text = claude_output.result_text();
+                        result.has_completion_signal(&self.config.completion_signal);
+                    let is_error = result.is_error;
+                    let result_text = result.result_text();
 
                     self.collector.record_iteration(
                         &mut trace,
@@ -155,26 +157,26 @@ impl SessionRunner {
                         iter_end,
                         SpanAttributes {
                             iteration,
-                            claude_session_id: claude_output.session_id.clone(),
-                            cost_usd: claude_output.total_cost_usd.unwrap_or(0.0),
-                            num_turns: claude_output.num_turns,
-                            api_duration_ms: claude_output.duration_api_ms,
+                            claude_session_id: result.session_id.clone(),
+                            cost_usd: result.total_cost_usd.unwrap_or(0.0),
+                            num_turns: result.num_turns,
+                            api_duration_ms: result.duration_api_ms,
                             completion_signal_found: has_signal,
-                            exit_code: proc.exit_code,
+                            exit_code: 0,
                             result_preview: result_text[..result_text.len().min(500)].to_string(),
                         },
                         is_error,
                     );
 
-                    if let Some(ref cb) = self.on_iteration {
-                        cb(iteration, &claude_output);
-                    }
+                    self.emit(SessionEvent::IterationComplete {
+                        iteration,
+                        result: result.clone(),
+                    });
 
                     println!(
-                        "[harness] Iteration {iteration} complete: cost=${:.4}, turns={}, signal={}",
-                        claude_output.total_cost_usd.unwrap_or(0.0),
-                        claude_output.num_turns.unwrap_or(0),
-                        has_signal,
+                        "[harness] Iteration {iteration} complete: cost=${:.4}, turns={}, signal={has_signal}",
+                        result.total_cost_usd.unwrap_or(0.0),
+                        result.num_turns.unwrap_or(0),
                     );
 
                     state = SessionState::Evaluating { iteration };
@@ -204,6 +206,7 @@ impl SessionRunner {
                     }
                 }
                 Err(e) => {
+                    let iter_end = Utc::now();
                     eprintln!("[harness] Process error on iteration {iteration}: {e}");
 
                     self.collector.record_iteration(
@@ -250,11 +253,92 @@ impl SessionRunner {
             _ => SessionOutcome::Running,
         };
 
+        let outcome = trace.outcome.clone();
+        self.emit(SessionEvent::SessionComplete { outcome });
+
         let trace_path = self.collector.finalize(&mut trace).await?;
         println!("\n[harness] Trace saved to: {}", trace_path.display());
 
         trace::print_trace_summary(&trace);
 
         Ok(trace)
+    }
+
+    /// Run a single iteration: spawn Claude, consume streaming events, return the final result.
+    async fn run_iteration(
+        &self,
+        runtime: &dyn RuntimeProvider,
+        invocation: &ClaudeInvocation,
+        iteration: u32,
+    ) -> Result<ResultEvent> {
+        let mut process = runtime.spawn_claude(invocation).await?;
+        let mut result_event: Option<ResultEvent> = None;
+
+        // Consume streaming events
+        while let Some(event) = process.events.recv().await {
+            match &event {
+                StreamEvent::System(sys) => {
+                    if let Some(ref model) = sys.model {
+                        tracing::debug!("Iteration {iteration}: model={model}");
+                    }
+                }
+                StreamEvent::Assistant(assistant) => {
+                    for block in &assistant.message.content {
+                        match block {
+                            ContentBlock::ToolUse { name, .. } => {
+                                println!("  [{iteration}] tool: {name}");
+                                self.emit(SessionEvent::ToolUse {
+                                    iteration,
+                                    tool_name: name.clone(),
+                                });
+                            }
+                            ContentBlock::Text { text } => {
+                                let preview = if text.len() > 100 {
+                                    format!("{}...", &text[..100])
+                                } else {
+                                    text.clone()
+                                };
+                                println!("  [{iteration}] text: {preview}");
+                                self.emit(SessionEvent::AssistantText {
+                                    iteration,
+                                    text: text.clone(),
+                                });
+                            }
+                            ContentBlock::Unknown => {}
+                        }
+                    }
+                }
+                StreamEvent::RateLimit(rl) => {
+                    if let Some(ref info) = rl.rate_limit_info {
+                        tracing::debug!(
+                            "Rate limit: status={:?} type={:?}",
+                            info.status,
+                            info.rate_limit_type
+                        );
+                    }
+                }
+                StreamEvent::Result(r) => {
+                    result_event = Some(r.clone());
+                }
+                StreamEvent::User(_) => {
+                    // Tool results flowing back — not interesting for display
+                }
+            }
+        }
+
+        // Wait for process to exit
+        let exit = process.completion.await??;
+
+        if exit.exit_code != 0 && result_event.is_none() {
+            anyhow::bail!(
+                "Claude process exited with code {} (stderr: {})",
+                exit.exit_code,
+                exit.stderr.trim()
+            );
+        }
+
+        result_event.ok_or_else(|| {
+            anyhow::anyhow!("Claude process exited without emitting a result event")
+        })
     }
 }
