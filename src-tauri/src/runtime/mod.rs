@@ -1,6 +1,8 @@
+mod local;
 mod mock;
 mod wsl;
 
+pub use local::LocalRuntime;
 pub use mock::MockRuntime;
 pub use wsl::WslRuntime;
 

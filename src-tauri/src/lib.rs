@@ -6,7 +6,7 @@ pub mod trace;
 
 use std::path::{Path, PathBuf};
 
-use runtime::{MockRuntime, WslRuntime};
+use runtime::{LocalRuntime, MockRuntime};
 use session::{SessionConfig, SessionRunner};
 use tauri::Emitter;
 use trace::TraceCollector;
@@ -60,7 +60,7 @@ async fn run_session(
 
     let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
 
-    let runtime = WslRuntime::new();
+    let runtime = LocalRuntime::new();
 
     let config = SessionConfig {
         repo_path: repo,
