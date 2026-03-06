@@ -140,9 +140,9 @@ Create a small TypeScript module that wraps the store plugin for loading/saving 
 - Store file name: `recents.json`
 
 **Checklist:**
-- [ ] Create recents.ts with load/save functions
-- [ ] Handle missing store gracefully (empty arrays)
-- [ ] Verify: `cd ui && npx tsc --noEmit`
+- [x] Create recents.ts with load/save functions
+- [x] Handle missing store gracefully (empty arrays)
+- [x] Verify: `cd ui && npx tsc --noEmit`
 
 ---
 
@@ -181,5 +181,5 @@ Wire up the dialog pickers and recents dropdowns into the existing form.
 |------|-------------|--------|
 | 1 | Add Tauri dialog and store plugins (Rust side) | Done |
 | 2 | Add JS plugin packages | Done |
-| 3 | Add recents store helper | Not Started |
+| 3 | Add recents store helper | Done |
 | 4 | Update App.svelte with Browse buttons and recents dropdowns | Not Started |
