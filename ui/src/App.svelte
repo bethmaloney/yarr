@@ -21,7 +21,7 @@
   };
 
   let repoPath = $state("");
-  let promptFile = $state("");
+  let planFile = $state("");
   let events = $state<SessionEvent[]>([]);
   let trace = $state<SessionTrace | null>(null);
   let running = $state(false);
@@ -46,7 +46,7 @@
     try {
       trace = await invoke<SessionTrace>("run_session", {
         repoPath: repoPath,
-        promptFile: promptFile,
+        planFile: planFile,
       });
     } catch (e) {
       error = String(e);
@@ -100,11 +100,11 @@
       <input type="text" bind:value={repoPath} placeholder="/home/user/repos/my-project" disabled={running} />
     </label>
     <label>
-      Prompt file
-      <input type="text" bind:value={promptFile} placeholder="scripts/IMPLEMENTATION_PROMPT.md" disabled={running} />
+      Plan file
+      <input type="text" bind:value={planFile} placeholder="docs/plans/my-feature-design.md" disabled={running} />
     </label>
     <div class="actions">
-      <button type="submit" disabled={running || !repoPath || !promptFile}>
+      <button type="submit" disabled={running || !repoPath || !planFile}>
         {running ? "Running..." : "Run"}
       </button>
       <button type="button" onclick={runMockSession} disabled={running} class="secondary">

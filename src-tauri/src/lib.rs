@@ -1,4 +1,5 @@
 pub mod output;
+pub mod prompt;
 pub mod runtime;
 pub mod session;
 pub mod trace;
@@ -38,13 +39,13 @@ async fn run_mock_session(app: tauri::AppHandle) -> Result<trace::SessionTrace, 
 async fn run_session(
     app: tauri::AppHandle,
     repo_path: String,
-    prompt_file: String,
+    plan_file: String,
 ) -> Result<trace::SessionTrace, String> {
     let repo = PathBuf::from(&repo_path);
 
-    // Resolve prompt file: if relative, join with repo_path
-    let prompt_path = {
-        let p = Path::new(&prompt_file);
+    // Resolve plan file to absolute path for the @file reference
+    let plan_path = {
+        let p = Path::new(&plan_file);
         if p.is_relative() {
             repo.join(p)
         } else {
@@ -52,9 +53,12 @@ async fn run_session(
         }
     };
 
-    let prompt = tokio::fs::read_to_string(&prompt_path)
-        .await
-        .map_err(|e| format!("Failed to read prompt file {}: {e}", prompt_path.display()))?;
+    // Verify plan file exists before building prompt
+    if !plan_path.exists() {
+        return Err(format!("Plan file not found: {}", plan_path.display()));
+    }
+
+    let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
 
     let runtime = WslRuntime::new();
 
