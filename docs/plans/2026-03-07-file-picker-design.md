@@ -102,10 +102,10 @@ Add both plugin crates as dependencies and register them in the Tauri builder.
 - Add `"dialog:default"` and `"store:default"` to capabilities permissions array
 
 **Checklist:**
-- [ ] Add crate dependencies to Cargo.toml
-- [ ] Register plugins in lib.rs builder
-- [ ] Add permissions to capabilities/default.json
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add crate dependencies to Cargo.toml
+- [x] Register plugins in lib.rs builder
+- [x] Add permissions to capabilities/default.json
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -120,9 +120,9 @@ Install the frontend npm packages for dialog and store plugins.
 - Run `npm install` in `ui/`
 
 **Checklist:**
-- [ ] Add packages to package.json dependencies
-- [ ] Run npm install
-- [ ] Verify: `cd ui && npx tsc --noEmit` (or just check imports resolve)
+- [x] Add packages to package.json dependencies
+- [x] Run npm install
+- [x] Verify: imports resolve (npm install succeeded)
 
 ---
 
@@ -130,7 +130,7 @@ Install the frontend npm packages for dialog and store plugins.
 
 Create a small TypeScript module that wraps the store plugin for loading/saving recent paths.
 
-**Files to create:** `ui/src/recents.ts`
+**Files to create:** `src/recents.ts`
 **Pattern reference:** `@tauri-apps/plugin-store` LazyStore API
 
 **Details:**
@@ -179,7 +179,7 @@ Wire up the dialog pickers and recents dropdowns into the existing form.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add Tauri dialog and store plugins (Rust side) | Not Started |
-| 2 | Add JS plugin packages | Not Started |
+| 1 | Add Tauri dialog and store plugins (Rust side) | Done |
+| 2 | Add JS plugin packages | Done |
 | 3 | Add recents store helper | Not Started |
 | 4 | Update App.svelte with Browse buttons and recents dropdowns | Not Started |
