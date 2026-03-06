@@ -1,7 +1,9 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
+  import { loadRecents, saveRecent } from "./recents";
 
   type SessionEvent = {
     kind: string;
@@ -26,10 +28,17 @@
   let trace = $state<SessionTrace | null>(null);
   let running = $state(false);
   let error = $state<string | null>(null);
+  let recentRepoPaths = $state<string[]>([]);
+  let recentPromptFiles = $state<string[]>([]);
 
   onMount(() => {
     const unlisten = listen<SessionEvent>("session-event", (e) => {
       events.push(e.payload);
+    });
+
+    loadRecents().then((r) => {
+      recentRepoPaths = r.repoPaths;
+      recentPromptFiles = r.promptFiles;
     });
 
     return () => {
@@ -37,7 +46,36 @@
     };
   });
 
+  async function browseRepo() {
+    try {
+      const result = await open({ directory: true, title: "Select repository" });
+      if (result !== null) {
+        repoPath = result;
+      }
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function browsePrompt() {
+    try {
+      const result = await open({
+        filters: [
+          { name: "Markdown", extensions: ["md"] },
+          { name: "All", extensions: ["*"] },
+        ],
+        title: "Select prompt file",
+      });
+      if (result !== null) {
+        planFile = result;
+      }
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   async function runSession() {
+    if (!repoPath || !planFile) return;
     events = [];
     trace = null;
     error = null;
@@ -48,6 +86,11 @@
         repoPath: repoPath,
         planFile: planFile,
       });
+      await saveRecent("repoPaths", repoPath);
+      await saveRecent("promptFiles", planFile);
+      const recents = await loadRecents();
+      recentRepoPaths = recents.repoPaths;
+      recentPromptFiles = recents.promptFiles;
     } catch (e) {
       error = String(e);
     } finally {
@@ -97,11 +140,47 @@
   <form onsubmit={e => { e.preventDefault(); runSession(); }} class="session-form">
     <label>
       Repo path
-      <input type="text" bind:value={repoPath} placeholder="/home/user/repos/my-project" disabled={running} />
+      <div class="input-row">
+        {#if recentRepoPaths.length > 0}
+          <select
+            disabled={running}
+            onchange={(e) => {
+              const val = (e.target as HTMLSelectElement).value;
+              if (val) repoPath = val;
+              (e.target as HTMLSelectElement).value = "";
+            }}
+          >
+            <option value="">Recents</option>
+            {#each recentRepoPaths as p}
+              <option value={p}>{p}</option>
+            {/each}
+          </select>
+        {/if}
+        <input type="text" bind:value={repoPath} placeholder="/home/user/repos/my-project" disabled={running} />
+        <button type="button" class="secondary" onclick={browseRepo} disabled={running}>Browse</button>
+      </div>
     </label>
     <label>
       Plan file
-      <input type="text" bind:value={planFile} placeholder="docs/plans/my-feature-design.md" disabled={running} />
+      <div class="input-row">
+        {#if recentPromptFiles.length > 0}
+          <select
+            disabled={running}
+            onchange={(e) => {
+              const val = (e.target as HTMLSelectElement).value;
+              if (val) planFile = val;
+              (e.target as HTMLSelectElement).value = "";
+            }}
+          >
+            <option value="">Recents</option>
+            {#each recentPromptFiles as p}
+              <option value={p}>{p}</option>
+            {/each}
+          </select>
+        {/if}
+        <input type="text" bind:value={planFile} placeholder="docs/plans/my-feature-design.md" disabled={running} />
+        <button type="button" class="secondary" onclick={browsePrompt} disabled={running}>Browse</button>
+      </div>
     </label>
     <div class="actions">
       <button type="submit" disabled={running || !repoPath || !planFile}>
@@ -187,6 +266,30 @@
     gap: 0.25rem;
     font-size: 0.85rem;
     color: #888;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .input-row input {
+    flex: 1;
+  }
+
+  select {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.9rem;
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+
+  select:disabled {
+    opacity: 0.5;
   }
 
   input {

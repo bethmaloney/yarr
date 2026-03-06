@@ -165,12 +165,12 @@ Wire up the dialog pickers and recents dropdowns into the existing form.
 - Style: Browse button matches secondary button style; dropdown styled to match dark theme
 
 **Checklist:**
-- [ ] Add dialog imports and browse functions
-- [ ] Add recents state and load on mount
-- [ ] Add Browse buttons to both input rows
-- [ ] Add recents dropdowns (conditional on non-empty)
-- [ ] Save recents on successful run
-- [ ] Style new elements to match existing theme
+- [x] Add dialog imports and browse functions
+- [x] Add recents state and load on mount
+- [x] Add Browse buttons to both input rows
+- [x] Add recents dropdowns (conditional on non-empty)
+- [x] Save recents on successful run
+- [x] Style new elements to match existing theme
 - [ ] Verify: manual test with `cd src-tauri && cargo tauri dev`
 
 ---
@@ -182,4 +182,4 @@ Wire up the dialog pickers and recents dropdowns into the existing form.
 | 1 | Add Tauri dialog and store plugins (Rust side) | Done |
 | 2 | Add JS plugin packages | Done |
 | 3 | Add recents store helper | Done |
-| 4 | Update App.svelte with Browse buttons and recents dropdowns | Not Started |
+| 4 | Update App.svelte with Browse buttons and recents dropdowns | In Progress (manual test remaining) |
