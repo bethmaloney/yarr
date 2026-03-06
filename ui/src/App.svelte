@@ -20,6 +20,8 @@
     total_cost_usd: number;
   };
 
+  let repoPath = $state("");
+  let promptFile = $state("");
   let events = $state<SessionEvent[]>([]);
   let trace = $state<SessionTrace | null>(null);
   let running = $state(false);
@@ -34,6 +36,24 @@
       unlisten.then((fn) => fn());
     };
   });
+
+  async function runSession() {
+    events = [];
+    trace = null;
+    error = null;
+    running = true;
+
+    try {
+      trace = await invoke<SessionTrace>("run_session", {
+        repoPath: repoPath,
+        promptFile: promptFile,
+      });
+    } catch (e) {
+      error = String(e);
+    } finally {
+      running = false;
+    }
+  }
 
   async function runMockSession() {
     events = [];
@@ -74,9 +94,24 @@
   <h1>Yarr</h1>
   <p class="subtitle">Claude Orchestrator</p>
 
-  <button onclick={runMockSession} disabled={running}>
-    {running ? "Running..." : "Run Mock Session"}
-  </button>
+  <form onsubmit={e => { e.preventDefault(); runSession(); }} class="session-form">
+    <label>
+      Repo path
+      <input type="text" bind:value={repoPath} placeholder="/home/user/repos/my-project" disabled={running} />
+    </label>
+    <label>
+      Prompt file
+      <input type="text" bind:value={promptFile} placeholder="scripts/IMPLEMENTATION_PROMPT.md" disabled={running} />
+    </label>
+    <div class="actions">
+      <button type="submit" disabled={running || !repoPath || !promptFile}>
+        {running ? "Running..." : "Run"}
+      </button>
+      <button type="button" onclick={runMockSession} disabled={running} class="secondary">
+        Mock
+      </button>
+    </div>
+  </form>
 
   {#if events.length > 0}
     <section class="events">
@@ -139,8 +174,47 @@
     font-size: 0.9rem;
   }
 
-  button {
+  .session-form {
     margin-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    color: #888;
+  }
+
+  input {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.9rem;
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+
+  input:disabled {
+    opacity: 0.5;
+  }
+
+  input:focus {
+    outline: none;
+    border-color: #e8d44d;
+  }
+
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+
+  button {
     padding: 0.6rem 1.5rem;
     font-size: 1rem;
     background: #e8d44d;
@@ -158,6 +232,17 @@
 
   button:hover:not(:disabled) {
     background: #f0e060;
+  }
+
+  button.secondary {
+    background: #333;
+    color: #888;
+    font-weight: 400;
+  }
+
+  button.secondary:hover:not(:disabled) {
+    background: #444;
+    color: #ccc;
   }
 
   section {

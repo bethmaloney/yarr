@@ -108,5 +108,5 @@ Replace the mock session button with a form that has repo path and prompt file i
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add `run_session` Tauri command | Not Started |
-| 2 | Update Svelte UI with form inputs | Not Started |
+| 1 | Add `run_session` Tauri command | Done |
+| 2 | Update Svelte UI with form inputs | Done |
