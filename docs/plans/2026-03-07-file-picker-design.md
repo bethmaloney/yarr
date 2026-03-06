@@ -171,7 +171,7 @@ Wire up the dialog pickers and recents dropdowns into the existing form.
 - [x] Add recents dropdowns (conditional on non-empty)
 - [x] Save recents on successful run
 - [x] Style new elements to match existing theme
-- [ ] Verify: manual test with `cd src-tauri && cargo tauri dev`
+- [x] Verify: manual test with `cd src-tauri && cargo tauri dev`
 
 ---
 
@@ -182,4 +182,4 @@ Wire up the dialog pickers and recents dropdowns into the existing form.
 | 1 | Add Tauri dialog and store plugins (Rust side) | Done |
 | 2 | Add JS plugin packages | Done |
 | 3 | Add recents store helper | Done |
-| 4 | Update App.svelte with Browse buttons and recents dropdowns | In Progress (manual test remaining) |
+| 4 | Update App.svelte with Browse buttons and recents dropdowns | Done |
