@@ -3,6 +3,7 @@ export type SessionEvent = {
   session_id?: string;
   iteration?: number;
   tool_name?: string;
+  tool_input?: Record<string, unknown>;
   text?: string;
   result?: Record<string, unknown>;
   outcome?: string;

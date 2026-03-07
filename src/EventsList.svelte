@@ -20,6 +20,26 @@
     }
   }
 
+  function toolSummary(ev: SessionEvent): string {
+    const name = ev.tool_name ?? "unknown";
+    const input = ev.tool_input;
+    if (!input) return name;
+    switch (name) {
+      case "Bash":
+        return input.command ? `${name}: ${input.command}` : name;
+      case "Read":
+      case "Write":
+      case "Edit":
+      case "MultiEdit":
+        return input.file_path ? `${name}: ${input.file_path}` : name;
+      case "Grep":
+      case "Glob":
+        return input.pattern ? `${name}: ${input.pattern}` : name;
+      default:
+        return name;
+    }
+  }
+
   function eventLabel(ev: SessionEvent): string {
     switch (ev.kind) {
       case "session_started":
@@ -27,7 +47,7 @@
       case "iteration_started":
         return `Iteration ${ev.iteration} started`;
       case "tool_use":
-        return `[${ev.iteration}] tool: ${ev.tool_name}`;
+        return `[${ev.iteration}] ${toolSummary(ev)}`;
       case "assistant_text":
         return `[${ev.iteration}] ${ev.text}`;
       case "iteration_complete":
@@ -89,6 +109,9 @@
             <span class="event-text">{eventLabel(ev)}</span>
             <span class="event-time">{formatTime(ev._ts)}</span>
           </button>
+          {#if expandedEvents.has(i) && ev.kind === "tool_use" && ev.tool_input}
+            <pre class="tool-input-detail">{JSON.stringify(ev.tool_input, null, 2)}</pre>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -246,6 +269,20 @@
 
   .event.iteration_complete {
     color: #34d399;
+  }
+
+  .tool-input-detail {
+    margin: 0 0.75rem 0.5rem 2.2rem;
+    padding: 0.5rem 0.75rem;
+    background: #1a1a35;
+    border: 1px solid #2a2a3e;
+    border-radius: 4px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.78rem;
+    color: #9ca3af;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
   }
 
   .event.session_complete {

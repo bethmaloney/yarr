@@ -753,6 +753,7 @@ mod tests {
             SessionEvent::ToolUse {
                 iteration: 1,
                 tool_name: "Bash".to_string(),
+                tool_input: Some(serde_json::json!({"command": "npm test"})),
             },
             SessionEvent::AssistantText {
                 iteration: 1,

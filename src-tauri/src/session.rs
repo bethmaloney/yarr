@@ -58,7 +58,11 @@ pub enum SessionEvent {
     /// A new iteration is beginning
     IterationStarted { iteration: u32 },
     /// Claude is using a tool
-    ToolUse { iteration: u32, tool_name: String },
+    ToolUse {
+        iteration: u32,
+        tool_name: String,
+        tool_input: Option<serde_json::Value>,
+    },
     /// Claude produced text output
     AssistantText { iteration: u32, text: String },
     /// An iteration completed with its result
@@ -332,11 +336,12 @@ impl SessionRunner {
                         StreamEvent::Assistant(assistant) => {
                             for block in &assistant.message.content {
                                 match block {
-                                    ContentBlock::ToolUse { name, .. } => {
+                                    ContentBlock::ToolUse { name, input, .. } => {
                                         println!("  [{iteration}] tool: {name}");
                                         self.emit(SessionEvent::ToolUse {
                                             iteration,
                                             tool_name: name.clone(),
+                                            tool_input: Some(input.clone()),
                                         });
                                     }
                                     ContentBlock::Text { text } => {
