@@ -16,6 +16,8 @@ pub struct SessionConfig {
     pub completion_signal: String,
     pub model: Option<String>,
     pub extra_args: Vec<String>,
+    /// Plan file path (if any)
+    pub plan_file: Option<String>,
     /// Delay between iterations (rate limit protection)
     pub inter_iteration_delay_ms: u64,
 }
@@ -29,6 +31,7 @@ impl Default for SessionConfig {
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
             extra_args: Vec::new(),
+            plan_file: None,
             inter_iteration_delay_ms: 1000,
         }
     }
@@ -47,7 +50,7 @@ pub enum SessionState {
 }
 
 /// Events emitted during a session for UI consumption
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SessionEvent {
     /// Session has started
@@ -113,7 +116,7 @@ impl SessionRunner {
         runtime.health_check().await?;
 
         let repo_str = self.config.repo_path.to_string_lossy().to_string();
-        let mut trace = self.collector.start_session(&repo_str, &self.config.prompt);
+        let mut trace = self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref());
 
         println!(
             "[harness] Starting Ralph loop on '{}' (max {} iterations)",

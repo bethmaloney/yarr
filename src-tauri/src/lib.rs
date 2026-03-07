@@ -43,6 +43,7 @@ async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trac
         completion_signal: "<promise>COMPLETE</promise>".to_string(),
         model: None,
         extra_args: vec![],
+        plan_file: None,
         inter_iteration_delay_ms: 100,
     };
 
@@ -107,6 +108,7 @@ async fn run_session(
         completion_signal,
         model: Some(model),
         extra_args: vec!["--dangerously-skip-permissions".to_string()],
+        plan_file: Some(plan_file),
         inter_iteration_delay_ms: 1000,
     };
 

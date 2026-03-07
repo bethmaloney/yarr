@@ -91,13 +91,13 @@ Add `plan_file: Option<String>` to `SessionTrace`. Add `Deserialize` to `Session
 - Update `TraceCollector::start_session()` to accept `plan_file: Option<&str>` and set it on the trace
 
 **Checklist:**
-- [ ] Add `plan_file: Option<String>` to `SessionTrace`
-- [ ] Add `Deserialize` to `SessionTrace`, `IterationSpan`, `SpanAttributes`, `SpanStatus`, `SessionOutcome`
-- [ ] Add `Deserialize` to `SessionEvent`
-- [ ] Add `Deserialize` to any output.rs types missing it (`TokenUsage`, `ModelTokenUsage`)
-- [ ] Update `start_session()` signature to accept plan_file
-- [ ] Update call sites in `lib.rs` to pass plan_file
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `plan_file: Option<String>` to `SessionTrace`
+- [x] Add `Deserialize` to `SessionTrace`, `IterationSpan`, `SpanAttributes`, `SpanStatus`, `SessionOutcome`
+- [x] Add `Deserialize` to `SessionEvent`
+- [x] Add `Deserialize` to any output.rs types missing it (`TokenUsage`, `ModelTokenUsage`)
+- [x] Update `start_session()` signature to accept plan_file
+- [x] Update call sites in `lib.rs` to pass plan_file
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -336,7 +336,7 @@ Add Rust tests for the new TraceCollector methods and event serialization round-
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add `plan_file` + Deserialize to trace/event types | Not Started |
+| 1 | Add `plan_file` + Deserialize to trace/event types | Done |
 | 2 | Update TraceCollector for app data dir + events file | Not Started |
 | 3 | Accumulate events in SessionRunner | Not Started |
 | 4 | Add Tauri commands for listing/reading traces | Not Started |
