@@ -103,12 +103,7 @@ if (!(window as any).__TAURI_INTERNALS__) {
         _ts: 1741336220000,
       },
       { kind: "tool_use", iteration: 1, tool_name: "Edit", _ts: 1741336225000 },
-      {
-        kind: "iteration_complete",
-        iteration: 1,
-        result: { total_cost_usd: 0.1523 },
-        _ts: 1741336230000,
-      },
+      { kind: "iteration_complete", iteration: 1, result: { total_cost_usd: 0.1523, input_tokens: 30000, output_tokens: 3200, cache_read_input_tokens: 5000, cache_creation_input_tokens: 2000, context_window: 200000 }, _ts: 1741336230000 },
       { kind: "iteration_started", iteration: 2, _ts: 1741336231000 },
       {
         kind: "assistant_text",
@@ -123,18 +118,8 @@ if (!(window as any).__TAURI_INTERNALS__) {
         _ts: 1741336240000,
       },
       { kind: "tool_use", iteration: 2, tool_name: "Bash", _ts: 1741336250000 },
-      {
-        kind: "assistant_text",
-        iteration: 2,
-        text: "Tests pass. Adding integration test coverage.",
-        _ts: 1741336255000,
-      },
-      {
-        kind: "iteration_complete",
-        iteration: 2,
-        result: { total_cost_usd: 0.1612 },
-        _ts: 1741336260000,
-      },
+      { kind: "assistant_text", iteration: 2, text: "Tests pass. Adding integration test coverage.", _ts: 1741336255000 },
+      { kind: "iteration_complete", iteration: 2, result: { total_cost_usd: 0.1612, input_tokens: 62000, output_tokens: 4500, cache_read_input_tokens: 18000, cache_creation_input_tokens: 3000, context_window: 200000 }, _ts: 1741336260000 },
       { kind: "iteration_started", iteration: 3, _ts: 1741336261000 },
       {
         kind: "assistant_text",
@@ -143,18 +128,8 @@ if (!(window as any).__TAURI_INTERNALS__) {
         _ts: 1741336265000,
       },
       { kind: "tool_use", iteration: 3, tool_name: "Bash", _ts: 1741336270000 },
-      {
-        kind: "assistant_text",
-        iteration: 3,
-        text: "All 47 tests pass. Login bug is fixed and covered by tests.",
-        _ts: 1741336275000,
-      },
-      {
-        kind: "iteration_complete",
-        iteration: 3,
-        result: { total_cost_usd: 0.1386 },
-        _ts: 1741336280000,
-      },
+      { kind: "assistant_text", iteration: 3, text: "All 47 tests pass. Login bug is fixed and covered by tests.", _ts: 1741336275000 },
+      { kind: "iteration_complete", iteration: 3, result: { total_cost_usd: 0.1386, input_tokens: 95000, output_tokens: 5800, cache_read_input_tokens: 32000, cache_creation_input_tokens: 4000, context_window: 200000 }, _ts: 1741336280000 },
       { kind: "session_complete", outcome: "completed", _ts: 1741336335000 },
     ],
     "sess-def-456": [
@@ -172,12 +147,7 @@ if (!(window as any).__TAURI_INTERNALS__) {
       },
       { kind: "tool_use", iteration: 1, tool_name: "Read", _ts: 1741268410000 },
       { kind: "tool_use", iteration: 1, tool_name: "Read", _ts: 1741268415000 },
-      {
-        kind: "iteration_complete",
-        iteration: 1,
-        result: { total_cost_usd: 0.12 },
-        _ts: 1741268430000,
-      },
+      { kind: "iteration_complete", iteration: 1, result: { total_cost_usd: 0.1200, input_tokens: 28000, output_tokens: 2800, cache_read_input_tokens: 4000, cache_creation_input_tokens: 1800, context_window: 200000 }, _ts: 1741268430000 },
       { kind: "iteration_started", iteration: 2, _ts: 1741268431000 },
       {
         kind: "assistant_text",
@@ -187,50 +157,21 @@ if (!(window as any).__TAURI_INTERNALS__) {
       },
       { kind: "tool_use", iteration: 2, tool_name: "Edit", _ts: 1741268440000 },
       { kind: "tool_use", iteration: 2, tool_name: "Edit", _ts: 1741268450000 },
-      {
-        kind: "iteration_complete",
-        iteration: 2,
-        result: { total_cost_usd: 0.18 },
-        _ts: 1741268460000,
-      },
+      { kind: "iteration_complete", iteration: 2, result: { total_cost_usd: 0.1800, input_tokens: 55000, output_tokens: 5200, cache_read_input_tokens: 15000, cache_creation_input_tokens: 2500, context_window: 200000 }, _ts: 1741268460000 },
       { kind: "iteration_started", iteration: 3, _ts: 1741268461000 },
       { kind: "tool_use", iteration: 3, tool_name: "Bash", _ts: 1741268465000 },
-      {
-        kind: "assistant_text",
-        iteration: 3,
-        text: "Tests failing - 12 errors related to middleware changes",
-        _ts: 1741268475000,
-      },
-      {
-        kind: "iteration_complete",
-        iteration: 3,
-        result: { total_cost_usd: 0.2 },
-        _ts: 1741268480000,
-      },
+      { kind: "assistant_text", iteration: 3, text: "Tests failing - 12 errors related to middleware changes", _ts: 1741268475000 },
+      { kind: "iteration_complete", iteration: 3, result: { total_cost_usd: 0.2000, input_tokens: 85000, output_tokens: 7000, cache_read_input_tokens: 28000, cache_creation_input_tokens: 3500, context_window: 200000 }, _ts: 1741268480000 },
       { kind: "iteration_started", iteration: 4, _ts: 1741268481000 },
       { kind: "tool_use", iteration: 4, tool_name: "Edit", _ts: 1741268490000 },
       { kind: "tool_use", iteration: 4, tool_name: "Bash", _ts: 1741268500000 },
-      {
-        kind: "assistant_text",
-        iteration: 4,
-        text: "Still 4 failing tests in the refresh token flow",
-        _ts: 1741268510000,
-      },
-      {
-        kind: "iteration_complete",
-        iteration: 4,
-        result: { total_cost_usd: 0.195 },
-        _ts: 1741268520000,
-      },
+      { kind: "assistant_text", iteration: 4, text: "Still 4 failing tests in the refresh token flow", _ts: 1741268510000 },
+      { kind: "iteration_complete", iteration: 4, result: { total_cost_usd: 0.1950, input_tokens: 115000, output_tokens: 8500, cache_read_input_tokens: 42000, cache_creation_input_tokens: 4200, context_window: 200000 }, _ts: 1741268520000 },
       { kind: "iteration_started", iteration: 5, _ts: 1741268521000 },
       { kind: "tool_use", iteration: 5, tool_name: "Edit", _ts: 1741268530000 },
       { kind: "tool_use", iteration: 5, tool_name: "Bash", _ts: 1741268540000 },
-      {
-        kind: "assistant_text",
-        iteration: 5,
-        text: "Build error: circular dependency between auth and middleware",
-        _ts: 1741268550000,
-      },
+      { kind: "assistant_text", iteration: 5, text: "Build error: circular dependency between auth and middleware", _ts: 1741268550000 },
+      { kind: "iteration_complete", iteration: 5, result: { total_cost_usd: 0.1962, input_tokens: 140000, output_tokens: 9800, cache_read_input_tokens: 55000, cache_creation_input_tokens: 5000, context_window: 200000 }, _ts: 1741268555000 },
       { kind: "session_complete", outcome: "failed", _ts: 1741268730000 },
     ],
     "sess-ghi-789": [
@@ -247,12 +188,7 @@ if (!(window as any).__TAURI_INTERNALS__) {
         _ts: 1741168805000,
       },
       { kind: "tool_use", iteration: 1, tool_name: "Grep", _ts: 1741168810000 },
-      {
-        kind: "iteration_complete",
-        iteration: 1,
-        result: { total_cost_usd: 0.095 },
-        _ts: 1741168830000,
-      },
+      { kind: "iteration_complete", iteration: 1, result: { total_cost_usd: 0.0950, input_tokens: 25000, output_tokens: 2500, cache_read_input_tokens: 3500, cache_creation_input_tokens: 1500, context_window: 200000 }, _ts: 1741168830000 },
       { kind: "iteration_started", iteration: 2, _ts: 1741168831000 },
       {
         kind: "assistant_text",
@@ -261,17 +197,8 @@ if (!(window as any).__TAURI_INTERNALS__) {
         _ts: 1741168835000,
       },
       { kind: "tool_use", iteration: 2, tool_name: "Edit", _ts: 1741168840000 },
-      {
-        kind: "iteration_complete",
-        iteration: 2,
-        result: { total_cost_usd: 0.12 },
-        _ts: 1741168860000,
-      },
-      {
-        kind: "session_complete",
-        outcome: "max_iterations_reached",
-        _ts: 1741169925000,
-      },
+      { kind: "iteration_complete", iteration: 2, result: { total_cost_usd: 0.1200, input_tokens: 52000, output_tokens: 4800, cache_read_input_tokens: 14000, cache_creation_input_tokens: 2800, context_window: 200000 }, _ts: 1741168860000 },
+      { kind: "session_complete", outcome: "max_iterations_reached", _ts: 1741169925000 },
     ],
   };
 
@@ -279,10 +206,6 @@ if (!(window as any).__TAURI_INTERNALS__) {
 
   const store = new Map<string, unknown>([
     ["repos", SAMPLE_REPOS],
-    [
-      "recents",
-      { promptFiles: ["plans/fix-login.md", "plans/refactor-auth.md"] },
-    ],
   ]);
   type Callback = (...args: unknown[]) => void;
   const callbacks = new Map<number, Callback>();

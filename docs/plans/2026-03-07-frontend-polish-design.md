@@ -442,12 +442,12 @@ Update browser-mock and E2E fixtures with data needed for new features.
 - Mirror changes in `e2e/fixtures.ts` default handlers
 
 **Checklist:**
-- [ ] Enrich iteration_complete events with token data
-- [ ] Add `read_file_preview` invoke handler
-- [ ] Add `list_latest_traces` invoke handler
-- [ ] Remove recents from store
-- [ ] Update `e2e/fixtures.ts` with same handlers
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Enrich iteration_complete events with token data
+- [x] Add `read_file_preview` invoke handler
+- [x] Add `list_latest_traces` invoke handler
+- [x] Remove recents from store
+- [x] Update `e2e/fixtures.ts` with same handlers
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -496,5 +496,5 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 13 | Run Detail -- session ID click-to-copy | Done |
 | 14 | Run Detail -- collapsible iteration groups | Done |
 | 15 | Run Detail -- context window progress bar | Done |
-| 16 | Browser mock -- enrich sample data | Not Started |
+| 16 | Browser mock -- enrich sample data | Done |
 | 17 | Update E2E tests | Not Started |
