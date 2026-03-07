@@ -6,6 +6,7 @@ export type IterationGroup = {
   cost: number;
   inputTokens: number;
   outputTokens: number;
+  contextWindow: number;
   startTs: number | undefined;
   endTs: number | undefined;
 };
@@ -47,6 +48,7 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
         cost: 0,
         inputTokens: 0,
         outputTokens: 0,
+        contextWindow: 0,
         startTs: ev._ts,
         endTs: undefined,
       };
@@ -62,6 +64,7 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
         currentGroup.cost = (result?.total_cost_usd as number) ?? 0;
         currentGroup.inputTokens = (result?.input_tokens as number) ?? 0;
         currentGroup.outputTokens = (result?.output_tokens as number) ?? 0;
+        currentGroup.contextWindow = (result?.context_window as number) ?? 0;
         currentGroup.endTs = ev._ts;
       }
     }

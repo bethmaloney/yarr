@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { IterationGroup } from './iteration-groups';
   import type { SessionEvent } from './types';
+  import { formatTokenCount, contextBarColor } from './context-bar';
 
   let { group, expanded, onToggle, eventEmoji, eventLabel, formatTime, expandedEvents, toggleEvent, globalStartIndex }: {
     group: IterationGroup;
@@ -36,6 +37,20 @@
       {/if}
     </span>
   </button>
+  {#if group.contextWindow > 0}
+    {@const percentage = Math.round((group.inputTokens / group.contextWindow) * 100)}
+    <div class="context-bar">
+      <div class="context-bar-track">
+        <div
+          class="context-bar-fill"
+          style="width: {Math.min(percentage, 100)}%; background: {contextBarColor(percentage)}"
+        ></div>
+      </div>
+      <span class="context-bar-label">
+        {formatTokenCount(group.inputTokens)} / {formatTokenCount(group.contextWindow)} ({percentage}%)
+      </span>
+    </div>
+  {/if}
   {#if expanded}
     <ul class="iteration-events">
       {#each group.events as ev, i}
@@ -187,6 +202,36 @@
   .event.session_complete {
     color: #e8d44d;
     font-weight: 600;
+  }
+
+  .context-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0.75rem 0.35rem 2.25rem;
+    /* 2.25rem left padding = toggle width (1rem) + gap (0.5rem) + button left pad (0.75rem) */
+  }
+
+  .context-bar-track {
+    flex: 1;
+    height: 4px;
+    background: #1e1e38;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .context-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  .context-bar-label {
+    font-size: 0.65rem;
+    color: #666;
+    font-family: "SF Mono", "Fira Code", monospace;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .tool-input-detail {

@@ -413,12 +413,12 @@ Add context window usage indicator to iteration group headers.
 - If no context_window data available, hide the bar
 
 **Checklist:**
-- [ ] Extract token usage from iteration_complete result
-- [ ] Render progress bar with percentage width
-- [ ] Apply color thresholds
-- [ ] Add text label
-- [ ] Handle missing data gracefully
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Extract token usage from iteration_complete result
+- [x] Render progress bar with percentage width
+- [x] Apply color thresholds
+- [x] Add text label
+- [x] Handle missing data gracefully
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -495,6 +495,6 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 11 | History view -- sortable columns | Done |
 | 13 | Run Detail -- session ID click-to-copy | Done |
 | 14 | Run Detail -- collapsible iteration groups | Done |
-| 15 | Run Detail -- context window progress bar | Not Started |
+| 15 | Run Detail -- context window progress bar | Done |
 | 16 | Browser mock -- enrich sample data | Not Started |
 | 17 | Update E2E tests | Not Started |

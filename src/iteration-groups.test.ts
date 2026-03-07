@@ -330,4 +330,93 @@ describe('groupEventsByIteration', () => {
       expect(result.iterations[0].outputTokens).toBe(2000);
     });
   });
+
+  describe('context window extraction', () => {
+    it('extracts context_window from result when present', () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({
+          kind: 'iteration_complete',
+          iteration: 1,
+          _ts: 1500,
+          result: { total_cost_usd: 0.5, input_tokens: 60000, output_tokens: 5000, context_window: 200000 },
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations[0].contextWindow).toBe(200000);
+    });
+
+    it('defaults contextWindow to 0 when context_window is not in result', () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({
+          kind: 'iteration_complete',
+          iteration: 1,
+          _ts: 1500,
+          result: { total_cost_usd: 0.5, input_tokens: 60000, output_tokens: 5000 },
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations[0].contextWindow).toBe(0);
+    });
+
+    it('defaults contextWindow to 0 when result is undefined', () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({ kind: 'iteration_complete', iteration: 1, _ts: 1500 }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations[0].contextWindow).toBe(0);
+    });
+
+    it('works correctly across multiple iterations with different context_window values', () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({
+          kind: 'iteration_complete',
+          iteration: 1,
+          _ts: 1500,
+          result: { total_cost_usd: 0.3, input_tokens: 40000, output_tokens: 3000, context_window: 200000 },
+        }),
+        makeEvent({ kind: 'iteration_started', iteration: 2, _ts: 2000 }),
+        makeEvent({
+          kind: 'iteration_complete',
+          iteration: 2,
+          _ts: 3000,
+          result: { total_cost_usd: 0.6, input_tokens: 80000, output_tokens: 7000, context_window: 180000 },
+        }),
+        makeEvent({ kind: 'iteration_started', iteration: 3, _ts: 3500 }),
+        makeEvent({
+          kind: 'iteration_complete',
+          iteration: 3,
+          _ts: 4500,
+          result: { total_cost_usd: 0.1, input_tokens: 10000, output_tokens: 1000 },
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(3);
+      expect(result.iterations[0].contextWindow).toBe(200000);
+      expect(result.iterations[1].contextWindow).toBe(180000);
+      expect(result.iterations[2].contextWindow).toBe(0); // not present in result
+    });
+
+    it('defaults contextWindow to 0 for in-progress iteration (no iteration_complete)', () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({ kind: 'assistant_text', text: 'Working...', _ts: 800 }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations[0].contextWindow).toBe(0);
+    });
+  });
 });
