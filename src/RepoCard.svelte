@@ -26,7 +26,7 @@
 <button class="repo-card" onclick={onclick} aria-label="{repo.name} — {statusLabels[status]}">
   <div class="repo-info">
     <span class="repo-name">{repo.name}</span>
-    <span class="repo-path">{repo.path}</span>
+    <span class="repo-path">{repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`}</span>
   </div>
   <div class="repo-status">
     <span

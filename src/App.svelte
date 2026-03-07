@@ -4,7 +4,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { saveRecent } from "./recents";
-  import { loadRepos, addRepo, updateRepo, type RepoConfig } from "./repos";
+  import { loadRepos, addLocalRepo, updateRepo, type RepoConfig } from "./repos";
   import HomeView from "./HomeView.svelte";
   import RepoDetail from "./RepoDetail.svelte";
   import HistoryView from "./HistoryView.svelte";
@@ -43,7 +43,7 @@
   async function handleAddRepo() {
     const result = await open({ directory: true, title: "Select repository" });
     if (result !== null) {
-      await addRepo(result);
+      await addLocalRepo(result);
       repos = await loadRepos();
     }
   }
@@ -71,9 +71,12 @@
     sessions.set(repoId, { running: true, events: [], trace: null, error: null });
 
     try {
+      const repoPayload = repo.type === "local"
+        ? { type: "local" as const, path: repo.path }
+        : { type: "ssh" as const, sshHost: repo.sshHost, remotePath: repo.remotePath };
       const trace = await invoke<SessionTrace>("run_session", {
         repoId,
-        repoPath: repo.path,
+        repo: repoPayload,
         planFile,
         model: repo.model,
         maxIterations: repo.maxIterations,

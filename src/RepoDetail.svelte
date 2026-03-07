@@ -69,7 +69,7 @@
 
   <header>
     <h1>{repo.name}</h1>
-    <p class="repo-path">{repo.path}</p>
+    <p class="repo-path">{repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`}</p>
   </header>
 
   <details class="settings">

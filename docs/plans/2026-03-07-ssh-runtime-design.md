@@ -212,10 +212,10 @@ Refactor the Rust side to support both local and SSH repo types. Currently `run_
 - For now, SSH branch can return an error ("SSH runtime not yet implemented") — later tasks will fill it in
 
 **Checklist:**
-- [ ] Define `RepoType` serde enum in `lib.rs` (or a shared types module)
-- [ ] Update `run_session` command signature to accept `RepoType` instead of `repo_path: String`
-- [ ] Branch on repo type: local uses `default_runtime()`, SSH is a placeholder
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Define `RepoType` serde enum in `lib.rs` (or a shared types module)
+- [x] Update `run_session` command signature to accept `RepoType` instead of `repo_path: String`
+- [x] Branch on repo type: local uses `default_runtime()`, SSH is a placeholder
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -236,10 +236,10 @@ Update the frontend repo model and storage to support the new discriminated unio
 - Handle migration: existing stored repos without a `type` field should default to `"local"`
 
 **Checklist:**
-- [ ] Define discriminated union `RepoConfig` type
-- [ ] Update `addRepo` to handle both local and SSH
-- [ ] Add migration logic in `loadRepos` for existing repos (default to `"local"`)
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Define discriminated union `RepoConfig` type
+- [x] Update `addRepo` to handle both local and SSH
+- [x] Add migration logic in `loadRepos` for existing repos (default to `"local"`)
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -258,8 +258,8 @@ Wire the new repo type through the run handler to the updated Tauri command.
 - For SSH repos, pass `sshHost` and `remotePath` instead of `path`
 
 **Checklist:**
-- [ ] Update `handleRunSession` to construct the correct invoke payload per repo type
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Update `handleRunSession` to construct the correct invoke payload per repo type
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -522,9 +522,9 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Update RepoConfig to discriminated union (Rust) | Not Started |
-| 2 | Update RepoConfig to discriminated union (Frontend) | Not Started |
-| 3 | Update App.svelte to pass repo type to backend | Not Started |
+| 1 | Update RepoConfig to discriminated union (Rust) | Done |
+| 2 | Update RepoConfig to discriminated union (Frontend) | Done |
+| 3 | Update App.svelte to pass repo type to backend | Done |
 | 4 | Update repo configuration UI for SSH | Not Started |
 | 5 | SSH command helper module | Not Started |
 | 6 | SshRuntime — RuntimeProvider implementation | Not Started |

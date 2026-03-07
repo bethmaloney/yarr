@@ -26,6 +26,14 @@ struct ActiveSession {
     cancel_token: Mutex<Option<CancellationToken>>,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub(crate) enum RepoType {
+    Local { path: String },
+    #[serde(rename_all = "camelCase")]
+    Ssh { ssh_host: String, remote_path: String },
+}
+
 #[tauri::command]
 async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trace::SessionTrace, String> {
     let cancel_token = CancellationToken::new();
@@ -68,7 +76,7 @@ async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trac
 async fn run_session(
     app: tauri::AppHandle,
     repo_id: String,
-    repo_path: String,
+    repo: RepoType,
     plan_file: String,
     model: String,
     max_iterations: u32,
@@ -80,13 +88,19 @@ async fn run_session(
         *active.cancel_token.lock().await = Some(cancel_token.clone());
     }
 
-    let repo = PathBuf::from(&repo_path);
+    let (repo_path_buf, runtime): (PathBuf, Box<dyn runtime::RuntimeProvider>) = match &repo {
+        RepoType::Local { path } => (PathBuf::from(path), default_runtime()),
+        RepoType::Ssh { .. } => {
+            *app.state::<ActiveSession>().cancel_token.lock().await = None;
+            return Err("SSH runtime not yet implemented".to_string());
+        }
+    };
 
     // Resolve plan file to absolute path for the @file reference
     let plan_path = {
         let p = Path::new(&plan_file);
         if p.is_relative() {
-            repo.join(p)
+            repo_path_buf.join(p)
         } else {
             p.to_path_buf()
         }
@@ -100,10 +114,8 @@ async fn run_session(
 
     let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
 
-    let runtime = default_runtime();
-
     let config = SessionConfig {
-        repo_path: repo,
+        repo_path: repo_path_buf,
         prompt,
         max_iterations,
         completion_signal,
@@ -235,5 +247,49 @@ mod tests {
             serde_json::to_string(&cloned).expect("serialization should succeed");
 
         assert_eq!(json_original, json_cloned);
+    }
+
+    #[test]
+    fn repo_type_local_deserializes_from_json() {
+        let json = r#"{ "type": "local", "path": "/some/path" }"#;
+        let repo: RepoType = serde_json::from_str(json).expect("deserialization should succeed");
+        match repo {
+            RepoType::Local { path } => assert_eq!(path, "/some/path"),
+            other => panic!("expected RepoType::Local, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn repo_type_ssh_deserializes_from_json() {
+        let json = r#"{ "type": "ssh", "sshHost": "user@host", "remotePath": "/repo/path" }"#;
+        let repo: RepoType = serde_json::from_str(json).expect("deserialization should succeed");
+        match repo {
+            RepoType::Ssh { ssh_host, remote_path } => {
+                assert_eq!(ssh_host, "user@host");
+                assert_eq!(remote_path, "/repo/path");
+            }
+            other => panic!("expected RepoType::Ssh, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn repo_type_unknown_type_fails() {
+        let json = r#"{ "type": "unknown" }"#;
+        let result = serde_json::from_str::<RepoType>(json);
+        assert!(result.is_err(), "deserializing an unknown type tag should fail");
+    }
+
+    #[test]
+    fn repo_type_local_missing_path_fails() {
+        let json = r#"{ "type": "local" }"#;
+        let result = serde_json::from_str::<RepoType>(json);
+        assert!(result.is_err(), "deserializing local without path should fail");
+    }
+
+    #[test]
+    fn repo_type_ssh_missing_fields_fails() {
+        let json = r#"{ "type": "ssh", "sshHost": "host" }"#;
+        let result = serde_json::from_str::<RepoType>(json);
+        assert!(result.is_err(), "deserializing ssh without remotePath should fail");
     }
 }
