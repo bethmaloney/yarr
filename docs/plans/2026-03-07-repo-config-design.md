@@ -307,9 +307,9 @@ Verify everything compiles and works together.
 **Files:** none (verification only)
 
 **Checklist:**
-- [ ] `npx tsc --noEmit` passes (frontend types)
-- [ ] `cd src-tauri && cargo check` passes (backend)
-- [ ] `npx vitest run` passes (tests)
+- [x] `npx tsc --noEmit` passes (frontend types)
+- [x] `cd src-tauri && cargo check` passes (backend)
+- [x] `npx vitest run` passes (tests)
 - [ ] `npx tauri dev` launches, shows home view, can add a repo, navigate to detail, and run a mock session
 
 ---
@@ -326,7 +326,7 @@ Verify everything compiles and works together.
 | 6 | `HomeView.svelte` — home page with repo grid | Done |
 | 7 | `RepoDetail.svelte` — repo workspace view | Done |
 | 8 | `App.svelte` refactor — view router + session state | Done |
-| 9 | Integration verification | Not Started |
+| 9 | Integration verification | In Progress (manual testing remaining) |
 
 ## Out of Scope (for now)
 
