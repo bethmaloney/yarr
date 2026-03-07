@@ -2,6 +2,7 @@ pub mod output;
 pub mod prompt;
 pub mod runtime;
 pub mod session;
+pub mod ssh_orchestrator;
 pub mod trace;
 
 use std::path::{Path, PathBuf};

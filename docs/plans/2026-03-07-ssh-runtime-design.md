@@ -448,13 +448,13 @@ Create the orchestrator that wraps `SessionRunner` with disconnect/reconnect log
 - Exposes a `reconnect()` method that can be called from a Tauri command
 
 **Checklist:**
-- [ ] Create `SshSessionOrchestrator` struct
-- [ ] Implement start flow (delegates to SshRuntime)
-- [ ] Implement disconnect detection (distinguish from normal completion)
-- [ ] Implement reconnect flow with event recovery
-- [ ] Implement line-count tracking for resume position
-- [ ] Register module in `src-tauri/src/lib.rs`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Create `SshSessionOrchestrator` struct
+- [x] Implement start flow (delegates to SshRuntime)
+- [x] Implement disconnect detection (distinguish from normal completion)
+- [x] Implement reconnect flow with event recovery
+- [x] Implement line-count tracking for resume position
+- [x] Register module in `src-tauri/src/lib.rs`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -572,7 +572,7 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 6 | RuntimeProvider — add `run_command` method | Not Started |
 | 7 | SshRuntime — RuntimeProvider implementation | Done |
 | 8 | SshRuntime — reconnection methods | Done |
-| 9 | SshSessionOrchestrator | Not Started |
+| 9 | SshSessionOrchestrator | Done |
 | 10 | Tauri commands for SSH sessions | Not Started |
 | 11 | Frontend session state — Disconnected and Reconnecting | Not Started |
 | 12 | SSH runtime unit tests (Rust) | Not Started |

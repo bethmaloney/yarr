@@ -47,6 +47,8 @@ pub enum SessionState {
     MaxIterations { iterations: u32 },
     Failed { iteration: u32, error: String },
     Cancelled { iteration: u32 },
+    Disconnected { iteration: u32 },
+    Reconnecting { iteration: u32 },
 }
 
 /// Events emitted during a session for UI consumption
@@ -69,6 +71,10 @@ pub enum SessionEvent {
     IterationComplete { iteration: u32, result: ResultEvent },
     /// The entire session finished
     SessionComplete { outcome: SessionOutcome },
+    /// SSH connection lost, session may still be running remotely
+    Disconnected { iteration: u32 },
+    /// Attempting to reconnect to remote session
+    Reconnecting { iteration: u32 },
 }
 
 /// Callback for receiving session events (Tauri IPC hookpoint)
