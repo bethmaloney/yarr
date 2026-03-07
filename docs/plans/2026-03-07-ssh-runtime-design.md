@@ -376,11 +376,11 @@ Implement the core `SshRuntime` struct that implements `RuntimeProvider`.
 - Session ID generation: use the session ID from the invocation or generate a UUID
 
 **Checklist:**
-- [ ] Implement `SshRuntime` struct with `new(host, remote_path)`
-- [ ] Implement `spawn_claude()` with tmux + tee + tail-f pattern
-- [ ] Implement `health_check()` checking for tmux and claude
-- [ ] Export from `runtime/mod.rs`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Implement `SshRuntime` struct with `new(host, remote_path)`
+- [x] Implement `spawn_claude()` with tmux + tee + tail-f pattern
+- [x] Implement `health_check()` checking for tmux and claude
+- [x] Export from `runtime/mod.rs`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -570,7 +570,7 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 4 | Update repo configuration UI for SSH | Done |
 | 5 | SSH command helper module | Done |
 | 6 | RuntimeProvider — add `run_command` method | Not Started |
-| 7 | SshRuntime — RuntimeProvider implementation | Not Started |
+| 7 | SshRuntime — RuntimeProvider implementation | Done |
 | 8 | SshRuntime — reconnection methods | Not Started |
 | 9 | SshSessionOrchestrator | Not Started |
 | 10 | Tauri commands for SSH sessions | Not Started |
