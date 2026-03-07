@@ -1,7 +1,7 @@
 {
   "productName": "yarr",
   "version": "0.1.0",
-  "identifier": "com.yarr.app",
+  "identifier": "com.yarr.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
