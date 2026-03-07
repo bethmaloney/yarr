@@ -167,3 +167,109 @@ test.describe("History view — prompt text column (Task 10)", () => {
     await expect(header).toContainText("Prompt");
   });
 });
+
+test.describe("History view — sortable columns (Task 11)", () => {
+  test("column headers are clickable buttons", async ({ page, mockTauri }) => {
+    await navigateToHistory(page, mockTauri);
+
+    const header = page.locator(".trace-header");
+    await expect(header).toBeVisible();
+
+    // Each sortable column should be a <button> element, not a <span>
+    const headerButtons = header.locator("button");
+    const expectedColumns = ["Date", "Plan", "Prompt", "Status", "Iters", "Cost", "Duration"];
+
+    for (const label of expectedColumns) {
+      const btn = header.locator("button", { hasText: label });
+      await expect(btn).toBeVisible();
+    }
+
+    // There should be at least as many buttons as sortable columns
+    await expect(headerButtons).toHaveCount(expectedColumns.length);
+  });
+
+  test("default sort is date descending — most recent trace first", async ({ page, mockTauri }) => {
+    await navigateToHistory(page, mockTauri);
+
+    const traceRows = page.locator(".trace-row");
+    await expect(traceRows).toHaveCount(2);
+
+    // sess-abc-123 (Mar 7) is more recent than sess-def-456 (Mar 6), so it should be first
+    const firstRow = traceRows.nth(0);
+    await expect(firstRow).toContainText("Fix login bug");
+
+    const secondRow = traceRows.nth(1);
+    await expect(secondRow).toContainText("Refactor auth module");
+
+    // The Date column header button should show a descending arrow indicator
+    const dateButton = page.locator(".trace-header button", { hasText: "Date" });
+    await expect(dateButton).toContainText("\u2193"); // down arrow
+  });
+
+  test("clicking Date header toggles to ascending sort", async ({ page, mockTauri }) => {
+    await navigateToHistory(page, mockTauri);
+
+    // Click the Date header button to toggle from desc to asc
+    const dateButton = page.locator(".trace-header button", { hasText: "Date" });
+    await dateButton.click();
+
+    const traceRows = page.locator(".trace-row");
+    await expect(traceRows).toHaveCount(2);
+
+    // After toggling to ascending, the older trace (sess-def-456, Mar 6) should be first
+    const firstRow = traceRows.nth(0);
+    await expect(firstRow).toContainText("Refactor auth module");
+
+    const secondRow = traceRows.nth(1);
+    await expect(secondRow).toContainText("Fix login bug");
+
+    // Arrow should flip to ascending indicator
+    await expect(dateButton).toContainText("\u2191"); // up arrow
+  });
+
+  test("clicking Cost header sorts by cost", async ({ page, mockTauri }) => {
+    await navigateToHistory(page, mockTauri);
+
+    // Click Cost header to sort by cost ascending
+    const costButton = page.locator(".trace-header button", { hasText: "Cost" });
+    await costButton.click();
+
+    const traceRows = page.locator(".trace-row");
+    await expect(traceRows).toHaveCount(2);
+
+    // sess-abc-123 has cost 0.4521, sess-def-456 has cost 0.8912
+    // Ascending: cheaper first
+    const firstRow = traceRows.nth(0);
+    await expect(firstRow).toContainText("$0.4521");
+
+    const secondRow = traceRows.nth(1);
+    await expect(secondRow).toContainText("$0.8912");
+
+    // Cost button should show the active sort arrow
+    await expect(costButton).toContainText("\u2191"); // ascending arrow
+  });
+
+  test("header buttons have no visible button chrome", async ({ page, mockTauri }) => {
+    await navigateToHistory(page, mockTauri);
+
+    const headerButtons = page.locator(".trace-header button");
+    const count = await headerButtons.count();
+    expect(count).toBeGreaterThan(0);
+
+    for (let i = 0; i < count; i++) {
+      const btn = headerButtons.nth(i);
+
+      // Buttons should have no border
+      const border = await btn.evaluate(
+        (el) => getComputedStyle(el).borderStyle,
+      );
+      expect(border).toBe("none");
+
+      // Buttons should have cursor: pointer
+      const cursor = await btn.evaluate(
+        (el) => getComputedStyle(el).cursor,
+      );
+      expect(cursor).toBe("pointer");
+    }
+  });
+});

@@ -335,12 +335,12 @@ Make column headers clickable for sorting.
 - Arrow indicator: up/down unicode arrow next to active column
 
 **Checklist:**
-- [ ] Add sort state variables
-- [ ] Make header labels clickable buttons
-- [ ] Add `$derived` sorted traces computation
-- [ ] Render sort direction arrow on active column
-- [ ] Style header buttons (no visible button chrome, just cursor pointer)
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add sort state variables
+- [x] Make header labels clickable buttons
+- [x] Add `$derived` sorted traces computation
+- [x] Render sort direction arrow on active column
+- [x] Style header buttons (no visible button chrome, just cursor pointer)
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -492,7 +492,7 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 8 | Home page -- repo cards with last run summary | Done |
 | 9 | History view -- column headers | Done |
 | 10 | History view -- show prompt text | Done |
-| 11 | History view -- sortable columns | Not Started |
+| 11 | History view -- sortable columns | Done |
 | 13 | Run Detail -- session ID click-to-copy | Not Started |
 | 14 | Run Detail -- collapsible iteration groups | Not Started |
 | 15 | Run Detail -- context window progress bar | Not Started |

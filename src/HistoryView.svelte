@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import type { RepoConfig } from "./repos";
+  import { sortTraces, type SortField, type SortDir } from "./sort";
   import type { SessionTrace } from "./types";
 
   let {
@@ -20,6 +21,19 @@
   let traces: SessionTrace[] = $state([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let sortField: SortField = $state<SortField>('start_time');
+  let sortDir: SortDir = $state<SortDir>('desc');
+
+  let sortedTraces = $derived(sortTraces(traces, sortField, sortDir));
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortField = field;
+      sortDir = field === 'start_time' ? 'desc' : 'asc';
+    }
+  }
 
   onMount(async () => {
     try {
@@ -121,18 +135,32 @@
   {:else}
     <div class="trace-list">
       <div class="trace-header">
-        <span class="trace-date">Date</span>
+        <button class="sort-btn trace-date" onclick={() => toggleSort('start_time')}>
+          Date {sortField === 'start_time' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        </button>
         {#if !repoId}
           <span class="trace-repo">Repo</span>
         {/if}
-        <span class="trace-plan">Plan</span>
-        <span class="trace-prompt">Prompt</span>
-        <span class="trace-badge-header">Status</span>
-        <span class="trace-iters">Iters</span>
-        <span class="trace-cost">Cost</span>
-        <span class="trace-duration">Duration</span>
+        <button class="sort-btn trace-plan" onclick={() => toggleSort('plan_file')}>
+          Plan {sortField === 'plan_file' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        </button>
+        <button class="sort-btn trace-prompt" onclick={() => toggleSort('prompt')}>
+          Prompt {sortField === 'prompt' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        </button>
+        <button class="sort-btn trace-badge-header" onclick={() => toggleSort('outcome')}>
+          Status {sortField === 'outcome' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        </button>
+        <button class="sort-btn trace-iters" onclick={() => toggleSort('total_iterations')}>
+          Iters {sortField === 'total_iterations' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        </button>
+        <button class="sort-btn trace-cost" onclick={() => toggleSort('total_cost_usd')}>
+          Cost {sortField === 'total_cost_usd' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        </button>
+        <button class="sort-btn trace-duration" onclick={() => toggleSort('duration')}>
+          Duration {sortField === 'duration' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        </button>
       </div>
-      {#each traces as trace (trace.session_id)}
+      {#each sortedTraces as trace (trace.session_id)}
         {@const badge = outcomeBadge(trace.outcome)}
         <button
           class="trace-row"
@@ -314,5 +342,15 @@
     color: #888;
     min-width: 4rem;
     text-align: right;
+  }
+
+  .sort-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+    text-align: inherit;
   }
 </style>
