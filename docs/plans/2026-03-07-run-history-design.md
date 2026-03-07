@@ -173,11 +173,11 @@ Add `list_traces`, `get_trace`, and `get_trace_events` Tauri commands.
 - Use `app.path().app_data_dir()` to resolve the base path
 
 **Checklist:**
-- [ ] Add `list_traces` command
-- [ ] Add `get_trace` command
-- [ ] Add `get_trace_events` command
-- [ ] Register in `generate_handler![]`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `list_traces` command
+- [x] Add `get_trace` command
+- [x] Add `get_trace_events` command
+- [x] Register in `generate_handler![]`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -339,7 +339,7 @@ Add Rust tests for the new TraceCollector methods and event serialization round-
 | 1 | Add `plan_file` + Deserialize to trace/event types | Done |
 | 2 | Update TraceCollector for app data dir + events file | Done |
 | 3 | Accumulate events in SessionRunner | Done |
-| 4 | Add Tauri commands for listing/reading traces | Not Started |
+| 4 | Add Tauri commands for listing/reading traces | Done |
 | 5 | Extend frontend navigation with new views | Not Started |
 | 6 | Add History button to HomeView | Not Started |
 | 7 | Add History button to RepoDetail | Not Started |

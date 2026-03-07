@@ -131,6 +131,24 @@ async fn run_session(
 }
 
 #[tauri::command]
+fn list_traces(app: tauri::AppHandle, repo_id: Option<String>) -> Result<Vec<trace::SessionTrace>, String> {
+    let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    TraceCollector::list_traces(&base_dir, repo_id.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_trace(app: tauri::AppHandle, repo_id: String, session_id: String) -> Result<trace::SessionTrace, String> {
+    let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    TraceCollector::read_trace(&base_dir, &repo_id, &session_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_trace_events(app: tauri::AppHandle, repo_id: String, session_id: String) -> Result<Vec<session::SessionEvent>, String> {
+    let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    TraceCollector::read_events(&base_dir, &repo_id, &session_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn stop_session(app: tauri::AppHandle) -> Result<(), String> {
     let active = app.state::<ActiveSession>();
     let token = active.cancel_token.lock().await;
@@ -150,7 +168,7 @@ pub fn run() {
         .manage(ActiveSession {
             cancel_token: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session])
+        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, list_traces, get_trace, get_trace_events])
         .run(tauri::generate_context!())
         .expect("error running tauri application");
 }
