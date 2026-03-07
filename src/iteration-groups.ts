@@ -1,4 +1,4 @@
-import type { SessionEvent } from './types';
+import type { SessionEvent } from "./types";
 
 export type IterationGroup = {
   iteration: number;
@@ -12,32 +12,32 @@ export type IterationGroup = {
 };
 
 export type GroupedEvents = {
-  standaloneEvents: { index: 'before' | 'after'; event: SessionEvent }[];
+  standaloneEvents: { index: "before" | "after"; event: SessionEvent }[];
   iterations: IterationGroup[];
 };
 
 export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
-  const standaloneEvents: GroupedEvents['standaloneEvents'] = [];
+  const standaloneEvents: GroupedEvents["standaloneEvents"] = [];
   const iterations: IterationGroup[] = [];
   let currentGroup: IterationGroup | null = null;
 
   for (const ev of events) {
-    if (ev.kind === 'session_started') {
-      standaloneEvents.push({ index: 'before', event: ev });
+    if (ev.kind === "session_started") {
+      standaloneEvents.push({ index: "before", event: ev });
       continue;
     }
 
-    if (ev.kind === 'session_complete') {
+    if (ev.kind === "session_complete") {
       // Finalize any open group before adding standalone
       if (currentGroup) {
         iterations.push(currentGroup);
         currentGroup = null;
       }
-      standaloneEvents.push({ index: 'after', event: ev });
+      standaloneEvents.push({ index: "after", event: ev });
       continue;
     }
 
-    if (ev.kind === 'iteration_started') {
+    if (ev.kind === "iteration_started") {
       // Finalize previous group if open
       if (currentGroup) {
         iterations.push(currentGroup);
@@ -59,7 +59,7 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
     if (currentGroup) {
       currentGroup.events.push(ev);
 
-      if (ev.kind === 'iteration_complete') {
+      if (ev.kind === "iteration_complete") {
         const result = ev.result;
         currentGroup.cost = (result?.total_cost_usd as number) ?? 0;
         currentGroup.inputTokens = (result?.input_tokens as number) ?? 0;

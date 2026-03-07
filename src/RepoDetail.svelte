@@ -186,13 +186,9 @@
 
   <div class="actions">
     {#if session.disconnected}
-      <button type="button" onclick={onReconnect}>
-        Reconnect
-      </button>
+      <button type="button" onclick={onReconnect}> Reconnect </button>
     {:else if session.reconnecting}
-      <button type="button" disabled>
-        Reconnecting...
-      </button>
+      <button type="button" disabled> Reconnecting... </button>
     {:else}
       <button
         type="button"
@@ -202,7 +198,9 @@
         {session.running ? "Running..." : "Run"}
       </button>
       {#if session.running}
-        <button type="button" onclick={stopSession} class="danger"> Stop </button>
+        <button type="button" onclick={stopSession} class="danger">
+          Stop
+        </button>
       {:else}
         <button
           type="button"

@@ -51,7 +51,7 @@
 </script>
 
 <main>
-  <Breadcrumbs crumbs={[{label: "Home"}]} />
+  <Breadcrumbs crumbs={[{ label: "Home" }]} />
   <header class="toolbar-header">
     <div class="title-group">
       <h1>Yarr</h1>

@@ -219,25 +219,37 @@ test.describe("Repo detail page", () => {
     await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
   }
 
-  test("shows plan file preview when prompt file is entered", async ({ page, mockTauri }) => {
-    const previewContent = "# Fix Login Bug\n\nImplement the fix for the login timeout issue.\n\n## Steps";
+  test("shows plan file preview when prompt file is entered", async ({
+    page,
+    mockTauri,
+  }) => {
+    const previewContent =
+      "# Fix Login Bug\n\nImplement the fix for the login timeout issue.\n\n## Steps";
     await navigateToRepoDetailWithHandlers(page, mockTauri, {
       read_file_preview: previewContent,
     });
 
     // Fill in the prompt file input
-    await page.getByPlaceholder("docs/plans/my-feature-design.md").fill("docs/plans/fix-login.md");
+    await page
+      .getByPlaceholder("docs/plans/my-feature-design.md")
+      .fill("docs/plans/fix-login.md");
 
     // Wait for the preview to appear in a <pre> element
     const preview = page.locator("pre");
     await expect(preview).toBeVisible();
     await expect(preview).toContainText("# Fix Login Bug");
-    await expect(preview).toContainText("Implement the fix for the login timeout issue.");
+    await expect(preview).toContainText(
+      "Implement the fix for the login timeout issue.",
+    );
     await expect(preview).toContainText("## Steps");
   });
 
-  test("hides preview when prompt file is cleared", async ({ page, mockTauri }) => {
-    const previewContent = "# Fix Login Bug\n\nImplement the fix for the login timeout issue.\n\n## Steps";
+  test("hides preview when prompt file is cleared", async ({
+    page,
+    mockTauri,
+  }) => {
+    const previewContent =
+      "# Fix Login Bug\n\nImplement the fix for the login timeout issue.\n\n## Steps";
     await navigateToRepoDetailWithHandlers(page, mockTauri, {
       read_file_preview: previewContent,
     });
@@ -253,7 +265,10 @@ test.describe("Repo detail page", () => {
     await expect(preview).not.toBeVisible();
   });
 
-  test("no preview shown when plan file is empty", async ({ page, mockTauri }) => {
+  test("no preview shown when plan file is empty", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToRepoDetail(page, mockTauri);
 
     // Without filling in the prompt file input, no <pre> preview should exist
@@ -264,12 +279,16 @@ test.describe("Repo detail page", () => {
 });
 
 test.describe("Home page toolbar alignment", () => {
-  test("title and History button are both visible", async ({ tauriPage: page }) => {
+  test("title and History button are both visible", async ({
+    tauriPage: page,
+  }) => {
     await expect(page.locator("h1", { hasText: "Yarr" })).toBeVisible();
     await expect(page.getByRole("button", { name: "History" })).toBeVisible();
   });
 
-  test("toolbar-header contains both title and buttons in a single row", async ({ tauriPage: page }) => {
+  test("toolbar-header contains both title and buttons in a single row", async ({
+    tauriPage: page,
+  }) => {
     const toolbarHeader = page.locator(".toolbar-header");
     await expect(toolbarHeader).toBeVisible();
 
@@ -277,13 +296,19 @@ test.describe("Home page toolbar alignment", () => {
     await expect(toolbarHeader.locator("h1")).toContainText("Yarr");
 
     // The single container should hold the History button
-    await expect(toolbarHeader.getByRole("button", { name: "History" })).toBeVisible();
+    await expect(
+      toolbarHeader.getByRole("button", { name: "History" }),
+    ).toBeVisible();
 
     // The single container should hold the Add repo button
-    await expect(toolbarHeader.getByRole("button", { name: "+ Add repo" })).toBeVisible();
+    await expect(
+      toolbarHeader.getByRole("button", { name: "+ Add repo" }),
+    ).toBeVisible();
   });
 
   test("subtitle is still visible", async ({ tauriPage: page }) => {
-    await expect(page.locator(".subtitle", { hasText: "Claude Orchestrator" })).toBeVisible();
+    await expect(
+      page.locator(".subtitle", { hasText: "Claude Orchestrator" }),
+    ).toBeVisible();
   });
 });

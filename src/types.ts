@@ -37,7 +37,12 @@ export type SessionState = {
   error: string | null;
 };
 
-export type RepoStatus = "idle" | "running" | "completed" | "failed" | "disconnected";
+export type RepoStatus =
+  | "idle"
+  | "running"
+  | "completed"
+  | "failed"
+  | "disconnected";
 
 export type TaggedSessionEvent = {
   repo_id: string;

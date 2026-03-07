@@ -235,9 +235,7 @@ test.describe("Disconnected and Reconnecting states", () => {
     await emitSessionEvent(page, { kind: "disconnected", iteration: 3 });
 
     // A Reconnect button should appear
-    await expect(
-      page.getByRole("button", { name: "Reconnect" }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reconnect" })).toBeVisible();
   });
 
   test("shows reconnecting spinner when reconnecting", async ({
@@ -296,8 +294,6 @@ test.describe("Disconnected and Reconnecting states", () => {
       return (window as any).__reconnectCalls;
     });
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toEqual(
-      expect.objectContaining({ repoId: "ssh-repo-1" }),
-    );
+    expect(calls[0]).toEqual(expect.objectContaining({ repoId: "ssh-repo-1" }));
   });
 });

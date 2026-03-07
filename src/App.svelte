@@ -45,7 +45,7 @@
       }
     }
     if (activeRepoIds.length > 0) {
-      sessions = new Map(sessions);
+      sessions = new SvelteMap(sessions);
     }
   }
 
@@ -54,13 +54,15 @@
       repos = r;
     });
 
-    invoke<SessionTrace[]>("list_latest_traces").then(traces => {
-      const m = new Map<string, SessionTrace>();
-      for (const t of traces) {
-        if (t.repo_id) m.set(t.repo_id, t);
-      }
-      latestTraces = m;
-    }).catch(() => {});
+    invoke<SessionTrace[]>("list_latest_traces")
+      .then((traces) => {
+        const m = new SvelteMap<string, SessionTrace>();
+        for (const t of traces) {
+          if (t.repo_id) m.set(t.repo_id, t);
+        }
+        latestTraces = m;
+      })
+      .catch(() => {});
 
     // Check if a session was already running (e.g. after webview reload)
     syncActiveSession();
@@ -184,7 +186,7 @@
       });
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, trace });
-      latestTraces = new Map(latestTraces).set(repoId, trace);
+      latestTraces = new SvelteMap(latestTraces).set(repoId, trace);
       await saveRecent("promptFiles", planFile);
     } catch (e) {
       const session = sessions.get(repoId)!;
@@ -209,7 +211,7 @@
       const trace = await invoke<SessionTrace>("run_mock_session", { repoId });
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, trace });
-      latestTraces = new Map(latestTraces).set(repoId, trace);
+      latestTraces = new SvelteMap(latestTraces).set(repoId, trace);
     } catch (e) {
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, error: String(e) });
@@ -227,14 +229,23 @@
   async function handleReconnect(repoId: string) {
     const session = sessions.get(repoId);
     if (session) {
-      sessions.set(repoId, { ...session, reconnecting: true, disconnected: false });
+      sessions.set(repoId, {
+        ...session,
+        reconnecting: true,
+        disconnected: false,
+      });
     }
     try {
       await invoke("reconnect_session", { repoId });
     } catch (e) {
       const session = sessions.get(repoId);
       if (session) {
-        sessions.set(repoId, { ...session, error: String(e), reconnecting: false, disconnected: true });
+        sessions.set(repoId, {
+          ...session,
+          error: String(e),
+          reconnecting: false,
+          disconnected: true,
+        });
       }
     }
   }

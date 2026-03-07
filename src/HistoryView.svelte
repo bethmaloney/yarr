@@ -21,17 +21,17 @@
   let traces: SessionTrace[] = $state([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let sortField: SortField = $state<SortField>('start_time');
-  let sortDir: SortDir = $state<SortDir>('desc');
+  let sortField: SortField = $state<SortField>("start_time");
+  let sortDir: SortDir = $state<SortDir>("desc");
 
   let sortedTraces = $derived(sortTraces(traces, sortField, sortDir));
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
-      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      sortDir = sortDir === "asc" ? "desc" : "asc";
     } else {
       sortField = field;
-      sortDir = field === 'start_time' ? 'desc' : 'asc';
+      sortDir = field === "start_time" ? "desc" : "asc";
     }
   }
 
@@ -135,29 +135,78 @@
   {:else}
     <div class="trace-list">
       <div class="trace-header">
-        <button class="sort-btn trace-date" onclick={() => toggleSort('start_time')}>
-          Date {sortField === 'start_time' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        <button
+          class="sort-btn trace-date"
+          onclick={() => toggleSort("start_time")}
+        >
+          Date {sortField === "start_time"
+            ? sortDir === "desc"
+              ? "↓"
+              : "↑"
+            : ""}
         </button>
         {#if !repoId}
           <span class="trace-repo">Repo</span>
         {/if}
-        <button class="sort-btn trace-plan" onclick={() => toggleSort('plan_file')}>
-          Plan {sortField === 'plan_file' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        <button
+          class="sort-btn trace-plan"
+          onclick={() => toggleSort("plan_file")}
+        >
+          Plan {sortField === "plan_file"
+            ? sortDir === "desc"
+              ? "↓"
+              : "↑"
+            : ""}
         </button>
-        <button class="sort-btn trace-prompt" onclick={() => toggleSort('prompt')}>
-          Prompt {sortField === 'prompt' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        <button
+          class="sort-btn trace-prompt"
+          onclick={() => toggleSort("prompt")}
+        >
+          Prompt {sortField === "prompt"
+            ? sortDir === "desc"
+              ? "↓"
+              : "↑"
+            : ""}
         </button>
-        <button class="sort-btn trace-badge-header" onclick={() => toggleSort('outcome')}>
-          Status {sortField === 'outcome' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        <button
+          class="sort-btn trace-badge-header"
+          onclick={() => toggleSort("outcome")}
+        >
+          Status {sortField === "outcome"
+            ? sortDir === "desc"
+              ? "↓"
+              : "↑"
+            : ""}
         </button>
-        <button class="sort-btn trace-iters" onclick={() => toggleSort('total_iterations')}>
-          Iters {sortField === 'total_iterations' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        <button
+          class="sort-btn trace-iters"
+          onclick={() => toggleSort("total_iterations")}
+        >
+          Iters {sortField === "total_iterations"
+            ? sortDir === "desc"
+              ? "↓"
+              : "↑"
+            : ""}
         </button>
-        <button class="sort-btn trace-cost" onclick={() => toggleSort('total_cost_usd')}>
-          Cost {sortField === 'total_cost_usd' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        <button
+          class="sort-btn trace-cost"
+          onclick={() => toggleSort("total_cost_usd")}
+        >
+          Cost {sortField === "total_cost_usd"
+            ? sortDir === "desc"
+              ? "↓"
+              : "↑"
+            : ""}
         </button>
-        <button class="sort-btn trace-duration" onclick={() => toggleSort('duration')}>
-          Duration {sortField === 'duration' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+        <button
+          class="sort-btn trace-duration"
+          onclick={() => toggleSort("duration")}
+        >
+          Duration {sortField === "duration"
+            ? sortDir === "desc"
+              ? "↓"
+              : "↑"
+            : ""}
         </button>
       </div>
       {#each sortedTraces as trace (trace.session_id)}

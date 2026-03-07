@@ -1,9 +1,19 @@
 <script lang="ts">
-  import type { IterationGroup } from './iteration-groups';
-  import type { SessionEvent } from './types';
-  import { formatTokenCount, contextBarColor } from './context-bar';
+  import type { IterationGroup } from "./iteration-groups";
+  import type { SessionEvent } from "./types";
+  import { formatTokenCount, contextBarColor } from "./context-bar";
 
-  let { group, expanded, onToggle, eventEmoji, eventLabel, formatTime, expandedEvents, toggleEvent, globalStartIndex }: {
+  let {
+    group,
+    expanded,
+    onToggle,
+    eventEmoji,
+    eventLabel,
+    formatTime,
+    expandedEvents,
+    toggleEvent,
+    globalStartIndex,
+  }: {
     group: IterationGroup;
     expanded: boolean;
     onToggle: () => void;
@@ -23,14 +33,15 @@
   }
 </script>
 
-<div class="iteration-group" class:expanded={expanded}>
+<div class="iteration-group" class:expanded>
   <button class="iteration-header" onclick={onToggle}>
-    <span class="iteration-toggle">{expanded ? '\u25BC' : '\u25B6'}</span>
+    <span class="iteration-toggle">{expanded ? "\u25BC" : "\u25B6"}</span>
     <span class="iteration-title">Iteration {group.iteration}</span>
     <span class="iteration-stats">
       — {group.events.length} events &middot; ${group.cost.toFixed(4)}
       {#if group.inputTokens || group.outputTokens}
-        &middot; {group.inputTokens.toLocaleString()} in / {group.outputTokens.toLocaleString()} out
+        &middot; {group.inputTokens.toLocaleString()} in / {group.outputTokens.toLocaleString()}
+        out
       {/if}
       {#if group.startTs && group.endTs}
         &middot; {formatDuration(group.endTs - group.startTs)}
@@ -38,34 +49,45 @@
     </span>
   </button>
   {#if group.contextWindow > 0}
-    {@const percentage = Math.round((group.inputTokens / group.contextWindow) * 100)}
+    {@const percentage = Math.round(
+      (group.inputTokens / group.contextWindow) * 100,
+    )}
     <div class="context-bar">
       <div class="context-bar-track">
         <div
           class="context-bar-fill"
-          style="width: {Math.min(percentage, 100)}%; background: {contextBarColor(percentage)}"
+          style="width: {Math.min(
+            percentage,
+            100,
+          )}%; background: {contextBarColor(percentage)}"
         ></div>
       </div>
       <span class="context-bar-label">
-        {formatTokenCount(group.inputTokens)} / {formatTokenCount(group.contextWindow)} ({percentage}%)
+        {formatTokenCount(group.inputTokens)} / {formatTokenCount(
+          group.contextWindow,
+        )} ({percentage}%)
       </span>
     </div>
   {/if}
   {#if expanded}
     <ul class="iteration-events">
-      {#each group.events as ev, i}
+      {#each group.events as ev, i (i)}
         {@const globalIndex = globalStartIndex + i}
-        <li class="event {ev.kind}" class:expanded={expandedEvents.has(globalIndex)}>
-          <button
-            class="event-btn"
-            onclick={() => toggleEvent(globalIndex)}
-          >
+        <li
+          class="event {ev.kind}"
+          class:expanded={expandedEvents.has(globalIndex)}
+        >
+          <button class="event-btn" onclick={() => toggleEvent(globalIndex)}>
             <span class="event-emoji">{eventEmoji(ev.kind)}</span>
             <span class="event-text">{eventLabel(ev)}</span>
             <span class="event-time">{formatTime(ev._ts)}</span>
           </button>
           {#if expandedEvents.has(globalIndex) && ev.kind === "tool_use" && ev.tool_input}
-            <pre class="tool-input-detail">{JSON.stringify(ev.tool_input, null, 2)}</pre>
+            <pre class="tool-input-detail">{JSON.stringify(
+                ev.tool_input,
+                null,
+                2,
+              )}</pre>
           {/if}
         </li>
       {/each}
@@ -156,7 +178,8 @@
   .event-emoji {
     flex-shrink: 0;
     font-size: 0.9rem;
-    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    font-family:
+      "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   }
 
   .event-text {

@@ -11,7 +11,7 @@ export function formatTokenCount(n: number): string {
 }
 
 export function contextBarColor(percentage: number): string {
-  if (percentage >= 80) return '#f87171';
-  if (percentage >= 50) return '#fbbf24';
-  return '#34d399';
+  if (percentage >= 80) return "#f87171";
+  if (percentage >= 50) return "#fbbf24";
+  return "#34d399";
 }

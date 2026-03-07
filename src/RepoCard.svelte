@@ -48,7 +48,8 @@
   {#if lastTrace}
     <div class="last-run">
       {#if lastTrace.plan_file}
-        <span class="plan-name">{lastTrace.plan_file.split(/[\\/]/).pop()}</span>
+        <span class="plan-name">{lastTrace.plan_file.split(/[\\/]/).pop()}</span
+        >
         <span class="separator"> · </span>
       {/if}
       <span>${(lastTrace.total_cost_usd ?? 0).toFixed(2)}</span>

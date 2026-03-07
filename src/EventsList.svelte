@@ -5,7 +5,8 @@
   import { groupEventsByIteration } from "./iteration-groups";
   import IterationGroup from "./IterationGroup.svelte";
 
-  let { events, isLive = false }: { events: SessionEvent[]; isLive?: boolean } = $props();
+  let { events, isLive = false }: { events: SessionEvent[]; isLive?: boolean } =
+    $props();
 
   let eventsContainer: HTMLElement | undefined = $state();
   let autoScroll = $state(true);
@@ -17,11 +18,12 @@
   // Compute a mapping: for each iteration group, what is its starting global index in the flat events array.
   // standalone "before" events come first, then iteration groups in order, then standalone "after" events.
   let iterationGlobalStartIndices = $derived.by(() => {
-    const indices: Map<number, number> = new Map();
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local computation, not reactive state
+    const indices = new Map<number, number>();
     let offset = 0;
     // Count "before" standalone events
     for (const s of grouped.standaloneEvents) {
-      if (s.index === 'before') offset++;
+      if (s.index === "before") offset++;
     }
     for (const iter of grouped.iterations) {
       indices.set(iter.iteration, offset);
@@ -33,7 +35,7 @@
   let afterStartIndex = $derived.by(() => {
     let offset = 0;
     for (const s of grouped.standaloneEvents) {
-      if (s.index === 'before') offset++;
+      if (s.index === "before") offset++;
     }
     for (const iter of grouped.iterations) {
       offset += iter.events.length;
@@ -45,7 +47,8 @@
 
   $effect(() => {
     if (isLive && grouped.iterations.length > 0) {
-      const lastIter = grouped.iterations[grouped.iterations.length - 1].iteration;
+      const lastIter =
+        grouped.iterations[grouped.iterations.length - 1].iteration;
       if (lastIter !== lastExpandedIter) {
         lastExpandedIter = lastIter;
         expandedIterations.add(lastIter);
@@ -163,22 +166,28 @@
       <h2>Events</h2>
       <span class="event-count">{events.length}</span>
     </div>
-    <div class="events-scroll" bind:this={eventsContainer} onscroll={handleEventsScroll}>
+    <div
+      class="events-scroll"
+      bind:this={eventsContainer}
+      onscroll={handleEventsScroll}
+    >
       <ul>
-        {#each grouped.standaloneEvents.filter(s => s.index === 'before') as standalone, i}
-          <li class="event {standalone.event.kind}" class:expanded={expandedEvents.has(i)}>
-            <button
-              class="event-btn"
-              onclick={() => toggleEvent(i)}
-            >
-              <span class="event-emoji">{eventEmoji(standalone.event.kind)}</span>
+        {#each grouped.standaloneEvents.filter((s) => s.index === "before") as standalone, i (i)}
+          <li
+            class="event {standalone.event.kind}"
+            class:expanded={expandedEvents.has(i)}
+          >
+            <button class="event-btn" onclick={() => toggleEvent(i)}>
+              <span class="event-emoji"
+                >{eventEmoji(standalone.event.kind)}</span
+              >
               <span class="event-text">{eventLabel(standalone.event)}</span>
               <span class="event-time">{formatTime(standalone.event._ts)}</span>
             </button>
           </li>
         {/each}
 
-        {#each grouped.iterations as iter}
+        {#each grouped.iterations as iter (iter.iteration)}
           <IterationGroup
             group={iter}
             expanded={expandedIterations.has(iter.iteration)}
@@ -188,18 +197,21 @@
             {formatTime}
             {expandedEvents}
             {toggleEvent}
-            globalStartIndex={iterationGlobalStartIndices.get(iter.iteration) ?? 0}
+            globalStartIndex={iterationGlobalStartIndices.get(iter.iteration) ??
+              0}
           />
         {/each}
 
-        {#each grouped.standaloneEvents.filter(s => s.index === 'after') as standalone, i}
+        {#each grouped.standaloneEvents.filter((s) => s.index === "after") as standalone, i (i)}
           {@const globalIndex = afterStartIndex + i}
-          <li class="event {standalone.event.kind}" class:expanded={expandedEvents.has(globalIndex)}>
-            <button
-              class="event-btn"
-              onclick={() => toggleEvent(globalIndex)}
-            >
-              <span class="event-emoji">{eventEmoji(standalone.event.kind)}</span>
+          <li
+            class="event {standalone.event.kind}"
+            class:expanded={expandedEvents.has(globalIndex)}
+          >
+            <button class="event-btn" onclick={() => toggleEvent(globalIndex)}>
+              <span class="event-emoji"
+                >{eventEmoji(standalone.event.kind)}</span
+              >
               <span class="event-text">{eventLabel(standalone.event)}</span>
               <span class="event-time">{formatTime(standalone.event._ts)}</span>
             </button>
@@ -208,7 +220,7 @@
       </ul>
     </div>
     {#if !autoScroll}
-      <button class="jump-bottom" onclick={jumpToBottom}>{'\u2193'} New events</button>
+      <button class="jump-bottom" onclick={jumpToBottom}>↓ New events</button>
     {/if}
   </section>
 {/if}

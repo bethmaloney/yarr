@@ -67,7 +67,10 @@ async function navigateToHistory(
 }
 
 test.describe("History view — column headers (Task 9)", () => {
-  test("header row exists with all column labels", async ({ page, mockTauri }) => {
+  test("header row exists with all column labels", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri);
 
     const header = page.locator(".trace-header");
@@ -98,7 +101,10 @@ test.describe("History view — column headers (Task 9)", () => {
     await expect(traceRows).toHaveCount(2);
   });
 
-  test("header row is not shown when there are no traces", async ({ page, mockTauri }) => {
+  test("header row is not shown when there are no traces", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri, []);
 
     // With no traces, the empty state should show and no header should be present
@@ -108,7 +114,10 @@ test.describe("History view — column headers (Task 9)", () => {
 });
 
 test.describe("History view — prompt text column (Task 10)", () => {
-  test("prompt text is visible in each trace row", async ({ page, mockTauri }) => {
+  test("prompt text is visible in each trace row", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri);
 
     const traceRows = page.locator(".trace-row");
@@ -125,14 +134,20 @@ test.describe("History view — prompt text column (Task 10)", () => {
     await expect(secondRowPrompt).toContainText("Refactor auth module");
   });
 
-  test("prompt span has the trace-prompt class", async ({ page, mockTauri }) => {
+  test("prompt span has the trace-prompt class", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri);
 
     const promptSpans = page.locator(".trace-row .trace-prompt");
     await expect(promptSpans).toHaveCount(2);
   });
 
-  test("prompt column appears between plan and status badge", async ({ page, mockTauri }) => {
+  test("prompt column appears between plan and status badge", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri);
 
     const firstRow = page.locator(".trace-row").first();
@@ -148,7 +163,9 @@ test.describe("History view — prompt text column (Task 10)", () => {
 
     // Find indices of plan, prompt, and badge
     const planIndex = spanClasses.findIndex((c) => c.includes("trace-plan"));
-    const promptIndex = spanClasses.findIndex((c) => c.includes("trace-prompt"));
+    const promptIndex = spanClasses.findIndex((c) =>
+      c.includes("trace-prompt"),
+    );
     const badgeIndex = spanClasses.findIndex((c) => c.includes("trace-badge"));
 
     // Prompt should come after plan and before badge
@@ -159,7 +176,10 @@ test.describe("History view — prompt text column (Task 10)", () => {
     expect(promptIndex).toBeLessThan(badgeIndex);
   });
 
-  test("prompt text in header row matches column position", async ({ page, mockTauri }) => {
+  test("prompt text in header row matches column position", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri);
 
     // The header should also contain a "Prompt" label
@@ -177,7 +197,15 @@ test.describe("History view — sortable columns (Task 11)", () => {
 
     // Each sortable column should be a <button> element, not a <span>
     const headerButtons = header.locator("button");
-    const expectedColumns = ["Date", "Plan", "Prompt", "Status", "Iters", "Cost", "Duration"];
+    const expectedColumns = [
+      "Date",
+      "Plan",
+      "Prompt",
+      "Status",
+      "Iters",
+      "Cost",
+      "Duration",
+    ];
 
     for (const label of expectedColumns) {
       const btn = header.locator("button", { hasText: label });
@@ -188,7 +216,10 @@ test.describe("History view — sortable columns (Task 11)", () => {
     await expect(headerButtons).toHaveCount(expectedColumns.length);
   });
 
-  test("default sort is date descending — most recent trace first", async ({ page, mockTauri }) => {
+  test("default sort is date descending — most recent trace first", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri);
 
     const traceRows = page.locator(".trace-row");
@@ -202,15 +233,22 @@ test.describe("History view — sortable columns (Task 11)", () => {
     await expect(secondRow).toContainText("Refactor auth module");
 
     // The Date column header button should show a descending arrow indicator
-    const dateButton = page.locator(".trace-header button", { hasText: "Date" });
+    const dateButton = page.locator(".trace-header button", {
+      hasText: "Date",
+    });
     await expect(dateButton).toContainText("\u2193"); // down arrow
   });
 
-  test("clicking Date header toggles to ascending sort", async ({ page, mockTauri }) => {
+  test("clicking Date header toggles to ascending sort", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri);
 
     // Click the Date header button to toggle from desc to asc
-    const dateButton = page.locator(".trace-header button", { hasText: "Date" });
+    const dateButton = page.locator(".trace-header button", {
+      hasText: "Date",
+    });
     await dateButton.click();
 
     const traceRows = page.locator(".trace-row");
@@ -231,7 +269,9 @@ test.describe("History view — sortable columns (Task 11)", () => {
     await navigateToHistory(page, mockTauri);
 
     // Click Cost header to sort by cost ascending
-    const costButton = page.locator(".trace-header button", { hasText: "Cost" });
+    const costButton = page.locator(".trace-header button", {
+      hasText: "Cost",
+    });
     await costButton.click();
 
     const traceRows = page.locator(".trace-row");
@@ -249,7 +289,10 @@ test.describe("History view — sortable columns (Task 11)", () => {
     await expect(costButton).toContainText("\u2191"); // ascending arrow
   });
 
-  test("header buttons have no visible button chrome", async ({ page, mockTauri }) => {
+  test("header buttons have no visible button chrome", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri);
 
     const headerButtons = page.locator(".trace-header button");
@@ -266,9 +309,7 @@ test.describe("History view — sortable columns (Task 11)", () => {
       expect(border).toBe("none");
 
       // Buttons should have cursor: pointer
-      const cursor = await btn.evaluate(
-        (el) => getComputedStyle(el).cursor,
-      );
+      const cursor = await btn.evaluate((el) => getComputedStyle(el).cursor);
       expect(cursor).toBe("pointer");
     }
   });

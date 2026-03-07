@@ -28,7 +28,9 @@
       await navigator.clipboard.writeText(trace.session_id);
       copied = true;
       clearTimeout(copyTimer);
-      copyTimer = setTimeout(() => { copied = false; }, 1500);
+      copyTimer = setTimeout(() => {
+        copied = false;
+      }, 1500);
     } catch {
       // silently fail if clipboard not available
     }
@@ -138,7 +140,12 @@
           {trace.total_input_tokens.toLocaleString()} / {trace.total_output_tokens.toLocaleString()}
         </dd>
         <dt>Session ID</dt>
-        <dd class="mono"><span>{trace.session_id}</span> <button class="copy-btn" onclick={copySessionId}>{copied ? "Copied!" : "Copy"}</button></dd>
+        <dd class="mono">
+          <span>{trace.session_id}</span>
+          <button class="copy-btn" onclick={copySessionId}
+            >{copied ? "Copied!" : "Copy"}</button
+          >
+        </dd>
       </dl>
     </section>
 

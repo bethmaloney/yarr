@@ -1,54 +1,70 @@
-import { describe, it, expect } from 'vitest';
-import { groupEventsByIteration } from './iteration-groups';
-import type { IterationGroup, GroupedEvents } from './iteration-groups';
-import type { SessionEvent } from './types';
+import { describe, it, expect } from "vitest";
+import { groupEventsByIteration } from "./iteration-groups";
+import type { SessionEvent } from "./types";
 
 function makeEvent(overrides: Partial<SessionEvent>): SessionEvent {
-  return { kind: 'unknown', ...overrides };
+  return { kind: "unknown", ...overrides };
 }
 
-describe('groupEventsByIteration', () => {
-  describe('edge cases', () => {
-    it('returns empty standaloneEvents and iterations for empty array', () => {
+describe("groupEventsByIteration", () => {
+  describe("edge cases", () => {
+    it("returns empty standaloneEvents and iterations for empty array", () => {
       const result = groupEventsByIteration([]);
       expect(result.standaloneEvents).toEqual([]);
       expect(result.iterations).toEqual([]);
     });
   });
 
-  describe('standalone events', () => {
+  describe("standalone events", () => {
     it('session_started is a standalone "before" event', () => {
-      const event = makeEvent({ kind: 'session_started', session_id: 'sess-1', _ts: 1000 });
+      const event = makeEvent({
+        kind: "session_started",
+        session_id: "sess-1",
+        _ts: 1000,
+      });
       const result = groupEventsByIteration([event]);
 
-      expect(result.standaloneEvents).toEqual([
-        { index: 'before', event },
-      ]);
+      expect(result.standaloneEvents).toEqual([{ index: "before", event }]);
       expect(result.iterations).toEqual([]);
     });
 
     it('session_complete is a standalone "after" event', () => {
-      const event = makeEvent({ kind: 'session_complete', session_id: 'sess-1', _ts: 9000 });
+      const event = makeEvent({
+        kind: "session_complete",
+        session_id: "sess-1",
+        _ts: 9000,
+      });
       const result = groupEventsByIteration([event]);
 
-      expect(result.standaloneEvents).toEqual([
-        { index: 'after', event },
-      ]);
+      expect(result.standaloneEvents).toEqual([{ index: "after", event }]);
       expect(result.iterations).toEqual([]);
     });
   });
 
-  describe('single iteration', () => {
-    it('groups all event types into one IterationGroup with correct stats', () => {
+  describe("single iteration", () => {
+    it("groups all event types into one IterationGroup with correct stats", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 1000 }),
-        makeEvent({ kind: 'tool_use', tool_name: 'Read', tool_input: { path: '/foo' }, _ts: 1500 }),
-        makeEvent({ kind: 'assistant_text', text: 'I will read the file.', _ts: 2000 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "tool_use",
+          tool_name: "Read",
+          tool_input: { path: "/foo" },
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "assistant_text",
+          text: "I will read the file.",
+          _ts: 2000,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 3000,
-          result: { total_cost_usd: 0.42, input_tokens: 5000, output_tokens: 1200 },
+          result: {
+            total_cost_usd: 0.42,
+            input_tokens: 5000,
+            output_tokens: 1200,
+          },
         }),
       ];
 
@@ -68,24 +84,36 @@ describe('groupEventsByIteration', () => {
     });
   });
 
-  describe('multiple iterations', () => {
-    it('creates separate groups with correct stats per iteration', () => {
+  describe("multiple iterations", () => {
+    it("creates separate groups with correct stats per iteration", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 1000 }),
-        makeEvent({ kind: 'assistant_text', text: 'Working on task 1.', _ts: 1100 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "assistant_text",
+          text: "Working on task 1.",
+          _ts: 1100,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 2000,
-          result: { total_cost_usd: 0.20, input_tokens: 3000, output_tokens: 800 },
+          result: {
+            total_cost_usd: 0.2,
+            input_tokens: 3000,
+            output_tokens: 800,
+          },
         }),
-        makeEvent({ kind: 'iteration_started', iteration: 2, _ts: 2500 }),
-        makeEvent({ kind: 'tool_use', tool_name: 'Write', _ts: 2700 }),
+        makeEvent({ kind: "iteration_started", iteration: 2, _ts: 2500 }),
+        makeEvent({ kind: "tool_use", tool_name: "Write", _ts: 2700 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 2,
           _ts: 3500,
-          result: { total_cost_usd: 0.35, input_tokens: 6000, output_tokens: 1500 },
+          result: {
+            total_cost_usd: 0.35,
+            input_tokens: 6000,
+            output_tokens: 1500,
+          },
         }),
       ];
 
@@ -96,7 +124,7 @@ describe('groupEventsByIteration', () => {
       const g1 = result.iterations[0];
       expect(g1.iteration).toBe(1);
       expect(g1.events).toHaveLength(3);
-      expect(g1.cost).toBe(0.20);
+      expect(g1.cost).toBe(0.2);
       expect(g1.inputTokens).toBe(3000);
       expect(g1.outputTokens).toBe(800);
       expect(g1.startTs).toBe(1000);
@@ -113,40 +141,61 @@ describe('groupEventsByIteration', () => {
     });
   });
 
-  describe('full session', () => {
-    it('session_started + 3 iterations + session_complete', () => {
-      const sessionStarted = makeEvent({ kind: 'session_started', session_id: 'sess-1', _ts: 100 });
-      const sessionComplete = makeEvent({ kind: 'session_complete', session_id: 'sess-1', _ts: 9000, outcome: 'completed' });
+  describe("full session", () => {
+    it("session_started + 3 iterations + session_complete", () => {
+      const sessionStarted = makeEvent({
+        kind: "session_started",
+        session_id: "sess-1",
+        _ts: 100,
+      });
+      const sessionComplete = makeEvent({
+        kind: "session_complete",
+        session_id: "sess-1",
+        _ts: 9000,
+        outcome: "completed",
+      });
 
       const events: SessionEvent[] = [
         sessionStarted,
         // Iteration 1
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 200 }),
-        makeEvent({ kind: 'assistant_text', text: 'Planning.', _ts: 300 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 200 }),
+        makeEvent({ kind: "assistant_text", text: "Planning.", _ts: 300 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 1000,
-          result: { total_cost_usd: 0.10, input_tokens: 1000, output_tokens: 400 },
+          result: {
+            total_cost_usd: 0.1,
+            input_tokens: 1000,
+            output_tokens: 400,
+          },
         }),
         // Iteration 2
-        makeEvent({ kind: 'iteration_started', iteration: 2, _ts: 1100 }),
-        makeEvent({ kind: 'tool_use', tool_name: 'Edit', _ts: 1200 }),
-        makeEvent({ kind: 'assistant_text', text: 'Editing file.', _ts: 1300 }),
+        makeEvent({ kind: "iteration_started", iteration: 2, _ts: 1100 }),
+        makeEvent({ kind: "tool_use", tool_name: "Edit", _ts: 1200 }),
+        makeEvent({ kind: "assistant_text", text: "Editing file.", _ts: 1300 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 2,
           _ts: 2000,
-          result: { total_cost_usd: 0.25, input_tokens: 4000, output_tokens: 1000 },
+          result: {
+            total_cost_usd: 0.25,
+            input_tokens: 4000,
+            output_tokens: 1000,
+          },
         }),
         // Iteration 3
-        makeEvent({ kind: 'iteration_started', iteration: 3, _ts: 2100 }),
-        makeEvent({ kind: 'assistant_text', text: 'Verifying.', _ts: 2200 }),
+        makeEvent({ kind: "iteration_started", iteration: 3, _ts: 2100 }),
+        makeEvent({ kind: "assistant_text", text: "Verifying.", _ts: 2200 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 3,
           _ts: 3000,
-          result: { total_cost_usd: 0.15, input_tokens: 2000, output_tokens: 600 },
+          result: {
+            total_cost_usd: 0.15,
+            input_tokens: 2000,
+            output_tokens: 600,
+          },
         }),
         sessionComplete,
       ];
@@ -155,15 +204,21 @@ describe('groupEventsByIteration', () => {
 
       // Standalone events
       expect(result.standaloneEvents).toHaveLength(2);
-      expect(result.standaloneEvents[0]).toEqual({ index: 'before', event: sessionStarted });
-      expect(result.standaloneEvents[1]).toEqual({ index: 'after', event: sessionComplete });
+      expect(result.standaloneEvents[0]).toEqual({
+        index: "before",
+        event: sessionStarted,
+      });
+      expect(result.standaloneEvents[1]).toEqual({
+        index: "after",
+        event: sessionComplete,
+      });
 
       // Iteration groups
       expect(result.iterations).toHaveLength(3);
 
       expect(result.iterations[0].iteration).toBe(1);
       expect(result.iterations[0].events).toHaveLength(3);
-      expect(result.iterations[0].cost).toBe(0.10);
+      expect(result.iterations[0].cost).toBe(0.1);
       expect(result.iterations[0].startTs).toBe(200);
       expect(result.iterations[0].endTs).toBe(1000);
 
@@ -183,12 +238,16 @@ describe('groupEventsByIteration', () => {
     });
   });
 
-  describe('in-progress iteration (missing iteration_complete)', () => {
-    it('creates group with default cost/tokens and undefined endTs', () => {
+  describe("in-progress iteration (missing iteration_complete)", () => {
+    it("creates group with default cost/tokens and undefined endTs", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 1000 }),
-        makeEvent({ kind: 'assistant_text', text: 'Still working...', _ts: 1500 }),
-        makeEvent({ kind: 'tool_use', tool_name: 'Bash', _ts: 2000 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "assistant_text",
+          text: "Still working...",
+          _ts: 1500,
+        }),
+        makeEvent({ kind: "tool_use", tool_name: "Bash", _ts: 2000 }),
       ];
 
       const result = groupEventsByIteration(events);
@@ -205,17 +264,25 @@ describe('groupEventsByIteration', () => {
       expect(group.endTs).toBeUndefined();
     });
 
-    it('handles multiple iterations where only the last is in-progress', () => {
+    it("handles multiple iterations where only the last is in-progress", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 1000 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 2000,
-          result: { total_cost_usd: 0.10, input_tokens: 1000, output_tokens: 300 },
+          result: {
+            total_cost_usd: 0.1,
+            input_tokens: 1000,
+            output_tokens: 300,
+          },
         }),
-        makeEvent({ kind: 'iteration_started', iteration: 2, _ts: 2500 }),
-        makeEvent({ kind: 'assistant_text', text: 'In progress...', _ts: 3000 }),
+        makeEvent({ kind: "iteration_started", iteration: 2, _ts: 2500 }),
+        makeEvent({
+          kind: "assistant_text",
+          text: "In progress...",
+          _ts: 3000,
+        }),
       ];
 
       const result = groupEventsByIteration(events);
@@ -223,7 +290,7 @@ describe('groupEventsByIteration', () => {
       expect(result.iterations).toHaveLength(2);
 
       // First iteration: complete
-      expect(result.iterations[0].cost).toBe(0.10);
+      expect(result.iterations[0].cost).toBe(0.1);
       expect(result.iterations[0].endTs).toBe(2000);
 
       // Second iteration: in-progress
@@ -235,22 +302,27 @@ describe('groupEventsByIteration', () => {
     });
   });
 
-  describe('iteration_complete with missing result fields', () => {
-    it('defaults cost to 0 when result has no total_cost_usd', () => {
+  describe("iteration_complete with missing result fields", () => {
+    it("defaults cost to 0 when result has no total_cost_usd", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 1000 }),
-        makeEvent({ kind: 'iteration_complete', iteration: 1, _ts: 2000, result: {} }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: {},
+        }),
       ];
 
       const result = groupEventsByIteration(events);
       expect(result.iterations[0].cost).toBe(0);
     });
 
-    it('defaults tokens to 0 when result has no input_tokens or output_tokens', () => {
+    it("defaults tokens to 0 when result has no input_tokens or output_tokens", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 1000 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 2000,
           result: { total_cost_usd: 0.05 },
@@ -263,10 +335,10 @@ describe('groupEventsByIteration', () => {
       expect(result.iterations[0].outputTokens).toBe(0);
     });
 
-    it('defaults all stats to 0 when result is undefined on iteration_complete', () => {
+    it("defaults all stats to 0 when result is undefined on iteration_complete", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 1000 }),
-        makeEvent({ kind: 'iteration_complete', iteration: 1, _ts: 2000 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({ kind: "iteration_complete", iteration: 1, _ts: 2000 }),
       ];
 
       const result = groupEventsByIteration(events);
@@ -277,15 +349,19 @@ describe('groupEventsByIteration', () => {
     });
   });
 
-  describe('token data extraction', () => {
-    it('correctly extracts input_tokens and output_tokens from result', () => {
+  describe("token data extraction", () => {
+    it("correctly extracts input_tokens and output_tokens from result", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 500 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 1500,
-          result: { total_cost_usd: 1.23, input_tokens: 50000, output_tokens: 12000 },
+          result: {
+            total_cost_usd: 1.23,
+            input_tokens: 50000,
+            output_tokens: 12000,
+          },
         }),
       ];
 
@@ -296,14 +372,14 @@ describe('groupEventsByIteration', () => {
       expect(result.iterations[0].cost).toBe(1.23);
     });
 
-    it('handles partial token data — only input_tokens present', () => {
+    it("handles partial token data — only input_tokens present", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 500 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 1500,
-          result: { total_cost_usd: 0.50, input_tokens: 8000 },
+          result: { total_cost_usd: 0.5, input_tokens: 8000 },
         }),
       ];
 
@@ -313,14 +389,14 @@ describe('groupEventsByIteration', () => {
       expect(result.iterations[0].outputTokens).toBe(0);
     });
 
-    it('handles partial token data — only output_tokens present', () => {
+    it("handles partial token data — only output_tokens present", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 500 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 1500,
-          result: { total_cost_usd: 0.30, output_tokens: 2000 },
+          result: { total_cost_usd: 0.3, output_tokens: 2000 },
         }),
       ];
 
@@ -331,15 +407,20 @@ describe('groupEventsByIteration', () => {
     });
   });
 
-  describe('context window extraction', () => {
-    it('extracts context_window from result when present', () => {
+  describe("context window extraction", () => {
+    it("extracts context_window from result when present", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 500 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 1500,
-          result: { total_cost_usd: 0.5, input_tokens: 60000, output_tokens: 5000, context_window: 200000 },
+          result: {
+            total_cost_usd: 0.5,
+            input_tokens: 60000,
+            output_tokens: 5000,
+            context_window: 200000,
+          },
         }),
       ];
 
@@ -348,14 +429,18 @@ describe('groupEventsByIteration', () => {
       expect(result.iterations[0].contextWindow).toBe(200000);
     });
 
-    it('defaults contextWindow to 0 when context_window is not in result', () => {
+    it("defaults contextWindow to 0 when context_window is not in result", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 500 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 1500,
-          result: { total_cost_usd: 0.5, input_tokens: 60000, output_tokens: 5000 },
+          result: {
+            total_cost_usd: 0.5,
+            input_tokens: 60000,
+            output_tokens: 5000,
+          },
         }),
       ];
 
@@ -364,10 +449,10 @@ describe('groupEventsByIteration', () => {
       expect(result.iterations[0].contextWindow).toBe(0);
     });
 
-    it('defaults contextWindow to 0 when result is undefined', () => {
+    it("defaults contextWindow to 0 when result is undefined", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
-        makeEvent({ kind: 'iteration_complete', iteration: 1, _ts: 1500 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 500 }),
+        makeEvent({ kind: "iteration_complete", iteration: 1, _ts: 1500 }),
       ];
 
       const result = groupEventsByIteration(events);
@@ -375,28 +460,42 @@ describe('groupEventsByIteration', () => {
       expect(result.iterations[0].contextWindow).toBe(0);
     });
 
-    it('works correctly across multiple iterations with different context_window values', () => {
+    it("works correctly across multiple iterations with different context_window values", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 500 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 1,
           _ts: 1500,
-          result: { total_cost_usd: 0.3, input_tokens: 40000, output_tokens: 3000, context_window: 200000 },
+          result: {
+            total_cost_usd: 0.3,
+            input_tokens: 40000,
+            output_tokens: 3000,
+            context_window: 200000,
+          },
         }),
-        makeEvent({ kind: 'iteration_started', iteration: 2, _ts: 2000 }),
+        makeEvent({ kind: "iteration_started", iteration: 2, _ts: 2000 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 2,
           _ts: 3000,
-          result: { total_cost_usd: 0.6, input_tokens: 80000, output_tokens: 7000, context_window: 180000 },
+          result: {
+            total_cost_usd: 0.6,
+            input_tokens: 80000,
+            output_tokens: 7000,
+            context_window: 180000,
+          },
         }),
-        makeEvent({ kind: 'iteration_started', iteration: 3, _ts: 3500 }),
+        makeEvent({ kind: "iteration_started", iteration: 3, _ts: 3500 }),
         makeEvent({
-          kind: 'iteration_complete',
+          kind: "iteration_complete",
           iteration: 3,
           _ts: 4500,
-          result: { total_cost_usd: 0.1, input_tokens: 10000, output_tokens: 1000 },
+          result: {
+            total_cost_usd: 0.1,
+            input_tokens: 10000,
+            output_tokens: 1000,
+          },
         }),
       ];
 
@@ -408,10 +507,10 @@ describe('groupEventsByIteration', () => {
       expect(result.iterations[2].contextWindow).toBe(0); // not present in result
     });
 
-    it('defaults contextWindow to 0 for in-progress iteration (no iteration_complete)', () => {
+    it("defaults contextWindow to 0 for in-progress iteration (no iteration_complete)", () => {
       const events: SessionEvent[] = [
-        makeEvent({ kind: 'iteration_started', iteration: 1, _ts: 500 }),
-        makeEvent({ kind: 'assistant_text', text: 'Working...', _ts: 800 }),
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 500 }),
+        makeEvent({ kind: "assistant_text", text: "Working...", _ts: 800 }),
       ];
 
       const result = groupEventsByIteration(events);
