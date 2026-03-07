@@ -180,22 +180,72 @@ describe("SessionState", () => {
     };
     expect(state.error).toBe("Process exited with code 1");
   });
+
+  it("accepts a disconnected state", () => {
+    const state: SessionState = {
+      running: false,
+      events: [],
+      trace: null,
+      error: null,
+      disconnected: true,
+      reconnecting: false,
+    };
+    expect(state.disconnected).toBe(true);
+    expect(state.reconnecting).toBe(false);
+  });
+
+  it("accepts a reconnecting state", () => {
+    const state: SessionState = {
+      running: true,
+      events: [],
+      trace: null,
+      error: null,
+      disconnected: false,
+      reconnecting: true,
+    };
+    expect(state.reconnecting).toBe(true);
+    expect(state.disconnected).toBe(false);
+  });
+
+  it("is backwards compatible without disconnected and reconnecting fields", () => {
+    const state: SessionState = {
+      running: false,
+      events: [],
+      trace: null,
+      error: null,
+    };
+    expect(state.disconnected).toBeUndefined();
+    expect(state.reconnecting).toBeUndefined();
+  });
 });
 
 describe("RepoStatus", () => {
-  it("accepts all valid status values", () => {
-    const statuses: RepoStatus[] = ["idle", "running", "completed", "failed"];
-    expect(statuses).toHaveLength(4);
+  it("accepts all valid status values including disconnected", () => {
+    const statuses: RepoStatus[] = [
+      "idle",
+      "running",
+      "completed",
+      "failed",
+      "disconnected",
+    ];
+    expect(statuses).toHaveLength(5);
     expect(statuses).toContain("idle");
     expect(statuses).toContain("running");
     expect(statuses).toContain("completed");
     expect(statuses).toContain("failed");
+    expect(statuses).toContain("disconnected");
   });
 
   it("can be used in conditional logic", () => {
     const status: RepoStatus = "running";
     const isActive = status === "running";
     expect(isActive).toBe(true);
+  });
+
+  it("can represent a disconnected status", () => {
+    const status: RepoStatus = "disconnected";
+    const isDisconnected = status === "disconnected";
+    expect(isDisconnected).toBe(true);
   });
 });
 

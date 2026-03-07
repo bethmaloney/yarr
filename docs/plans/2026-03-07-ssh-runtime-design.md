@@ -502,12 +502,12 @@ Add disconnect/reconnect UI states and wire up the reconnect action.
 - After reconnect resolves, session transitions back to running/completed/failed
 
 **Checklist:**
-- [ ] Add `disconnected` and `reconnecting` to `SessionState`
-- [ ] Handle new event types in the session event listener
-- [ ] Add "Reconnect" button to RepoDetail for disconnected state
-- [ ] Add reconnecting spinner
-- [ ] Wire button to `reconnect_session` Tauri command
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `disconnected` and `reconnecting` to `SessionState`
+- [x] Handle new event types in the session event listener
+- [x] Add "Reconnect" button to RepoDetail for disconnected state
+- [x] Add reconnecting spinner
+- [x] Wire button to `reconnect_session` Tauri command
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -574,6 +574,6 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 8 | SshRuntime — reconnection methods | Done |
 | 9 | SshSessionOrchestrator | Done |
 | 10 | Tauri commands for SSH sessions | Done |
-| 11 | Frontend session state — Disconnected and Reconnecting | Not Started |
+| 11 | Frontend session state — Disconnected and Reconnecting | Done |
 | 12 | SSH runtime unit tests (Rust) | Not Started |
 | 13 | Frontend tests for SSH repo flow | Not Started |

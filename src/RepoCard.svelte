@@ -17,6 +17,7 @@
     running: "#e8d44d",
     completed: "#34d399",
     failed: "#f87171",
+    disconnected: "#f59e0b",
   };
 
   const statusLabels: Record<typeof status, string> = {
@@ -24,6 +25,7 @@
     running: "Running",
     completed: "Completed",
     failed: "Failed",
+    disconnected: "Disconnected",
   };
 </script>
 
@@ -44,6 +46,7 @@
     <span
       class="status-dot"
       class:running={status === "running"}
+      class:disconnected={status === "disconnected"}
       style="background: {statusColors[status]}"
     ></span>
     <span class="status-label" style="color: {statusColors[status]}"
@@ -130,6 +133,10 @@
     letter-spacing: 0.04em;
   }
 
+  .status-dot.disconnected {
+    animation: blink 1s step-end infinite;
+  }
+
   @keyframes pulse {
     0%,
     100% {
@@ -137,6 +144,16 @@
     }
     50% {
       opacity: 0.4;
+    }
+  }
+
+  @keyframes blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
     }
   }
 </style>

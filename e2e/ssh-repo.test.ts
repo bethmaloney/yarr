@@ -161,3 +161,134 @@ test.describe("RepoDetail for Local repos", () => {
     await expect(page.getByText("/home/user/projects/my-app")).toBeVisible();
   });
 });
+
+test.describe("Disconnected and Reconnecting states", () => {
+  const sshRepo = {
+    type: "ssh" as const,
+    id: "ssh-repo-1",
+    sshHost: "dev-server",
+    remotePath: "/home/user/projects/remote-app",
+    name: "remote-app",
+    model: "opus",
+    maxIterations: 40,
+    completionSignal: "ALL TODO ITEMS COMPLETE",
+  };
+
+  async function startRunningSession(
+    page: import("@playwright/test").Page,
+    mockTauri: (opts?: import("./fixtures").TauriMockOptions) => Promise<void>,
+    extraInvokeHandlers: Record<string, unknown> = {},
+  ) {
+    await mockTauri({
+      storeData: { repos: [sshRepo] },
+      invokeHandlers: {
+        // run_session never resolves, simulating an ongoing session
+        run_session: () => new Promise(() => {}),
+        ...extraInvokeHandlers,
+      },
+    });
+    await page.goto("/");
+
+    // Navigate to repo detail
+    await page.getByRole("button", { name: /remote-app/ }).click();
+    await expect(page.locator("h1", { hasText: "remote-app" })).toBeVisible();
+
+    // Fill in plan file and click Run to start the session
+    await page
+      .getByPlaceholder("docs/plans/my-feature-design.md")
+      .fill("/tmp/plan.md");
+    await page.getByRole("button", { name: "Run" }).click();
+
+    // Verify session is running
+    await expect(page.getByText("Running...")).toBeVisible();
+  }
+
+  async function emitSessionEvent(
+    page: import("@playwright/test").Page,
+    event: Record<string, unknown>,
+  ) {
+    await page.evaluate((evt) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+        event: "session-event",
+        payload: { repo_id: "ssh-repo-1", event: evt },
+      });
+    }, event);
+  }
+
+  test("shows Reconnect button when session is disconnected", async ({
+    page,
+    mockTauri,
+  }) => {
+    await startRunningSession(page, mockTauri);
+
+    // Emit a disconnected event
+    await emitSessionEvent(page, { kind: "disconnected", iteration: 3 });
+
+    // A Reconnect button should appear
+    await expect(
+      page.getByRole("button", { name: "Reconnect" }),
+    ).toBeVisible();
+  });
+
+  test("shows reconnecting spinner when reconnecting", async ({
+    page,
+    mockTauri,
+  }) => {
+    await startRunningSession(page, mockTauri);
+
+    // Emit a reconnecting event
+    await emitSessionEvent(page, { kind: "reconnecting", iteration: 3 });
+
+    // Should show reconnecting indicator text
+    await expect(page.getByText("Reconnecting...")).toBeVisible();
+  });
+
+  test("Reconnect button invokes reconnect_session with repoId", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: { repos: [sshRepo] },
+      invokeHandlers: {
+        run_session: () => new Promise(() => {}),
+        reconnect_session: (args: Record<string, unknown>) => {
+          // Store the call args on window so the test can read them
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ((window as any).__reconnectCalls ??= []).push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+    await page.goto("/");
+
+    // Navigate to repo detail
+    await page.getByRole("button", { name: /remote-app/ }).click();
+    await expect(page.locator("h1", { hasText: "remote-app" })).toBeVisible();
+
+    // Fill in plan file and click Run
+    await page
+      .getByPlaceholder("docs/plans/my-feature-design.md")
+      .fill("/tmp/plan.md");
+    await page.getByRole("button", { name: "Run" }).click();
+    await expect(page.getByText("Running...")).toBeVisible();
+
+    // Emit disconnected event
+    await emitSessionEvent(page, { kind: "disconnected", iteration: 3 });
+
+    // Click Reconnect
+    const reconnectButton = page.getByRole("button", { name: "Reconnect" });
+    await expect(reconnectButton).toBeVisible();
+    await reconnectButton.click();
+
+    // Verify the reconnect_session command was invoked with the correct repoId
+    const calls = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (window as any).__reconnectCalls;
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual(
+      expect.objectContaining({ repoId: "ssh-repo-1" }),
+    );
+  });
+});

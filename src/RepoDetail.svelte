@@ -13,6 +13,7 @@
     onRun,
     onMockRun,
     onUpdateRepo,
+    onReconnect,
   }: {
     repo: RepoConfig;
     session: SessionState;
@@ -20,6 +21,7 @@
     onRun: (planFile: string) => void;
     onMockRun: () => void;
     onUpdateRepo: (repo: RepoConfig) => void;
+    onReconnect: () => void;
   } = $props();
 
   // Local settings state, initialized from repo prop
@@ -153,29 +155,45 @@
   </section>
 
   <div class="actions">
-    <button
-      type="button"
-      disabled={session.running || !planFile}
-      onclick={() => onRun(planFile)}
-    >
-      {session.running ? "Running..." : "Run"}
-    </button>
-    {#if session.running}
-      <button type="button" onclick={stopSession} class="danger"> Stop </button>
+    {#if session.disconnected}
+      <button type="button" onclick={onReconnect}>
+        Reconnect
+      </button>
+    {:else if session.reconnecting}
+      <button type="button" disabled>
+        Reconnecting...
+      </button>
     {:else}
       <button
         type="button"
-        onclick={onMockRun}
-        disabled={session.running}
-        class="secondary"
+        disabled={session.running || !planFile}
+        onclick={() => onRun(planFile)}
       >
-        Test Run
+        {session.running ? "Running..." : "Run"}
       </button>
+      {#if session.running}
+        <button type="button" onclick={stopSession} class="danger"> Stop </button>
+      {:else}
+        <button
+          type="button"
+          onclick={onMockRun}
+          disabled={session.running}
+          class="secondary"
+        >
+          Test Run
+        </button>
+      {/if}
     {/if}
   </div>
 
   {#if !planFile && !session.running}
     <p class="hint">Select a prompt file to start a run</p>
+  {/if}
+
+  {#if session.disconnected}
+    <section class="disconnected-banner">
+      <p>Connection lost — the remote session may still be running.</p>
+    </section>
   {/if}
 
   <EventsList events={session.events} />
@@ -370,6 +388,20 @@
     color: #f87171;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  .disconnected-banner {
+    background: #3b2e1a;
+    border: 1px solid #f59e0b;
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .disconnected-banner p {
+    margin: 0;
+    color: #f59e0b;
+    font-size: 0.9rem;
   }
 
   .error pre {

@@ -40,10 +40,20 @@
       event._ts = Date.now();
       const session = sessions.get(repo_id);
       if (session) {
-        sessions.set(repo_id, {
-          ...session,
+        const updates: Partial<SessionState> = {
           events: [...session.events, event],
-        });
+        };
+        if (event.kind === "disconnected") {
+          updates.disconnected = true;
+          updates.reconnecting = false;
+        } else if (event.kind === "reconnecting") {
+          updates.reconnecting = true;
+          updates.disconnected = false;
+        } else if (session.disconnected || session.reconnecting) {
+          updates.disconnected = false;
+          updates.reconnecting = false;
+        }
+        sessions.set(repo_id, { ...session, ...updates });
       }
     });
 
@@ -106,6 +116,8 @@
 
     sessions.set(repoId, {
       running: true,
+      disconnected: false,
+      reconnecting: false,
       events: [],
       trace: null,
       error: null,
@@ -143,6 +155,8 @@
   async function handleMockRun(repoId: string) {
     sessions.set(repoId, {
       running: true,
+      disconnected: false,
+      reconnecting: false,
       events: [],
       trace: null,
       error: null,
@@ -164,6 +178,21 @@
   async function handleUpdateRepo(repo: RepoConfig) {
     await updateRepo(repo);
     repos = await loadRepos();
+  }
+
+  async function handleReconnect(repoId: string) {
+    const session = sessions.get(repoId);
+    if (session) {
+      sessions.set(repoId, { ...session, reconnecting: true, disconnected: false });
+    }
+    try {
+      await invoke("reconnect_session", { repoId });
+    } catch (e) {
+      const session = sessions.get(repoId);
+      if (session) {
+        sessions.set(repoId, { ...session, error: String(e), reconnecting: false, disconnected: true });
+      }
+    }
   }
 </script>
 
@@ -211,6 +240,8 @@
   {#if repo}
     {@const sessionState = sessions.get(repoId) ?? {
       running: false,
+      disconnected: false,
+      reconnecting: false,
       events: [],
       trace: null,
       error: null,
@@ -222,6 +253,7 @@
       onRun={(planFile) => handleRunSession(repoId, planFile)}
       onMockRun={() => handleMockRun(repoId)}
       onUpdateRepo={handleUpdateRepo}
+      onReconnect={() => handleReconnect(repoId)}
     />
   {/if}
 {/if}

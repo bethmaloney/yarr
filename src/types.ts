@@ -30,12 +30,14 @@ export type SessionTrace = {
 
 export type SessionState = {
   running: boolean;
+  disconnected?: boolean;
+  reconnecting?: boolean;
   events: SessionEvent[];
   trace: SessionTrace | null;
   error: string | null;
 };
 
-export type RepoStatus = "idle" | "running" | "completed" | "failed";
+export type RepoStatus = "idle" | "running" | "completed" | "failed" | "disconnected";
 
 export type TaggedSessionEvent = {
   repo_id: string;

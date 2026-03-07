@@ -39,6 +39,8 @@
   function deriveStatus(repoId: string): RepoStatus {
     const session = sessions.get(repoId);
     if (!session) return "idle";
+    if (session.disconnected) return "disconnected";
+    if (session.reconnecting) return "running";
     if (session.error) return "failed";
     if (session.running) return "running";
     if (session.trace) return "completed";
