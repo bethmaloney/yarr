@@ -197,6 +197,20 @@ fn to_wsl_path(path: &std::path::Path) -> String {
     if s.starts_with('/') {
         return s.to_string();
     }
+    // Convert \\wsl.localhost\Distro\home\... or \\wsl$\Distro\home\... -> /home/...
+    if s.starts_with("\\\\wsl.localhost\\") || s.starts_with("\\\\wsl$\\") {
+        let without_prefix = if s.starts_with("\\\\wsl.localhost\\") {
+            &s["\\\\wsl.localhost\\".len()..]
+        } else {
+            &s["\\\\wsl$\\".len()..]
+        };
+        // Skip the distro name (everything up to the next backslash)
+        if let Some(pos) = without_prefix.find('\\') {
+            let rest = &without_prefix[pos..];
+            return rest.replace('\\', "/");
+        }
+        return "/".to_string();
+    }
     // Convert C:\foo\bar -> /mnt/c/foo/bar
     if s.len() >= 3 && s.as_bytes()[1] == b':' {
         let drive = s.as_bytes()[0].to_ascii_lowercase() as char;
@@ -208,4 +222,34 @@ fn to_wsl_path(path: &std::path::Path) -> String {
 
 fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_to_wsl_path_unc_wsl_localhost() {
+        let path = Path::new("\\\\wsl.localhost\\Ubuntu-24.04\\home\\beth\\repos\\yarr");
+        assert_eq!(to_wsl_path(path), "/home/beth/repos/yarr");
+    }
+
+    #[test]
+    fn test_to_wsl_path_unc_wsl_dollar() {
+        let path = Path::new("\\\\wsl$\\Ubuntu-24.04\\home\\beth\\repos\\yarr");
+        assert_eq!(to_wsl_path(path), "/home/beth/repos/yarr");
+    }
+
+    #[test]
+    fn test_to_wsl_path_drive_letter() {
+        let path = Path::new("C:\\Users\\beth\\repos\\yarr");
+        assert_eq!(to_wsl_path(path), "/mnt/c/Users/beth/repos/yarr");
+    }
+
+    #[test]
+    fn test_to_wsl_path_unix() {
+        let path = Path::new("/home/beth/repos/yarr");
+        assert_eq!(to_wsl_path(path), "/home/beth/repos/yarr");
+    }
 }
