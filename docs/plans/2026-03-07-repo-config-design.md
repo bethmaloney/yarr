@@ -245,8 +245,8 @@ The main landing page showing all repos and an add button.
 - Empty state message when no repos configured
 
 **Checklist:**
-- [ ] Create `src/HomeView.svelte` with props, grid layout, and add button
-- [ ] Verify: `npx tsc --noEmit` passes
+- [x] Create `src/HomeView.svelte` with props, grid layout, and add button
+- [x] Verify: `npx tsc --noEmit` passes
 
 ---
 
@@ -323,7 +323,7 @@ Verify everything compiles and works together.
 | 3 | Backend — parameterize `run_session`, tag events | Done |
 | 4 | `EventsList.svelte` — extract events component | Done |
 | 5 | `RepoCard.svelte` — single repo card | Done |
-| 6 | `HomeView.svelte` — home page with repo grid | Not Started |
+| 6 | `HomeView.svelte` — home page with repo grid | Done |
 | 7 | `RepoDetail.svelte` — repo workspace view | Not Started |
 | 8 | `App.svelte` refactor — view router + session state | Not Started |
 | 9 | Integration verification | Not Started |
