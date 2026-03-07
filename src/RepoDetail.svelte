@@ -24,13 +24,14 @@
     total_cost_usd: number;
   };
 
-  let { repo, session, onBack, onRun, onMockRun, onUpdateRepo }: {
+  let { repo, session, onBack, onRun, onMockRun, onUpdateRepo, onHistory }: {
     repo: RepoConfig;
     session: { running: boolean; events: SessionEvent[]; trace: SessionTrace | null; error: string | null };
     onBack: () => void;
     onRun: (planFile: string) => void;
     onMockRun: () => void;
     onUpdateRepo: (repo: RepoConfig) => void;
+    onHistory: () => void;
   } = $props();
 
   // Local settings state, initialized from repo prop
@@ -91,6 +92,7 @@
 
 <main>
   <button class="back-btn" type="button" onclick={onBack}>&larr; Back</button>
+  <button class="back-btn" type="button" onclick={onHistory}>History</button>
 
   <header>
     <h1>{repo.name}</h1>

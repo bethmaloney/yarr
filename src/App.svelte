@@ -7,6 +7,8 @@
   import { loadRepos, addRepo, updateRepo, type RepoConfig } from "./repos";
   import HomeView from "./HomeView.svelte";
   import RepoDetail from "./RepoDetail.svelte";
+  import HistoryView from "./HistoryView.svelte";
+  import RunDetail from "./RunDetail.svelte";
 
   type SessionEvent = {
     kind: string;
@@ -38,7 +40,12 @@
     event: SessionEvent;
   };
 
-  let currentView: { kind: "home" } | { kind: "repo"; repoId: string } = $state({ kind: "home" });
+  let currentView:
+    | { kind: "home" }
+    | { kind: "repo"; repoId: string }
+    | { kind: "history"; repoId?: string }
+    | { kind: "run"; repoId: string; sessionId: string; fromRepoId?: string }
+    = $state({ kind: "home" });
   let repos: RepoConfig[] = $state([]);
   let sessions: Map<string, SessionState> = $state(new Map());
 
@@ -76,6 +83,14 @@
 
   function goHome() {
     currentView = { kind: "home" };
+  }
+
+  function goHistory(repoId?: string) {
+    currentView = repoId ? { kind: "history", repoId } : { kind: "history" };
+  }
+
+  function goRun(repoId: string, sessionId: string, fromRepoId?: string) {
+    currentView = { kind: "run", repoId, sessionId, fromRepoId };
   }
 
   async function handleRunSession(repoId: string, planFile: string) {
@@ -132,8 +147,21 @@
 </script>
 
 {#if currentView.kind === "home"}
-  <HomeView {repos} {sessions} onSelectRepo={selectRepo} onAddRepo={handleAddRepo} />
-{:else}
+  <HomeView {repos} {sessions} onSelectRepo={selectRepo} onAddRepo={handleAddRepo} onHistory={() => goHistory()} />
+{:else if currentView.kind === "history"}
+  <HistoryView
+    repoId={currentView.repoId}
+    {repos}
+    onBack={goHome}
+    onSelectRun={(rid, sid) => goRun(rid, sid, currentView.kind === "history" ? currentView.repoId : undefined)}
+  />
+{:else if currentView.kind === "run"}
+  <RunDetail
+    repoId={currentView.repoId}
+    sessionId={currentView.sessionId}
+    onBack={() => goHistory(currentView.kind === "run" ? currentView.fromRepoId : undefined)}
+  />
+{:else if currentView.kind === "repo"}
   {@const repoId = currentView.repoId}
   {@const repo = repos.find((r) => r.id === repoId)}
   {#if repo}
@@ -145,6 +173,7 @@
       onRun={(planFile) => handleRunSession(repoId, planFile)}
       onMockRun={() => handleMockRun(repoId)}
       onUpdateRepo={handleUpdateRepo}
+      onHistory={() => goHistory(repoId)}
     />
   {/if}
 {/if}

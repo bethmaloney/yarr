@@ -29,11 +29,12 @@
 
   type RepoStatus = "idle" | "running" | "completed" | "failed";
 
-  let { repos, sessions, onSelectRepo, onAddRepo }: {
+  let { repos, sessions, onSelectRepo, onAddRepo, onHistory }: {
     repos: RepoConfig[];
     sessions: Map<string, SessionState>;
     onSelectRepo: (id: string) => void;
     onAddRepo: () => void;
+    onHistory: () => void;
   } = $props();
 
   function deriveStatus(repoId: string): RepoStatus {
@@ -53,6 +54,7 @@
   </header>
 
   <div class="toolbar">
+    <button class="secondary" onclick={onHistory}>History</button>
     <button class="add-btn" onclick={onAddRepo}>+ Add repo</button>
   </div>
 
@@ -100,7 +102,24 @@
   .toolbar {
     display: flex;
     justify-content: flex-end;
+    gap: 0.5rem;
     margin-bottom: 1rem;
+  }
+
+  button.secondary {
+    padding: 0.6rem 1.5rem;
+    font-size: 1rem;
+    background: #333;
+    color: #888;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 400;
+  }
+
+  button.secondary:hover {
+    background: #444;
+    color: #ccc;
   }
 
   .add-btn {

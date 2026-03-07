@@ -197,11 +197,11 @@ Update `currentView` in App.svelte to support history and run detail views, add 
 - Pass navigation callbacks to child components
 
 **Checklist:**
-- [ ] Update `currentView` type union
-- [ ] Add navigation functions
-- [ ] Add `{:else if}` blocks for history and run views
-- [ ] Wire up props and callbacks to new components (placeholder imports for now)
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Update `currentView` type union
+- [x] Add navigation functions
+- [x] Add `{:else if}` blocks for history and run views
+- [x] Wire up props and callbacks to new components (placeholder imports for now)
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -220,10 +220,10 @@ Add a "History" button to HomeView that navigates to global history.
 - Style consistently with existing secondary buttons
 
 **Checklist:**
-- [ ] Add `onHistory` prop
-- [ ] Add History button in toolbar
-- [ ] Update App.svelte to pass `onHistory` callback
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `onHistory` prop
+- [x] Add History button in toolbar
+- [x] Update App.svelte to pass `onHistory` callback
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -242,10 +242,10 @@ Add a "History" button to RepoDetail that navigates to per-repo history.
 - Style consistently with existing secondary buttons
 
 **Checklist:**
-- [ ] Add `onHistory` prop
-- [ ] Add History button
-- [ ] Update App.svelte to pass `onHistory` callback
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `onHistory` prop
+- [x] Add History button
+- [x] Update App.svelte to pass `onHistory` callback
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -269,13 +269,13 @@ New component that lists prior runs with summary info.
 - Back button
 
 **Checklist:**
-- [ ] Create component with props
-- [ ] Invoke `list_traces` on mount
-- [ ] Render run list with all summary fields
-- [ ] Handle loading and empty states
-- [ ] Wire click to `onSelectRun`
-- [ ] Style consistently with existing views
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Create component with props
+- [x] Invoke `list_traces` on mount
+- [x] Render run list with all summary fields
+- [x] Handle loading and empty states
+- [x] Wire click to `onSelectRun`
+- [x] Style consistently with existing views
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -297,13 +297,13 @@ New component that shows a single run's trace summary and replays events.
 - Error state if trace not found
 
 **Checklist:**
-- [ ] Create component with props
-- [ ] Invoke `get_trace` and `get_trace_events` on mount
-- [ ] Render trace summary header
-- [ ] Render EventsList with loaded events
-- [ ] Handle loading and error states
-- [ ] Style consistently with existing views
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Create component with props
+- [x] Invoke `get_trace` and `get_trace_events` on mount
+- [x] Render trace summary header
+- [x] Render EventsList with loaded events
+- [x] Handle loading and error states
+- [x] Style consistently with existing views
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -340,9 +340,9 @@ Add Rust tests for the new TraceCollector methods and event serialization round-
 | 2 | Update TraceCollector for app data dir + events file | Done |
 | 3 | Accumulate events in SessionRunner | Done |
 | 4 | Add Tauri commands for listing/reading traces | Done |
-| 5 | Extend frontend navigation with new views | Not Started |
-| 6 | Add History button to HomeView | Not Started |
-| 7 | Add History button to RepoDetail | Not Started |
-| 8 | Create HistoryView.svelte | Not Started |
-| 9 | Create RunDetail.svelte | Not Started |
+| 5 | Extend frontend navigation with new views | Done |
+| 6 | Add History button to HomeView | Done |
+| 7 | Add History button to RepoDetail | Done |
+| 8 | Create HistoryView.svelte | Done |
+| 9 | Create RunDetail.svelte | Done |
 | 10 | Tests for trace persistence and listing | Not Started |

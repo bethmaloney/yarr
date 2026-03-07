@@ -31,6 +31,8 @@ pub struct SessionTrace {
     pub prompt: String,
     #[serde(default)]
     pub plan_file: Option<String>,
+    #[serde(default)]
+    pub repo_id: Option<String>,
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
     pub outcome: SessionOutcome,
@@ -77,6 +79,7 @@ pub enum SessionOutcome {
 /// Collects spans and writes them to disk as OTLP-compatible JSON
 pub struct TraceCollector {
     output_dir: PathBuf,
+    repo_id: String,
 }
 
 /// Validate that a path component does not contain traversal characters.
@@ -93,6 +96,7 @@ impl TraceCollector {
             .expect("repo_id must not contain path traversal characters");
         Self {
             output_dir: base_dir.into().join("traces").join(repo_id),
+            repo_id: repo_id.to_string(),
         }
     }
 
@@ -108,6 +112,7 @@ impl TraceCollector {
             repo_path: repo_path.to_string(),
             prompt: prompt.to_string(),
             plan_file: plan_file.map(|s| s.to_string()),
+            repo_id: Some(self.repo_id.clone()),
             start_time: Utc::now(),
             end_time: None,
             outcome: SessionOutcome::Running,
@@ -237,6 +242,11 @@ impl TraceCollector {
             if !dir.exists() {
                 continue;
             }
+            // Extract directory name to use as fallback repo_id for old traces
+            let dir_name = dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string());
             for entry in std::fs::read_dir(&dir)? {
                 let entry = entry?;
                 let path = entry.path();
@@ -250,7 +260,13 @@ impl TraceCollector {
                             }
                         };
                         match serde_json::from_str::<SessionTrace>(&contents) {
-                            Ok(trace) => traces.push(trace),
+                            Ok(mut trace) => {
+                                // Backfill repo_id from directory name for old-format traces
+                                if trace.repo_id.is_none() {
+                                    trace.repo_id = dir_name.clone();
+                                }
+                                traces.push(trace);
+                            }
                             Err(e) => {
                                 warn!("Skipping malformed trace file {:?}: {}", path, e);
                             }
@@ -306,6 +322,7 @@ mod tests {
             repo_path: "/tmp/repo".to_string(),
             prompt: "do the thing".to_string(),
             plan_file,
+            repo_id: Some("test-repo".to_string()),
             start_time: Utc::now(),
             end_time: Some(Utc::now()),
             outcome: SessionOutcome::Completed,
@@ -461,6 +478,7 @@ mod tests {
         let trace = collector.start_session("/tmp/repo", "do stuff", Some("plan.md"));
 
         assert_eq!(trace.plan_file, Some("plan.md".to_string()));
+        assert_eq!(trace.repo_id, Some("traces".to_string()));
         assert_eq!(trace.repo_path, "/tmp/repo");
         assert_eq!(trace.prompt, "do stuff");
         assert_eq!(trace.outcome, SessionOutcome::Running);
@@ -482,23 +500,25 @@ mod tests {
 
     #[test]
     fn session_trace_backward_compat_without_plan_file() {
-        // Build a trace, serialize it, then strip the plan_file key to simulate an old-format file
+        // Build a trace, serialize it, then strip the plan_file and repo_id keys to simulate an old-format file
         let trace = make_test_trace(None);
         let json = serde_json::to_string(&trace).expect("serialize SessionTrace");
 
-        // Parse into a generic Value, remove plan_file, and re-serialize
+        // Parse into a generic Value, remove plan_file and repo_id, and re-serialize
         let mut value: serde_json::Value =
             serde_json::from_str(&json).expect("parse as Value");
         let obj = value.as_object_mut().expect("top-level object");
         assert!(obj.remove("plan_file").is_some(), "plan_file key should have been present");
+        assert!(obj.remove("repo_id").is_some(), "repo_id key should have been present");
 
-        let old_format_json = serde_json::to_string(&value).expect("re-serialize without plan_file");
+        let old_format_json = serde_json::to_string(&value).expect("re-serialize without plan_file/repo_id");
 
         // Deserialize the old-format JSON — this would fail without #[serde(default)]
         let restored: SessionTrace =
             serde_json::from_str(&old_format_json).expect("deserialize old-format trace");
 
         assert_eq!(restored.plan_file, None);
+        assert_eq!(restored.repo_id, None);
         assert_eq!(restored.trace_id, trace.trace_id);
         assert_eq!(restored.session_id, trace.session_id);
         assert_eq!(restored.repo_path, trace.repo_path);
