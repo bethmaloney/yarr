@@ -47,8 +47,6 @@ Pure refactor — no behavior changes.
 
 **C. Session ID click-to-copy** — Copy button next to session ID. `navigator.clipboard.writeText()`.
 
-**D. Replace emojis with CSS icons** — Colored dots or short text labels instead of emoji (which render as boxes on some systems). Pure CSS.
-
 ## 6. Breadcrumb Navigation
 
 **New component: `Breadcrumbs.svelte`** — Takes `{ label: string, onclick?: () => void }[]`. Renders "Home / my-project / History / Run sess-abc" with clickable segments. Last segment is non-clickable (current page).
@@ -346,29 +344,6 @@ Make column headers clickable for sorting.
 
 ---
 
-### Task 12: Run Detail — replace emojis with CSS icons
-
-Replace emoji indicators with styled CSS elements.
-
-**Files to modify:**
-- `src/EventsList.svelte`
-
-**Details:**
-- Replace `eventEmoji()` with a function returning `{ symbol: string, color: string }`
-- Symbols: session_started="S", iteration_started="I", tool_use="T", assistant_text=">", iteration_complete="ok", session_complete="fin"
-- Render as small inline badge: colored background circle/pill with the letter
-- Remove the `.event-emoji` font-family override
-
-**Checklist:**
-- [ ] Replace `eventEmoji()` with `eventIcon()` returning symbol + color
-- [ ] Update template to render CSS badge instead of emoji span
-- [ ] Add badge styles (small pill, colored per event type)
-- [ ] Remove emoji font-family style
-- [ ] Verify visually with Playwright screenshot
-- [ ] Verify: `npx tsc --noEmit`
-
----
-
 ### Task 13: Run Detail — session ID click-to-copy
 
 Add a copy button next to the session ID.
@@ -518,7 +493,6 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 9 | History view -- column headers | Not Started |
 | 10 | History view -- show prompt text | Not Started |
 | 11 | History view -- sortable columns | Not Started |
-| 12 | Run Detail -- replace emojis with CSS icons | Not Started |
 | 13 | Run Detail -- session ID click-to-copy | Not Started |
 | 14 | Run Detail -- collapsible iteration groups | Not Started |
 | 15 | Run Detail -- context window progress bar | Not Started |
