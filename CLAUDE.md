@@ -26,6 +26,13 @@ cd src-tauri && cargo test
 # Frontend checks
 npx tsc --noEmit
 
+# Lint
+npx eslint .
+
+# Format (check / fix)
+npx prettier --check .
+npx prettier --write .
+
 # Frontend unit tests (vitest)
 npm test
 
