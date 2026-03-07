@@ -469,12 +469,12 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 - Existing tests should still pass with selector updates
 
 **Checklist:**
-- [ ] Update existing tests for breadcrumb navigation
-- [ ] Add home page last run summary test
-- [ ] Add settings accordion test
-- [ ] Add history column headers test
-- [ ] Add iteration grouping test
-- [ ] Verify: `npm run test:e2e`
+- [x] Update existing tests for breadcrumb navigation
+- [x] Add home page last run summary test
+- [x] Add settings accordion test
+- [x] Add history column headers test
+- [x] Add iteration grouping test
+- [x] Verify: `npm run test:e2e`
 
 ---
 
@@ -497,4 +497,4 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 14 | Run Detail -- collapsible iteration groups | Done |
 | 15 | Run Detail -- context window progress bar | Done |
 | 16 | Browser mock -- enrich sample data | Done |
-| 17 | Update E2E tests | Not Started |
+| 17 | Update E2E tests | Done |
