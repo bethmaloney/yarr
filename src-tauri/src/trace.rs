@@ -283,6 +283,27 @@ impl TraceCollector {
         Ok(traces)
     }
 
+    /// List only the most recent trace per repo, sorted by start_time descending.
+    pub fn list_latest_traces(base_dir: &Path) -> anyhow::Result<Vec<SessionTrace>> {
+        let all_traces = Self::list_traces(base_dir, None)?;
+        let mut latest_by_repo: HashMap<String, SessionTrace> = HashMap::new();
+        for trace in all_traces {
+            if let Some(ref repo_id) = trace.repo_id {
+                latest_by_repo
+                    .entry(repo_id.clone())
+                    .and_modify(|existing| {
+                        if trace.start_time > existing.start_time {
+                            *existing = trace.clone();
+                        }
+                    })
+                    .or_insert(trace);
+            }
+        }
+        let mut results: Vec<SessionTrace> = latest_by_repo.into_values().collect();
+        results.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        Ok(results)
+    }
+
     /// Read a single trace file
     pub fn read_trace(base_dir: &Path, repo_id: &str, session_id: &str) -> anyhow::Result<SessionTrace> {
         validate_path_component(repo_id, "repo_id")?;
@@ -801,6 +822,157 @@ mod tests {
             .expect("list_traces on empty dir should return Ok, not error");
 
         assert!(traces.is_empty(), "should return empty vec for nonexistent repo dir");
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Tests for list_latest_traces
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Test: list_latest_traces returns one per repo ──
+
+    #[tokio::test]
+    async fn list_latest_traces_returns_one_per_repo() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // repo-1: two traces, the second is newer
+        let collector1 = TraceCollector::new(base_dir, "repo-1");
+        let mut trace1a = collector1.start_session("/tmp/repo1", "repo1 older", None);
+        trace1a.start_time = Utc::now() - chrono::Duration::hours(3);
+        collector1.finalize(&mut trace1a, &[]).await.expect("finalize trace1a");
+
+        let mut trace1b = collector1.start_session("/tmp/repo1", "repo1 newer", None);
+        trace1b.start_time = Utc::now() - chrono::Duration::hours(1);
+        collector1.finalize(&mut trace1b, &[]).await.expect("finalize trace1b");
+
+        // repo-2: two traces, the first is newer
+        let collector2 = TraceCollector::new(base_dir, "repo-2");
+        let mut trace2a = collector2.start_session("/tmp/repo2", "repo2 newer", None);
+        trace2a.start_time = Utc::now() - chrono::Duration::hours(2);
+        collector2.finalize(&mut trace2a, &[]).await.expect("finalize trace2a");
+
+        let mut trace2b = collector2.start_session("/tmp/repo2", "repo2 older", None);
+        trace2b.start_time = Utc::now() - chrono::Duration::hours(5);
+        collector2.finalize(&mut trace2b, &[]).await.expect("finalize trace2b");
+
+        let latest = TraceCollector::list_latest_traces(base_dir)
+            .expect("list_latest_traces should succeed");
+
+        assert_eq!(latest.len(), 2, "should return exactly one trace per repo");
+
+        // Collect the prompts to verify we got the latest from each repo
+        let prompts: Vec<&str> = latest.iter().map(|t| t.prompt.as_str()).collect();
+        assert!(prompts.contains(&"repo1 newer"), "should contain the latest trace from repo-1");
+        assert!(prompts.contains(&"repo2 newer"), "should contain the latest trace from repo-2");
+    }
+
+    // ── Test: list_latest_traces on empty dir returns empty vec ──
+
+    #[tokio::test]
+    async fn list_latest_traces_empty_dir() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // No traces written at all — the traces/ directory doesn't even exist
+        let latest = TraceCollector::list_latest_traces(base_dir)
+            .expect("list_latest_traces on empty dir should return Ok, not error");
+
+        assert!(latest.is_empty(), "should return empty vec when no traces exist");
+    }
+
+    // ── Test: list_latest_traces with single repo single trace ──
+
+    #[tokio::test]
+    async fn list_latest_traces_single_repo_single_trace() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "only-repo");
+        let mut trace = collector.start_session("/tmp/repo", "the only task", None);
+        let session_id = trace.session_id.clone();
+        collector.finalize(&mut trace, &[]).await.expect("finalize trace");
+
+        let latest = TraceCollector::list_latest_traces(base_dir)
+            .expect("list_latest_traces should succeed");
+
+        assert_eq!(latest.len(), 1, "should return exactly one trace");
+        assert_eq!(latest[0].session_id, session_id);
+        assert_eq!(latest[0].prompt, "the only task");
+    }
+
+    // ── Test: list_latest_traces sorted by start_time descending ──
+
+    #[tokio::test]
+    async fn list_latest_traces_sorted_by_start_time_desc() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // Create 3 repos with different latest trace times
+        let collector_a = TraceCollector::new(base_dir, "repo-a");
+        let mut trace_a = collector_a.start_session("/tmp/a", "repo-a task", None);
+        trace_a.start_time = Utc::now() - chrono::Duration::hours(5); // oldest
+        collector_a.finalize(&mut trace_a, &[]).await.expect("finalize trace_a");
+
+        let collector_b = TraceCollector::new(base_dir, "repo-b");
+        let mut trace_b = collector_b.start_session("/tmp/b", "repo-b task", None);
+        trace_b.start_time = Utc::now() - chrono::Duration::hours(1); // newest
+        collector_b.finalize(&mut trace_b, &[]).await.expect("finalize trace_b");
+
+        let collector_c = TraceCollector::new(base_dir, "repo-c");
+        let mut trace_c = collector_c.start_session("/tmp/c", "repo-c task", None);
+        trace_c.start_time = Utc::now() - chrono::Duration::hours(3); // middle
+        collector_c.finalize(&mut trace_c, &[]).await.expect("finalize trace_c");
+
+        let latest = TraceCollector::list_latest_traces(base_dir)
+            .expect("list_latest_traces should succeed");
+
+        assert_eq!(latest.len(), 3);
+
+        // Should be sorted by start_time descending (newest first)
+        assert!(
+            latest[0].start_time >= latest[1].start_time,
+            "latest[0] should be newer than or equal to latest[1]"
+        );
+        assert!(
+            latest[1].start_time >= latest[2].start_time,
+            "latest[1] should be newer than or equal to latest[2]"
+        );
+
+        // Verify order: repo-b (1h ago), repo-c (3h ago), repo-a (5h ago)
+        assert_eq!(latest[0].prompt, "repo-b task");
+        assert_eq!(latest[1].prompt, "repo-c task");
+        assert_eq!(latest[2].prompt, "repo-a task");
+    }
+
+    // ── Test: list_latest_traces ignores older traces ──
+
+    #[tokio::test]
+    async fn list_latest_traces_ignores_older_traces() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "busy-repo");
+
+        // Create 3 traces at different times for the same repo
+        let mut trace_old = collector.start_session("/tmp/repo", "oldest task", None);
+        trace_old.start_time = Utc::now() - chrono::Duration::hours(10);
+        collector.finalize(&mut trace_old, &[]).await.expect("finalize trace_old");
+
+        let mut trace_mid = collector.start_session("/tmp/repo", "middle task", None);
+        trace_mid.start_time = Utc::now() - chrono::Duration::hours(5);
+        collector.finalize(&mut trace_mid, &[]).await.expect("finalize trace_mid");
+
+        let mut trace_new = collector.start_session("/tmp/repo", "newest task", None);
+        trace_new.start_time = Utc::now() - chrono::Duration::hours(1);
+        let newest_session_id = trace_new.session_id.clone();
+        collector.finalize(&mut trace_new, &[]).await.expect("finalize trace_new");
+
+        let latest = TraceCollector::list_latest_traces(base_dir)
+            .expect("list_latest_traces should succeed");
+
+        assert_eq!(latest.len(), 1, "should return only one trace for the single repo");
+        assert_eq!(latest[0].session_id, newest_session_id, "should be the newest trace");
+        assert_eq!(latest[0].prompt, "newest task");
     }
 }
 

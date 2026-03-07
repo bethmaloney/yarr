@@ -217,6 +217,12 @@ fn list_traces(app: tauri::AppHandle, repo_id: Option<String>) -> Result<Vec<tra
 }
 
 #[tauri::command]
+fn list_latest_traces(app: tauri::AppHandle) -> Result<Vec<trace::SessionTrace>, String> {
+    let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    TraceCollector::list_latest_traces(&base_dir).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_trace(app: tauri::AppHandle, repo_id: String, session_id: String) -> Result<trace::SessionTrace, String> {
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     TraceCollector::read_trace(&base_dir, &repo_id, &session_id).map_err(|e| e.to_string())
@@ -283,7 +289,7 @@ pub fn run() {
         .manage(ActiveSshSessions {
             sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
-        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, test_ssh_connection, reconnect_session, list_traces, get_trace, get_trace_events, read_file_preview])
+        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview])
         .run(tauri::generate_context!())
         .expect("error running tauri application");
 }

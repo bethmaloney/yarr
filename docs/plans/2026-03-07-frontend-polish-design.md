@@ -247,9 +247,9 @@ Backend command to return the most recent trace per repo.
 - Return as a vec
 
 **Checklist:**
-- [ ] Add `list_latest_traces` command function
-- [ ] Register in Tauri command list
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `list_latest_traces` command function
+- [x] Register in Tauri command list
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -488,7 +488,7 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 4 | Add `read_file_preview` Tauri command | Done |
 | 5 | Repo Detail -- plan file preview | Done |
 | 6 | Home page -- toolbar alignment | Done |
-| 7 | Add `list_latest_traces` Tauri command | Not Started |
+| 7 | Add `list_latest_traces` Tauri command | Done |
 | 8 | Home page -- repo cards with last run summary | Not Started |
 | 9 | History view -- column headers | Not Started |
 | 10 | History view -- show prompt text | Not Started |
