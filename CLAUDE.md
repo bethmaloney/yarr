@@ -25,4 +25,16 @@ cd src-tauri && cargo test
 
 # Frontend checks
 npx tsc --noEmit
+
+# Frontend unit tests (vitest)
+npm test
+
+# E2E tests (Playwright — starts Vite dev server automatically)
+npm run test:e2e
 ```
+
+## Testing
+
+- **Unit tests** (`src/*.test.ts`): Vitest with `vi.mock` for `@tauri-apps/plugin-store`. Run with `npm test`.
+- **E2E tests** (`e2e/*.test.ts`): Playwright against the Vite dev server. Tauri IPC is mocked via `window.__TAURI_INTERNALS__` in `e2e/fixtures.ts`. Run with `npm run test:e2e`.
+- **Rust tests** (`src-tauri/`): `cargo test` in the `src-tauri` directory.

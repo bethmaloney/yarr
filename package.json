@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
     "@tauri-apps/plugin-store": "^2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@sveltejs/vite-plugin-svelte": "^5",
     "@tauri-apps/cli": "^2",
     "svelte": "^5",

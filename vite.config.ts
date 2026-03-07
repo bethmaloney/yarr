@@ -8,4 +8,7 @@ export default defineConfig({
     strictPort: true,
     port: 5173,
   },
+  test: {
+    exclude: ["e2e/**", "node_modules/**"],
+  },
 });
