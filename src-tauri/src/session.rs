@@ -175,6 +175,8 @@ impl SessionRunner {
                             completion_signal_found: has_signal,
                             exit_code: 0,
                             result_preview: result_text[..result_text.len().min(500)].to_string(),
+                            token_usage: result.token_usage(),
+                            model_token_usage: result.model_token_usage(),
                         },
                         is_error,
                     );
@@ -247,6 +249,8 @@ impl SessionRunner {
                             completion_signal_found: false,
                             exit_code: -1,
                             result_preview: format!("Process error: {e}"),
+                            token_usage: Default::default(),
+                            model_token_usage: Default::default(),
                         },
                         true,
                     );

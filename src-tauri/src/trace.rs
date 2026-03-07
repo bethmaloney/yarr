@@ -1,7 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use uuid::Uuid;
+
+use crate::output::{ModelTokenUsage, TokenUsage};
 
 /// A single span representing one Ralph iteration
 #[derive(Debug, Serialize, Clone)]
@@ -31,6 +34,10 @@ pub struct SessionTrace {
     pub iterations: Vec<IterationSpan>,
     pub total_cost_usd: f64,
     pub total_iterations: u32,
+    pub total_input_tokens: u64,
+    pub total_output_tokens: u64,
+    pub total_cache_read_tokens: u64,
+    pub total_cache_creation_tokens: u64,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -43,6 +50,8 @@ pub struct SpanAttributes {
     pub completion_signal_found: bool,
     pub exit_code: i32,
     pub result_preview: String,
+    pub token_usage: TokenUsage,
+    pub model_token_usage: HashMap<String, ModelTokenUsage>,
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
@@ -91,6 +100,10 @@ impl TraceCollector {
             iterations: Vec::new(),
             total_cost_usd: 0.0,
             total_iterations: 0,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_cache_read_tokens: 0,
+            total_cache_creation_tokens: 0,
         }
     }
 
@@ -118,6 +131,10 @@ impl TraceCollector {
         };
 
         trace.total_cost_usd += span.attributes.cost_usd;
+        trace.total_input_tokens += span.attributes.token_usage.input_tokens;
+        trace.total_output_tokens += span.attributes.token_usage.output_tokens;
+        trace.total_cache_read_tokens += span.attributes.token_usage.cache_read_input_tokens;
+        trace.total_cache_creation_tokens += span.attributes.token_usage.cache_creation_input_tokens;
         trace.total_iterations += 1;
         trace.iterations.push(span);
     }
@@ -130,6 +147,26 @@ impl TraceCollector {
             .iterations
             .iter()
             .map(|s| s.attributes.cost_usd)
+            .sum();
+        trace.total_input_tokens = trace
+            .iterations
+            .iter()
+            .map(|s| s.attributes.token_usage.input_tokens)
+            .sum();
+        trace.total_output_tokens = trace
+            .iterations
+            .iter()
+            .map(|s| s.attributes.token_usage.output_tokens)
+            .sum();
+        trace.total_cache_read_tokens = trace
+            .iterations
+            .iter()
+            .map(|s| s.attributes.token_usage.cache_read_input_tokens)
+            .sum();
+        trace.total_cache_creation_tokens = trace
+            .iterations
+            .iter()
+            .map(|s| s.attributes.token_usage.cache_creation_input_tokens)
             .sum();
 
         tokio::fs::create_dir_all(&self.output_dir).await?;
@@ -159,6 +196,13 @@ pub fn print_trace_summary(trace: &SessionTrace) {
     println!("  Outcome:     {:?}", trace.outcome);
     println!("  Iterations:  {}", trace.total_iterations);
     println!("  Total cost:  ${:.4}", trace.total_cost_usd);
+    println!(
+        "  Tokens:      {} in / {} out / {} cache-read / {} cache-create",
+        trace.total_input_tokens,
+        trace.total_output_tokens,
+        trace.total_cache_read_tokens,
+        trace.total_cache_creation_tokens,
+    );
 
     if let Some(end) = trace.end_time {
         let duration = end - trace.start_time;
@@ -167,21 +211,22 @@ pub fn print_trace_summary(trace: &SessionTrace) {
 
     println!("\n  ITERATION BREAKDOWN:");
     println!(
-        "  {:<6} {:<10} {:<10} {:<10} {:<8}",
-        "Iter", "Duration", "Cost", "Turns", "Status"
+        "  {:<6} {:<10} {:<10} {:<10} {:<12} {:<8}",
+        "Iter", "Duration", "Cost", "Turns", "In tokens", "Status"
     );
     println!(
-        "  {:-<6} {:-<10} {:-<10} {:-<10} {:-<8}",
-        "", "", "", "", ""
+        "  {:-<6} {:-<10} {:-<10} {:-<10} {:-<12} {:-<8}",
+        "", "", "", "", "", ""
     );
 
     for span in &trace.iterations {
         println!(
-            "  {:<6} {:<10} ${:<9.4} {:<10} {:?}",
+            "  {:<6} {:<10} ${:<9.4} {:<10} {:<12} {:?}",
             span.attributes.iteration,
             format!("{}ms", span.duration_ms),
             span.attributes.cost_usd,
             span.attributes.num_turns.unwrap_or(0),
+            span.attributes.token_usage.input_tokens,
             span.status,
         );
     }

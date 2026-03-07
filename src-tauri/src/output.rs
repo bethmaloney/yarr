@@ -107,6 +107,29 @@ pub struct RateLimitInfo {
     pub resets_at: Option<u64>,
 }
 
+// ── token usage ─────────────────────────────────────────────
+
+/// Aggregate token usage for a single `claude -p` invocation
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_input_tokens: u64,
+    pub cache_creation_input_tokens: u64,
+}
+
+/// Per-model token usage breakdown (from `modelUsage` in result)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelTokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_input_tokens: u64,
+    pub cache_creation_input_tokens: u64,
+    pub cost_usd: f64,
+    pub context_window: u64,
+    pub max_output_tokens: u64,
+}
+
 // ── result (final) ───────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,6 +167,44 @@ impl ResultEvent {
         } else {
             "<no result>".to_string()
         }
+    }
+
+    /// Extract aggregate token usage from the `usage` field
+    pub fn token_usage(&self) -> TokenUsage {
+        let Some(ref v) = self.usage else {
+            return TokenUsage::default();
+        };
+        TokenUsage {
+            input_tokens: v["input_tokens"].as_u64().unwrap_or(0),
+            output_tokens: v["output_tokens"].as_u64().unwrap_or(0),
+            cache_read_input_tokens: v["cache_read_input_tokens"].as_u64().unwrap_or(0),
+            cache_creation_input_tokens: v["cache_creation_input_tokens"].as_u64().unwrap_or(0),
+        }
+    }
+
+    /// Extract per-model token usage from the `modelUsage` field
+    pub fn model_token_usage(&self) -> HashMap<String, ModelTokenUsage> {
+        let Some(ref mu) = self.model_usage else {
+            return HashMap::new();
+        };
+        mu.iter()
+            .filter_map(|(model, v)| {
+                Some((
+                    model.clone(),
+                    ModelTokenUsage {
+                        input_tokens: v["inputTokens"].as_u64().unwrap_or(0),
+                        output_tokens: v["outputTokens"].as_u64().unwrap_or(0),
+                        cache_read_input_tokens: v["cacheReadInputTokens"].as_u64().unwrap_or(0),
+                        cache_creation_input_tokens: v["cacheCreationInputTokens"]
+                            .as_u64()
+                            .unwrap_or(0),
+                        cost_usd: v["costUSD"].as_f64().unwrap_or(0.0),
+                        context_window: v["contextWindow"].as_u64().unwrap_or(0),
+                        max_output_tokens: v["maxOutputTokens"].as_u64().unwrap_or(0),
+                    },
+                ))
+            })
+            .collect()
     }
 }
 
@@ -274,6 +335,68 @@ mod tests {
                 assert_eq!(r.result.as_deref(), Some("hello"));
                 assert!((r.total_cost_usd.unwrap() - 0.041).abs() < 0.001);
                 assert!(r.model_usage.is_some());
+            }
+            _ => panic!("expected Result event"),
+        }
+    }
+
+    #[test]
+    fn token_usage_from_real_result() {
+        let json = r#"{"type":"result","subtype":"success","is_error":false,"duration_ms":1929,"duration_api_ms":1887,"num_turns":1,"result":"hello","stop_reason":"end_turn","session_id":"abc","total_cost_usd":0.041,"usage":{"input_tokens":3,"cache_creation_input_tokens":6539,"cache_read_input_tokens":0,"output_tokens":4}}"#;
+        let event = StreamEvent::parse_line(json).unwrap();
+        match event {
+            StreamEvent::Result(r) => {
+                let usage = r.token_usage();
+                assert_eq!(usage.input_tokens, 3);
+                assert_eq!(usage.output_tokens, 4);
+                assert_eq!(usage.cache_read_input_tokens, 0);
+                assert_eq!(usage.cache_creation_input_tokens, 6539);
+            }
+            _ => panic!("expected Result event"),
+        }
+    }
+
+    #[test]
+    fn token_usage_defaults_when_missing() {
+        let json = r#"{"type":"result","subtype":"success","is_error":false,"duration_ms":100,"num_turns":1,"result":"ok","session_id":"abc","total_cost_usd":0.01}"#;
+        let event = StreamEvent::parse_line(json).unwrap();
+        match event {
+            StreamEvent::Result(r) => {
+                let usage = r.token_usage();
+                assert_eq!(usage.input_tokens, 0);
+                assert_eq!(usage.output_tokens, 0);
+            }
+            _ => panic!("expected Result event"),
+        }
+    }
+
+    #[test]
+    fn model_token_usage_from_real_result() {
+        let json = r#"{"type":"result","subtype":"success","is_error":false,"duration_ms":1929,"duration_api_ms":1887,"num_turns":1,"result":"hello","stop_reason":"end_turn","session_id":"abc","total_cost_usd":0.041,"modelUsage":{"claude-opus-4-6":{"inputTokens":3,"outputTokens":4,"cacheReadInputTokens":0,"cacheCreationInputTokens":6539,"costUSD":0.041,"contextWindow":200000,"maxOutputTokens":32000}}}"#;
+        let event = StreamEvent::parse_line(json).unwrap();
+        match event {
+            StreamEvent::Result(r) => {
+                let mu = r.model_token_usage();
+                assert_eq!(mu.len(), 1);
+                let opus = &mu["claude-opus-4-6"];
+                assert_eq!(opus.input_tokens, 3);
+                assert_eq!(opus.output_tokens, 4);
+                assert_eq!(opus.cache_creation_input_tokens, 6539);
+                assert_eq!(opus.context_window, 200000);
+                assert_eq!(opus.max_output_tokens, 32000);
+                assert!((opus.cost_usd - 0.041).abs() < 0.001);
+            }
+            _ => panic!("expected Result event"),
+        }
+    }
+
+    #[test]
+    fn model_token_usage_empty_when_missing() {
+        let json = r#"{"type":"result","subtype":"success","is_error":false,"duration_ms":100,"num_turns":1,"result":"ok","session_id":"abc","total_cost_usd":0.01}"#;
+        let event = StreamEvent::parse_line(json).unwrap();
+        match event {
+            StreamEvent::Result(r) => {
+                assert!(r.model_token_usage().is_empty());
             }
             _ => panic!("expected Result event"),
         }

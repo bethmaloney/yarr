@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::mpsc;
 
@@ -109,6 +110,11 @@ impl RuntimeProvider for MockRuntime {
         }));
 
         // 4. result
+        let input_tokens = 5000 + 2000 * scenario.num_turns as u64;
+        let output_tokens = 500 * scenario.num_turns as u64;
+        let cache_read = if idx > 0 { 4000u64 } else { 0u64 };
+        let cache_create = if idx == 0 { 5000u64 } else { 1000u64 };
+
         let subtype = if scenario.is_error { "error" } else { "success" };
         events.push(StreamEvent::Result(ResultEvent {
             subtype: Some(subtype.to_string()),
@@ -120,8 +126,24 @@ impl RuntimeProvider for MockRuntime {
             session_id: Some(session_id),
             total_cost_usd: Some(cost),
             stop_reason: Some("end_turn".to_string()),
-            usage: None,
-            model_usage: None,
+            usage: Some(serde_json::json!({
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cache_read_input_tokens": cache_read,
+                "cache_creation_input_tokens": cache_create,
+            })),
+            model_usage: Some(HashMap::from([(
+                "mock-model".to_string(),
+                serde_json::json!({
+                    "inputTokens": input_tokens,
+                    "outputTokens": output_tokens,
+                    "cacheReadInputTokens": cache_read,
+                    "cacheCreationInputTokens": cache_create,
+                    "costUSD": cost,
+                    "contextWindow": 200000,
+                    "maxOutputTokens": 32000,
+                }),
+            )])),
         }));
 
         let (tx, rx) = mpsc::channel(64);
