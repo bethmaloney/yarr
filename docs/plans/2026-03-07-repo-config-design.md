@@ -139,8 +139,8 @@ Create the data layer for repo configuration, following the same pattern as `rec
 - Export the `RepoConfig` type
 
 **Checklist:**
-- [ ] Create `src/repos.ts` with type and all CRUD functions
-- [ ] Verify: `npx tsc --noEmit` passes
+- [x] Create `src/repos.ts` with type and all CRUD functions
+- [x] Verify: `npx tsc --noEmit` passes
 
 ---
 
@@ -161,8 +161,8 @@ Unit tests for the repo CRUD helpers.
 - Test `loadRepos` returns stored repos
 
 **Checklist:**
-- [ ] Create `src/repos.test.ts` with tests for all CRUD functions
-- [ ] Verify: `npx vitest run` passes
+- [x] Create `src/repos.test.ts` with tests for all CRUD functions
+- [x] Verify: `npx vitest run` passes
 
 ---
 
@@ -318,8 +318,8 @@ Verify everything compiles and works together.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | `repos.ts` — RepoConfig type + CRUD helpers | Not Started |
-| 2 | `repos.test.ts` — unit tests for CRUD | Not Started |
+| 1 | `repos.ts` — RepoConfig type + CRUD helpers | Done |
+| 2 | `repos.test.ts` — unit tests for CRUD | Done |
 | 3 | Backend — parameterize `run_session`, tag events | Not Started |
 | 4 | `EventsList.svelte` — extract events component | Not Started |
 | 5 | `RepoCard.svelte` — single repo card | Not Started |
