@@ -17,15 +17,27 @@ const DEFAULT_REPOS: unknown[] = [];
  */
 async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
   const storeData = opts.storeData ?? { repos: DEFAULT_REPOS };
-  // Pre-evaluate function handlers since addInitScript serializes args (functions aren't serializable)
   const rawHandlers = opts.invokeHandlers ?? {};
+
+  // Serialize function handlers to strings so they survive JSON.stringify in addInitScript
   const invokeHandlers: Record<string, unknown> = {};
-  for (const [cmd, handler] of Object.entries(rawHandlers)) {
-    invokeHandlers[cmd] = typeof handler === "function" ? handler() : handler;
+  for (const [key, value] of Object.entries(rawHandlers)) {
+    if (typeof value === "function") {
+      invokeHandlers[key] = { __fn: value.toString() };
+    } else {
+      invokeHandlers[key] = value;
+    }
   }
 
   await page.addInitScript(
     ({ storeData, invokeHandlers }) => {
+      // Reconstruct function handlers from serialized strings
+      for (const key of Object.keys(invokeHandlers)) {
+        const val = invokeHandlers[key];
+        if (val && typeof val === "object" && "__fn" in (val as Record<string, unknown>)) {
+          invokeHandlers[key] = new Function("return " + (val as Record<string, string>).__fn)();
+        }
+      }
       const store = new Map<string, unknown>(Object.entries(storeData));
       type Callback = (...args: unknown[]) => void;
       const callbacks = new Map<number, Callback>();

@@ -4,7 +4,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { saveRecent } from "./recents";
-  import { loadRepos, addLocalRepo, updateRepo, type RepoConfig } from "./repos";
+  import { loadRepos, addLocalRepo, addSshRepo, updateRepo, type RepoConfig } from "./repos";
   import HomeView from "./HomeView.svelte";
   import RepoDetail from "./RepoDetail.svelte";
   import HistoryView from "./HistoryView.svelte";
@@ -20,6 +20,9 @@
     = $state({ kind: "home" });
   let repos: RepoConfig[] = $state([]);
   let sessions = new SvelteMap<string, SessionState>();
+  let addMode: null | "choosing" | "ssh-form" = $state(null);
+  let sshHost = $state("");
+  let sshRemotePath = $state("");
 
   onMount(() => {
     loadRepos().then((r) => {
@@ -40,12 +43,36 @@
     };
   });
 
-  async function handleAddRepo() {
+  function handleAddRepo() {
+    addMode = "choosing";
+  }
+
+  async function handleChooseLocal() {
+    addMode = null;
     const result = await open({ directory: true, title: "Select repository" });
     if (result !== null) {
       await addLocalRepo(result);
       repos = await loadRepos();
     }
+  }
+
+  function handleChooseSsh() {
+    sshHost = "";
+    sshRemotePath = "";
+    addMode = "ssh-form";
+  }
+
+  function handleCancelAdd() {
+    addMode = null;
+  }
+
+  async function handleAddSshRepo() {
+    const host = sshHost.trim();
+    const path = sshRemotePath.trim();
+    if (!host || !path) return;
+    await addSshRepo(host, path);
+    repos = await loadRepos();
+    addMode = null;
   }
 
   function selectRepo(id: string) {
@@ -117,7 +144,7 @@
 </script>
 
 {#if currentView.kind === "home"}
-  <HomeView {repos} {sessions} onSelectRepo={selectRepo} onAddRepo={handleAddRepo} onHistory={() => goHistory()} />
+  <HomeView {repos} {sessions} {addMode} {sshHost} {sshRemotePath} onSelectRepo={selectRepo} onAddRepo={handleAddRepo} onChooseLocal={handleChooseLocal} onChooseSsh={handleChooseSsh} onSshHostChange={(v) => sshHost = v} onSshRemotePathChange={(v) => sshRemotePath = v} onAddSshRepo={handleAddSshRepo} onCancelAdd={handleCancelAdd} onHistory={() => goHistory()} />
 {:else if currentView.kind === "history"}
   <HistoryView
     repoId={currentView.repoId}
@@ -154,4 +181,5 @@
     background: #1a1a2e;
     color: #e0e0e0;
   }
+
 </style>

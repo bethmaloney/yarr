@@ -4,11 +4,20 @@
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import RepoCard from "./RepoCard.svelte";
 
-  let { repos, sessions, onSelectRepo, onAddRepo, onHistory }: {
+  let { repos, sessions, addMode, sshHost, sshRemotePath, onSelectRepo, onAddRepo, onChooseLocal, onChooseSsh, onSshHostChange, onSshRemotePathChange, onAddSshRepo, onCancelAdd, onHistory }: {
     repos: RepoConfig[];
     sessions: Map<string, SessionState>;
+    addMode: null | "choosing" | "ssh-form";
+    sshHost: string;
+    sshRemotePath: string;
     onSelectRepo: (id: string) => void;
     onAddRepo: () => void;
+    onChooseLocal: () => void;
+    onChooseSsh: () => void;
+    onSshHostChange: (value: string) => void;
+    onSshRemotePathChange: (value: string) => void;
+    onAddSshRepo: () => void;
+    onCancelAdd: () => void;
     onHistory: () => void;
   } = $props();
 
@@ -31,8 +40,31 @@
 
   <div class="toolbar">
     <button class="secondary" onclick={onHistory}>History</button>
-    <button class="add-btn" onclick={onAddRepo}>+ Add repo</button>
+    {#if addMode === null}
+      <button class="add-btn" onclick={onAddRepo}>+ Add repo</button>
+    {:else if addMode === "choosing"}
+      <button class="add-btn" onclick={onChooseLocal}>Local</button>
+      <button class="add-btn" onclick={onChooseSsh}>SSH</button>
+      <button class="secondary" onclick={onCancelAdd}>Cancel</button>
+    {/if}
   </div>
+
+  {#if addMode === "ssh-form"}
+    <div class="ssh-form">
+      <label>
+        SSH Host
+        <input type="text" value={sshHost} oninput={(e) => onSshHostChange((e.target as HTMLInputElement).value)} />
+      </label>
+      <label>
+        Remote Path
+        <input type="text" value={sshRemotePath} oninput={(e) => onSshRemotePathChange((e.target as HTMLInputElement).value)} />
+      </label>
+      <div class="ssh-form-actions">
+        <button class="add-btn" onclick={onAddSshRepo}>Add</button>
+        <button class="secondary" onclick={onCancelAdd}>Cancel</button>
+      </div>
+    </div>
+  {/if}
 
   {#if repos.length === 0}
     <div class="empty-state">
@@ -132,5 +164,44 @@
   .empty-hint {
     font-size: 0.85rem;
     color: #666;
+  }
+
+  .ssh-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #16213e;
+    border: 1px solid #333;
+    border-radius: 8px;
+  }
+
+  .ssh-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    color: #888;
+  }
+
+  .ssh-form input {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.9rem;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+
+  .ssh-form input:focus {
+    outline: none;
+    border-color: #e8d44d;
+  }
+
+  .ssh-form-actions {
+    display: flex;
+    gap: 0.5rem;
   }
 </style>

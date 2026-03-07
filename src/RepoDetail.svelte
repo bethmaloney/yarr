@@ -75,6 +75,16 @@
   <details class="settings">
     <summary>Settings — {model}, {maxIterations} iters</summary>
     <div class="settings-form">
+      {#if repo.type === "ssh"}
+        <label>
+          SSH Host
+          <input type="text" value={repo.sshHost} readonly disabled />
+        </label>
+        <label>
+          Remote Path
+          <input type="text" value={repo.remotePath} readonly disabled />
+        </label>
+      {/if}
       <label>
         Model
         <input type="text" bind:value={model} disabled={session.running} />
@@ -89,6 +99,9 @@
       </label>
       <div class="settings-actions">
         <button type="button" class="secondary" onclick={saveSettings} disabled={session.running}>Save</button>
+        {#if repo.type === "ssh"}
+          <button type="button" class="secondary">Test Connection</button>
+        {/if}
       </div>
     </div>
   </details>
@@ -217,6 +230,10 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+  }
+
+  label input[readonly] {
+    opacity: 0.7;
   }
 
   .settings-actions {

@@ -281,11 +281,11 @@ Add the ability to add and configure SSH repos in the frontend.
 - Add a "Test Connection" button that invokes a new Tauri command
 
 **Checklist:**
-- [ ] Add Local/SSH selector to the "add repo" flow
-- [ ] Add SSH-specific input fields (host, remote path)
-- [ ] Update RepoDetail to display SSH config for SSH repos
-- [ ] Add "Test Connection" button (wired up in a later task)
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add Local/SSH selector to the "add repo" flow
+- [x] Add SSH-specific input fields (host, remote path)
+- [x] Update RepoDetail to display SSH config for SSH repos
+- [x] Add "Test Connection" button (wired up in a later task)
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -525,7 +525,7 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 1 | Update RepoConfig to discriminated union (Rust) | Done |
 | 2 | Update RepoConfig to discriminated union (Frontend) | Done |
 | 3 | Update App.svelte to pass repo type to backend | Done |
-| 4 | Update repo configuration UI for SSH | Not Started |
+| 4 | Update repo configuration UI for SSH | Done |
 | 5 | SSH command helper module | Not Started |
 | 6 | SshRuntime — RuntimeProvider implementation | Not Started |
 | 7 | SshRuntime — reconnection methods | Not Started |
