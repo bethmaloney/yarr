@@ -552,11 +552,11 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 - E2E tests: add SSH repo flow, verify form fields change, test connection button
 
 **Checklist:**
-- [ ] Add unit tests for SSH repo CRUD in repos.test.ts
-- [ ] Add unit tests for legacy repo migration
-- [ ] Add tests for disconnect/reconnect state transitions
-- [ ] Add E2E test for SSH repo add flow
-- [ ] Verify: `npm test && npm run test:e2e`
+- [x] Add unit tests for SSH repo CRUD in repos.test.ts
+- [x] Add unit tests for legacy repo migration
+- [x] Add tests for disconnect/reconnect state transitions
+- [x] Add E2E test for SSH repo add flow
+- [x] Verify: `npm test && npm run test:e2e`
 
 ---
 
@@ -576,4 +576,4 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 10 | Tauri commands for SSH sessions | Done |
 | 11 | Frontend session state — Disconnected and Reconnecting | Done |
 | 12 | SSH runtime unit tests (Rust) | Done |
-| 13 | Frontend tests for SSH repo flow | Not Started |
+| 13 | Frontend tests for SSH repo flow | Done |

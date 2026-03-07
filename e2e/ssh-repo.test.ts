@@ -101,6 +101,9 @@ test.describe("RepoDetail for SSH repos", () => {
 
     await page.getByRole("button", { name: /remote-app/ }).click();
 
+    // Expand the settings section
+    await page.locator("details.settings summary").click();
+
     // Settings section should display SSH host and remote path
     await expect(page.getByText("SSH Host")).toBeVisible();
     await expect(page.getByText("dev-server")).toBeVisible();
@@ -118,6 +121,9 @@ test.describe("RepoDetail for SSH repos", () => {
     await page.goto("/");
 
     await page.getByRole("button", { name: /remote-app/ }).click();
+
+    // Expand the settings section
+    await page.locator("details.settings summary").click();
 
     await expect(
       page.getByRole("button", { name: "Test Connection" }),
@@ -144,6 +150,9 @@ test.describe("RepoDetail for Local repos", () => {
     await page.goto("/");
 
     await page.getByRole("button", { name: /my-app/ }).click();
+
+    // Expand settings to verify Test Connection is truly absent, not just hidden
+    await page.locator("details.settings summary").click();
 
     // Local repos should not have the Test Connection button
     await expect(
@@ -197,7 +206,7 @@ test.describe("Disconnected and Reconnecting states", () => {
     await page
       .getByPlaceholder("docs/plans/my-feature-design.md")
       .fill("/tmp/plan.md");
-    await page.getByRole("button", { name: "Run" }).click();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
 
     // Verify session is running
     await expect(page.getByText("Running...")).toBeVisible();
@@ -270,7 +279,7 @@ test.describe("Disconnected and Reconnecting states", () => {
     await page
       .getByPlaceholder("docs/plans/my-feature-design.md")
       .fill("/tmp/plan.md");
-    await page.getByRole("button", { name: "Run" }).click();
+    await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(page.getByText("Running...")).toBeVisible();
 
     // Emit disconnected event

@@ -159,9 +159,9 @@ test.describe("Breadcrumb navigation", () => {
         repos: [REPO_FIXTURE],
       },
       invokeHandlers: {
-        list_traces: () => [TRACE_FIXTURE],
-        get_trace: () => TRACE_FIXTURE,
-        get_trace_events: () => [],
+        list_traces: [TRACE_FIXTURE],
+        get_trace: TRACE_FIXTURE,
+        get_trace_events: [],
       },
     });
     await page.goto("/");
