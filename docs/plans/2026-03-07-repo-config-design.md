@@ -224,8 +224,8 @@ A card component for the home grid.
 - Uses the project's existing color scheme (#1a1a2e background, #e8d44d accent, etc.)
 
 **Checklist:**
-- [ ] Create `src/RepoCard.svelte` with props, markup, and styles
-- [ ] Verify: `npx tsc --noEmit` passes
+- [x] Create `src/RepoCard.svelte` with props, markup, and styles
+- [x] Verify: `npx tsc --noEmit` passes
 
 ---
 
@@ -322,7 +322,7 @@ Verify everything compiles and works together.
 | 2 | `repos.test.ts` — unit tests for CRUD | Done |
 | 3 | Backend — parameterize `run_session`, tag events | Done |
 | 4 | `EventsList.svelte` — extract events component | Done |
-| 5 | `RepoCard.svelte` — single repo card | Not Started |
+| 5 | `RepoCard.svelte` — single repo card | Done |
 | 6 | `HomeView.svelte` — home page with repo grid | Not Started |
 | 7 | `RepoDetail.svelte` — repo workspace view | Not Started |
 | 8 | `App.svelte` refactor — view router + session state | Not Started |
