@@ -38,6 +38,17 @@ pub struct ProcessExit {
     pub stderr: String,
 }
 
+/// Returns the appropriate runtime for the current platform:
+/// - Windows → WslRuntime (shells into WSL to run claude)
+/// - Linux/macOS → LocalRuntime (runs claude directly)
+pub fn default_runtime() -> Box<dyn RuntimeProvider> {
+    if cfg!(target_os = "windows") {
+        Box::new(WslRuntime::new())
+    } else {
+        Box::new(LocalRuntime::new())
+    }
+}
+
 /// Abstraction over execution environments.
 /// Implement this trait to add new runtimes (SSH, macOS local, etc.)
 #[async_trait::async_trait]

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use runtime::{LocalRuntime, MockRuntime};
+use runtime::{default_runtime, MockRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use tauri::{Emitter, Manager};
 use trace::TraceCollector;
@@ -100,7 +100,7 @@ async fn run_session(
 
     let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
 
-    let runtime = LocalRuntime::new();
+    let runtime = default_runtime();
 
     let config = SessionConfig {
         repo_path: repo,
@@ -125,7 +125,7 @@ async fn run_session(
         });
     }));
 
-    let result = runner.run(&runtime).await.map_err(|e| e.to_string());
+    let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
     *app.state::<ActiveSession>().cancel_token.lock().await = None;
     result
 }
