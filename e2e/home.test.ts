@@ -218,3 +218,28 @@ test.describe("Repo detail page", () => {
     await expect(planSection.locator("pre")).toHaveCount(0);
   });
 });
+
+test.describe("Home page toolbar alignment", () => {
+  test("title and History button are both visible", async ({ tauriPage: page }) => {
+    await expect(page.locator("h1", { hasText: "Yarr" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "History" })).toBeVisible();
+  });
+
+  test("toolbar-header contains both title and buttons in a single row", async ({ tauriPage: page }) => {
+    const toolbarHeader = page.locator(".toolbar-header");
+    await expect(toolbarHeader).toBeVisible();
+
+    // The single container should hold the h1 title
+    await expect(toolbarHeader.locator("h1")).toContainText("Yarr");
+
+    // The single container should hold the History button
+    await expect(toolbarHeader.getByRole("button", { name: "History" })).toBeVisible();
+
+    // The single container should hold the Add repo button
+    await expect(toolbarHeader.getByRole("button", { name: "+ Add repo" })).toBeVisible();
+  });
+
+  test("subtitle is still visible", async ({ tauriPage: page }) => {
+    await expect(page.locator(".subtitle", { hasText: "Claude Orchestrator" })).toBeVisible();
+  });
+});

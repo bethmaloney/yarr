@@ -49,22 +49,23 @@
 </script>
 
 <main>
-  <Breadcrumbs crumbs={[{ label: "Home" }]} />
-  <header>
-    <h1>Yarr</h1>
-    <p class="subtitle">Claude Orchestrator</p>
+  <Breadcrumbs crumbs={[{label: "Home"}]} />
+  <header class="toolbar-header">
+    <div class="title-group">
+      <h1>Yarr</h1>
+      <p class="subtitle">Claude Orchestrator</p>
+    </div>
+    <div class="toolbar-actions">
+      <button class="secondary" onclick={onHistory}>History</button>
+      {#if addMode === null}
+        <button class="add-btn" onclick={onAddRepo}>+ Add repo</button>
+      {:else if addMode === "choosing"}
+        <button class="add-btn" onclick={onChooseLocal}>Local</button>
+        <button class="add-btn" onclick={onChooseSsh}>SSH</button>
+        <button class="secondary" onclick={onCancelAdd}>Cancel</button>
+      {/if}
+    </div>
   </header>
-
-  <div class="toolbar">
-    <button class="secondary" onclick={onHistory}>History</button>
-    {#if addMode === null}
-      <button class="add-btn" onclick={onAddRepo}>+ Add repo</button>
-    {:else if addMode === "choosing"}
-      <button class="add-btn" onclick={onChooseLocal}>Local</button>
-      <button class="add-btn" onclick={onChooseSsh}>SSH</button>
-      <button class="secondary" onclick={onCancelAdd}>Cancel</button>
-    {/if}
-  </div>
 
   {#if addMode === "ssh-form"}
     <div class="ssh-form">
@@ -117,7 +118,10 @@
     padding: 2rem;
   }
 
-  header {
+  .toolbar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
     margin-bottom: 1.5rem;
   }
 
@@ -133,11 +137,11 @@
     font-size: 0.9rem;
   }
 
-  .toolbar {
+  .toolbar-actions {
     display: flex;
-    justify-content: flex-end;
     gap: 0.5rem;
-    margin-bottom: 1rem;
+    align-items: center;
+    padding-top: 0.5rem;
   }
 
   button.secondary {

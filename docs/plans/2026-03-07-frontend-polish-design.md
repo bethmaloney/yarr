@@ -225,10 +225,10 @@ Move title and buttons onto the same row.
 - Remove separate `<header>` and `.toolbar` divs, merge into one
 
 **Checklist:**
-- [ ] Restructure HTML to single header row
-- [ ] Update CSS for flex layout
-- [ ] Verify visual alignment with Playwright screenshot
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Restructure HTML to single header row
+- [x] Update CSS for flex layout
+- [x] Verify visual alignment with Playwright screenshot
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -487,7 +487,7 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 3 | Repo Detail -- collapse Settings, remove recents, rename Mock | Done |
 | 4 | Add `read_file_preview` Tauri command | Done |
 | 5 | Repo Detail -- plan file preview | Done |
-| 6 | Home page -- toolbar alignment | Not Started |
+| 6 | Home page -- toolbar alignment | Done |
 | 7 | Add `list_latest_traces` Tauri command | Not Started |
 | 8 | Home page -- repo cards with last run summary | Not Started |
 | 9 | History view -- column headers | Not Started |
