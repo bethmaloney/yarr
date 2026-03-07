@@ -305,11 +305,11 @@ Create the foundation for running SSH commands, handling platform detection (dir
 - These helpers are the building blocks for the runtime and orchestrator
 
 **Checklist:**
-- [ ] Create `ssh.rs` module
-- [ ] Implement `ssh_command()` helper with platform-aware wrapping
-- [ ] Implement or reuse `shell_escape()`
-- [ ] Register module in `src-tauri/src/runtime/mod.rs`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Create `ssh.rs` module
+- [x] Implement `ssh_command()` helper with platform-aware wrapping
+- [x] Implement or reuse `shell_escape()`
+- [x] Register module in `src-tauri/src/runtime/mod.rs`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -526,7 +526,7 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 2 | Update RepoConfig to discriminated union (Frontend) | Done |
 | 3 | Update App.svelte to pass repo type to backend | Done |
 | 4 | Update repo configuration UI for SSH | Done |
-| 5 | SSH command helper module | Not Started |
+| 5 | SSH command helper module | Done |
 | 6 | SshRuntime — RuntimeProvider implementation | Not Started |
 | 7 | SshRuntime — reconnection methods | Not Started |
 | 8 | SshSessionOrchestrator | Not Started |
