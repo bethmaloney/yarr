@@ -24,6 +24,7 @@
   type SessionTrace = {
     session_id: string;
     outcome: string;
+    failure_reason: string | null;
     total_iterations: number;
     total_cost_usd: number;
   };

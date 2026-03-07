@@ -12,6 +12,7 @@
     start_time: string;
     end_time: string | null;
     outcome: string;
+    failure_reason: string | null;
     total_iterations: number;
     total_cost_usd: number;
     total_input_tokens: number;

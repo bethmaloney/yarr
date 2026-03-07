@@ -288,6 +288,11 @@ impl SessionRunner {
             _ => SessionOutcome::Running,
         };
 
+        trace.failure_reason = match &state {
+            SessionState::Failed { error, .. } => Some(error.clone()),
+            _ => None,
+        };
+
         let outcome = trace.outcome.clone();
         self.emit(SessionEvent::SessionComplete { outcome });
 
