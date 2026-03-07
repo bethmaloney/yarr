@@ -1,8 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { onMount } from "svelte";
-  import { loadRecents } from "./recents";
   import type { RepoConfig } from "./repos";
   import type { SessionState } from "./types";
   import Breadcrumbs from "./Breadcrumbs.svelte";
@@ -31,13 +29,6 @@
   });
 
   let planFile = $state("");
-  let recentPromptFiles = $state<string[]>([]);
-
-  onMount(() => {
-    loadRecents().then((r) => {
-      recentPromptFiles = r.promptFiles;
-    });
-  });
 
   async function browsePrompt() {
     try {
@@ -82,8 +73,8 @@
     <p class="repo-path">{repo.path}</p>
   </header>
 
-  <section class="settings">
-    <h2>Settings</h2>
+  <details class="settings">
+    <summary>Settings — {model}, {maxIterations} iters</summary>
     <div class="settings-form">
       <label>
         Model
@@ -101,28 +92,13 @@
         <button type="button" class="secondary" onclick={saveSettings} disabled={session.running}>Save</button>
       </div>
     </div>
-  </section>
+  </details>
 
   <section class="plan-section">
     <h2>Plan</h2>
     <label>
       Prompt file
       <div class="input-row">
-        {#if recentPromptFiles.length > 0}
-          <select
-            disabled={session.running}
-            onchange={(e) => {
-              const val = (e.target as HTMLSelectElement).value;
-              if (val) planFile = val;
-              (e.target as HTMLSelectElement).value = "";
-            }}
-          >
-            <option value="">Recents</option>
-            {#each recentPromptFiles as p}
-              <option value={p}>{p}</option>
-            {/each}
-          </select>
-        {/if}
         <input type="text" bind:value={planFile} placeholder="docs/plans/my-feature-design.md" disabled={session.running} />
         <button type="button" class="secondary" onclick={browsePrompt} disabled={session.running}>Browse</button>
       </div>
@@ -139,10 +115,14 @@
       </button>
     {:else}
       <button type="button" onclick={onMockRun} disabled={session.running} class="secondary">
-        Mock
+        Test Run
       </button>
     {/if}
   </div>
+
+  {#if !planFile && !session.running}
+    <p class="hint">Select a prompt file to start a run</p>
+  {/if}
 
   <EventsList events={session.events} />
 
@@ -203,6 +183,20 @@
     margin-top: 1.5rem;
   }
 
+  details.settings {
+    margin-top: 1.5rem;
+  }
+
+  details.settings summary {
+    font-size: 1rem;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #333;
+    padding-bottom: 0.3rem;
+    cursor: pointer;
+  }
+
   h2 {
     font-size: 1rem;
     color: #aaa;
@@ -211,6 +205,12 @@
     border-bottom: 1px solid #333;
     padding-bottom: 0.3rem;
     margin: 0;
+  }
+
+  .hint {
+    color: #666;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
   }
 
   .settings-form {
@@ -241,20 +241,6 @@
 
   .input-row input {
     flex: 1;
-  }
-
-  select {
-    padding: 0.5rem 0.6rem;
-    font-size: 0.9rem;
-    background: #16213e;
-    color: #e0e0e0;
-    border: 1px solid #333;
-    border-radius: 4px;
-    font-family: "SF Mono", "Fira Code", monospace;
-  }
-
-  select:disabled {
-    opacity: 0.5;
   }
 
   input {

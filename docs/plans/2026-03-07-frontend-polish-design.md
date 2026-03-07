@@ -159,12 +159,12 @@ Restructure the repo detail page to prioritize the Plan + Run workflow.
 - Add hint text below actions: "Select a prompt file to start a run" — only visible when `planFile` is empty and not running
 
 **Checklist:**
-- [ ] Wrap settings in `<details>` element with summary line
-- [ ] Style the `<details>` / `<summary>` to match existing dark theme
-- [ ] Remove recents dropdown, state, and `loadRecents` import
-- [ ] Rename "Mock" to "Test Run"
-- [ ] Add conditional hint text below Run button
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Wrap settings in `<details>` element with summary line
+- [x] Style the `<details>` / `<summary>` to match existing dark theme
+- [x] Remove recents dropdown, state, and `loadRecents` import
+- [x] Rename "Mock" to "Test Run"
+- [x] Add conditional hint text below Run button
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -484,7 +484,7 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 |------|-------------|--------|
 | 1 | Extract shared types into `src/types.ts` | Done |
 | 2 | Add Breadcrumbs component | Done |
-| 3 | Repo Detail -- collapse Settings, remove recents, rename Mock | Not Started |
+| 3 | Repo Detail -- collapse Settings, remove recents, rename Mock | Done |
 | 4 | Add `read_file_preview` Tauri command | Not Started |
 | 5 | Repo Detail -- plan file preview | Not Started |
 | 6 | Home page -- toolbar alignment | Not Started |
