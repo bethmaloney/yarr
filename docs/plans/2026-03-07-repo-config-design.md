@@ -295,8 +295,8 @@ Rewrite App.svelte as the orchestrator: view routing, session state map, event l
 - Keep only global styles (body, main container)
 
 **Checklist:**
-- [ ] Rewrite `src/App.svelte` as view router with session state management
-- [ ] Verify: `npx tsc --noEmit` passes
+- [x] Rewrite `src/App.svelte` as view router with session state management
+- [x] Verify: `npx tsc --noEmit` passes
 
 ---
 
@@ -325,7 +325,7 @@ Verify everything compiles and works together.
 | 5 | `RepoCard.svelte` — single repo card | Done |
 | 6 | `HomeView.svelte` — home page with repo grid | Done |
 | 7 | `RepoDetail.svelte` — repo workspace view | Done |
-| 8 | `App.svelte` refactor — view router + session state | Not Started |
+| 8 | `App.svelte` refactor — view router + session state | Done |
 | 9 | Integration verification | Not Started |
 
 ## Out of Scope (for now)
