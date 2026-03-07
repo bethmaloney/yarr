@@ -60,7 +60,7 @@ impl RuntimeProvider for WslRuntime {
         let start = std::time::Instant::now();
 
         let mut child = Command::new("wsl")
-            .args(["-e", "bash", "-c", &cmd_str])
+            .args(["-e", "bash", "-lc", &cmd_str])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -138,7 +138,7 @@ impl RuntimeProvider for WslRuntime {
 
     async fn health_check(&self) -> Result<()> {
         let output = Command::new("wsl")
-            .args(["-e", "which", &self.claude_bin])
+            .args(["-e", "bash", "-lc", &format!("which {}", shell_escape(&self.claude_bin))])
             .output()
             .await?;
 
