@@ -4,8 +4,19 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::{AbortHandle, ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider};
+use super::{AbortHandle, ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
 use crate::output::StreamEvent;
+
+/// State of a remote SSH session, determined by checking tmux and log file.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RemoteState {
+    /// Tmux session is alive, claude is still running
+    Alive,
+    /// Tmux session is dead, log contains a Result event (completed normally)
+    CompletedOk,
+    /// Tmux session is dead, no Result event found (crashed or killed)
+    Dead,
+}
 
 /// Shell-escapes a string by wrapping in single quotes and escaping embedded single quotes.
 pub fn shell_escape(s: &str) -> String {
@@ -140,6 +151,166 @@ impl SshRuntime {
             &self.ssh_host,
             "command -v tmux && command -v claude && echo OK",
         )
+    }
+
+    pub fn build_check_tmux_command(&self, session_id: &str) -> Command {
+        let remote_cmd = format!(
+            "tmux has-session -t yarr-{session_id} 2>/dev/null && echo ALIVE || echo DEAD"
+        );
+        ssh_command(&self.ssh_host, &remote_cmd)
+    }
+
+    pub fn build_tail_last_line_command(&self, session_id: &str) -> Command {
+        let remote_cmd = format!("tail -1 ~/.yarr/logs/yarr-{session_id}.log");
+        ssh_command(&self.ssh_host, &remote_cmd)
+    }
+
+    pub fn build_recover_command(&self, session_id: &str, from_line: u64) -> Command {
+        let remote_cmd = format!("tail -n +{from_line} ~/.yarr/logs/yarr-{session_id}.log");
+        ssh_command(&self.ssh_host, &remote_cmd)
+    }
+
+    pub fn build_resume_tail_command(&self, session_id: &str, from_line: u64) -> Command {
+        let remote_cmd = format!("tail -f -n +{from_line} ~/.yarr/logs/yarr-{session_id}.log");
+        ssh_command(&self.ssh_host, &remote_cmd)
+    }
+
+    pub fn build_cleanup_command(&self, session_id: &str) -> Command {
+        let remote_cmd = format!(
+            "rm -f ~/.yarr/logs/yarr-{session_id}.log /tmp/yarr-{session_id}.stderr"
+        );
+        ssh_command(&self.ssh_host, &remote_cmd)
+    }
+
+    pub fn build_get_stderr_command(&self, session_id: &str) -> Command {
+        let remote_cmd = format!("cat /tmp/yarr-{session_id}.stderr 2>/dev/null");
+        ssh_command(&self.ssh_host, &remote_cmd)
+    }
+
+    /// Parse the combined output of tmux check and last log line into a RemoteState.
+    pub fn parse_remote_state(tmux_output: &str, last_log_line: &str) -> RemoteState {
+        if tmux_output.trim().contains("ALIVE") {
+            return RemoteState::Alive;
+        }
+        // Tmux is dead — check if the log has a Result event
+        let trimmed = last_log_line.trim();
+        if !trimmed.is_empty() {
+            if let Ok(StreamEvent::Result(_)) = StreamEvent::parse_line(trimmed) {
+                return RemoteState::CompletedOk;
+            }
+        }
+        RemoteState::Dead
+    }
+
+    /// Check if a remote session is still running.
+    pub async fn check_remote_state(&self, session_id: &str) -> Result<RemoteState> {
+        let tmux_output = self.build_check_tmux_command(session_id).output().await?;
+        let tmux_stdout = String::from_utf8_lossy(&tmux_output.stdout).to_string();
+
+        let last_line_output = self.build_tail_last_line_command(session_id).output().await?;
+        let last_line = String::from_utf8_lossy(&last_line_output.stdout).to_string();
+
+        Ok(Self::parse_remote_state(&tmux_stdout, &last_line))
+    }
+
+    /// Recover missed events from the log file starting at the given line.
+    pub async fn recover_events(
+        &self,
+        session_id: &str,
+        from_line: u64,
+    ) -> Result<Vec<StreamEvent>> {
+        let output = self
+            .build_recover_command(session_id, from_line)
+            .output()
+            .await?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to recover events: {}", stderr);
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut events = Vec::new();
+        for line in stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            match StreamEvent::parse_line(line) {
+                Ok(event) => events.push(event),
+                Err(e) => tracing::warn!("Failed to parse recovered event: {e}\n  line: {line}"),
+            }
+        }
+        Ok(events)
+    }
+
+    /// Resume tailing the log file from the given line, returning a RunningProcess.
+    pub async fn resume_tail(
+        &self,
+        session_id: &str,
+        from_line: u64,
+    ) -> Result<RunningProcess> {
+        let start = std::time::Instant::now();
+        let mut child = self
+            .build_resume_tail_command(session_id, from_line)
+            .stdout(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+
+        let stdout = child.stdout.take().expect("stdout was piped");
+        let (tx, rx) = mpsc::channel::<StreamEvent>(64);
+
+        let reader_task = tokio::spawn(async move {
+            let mut lines = BufReader::new(stdout).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let line = line.trim().to_string();
+                if line.is_empty() {
+                    continue;
+                }
+                match StreamEvent::parse_line(&line) {
+                    Ok(event) => {
+                        if tx.send(event).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse stream-json line: {e}\n  line: {line}");
+                    }
+                }
+            }
+        });
+
+        let completion = tokio::spawn(async move {
+            let status = child.wait().await?;
+            let _ = reader_task.await;
+            let elapsed = start.elapsed();
+            Ok(ProcessExit {
+                exit_code: status.code().unwrap_or(-1),
+                wall_time_ms: elapsed.as_millis() as u64,
+                stderr: String::new(),
+            })
+        });
+
+        let abort_handle = TaskAbortHandle(completion.abort_handle());
+        Ok(RunningProcess {
+            events: rx,
+            completion,
+            abort_handle: Box::new(abort_handle),
+        })
+    }
+
+    /// Clean up remote log and stderr files.
+    pub async fn cleanup_remote(&self, session_id: &str) -> Result<()> {
+        let output = self.build_cleanup_command(session_id).output().await?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to clean up remote files: {}", stderr);
+        }
+        Ok(())
+    }
+
+    /// Retrieve stderr output from the remote.
+    pub async fn get_stderr(&self, session_id: &str) -> Result<String> {
+        let output = self.build_get_stderr_command(session_id).output().await?;
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 }
 
@@ -1149,5 +1320,571 @@ mod tests {
             "expected backtick-wrapped text preserved in prompt, got: {}",
             all_args
         );
+    }
+
+    // ── build_check_tmux_command tests ────────────────────────────
+
+    #[test]
+    fn build_check_tmux_command_contains_tmux_has_session() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_check_tmux_command("abc-123");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("tmux has-session -t yarr-abc-123"),
+            "expected 'tmux has-session -t yarr-abc-123' in command, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_check_tmux_command_echoes_alive_or_dead() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_check_tmux_command("abc-123");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("echo ALIVE"),
+            "expected 'echo ALIVE' in command, got: {}",
+            all_args
+        );
+        assert!(
+            all_args.contains("echo DEAD"),
+            "expected 'echo DEAD' in command, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_check_tmux_command_suppresses_stderr() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_check_tmux_command("abc-123");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("2>/dev/null"),
+            "expected stderr suppression '2>/dev/null' in command, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_check_tmux_command_targets_correct_host() {
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let cmd = rt.build_check_tmux_command("sess-1");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+
+        assert!(
+            args_str.iter().any(|a| a.contains("beth@server")),
+            "expected host 'beth@server' in check tmux command args, got: {:?}",
+            args_str
+        );
+    }
+
+    #[test]
+    fn build_check_tmux_command_substitutes_session_id() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let session_id = "550e8400-e29b-41d4-a716-446655440000";
+        let cmd = rt.build_check_tmux_command(session_id);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains(&format!("yarr-{}", session_id)),
+            "expected session id in tmux session name, got: {}",
+            all_args
+        );
+    }
+
+    // ── build_tail_last_line_command tests ─────────────────────────
+
+    #[test]
+    fn build_tail_last_line_command_tails_one_line() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_tail_last_line_command("abc-123");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("tail -1 ~/.yarr/logs/yarr-abc-123.log"),
+            "expected 'tail -1' of log file, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_tail_last_line_command_targets_correct_host() {
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let cmd = rt.build_tail_last_line_command("sess-1");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+
+        assert!(
+            args_str.iter().any(|a| a.contains("beth@server")),
+            "expected host 'beth@server' in tail last line command args, got: {:?}",
+            args_str
+        );
+    }
+
+    #[test]
+    fn build_tail_last_line_command_substitutes_session_id() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let session_id = "my-session-42";
+        let cmd = rt.build_tail_last_line_command(session_id);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains(&format!("yarr-{}.log", session_id)),
+            "expected session id in log path, got: {}",
+            all_args
+        );
+    }
+
+    // ── build_recover_command tests ────────────────────────────────
+
+    #[test]
+    fn build_recover_command_tails_from_line() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_recover_command("abc-123", 42);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("tail -n +42 ~/.yarr/logs/yarr-abc-123.log"),
+            "expected 'tail -n +42' of log file, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_recover_command_targets_correct_host() {
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let cmd = rt.build_recover_command("sess-1", 1);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+
+        assert!(
+            args_str.iter().any(|a| a.contains("beth@server")),
+            "expected host 'beth@server' in recover command args, got: {:?}",
+            args_str
+        );
+    }
+
+    #[test]
+    fn build_recover_command_substitutes_session_id() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let session_id = "550e8400-e29b-41d4";
+        let cmd = rt.build_recover_command(session_id, 100);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains(&format!("yarr-{}.log", session_id)),
+            "expected session id in log path, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_recover_command_uses_correct_from_line() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_recover_command("abc-123", 999);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("tail -n +999"),
+            "expected 'tail -n +999' for from_line=999, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_recover_command_does_not_follow() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_recover_command("abc-123", 1);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        // recover is a one-shot read, should NOT contain -f (follow)
+        assert!(
+            !all_args.contains("tail -f"),
+            "recover command should not use 'tail -f', got: {}",
+            all_args
+        );
+    }
+
+    // ── build_resume_tail_command tests ────────────────────────────
+
+    #[test]
+    fn build_resume_tail_command_follows_from_line() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_resume_tail_command("abc-123", 42);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("tail -f -n +42 ~/.yarr/logs/yarr-abc-123.log"),
+            "expected 'tail -f -n +42' of log file, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_resume_tail_command_targets_correct_host() {
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let cmd = rt.build_resume_tail_command("sess-1", 1);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+
+        assert!(
+            args_str.iter().any(|a| a.contains("beth@server")),
+            "expected host 'beth@server' in resume tail command args, got: {:?}",
+            args_str
+        );
+    }
+
+    #[test]
+    fn build_resume_tail_command_substitutes_session_id() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let session_id = "my-session-42";
+        let cmd = rt.build_resume_tail_command(session_id, 10);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains(&format!("yarr-{}.log", session_id)),
+            "expected session id in log path, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_resume_tail_command_uses_correct_from_line() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_resume_tail_command("abc-123", 500);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("tail -f -n +500"),
+            "expected 'tail -f -n +500' for from_line=500, got: {}",
+            all_args
+        );
+    }
+
+    // ── build_cleanup_command tests ────────────────────────────────
+
+    #[test]
+    fn build_cleanup_command_removes_log_and_stderr() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_cleanup_command("abc-123");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("rm -f"),
+            "expected 'rm -f' in cleanup command, got: {}",
+            all_args
+        );
+        assert!(
+            all_args.contains("~/.yarr/logs/yarr-abc-123.log"),
+            "expected log file path in cleanup command, got: {}",
+            all_args
+        );
+        assert!(
+            all_args.contains("/tmp/yarr-abc-123.stderr"),
+            "expected stderr file path in cleanup command, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_cleanup_command_targets_correct_host() {
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let cmd = rt.build_cleanup_command("sess-1");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+
+        assert!(
+            args_str.iter().any(|a| a.contains("beth@server")),
+            "expected host 'beth@server' in cleanup command args, got: {:?}",
+            args_str
+        );
+    }
+
+    #[test]
+    fn build_cleanup_command_substitutes_session_id() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let session_id = "550e8400-e29b-41d4-a716-446655440000";
+        let cmd = rt.build_cleanup_command(session_id);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        let expected_log = format!("yarr-{}.log", session_id);
+        let expected_stderr = format!("yarr-{}.stderr", session_id);
+
+        assert!(
+            all_args.contains(&expected_log),
+            "expected log filename '{}' in cleanup command, got: {}",
+            expected_log, all_args
+        );
+        assert!(
+            all_args.contains(&expected_stderr),
+            "expected stderr filename '{}' in cleanup command, got: {}",
+            expected_stderr, all_args
+        );
+    }
+
+    // ── build_get_stderr_command tests ─────────────────────────────
+
+    #[test]
+    fn build_get_stderr_command_cats_stderr_file() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_get_stderr_command("abc-123");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("cat /tmp/yarr-abc-123.stderr"),
+            "expected 'cat /tmp/yarr-abc-123.stderr' in command, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_get_stderr_command_suppresses_errors() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let cmd = rt.build_get_stderr_command("abc-123");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("2>/dev/null"),
+            "expected stderr suppression '2>/dev/null' in command, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_get_stderr_command_targets_correct_host() {
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let cmd = rt.build_get_stderr_command("sess-1");
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+
+        assert!(
+            args_str.iter().any(|a| a.contains("beth@server")),
+            "expected host 'beth@server' in get stderr command args, got: {:?}",
+            args_str
+        );
+    }
+
+    #[test]
+    fn build_get_stderr_command_substitutes_session_id() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let session_id = "550e8400-e29b-41d4";
+        let cmd = rt.build_get_stderr_command(session_id);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains(&format!("yarr-{}.stderr", session_id)),
+            "expected session id in stderr path, got: {}",
+            all_args
+        );
+    }
+
+    // ── RemoteState enum tests ────────────────────────────────────
+
+    #[test]
+    fn remote_state_alive_equals_alive() {
+        let state = super::RemoteState::Alive;
+        assert_eq!(state, super::RemoteState::Alive);
+    }
+
+    #[test]
+    fn remote_state_completed_ok_equals_completed_ok() {
+        let state = super::RemoteState::CompletedOk;
+        assert_eq!(state, super::RemoteState::CompletedOk);
+    }
+
+    #[test]
+    fn remote_state_dead_equals_dead() {
+        let state = super::RemoteState::Dead;
+        assert_eq!(state, super::RemoteState::Dead);
+    }
+
+    #[test]
+    fn remote_state_variants_are_not_equal() {
+        assert_ne!(super::RemoteState::Alive, super::RemoteState::Dead);
+        assert_ne!(super::RemoteState::Alive, super::RemoteState::CompletedOk);
+        assert_ne!(super::RemoteState::CompletedOk, super::RemoteState::Dead);
+    }
+
+    #[test]
+    fn remote_state_is_clone() {
+        let state = super::RemoteState::Alive;
+        let cloned = state.clone();
+        assert_eq!(state, cloned);
+    }
+
+    #[test]
+    fn remote_state_is_debug() {
+        let state = super::RemoteState::Alive;
+        let debug = format!("{:?}", state);
+        assert!(
+            debug.contains("Alive"),
+            "expected Debug output to contain 'Alive', got: {}",
+            debug
+        );
+    }
+
+    // ── parse_remote_state tests ──────────────────────────────────
+
+    #[test]
+    fn parse_remote_state_alive_output_returns_alive() {
+        let state = SshRuntime::parse_remote_state("ALIVE", "");
+        assert_eq!(state, super::RemoteState::Alive);
+    }
+
+    #[test]
+    fn parse_remote_state_alive_ignores_last_log_line() {
+        // Even if the last log line is a Result event, ALIVE takes precedence
+        let result_json = r#"{"type":"result","subtype":"success","is_error":false,"duration_ms":1929,"duration_api_ms":1887,"num_turns":1,"result":"hello","session_id":"abc","total_cost_usd":0.041}"#;
+        let state = SshRuntime::parse_remote_state("ALIVE", result_json);
+        assert_eq!(state, super::RemoteState::Alive);
+    }
+
+    #[test]
+    fn parse_remote_state_alive_with_trailing_whitespace() {
+        let state = SshRuntime::parse_remote_state("ALIVE\n", "some line");
+        assert_eq!(state, super::RemoteState::Alive);
+    }
+
+    #[test]
+    fn parse_remote_state_dead_with_result_event_returns_completed_ok() {
+        let result_json = r#"{"type":"result","subtype":"success","is_error":false,"duration_ms":1929,"duration_api_ms":1887,"num_turns":1,"result":"hello","session_id":"abc","total_cost_usd":0.041}"#;
+        let state = SshRuntime::parse_remote_state("DEAD", result_json);
+        assert_eq!(state, super::RemoteState::CompletedOk);
+    }
+
+    #[test]
+    fn parse_remote_state_dead_with_error_result_returns_completed_ok() {
+        // Even an error result is still a Result event — the session completed
+        let result_json = r#"{"type":"result","subtype":"error","is_error":true,"duration_ms":500,"num_turns":1,"result":"something went wrong","session_id":"abc","total_cost_usd":0.01}"#;
+        let state = SshRuntime::parse_remote_state("DEAD", result_json);
+        assert_eq!(state, super::RemoteState::CompletedOk);
+    }
+
+    #[test]
+    fn parse_remote_state_dead_with_non_result_line_returns_dead() {
+        // An assistant event is not a Result event
+        let assistant_json = r#"{"type":"assistant","message":{"id":"msg_1","role":"assistant","model":"claude-opus-4-6","content":[{"type":"text","text":"hello"}],"stop_reason":null,"usage":{"input_tokens":10,"output_tokens":1}},"session_id":"abc"}"#;
+        let state = SshRuntime::parse_remote_state("DEAD", assistant_json);
+        assert_eq!(state, super::RemoteState::Dead);
+    }
+
+    #[test]
+    fn parse_remote_state_dead_with_empty_last_line_returns_dead() {
+        let state = SshRuntime::parse_remote_state("DEAD", "");
+        assert_eq!(state, super::RemoteState::Dead);
+    }
+
+    #[test]
+    fn parse_remote_state_dead_with_invalid_json_returns_dead() {
+        let state = SshRuntime::parse_remote_state("DEAD", "this is not json at all");
+        assert_eq!(state, super::RemoteState::Dead);
+    }
+
+    #[test]
+    fn parse_remote_state_dead_with_partial_json_returns_dead() {
+        let state = SshRuntime::parse_remote_state("DEAD", r#"{"type":"result","subtype":"#);
+        assert_eq!(state, super::RemoteState::Dead);
+    }
+
+    #[test]
+    fn parse_remote_state_dead_with_system_event_returns_dead() {
+        let system_json = r#"{"type":"system","subtype":"init","cwd":"/tmp","session_id":"abc","model":"claude-opus-4-6","tools":["Bash"]}"#;
+        let state = SshRuntime::parse_remote_state("DEAD", system_json);
+        assert_eq!(state, super::RemoteState::Dead);
+    }
+
+    #[test]
+    fn parse_remote_state_dead_with_rate_limit_event_returns_dead() {
+        let rate_limit_json = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1772845200,"rateLimitType":"five_hour"},"session_id":"abc"}"#;
+        let state = SshRuntime::parse_remote_state("DEAD", rate_limit_json);
+        assert_eq!(state, super::RemoteState::Dead);
     }
 }

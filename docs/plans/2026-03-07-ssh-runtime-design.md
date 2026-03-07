@@ -410,13 +410,13 @@ Add the methods beyond `RuntimeProvider` that handle disconnect recovery.
   - Run `ssh host "cat /tmp/yarr-{id}.stderr 2>/dev/null"`
 
 **Checklist:**
-- [ ] Define `RemoteState` enum
-- [ ] Implement `check_remote_state()`
-- [ ] Implement `recover_events()`
-- [ ] Implement `resume_tail()`
-- [ ] Implement `cleanup_remote()`
-- [ ] Implement `get_stderr()`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Define `RemoteState` enum
+- [x] Implement `check_remote_state()`
+- [x] Implement `recover_events()`
+- [x] Implement `resume_tail()`
+- [x] Implement `cleanup_remote()`
+- [x] Implement `get_stderr()`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -571,7 +571,7 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 5 | SSH command helper module | Done |
 | 6 | RuntimeProvider — add `run_command` method | Not Started |
 | 7 | SshRuntime — RuntimeProvider implementation | Done |
-| 8 | SshRuntime — reconnection methods | Not Started |
+| 8 | SshRuntime — reconnection methods | Done |
 | 9 | SshSessionOrchestrator | Not Started |
 | 10 | Tauri commands for SSH sessions | Not Started |
 | 11 | Frontend session state — Disconnected and Reconnecting | Not Started |
