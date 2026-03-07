@@ -6,7 +6,14 @@
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import EventsList from "./EventsList.svelte";
 
-  let { repo, session, onBack, onRun, onMockRun, onUpdateRepo }: {
+  let {
+    repo,
+    session,
+    onBack,
+    onRun,
+    onMockRun,
+    onUpdateRepo,
+  }: {
     repo: RepoConfig;
     session: SessionState;
     onBack: () => void;
@@ -65,11 +72,15 @@
 </script>
 
 <main>
-  <Breadcrumbs crumbs={[{label: "Home", onclick: onBack}, {label: repo.name}]} />
+  <Breadcrumbs
+    crumbs={[{ label: "Home", onclick: onBack }, { label: repo.name }]}
+  />
 
   <header>
     <h1>{repo.name}</h1>
-    <p class="repo-path">{repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`}</p>
+    <p class="repo-path">
+      {repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`}
+    </p>
   </header>
 
   <details class="settings">
@@ -91,14 +102,28 @@
       </label>
       <label>
         Max Iterations
-        <input type="number" bind:value={maxIterations} min="1" disabled={session.running} />
+        <input
+          type="number"
+          bind:value={maxIterations}
+          min="1"
+          disabled={session.running}
+        />
       </label>
       <label>
         Completion Signal
-        <input type="text" bind:value={completionSignal} disabled={session.running} />
+        <input
+          type="text"
+          bind:value={completionSignal}
+          disabled={session.running}
+        />
       </label>
       <div class="settings-actions">
-        <button type="button" class="secondary" onclick={saveSettings} disabled={session.running}>Save</button>
+        <button
+          type="button"
+          class="secondary"
+          onclick={saveSettings}
+          disabled={session.running}>Save</button
+        >
         {#if repo.type === "ssh"}
           <button type="button" class="secondary">Test Connection</button>
         {/if}
@@ -111,22 +136,39 @@
     <label>
       Prompt file
       <div class="input-row">
-        <input type="text" bind:value={planFile} placeholder="docs/plans/my-feature-design.md" disabled={session.running} />
-        <button type="button" class="secondary" onclick={browsePrompt} disabled={session.running}>Browse</button>
+        <input
+          type="text"
+          bind:value={planFile}
+          placeholder="docs/plans/my-feature-design.md"
+          disabled={session.running}
+        />
+        <button
+          type="button"
+          class="secondary"
+          onclick={browsePrompt}
+          disabled={session.running}>Browse</button
+        >
       </div>
     </label>
   </section>
 
   <div class="actions">
-    <button type="button" disabled={session.running || !planFile} onclick={() => onRun(planFile)}>
+    <button
+      type="button"
+      disabled={session.running || !planFile}
+      onclick={() => onRun(planFile)}
+    >
       {session.running ? "Running..." : "Run"}
     </button>
     {#if session.running}
-      <button type="button" onclick={stopSession} class="danger">
-        Stop
-      </button>
+      <button type="button" onclick={stopSession} class="danger"> Stop </button>
     {:else}
-      <button type="button" onclick={onMockRun} disabled={session.running} class="secondary">
+      <button
+        type="button"
+        onclick={onMockRun}
+        disabled={session.running}
+        class="secondary"
+      >
         Test Run
       </button>
     {/if}

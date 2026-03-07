@@ -11,13 +11,20 @@
 
   function eventEmoji(kind: string): string {
     switch (kind) {
-      case "session_started": return "\u{1F680}";
-      case "iteration_started": return "\u{1F504}";
-      case "tool_use": return "\u{1F527}";
-      case "assistant_text": return "\u{1F4AC}";
-      case "iteration_complete": return "\u2705";
-      case "session_complete": return "\u{1F3C1}";
-      default: return "\u{1F4CB}";
+      case "session_started":
+        return "\u{1F680}";
+      case "iteration_started":
+        return "\u{1F504}";
+      case "tool_use":
+        return "\u{1F527}";
+      case "assistant_text":
+        return "\u{1F4AC}";
+      case "iteration_complete":
+        return "\u2705";
+      case "session_complete":
+        return "\u{1F3C1}";
+      default:
+        return "\u{1F4CB}";
     }
   }
 
@@ -63,7 +70,11 @@
   function formatTime(ts?: number): string {
     if (!ts) return "";
     const d = new Date(ts);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    return d.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
   }
 
   function handleEventsScroll() {
@@ -73,51 +84,65 @@
   }
 
   function jumpToBottom() {
-    eventsContainer?.scrollTo({ top: eventsContainer.scrollHeight, behavior: "smooth" });
+    eventsContainer?.scrollTo({
+      top: eventsContainer.scrollHeight,
+      behavior: "smooth",
+    });
     autoScroll = true;
   }
 
   $effect(() => {
     if (events.length > 0 && untrack(() => autoScroll)) {
       requestAnimationFrame(() => {
-        eventsContainer?.scrollTo({ top: eventsContainer.scrollHeight, behavior: "smooth" });
+        eventsContainer?.scrollTo({
+          top: eventsContainer.scrollHeight,
+          behavior: "smooth",
+        });
       });
     }
   });
 </script>
 
 {#if events.length > 0}
-<section class="events">
-  <div class="events-header">
-    <h2>Events</h2>
-    <span class="event-count">{events.length}</span>
-  </div>
-  <div class="events-scroll" bind:this={eventsContainer} onscroll={handleEventsScroll}>
-    <ul>
-      {#each events as ev, i (i)}
-        <li class="event {ev.kind}" class:expanded={expandedEvents.has(i)}>
-          <button
-            class="event-btn"
-            onclick={() => {
-              if (expandedEvents.has(i)) expandedEvents.delete(i);
-              else expandedEvents.add(i);
-            }}
-          >
-            <span class="event-emoji">{eventEmoji(ev.kind)}</span>
-            <span class="event-text">{eventLabel(ev)}</span>
-            <span class="event-time">{formatTime(ev._ts)}</span>
-          </button>
-          {#if expandedEvents.has(i) && ev.kind === "tool_use" && ev.tool_input}
-            <pre class="tool-input-detail">{JSON.stringify(ev.tool_input, null, 2)}</pre>
-          {/if}
-        </li>
-      {/each}
-    </ul>
-  </div>
-  {#if !autoScroll}
-    <button class="jump-bottom" onclick={jumpToBottom}>↓ New events</button>
-  {/if}
-</section>
+  <section class="events">
+    <div class="events-header">
+      <h2>Events</h2>
+      <span class="event-count">{events.length}</span>
+    </div>
+    <div
+      class="events-scroll"
+      bind:this={eventsContainer}
+      onscroll={handleEventsScroll}
+    >
+      <ul>
+        {#each events as ev, i (i)}
+          <li class="event {ev.kind}" class:expanded={expandedEvents.has(i)}>
+            <button
+              class="event-btn"
+              onclick={() => {
+                if (expandedEvents.has(i)) expandedEvents.delete(i);
+                else expandedEvents.add(i);
+              }}
+            >
+              <span class="event-emoji">{eventEmoji(ev.kind)}</span>
+              <span class="event-text">{eventLabel(ev)}</span>
+              <span class="event-time">{formatTime(ev._ts)}</span>
+            </button>
+            {#if expandedEvents.has(i) && ev.kind === "tool_use" && ev.tool_input}
+              <pre class="tool-input-detail">{JSON.stringify(
+                  ev.tool_input,
+                  null,
+                  2,
+                )}</pre>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    </div>
+    {#if !autoScroll}
+      <button class="jump-bottom" onclick={jumpToBottom}>↓ New events</button>
+    {/if}
+  </section>
 {/if}
 
 <style>
@@ -226,7 +251,8 @@
   .event-emoji {
     flex-shrink: 0;
     font-size: 0.9rem;
-    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    font-family:
+      "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   }
 
   .event-text {

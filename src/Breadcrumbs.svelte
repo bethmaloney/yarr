@@ -1,5 +1,7 @@
 <script lang="ts">
-  let { crumbs }: {
+  let {
+    crumbs,
+  }: {
     crumbs: { label: string; onclick?: () => void }[];
   } = $props();
 </script>

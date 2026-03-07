@@ -4,7 +4,22 @@
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import RepoCard from "./RepoCard.svelte";
 
-  let { repos, sessions, addMode, sshHost, sshRemotePath, onSelectRepo, onAddRepo, onChooseLocal, onChooseSsh, onSshHostChange, onSshRemotePathChange, onAddSshRepo, onCancelAdd, onHistory }: {
+  let {
+    repos,
+    sessions,
+    addMode,
+    sshHost,
+    sshRemotePath,
+    onSelectRepo,
+    onAddRepo,
+    onChooseLocal,
+    onChooseSsh,
+    onSshHostChange,
+    onSshRemotePathChange,
+    onAddSshRepo,
+    onCancelAdd,
+    onHistory,
+  }: {
     repos: RepoConfig[];
     sessions: Map<string, SessionState>;
     addMode: null | "choosing" | "ssh-form";
@@ -32,7 +47,7 @@
 </script>
 
 <main>
-  <Breadcrumbs crumbs={[{label: "Home"}]} />
+  <Breadcrumbs crumbs={[{ label: "Home" }]} />
   <header>
     <h1>Yarr</h1>
     <p class="subtitle">Claude Orchestrator</p>
@@ -53,11 +68,20 @@
     <div class="ssh-form">
       <label>
         SSH Host
-        <input type="text" value={sshHost} oninput={(e) => onSshHostChange((e.target as HTMLInputElement).value)} />
+        <input
+          type="text"
+          value={sshHost}
+          oninput={(e) => onSshHostChange((e.target as HTMLInputElement).value)}
+        />
       </label>
       <label>
         Remote Path
-        <input type="text" value={sshRemotePath} oninput={(e) => onSshRemotePathChange((e.target as HTMLInputElement).value)} />
+        <input
+          type="text"
+          value={sshRemotePath}
+          oninput={(e) =>
+            onSshRemotePathChange((e.target as HTMLInputElement).value)}
+        />
       </label>
       <div class="ssh-form-actions">
         <button class="add-btn" onclick={onAddSshRepo}>Add</button>

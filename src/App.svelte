@@ -4,7 +4,13 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { saveRecent } from "./recents";
-  import { loadRepos, addLocalRepo, addSshRepo, updateRepo, type RepoConfig } from "./repos";
+  import {
+    loadRepos,
+    addLocalRepo,
+    addSshRepo,
+    updateRepo,
+    type RepoConfig,
+  } from "./repos";
   import HomeView from "./HomeView.svelte";
   import RepoDetail from "./RepoDetail.svelte";
   import HistoryView from "./HistoryView.svelte";
@@ -16,8 +22,8 @@
     | { kind: "home" }
     | { kind: "repo"; repoId: string }
     | { kind: "history"; repoId?: string }
-    | { kind: "run"; repoId: string; sessionId: string; fromRepoId?: string }
-    = $state({ kind: "home" });
+    | { kind: "run"; repoId: string; sessionId: string; fromRepoId?: string } =
+    $state({ kind: "home" });
   let repos: RepoConfig[] = $state([]);
   let sessions = new SvelteMap<string, SessionState>();
   let addMode: null | "choosing" | "ssh-form" = $state(null);
@@ -34,7 +40,10 @@
       event._ts = Date.now();
       const session = sessions.get(repo_id);
       if (session) {
-        sessions.set(repo_id, { ...session, events: [...session.events, event] });
+        sessions.set(repo_id, {
+          ...session,
+          events: [...session.events, event],
+        });
       }
     });
 
@@ -95,12 +104,22 @@
     const repo = repos.find((r) => r.id === repoId);
     if (!repo) return;
 
-    sessions.set(repoId, { running: true, events: [], trace: null, error: null });
+    sessions.set(repoId, {
+      running: true,
+      events: [],
+      trace: null,
+      error: null,
+    });
 
     try {
-      const repoPayload = repo.type === "local"
-        ? { type: "local" as const, path: repo.path }
-        : { type: "ssh" as const, sshHost: repo.sshHost, remotePath: repo.remotePath };
+      const repoPayload =
+        repo.type === "local"
+          ? { type: "local" as const, path: repo.path }
+          : {
+              type: "ssh" as const,
+              sshHost: repo.sshHost,
+              remotePath: repo.remotePath,
+            };
       const trace = await invoke<SessionTrace>("run_session", {
         repoId,
         repo: repoPayload,
@@ -122,7 +141,12 @@
   }
 
   async function handleMockRun(repoId: string) {
-    sessions.set(repoId, { running: true, events: [], trace: null, error: null });
+    sessions.set(repoId, {
+      running: true,
+      events: [],
+      trace: null,
+      error: null,
+    });
 
     try {
       const trace = await invoke<SessionTrace>("run_mock_session", { repoId });
@@ -144,25 +168,53 @@
 </script>
 
 {#if currentView.kind === "home"}
-  <HomeView {repos} {sessions} {addMode} {sshHost} {sshRemotePath} onSelectRepo={selectRepo} onAddRepo={handleAddRepo} onChooseLocal={handleChooseLocal} onChooseSsh={handleChooseSsh} onSshHostChange={(v) => sshHost = v} onSshRemotePathChange={(v) => sshRemotePath = v} onAddSshRepo={handleAddSshRepo} onCancelAdd={handleCancelAdd} onHistory={() => goHistory()} />
+  <HomeView
+    {repos}
+    {sessions}
+    {addMode}
+    {sshHost}
+    {sshRemotePath}
+    onSelectRepo={selectRepo}
+    onAddRepo={handleAddRepo}
+    onChooseLocal={handleChooseLocal}
+    onChooseSsh={handleChooseSsh}
+    onSshHostChange={(v) => (sshHost = v)}
+    onSshRemotePathChange={(v) => (sshRemotePath = v)}
+    onAddSshRepo={handleAddSshRepo}
+    onCancelAdd={handleCancelAdd}
+    onHistory={() => goHistory()}
+  />
 {:else if currentView.kind === "history"}
   <HistoryView
     repoId={currentView.repoId}
     {repos}
     onBack={goHome}
-    onSelectRun={(rid, sid) => goRun(rid, sid, currentView.kind === "history" ? currentView.repoId : undefined)}
+    onSelectRun={(rid, sid) =>
+      goRun(
+        rid,
+        sid,
+        currentView.kind === "history" ? currentView.repoId : undefined,
+      )}
   />
 {:else if currentView.kind === "run"}
   <RunDetail
     repoId={currentView.repoId}
     sessionId={currentView.sessionId}
-    onBack={() => goHistory(currentView.kind === "run" ? currentView.fromRepoId : undefined)}
+    onBack={() =>
+      goHistory(
+        currentView.kind === "run" ? currentView.fromRepoId : undefined,
+      )}
   />
 {:else if currentView.kind === "repo"}
   {@const repoId = currentView.repoId}
   {@const repo = repos.find((r) => r.id === repoId)}
   {#if repo}
-    {@const sessionState = sessions.get(repoId) ?? { running: false, events: [], trace: null, error: null }}
+    {@const sessionState = sessions.get(repoId) ?? {
+      running: false,
+      events: [],
+      trace: null,
+      error: null,
+    }}
     <RepoDetail
       {repo}
       session={sessionState}
@@ -181,5 +233,4 @@
     background: #1a1a2e;
     color: #e0e0e0;
   }
-
 </style>

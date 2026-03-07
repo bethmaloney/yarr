@@ -2,7 +2,11 @@
   import type { RepoConfig } from "./repos";
   import type { RepoStatus } from "./types";
 
-  let { repo, status, onclick }: {
+  let {
+    repo,
+    status,
+    onclick,
+  }: {
     repo: RepoConfig;
     status: RepoStatus;
     onclick: () => void;
@@ -23,10 +27,18 @@
   };
 </script>
 
-<button class="repo-card" onclick={onclick} aria-label="{repo.name} — {statusLabels[status]}">
+<button
+  class="repo-card"
+  {onclick}
+  aria-label="{repo.name} — {statusLabels[status]}"
+>
   <div class="repo-info">
     <span class="repo-name">{repo.name}</span>
-    <span class="repo-path">{repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`}</span>
+    <span class="repo-path"
+      >{repo.type === "local"
+        ? repo.path
+        : `${repo.sshHost}:${repo.remotePath}`}</span
+    >
   </div>
   <div class="repo-status">
     <span
@@ -34,7 +46,9 @@
       class:running={status === "running"}
       style="background: {statusColors[status]}"
     ></span>
-    <span class="status-label" style="color: {statusColors[status]}">{statusLabels[status]}</span>
+    <span class="status-label" style="color: {statusColors[status]}"
+      >{statusLabels[status]}</span
+    >
   </div>
 </button>
 
@@ -52,7 +66,9 @@
     font-family: inherit;
     color: inherit;
     width: 100%;
-    transition: border-color 0.15s, background 0.15s;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
   }
 
   .repo-card:hover {
@@ -115,7 +131,8 @@
   }
 
   @keyframes pulse {
-    0%, 100% {
+    0%,
+    100% {
       opacity: 1;
     }
     50% {

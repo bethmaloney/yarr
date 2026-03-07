@@ -5,7 +5,11 @@
   import type { SessionEvent, SessionTrace } from "./types";
   import EventsList from "./EventsList.svelte";
 
-  let { repoId, sessionId, onBack }: {
+  let {
+    repoId,
+    sessionId,
+    onBack,
+  }: {
     repoId: string;
     sessionId: string;
     onBack: () => void;
@@ -33,8 +37,19 @@
 
   function formatDate(iso: string): string {
     const d = new Date(iso);
-    return d.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" }) +
-      " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    return (
+      d.toLocaleDateString([], {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      }) +
+      " " +
+      d.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    );
   }
 
   function formatDuration(start: string, end: string | null): string {
@@ -48,17 +63,28 @@
 
   function outcomeBadge(outcome: string): { label: string; cls: string } {
     switch (outcome) {
-      case "completed": return { label: "Completed", cls: "badge-success" };
-      case "failed": return { label: "Failed", cls: "badge-error" };
-      case "max_iterations_reached": return { label: "Max Iters", cls: "badge-warn" };
-      case "cancelled": return { label: "Cancelled", cls: "badge-cancel" };
-      default: return { label: outcome, cls: "badge-default" };
+      case "completed":
+        return { label: "Completed", cls: "badge-success" };
+      case "failed":
+        return { label: "Failed", cls: "badge-error" };
+      case "max_iterations_reached":
+        return { label: "Max Iters", cls: "badge-warn" };
+      case "cancelled":
+        return { label: "Cancelled", cls: "badge-cancel" };
+      default:
+        return { label: outcome, cls: "badge-default" };
     }
   }
 </script>
 
 <main>
-  <Breadcrumbs crumbs={[{label: "Home"}, {label: "History", onclick: onBack}, {label: "Run " + sessionId}]} />
+  <Breadcrumbs
+    crumbs={[
+      { label: "Home" },
+      { label: "History", onclick: onBack },
+      { label: "Run " + sessionId },
+    ]}
+  />
 
   {#if loading}
     <div class="empty-state"><p>Loading...</p></div>
@@ -92,7 +118,9 @@
         <dt>Duration</dt>
         <dd>{formatDuration(trace.start_time, trace.end_time)}</dd>
         <dt>Tokens (in / out)</dt>
-        <dd>{trace.total_input_tokens.toLocaleString()} / {trace.total_output_tokens.toLocaleString()}</dd>
+        <dd>
+          {trace.total_input_tokens.toLocaleString()} / {trace.total_output_tokens.toLocaleString()}
+        </dd>
         <dt>Session ID</dt>
         <dd class="mono">{trace.session_id}</dd>
       </dl>

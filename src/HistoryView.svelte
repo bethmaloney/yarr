@@ -5,7 +5,12 @@
   import type { RepoConfig } from "./repos";
   import type { SessionTrace } from "./types";
 
-  let { repoId, repos, onBack, onSelectRun }: {
+  let {
+    repoId,
+    repos,
+    onBack,
+    onSelectRun,
+  }: {
     repoId: string | undefined;
     repos: RepoConfig[];
     onBack: () => void;
@@ -18,7 +23,9 @@
 
   onMount(async () => {
     try {
-      traces = await invoke<SessionTrace[]>("list_traces", { repoId: repoId ?? null });
+      traces = await invoke<SessionTrace[]>("list_traces", {
+        repoId: repoId ?? null,
+      });
     } catch (e) {
       error = String(e);
     } finally {
@@ -38,8 +45,11 @@
 
   function formatDate(iso: string): string {
     const d = new Date(iso);
-    return d.toLocaleDateString([], { month: "short", day: "numeric" }) +
-      " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return (
+      d.toLocaleDateString([], { month: "short", day: "numeric" }) +
+      " " +
+      d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
   }
 
   function formatDuration(start: string, end: string | null): string {
@@ -53,11 +63,16 @@
 
   function outcomeBadge(outcome: string): { label: string; cls: string } {
     switch (outcome) {
-      case "completed": return { label: "Completed", cls: "badge-success" };
-      case "failed": return { label: "Failed", cls: "badge-error" };
-      case "max_iterations_reached": return { label: "Max Iters", cls: "badge-warn" };
-      case "cancelled": return { label: "Cancelled", cls: "badge-cancel" };
-      default: return { label: outcome, cls: "badge-default" };
+      case "completed":
+        return { label: "Completed", cls: "badge-success" };
+      case "failed":
+        return { label: "Failed", cls: "badge-error" };
+      case "max_iterations_reached":
+        return { label: "Max Iters", cls: "badge-warn" };
+      case "cancelled":
+        return { label: "Cancelled", cls: "badge-cancel" };
+      default:
+        return { label: outcome, cls: "badge-default" };
     }
   }
 
@@ -74,13 +89,25 @@
 </script>
 
 <main>
-  <Breadcrumbs crumbs={repoId
-    ? [{label: "Home", onclick: onBack}, {label: repos.find(r => r.id === repoId)?.name ?? repoId, onclick: onBack}, {label: "History"}]
-    : [{label: "Home", onclick: onBack}, {label: "History"}]
-  } />
+  <Breadcrumbs
+    crumbs={repoId
+      ? [
+          { label: "Home", onclick: onBack },
+          {
+            label: repos.find((r) => r.id === repoId)?.name ?? repoId,
+            onclick: onBack,
+          },
+          { label: "History" },
+        ]
+      : [{ label: "Home", onclick: onBack }, { label: "History" }]}
+  />
 
   <header>
-    <h1>{repoId ? `History \u2014 ${repos.find(r => r.id === repoId)?.name ?? repoId}` : "History"}</h1>
+    <h1>
+      {repoId
+        ? `History \u2014 ${repos.find((r) => r.id === repoId)?.name ?? repoId}`
+        : "History"}
+    </h1>
   </header>
 
   {#if loading}
@@ -95,7 +122,10 @@
     <div class="trace-list">
       {#each traces as trace (trace.session_id)}
         {@const badge = outcomeBadge(trace.outcome)}
-        <button class="trace-row" onclick={() => onSelectRun(traceRepoId(trace), trace.session_id)}>
+        <button
+          class="trace-row"
+          onclick={() => onSelectRun(traceRepoId(trace), trace.session_id)}
+        >
           <span class="trace-date">{formatDate(trace.start_time)}</span>
           {#if !repoId}
             <span class="trace-repo">{repoName(trace)}</span>
@@ -104,7 +134,9 @@
           <span class="trace-badge {badge.cls}">{badge.label}</span>
           <span class="trace-iters">{trace.total_iterations} iters</span>
           <span class="trace-cost">${trace.total_cost_usd.toFixed(4)}</span>
-          <span class="trace-duration">{formatDuration(trace.start_time, trace.end_time)}</span>
+          <span class="trace-duration"
+            >{formatDuration(trace.start_time, trace.end_time)}</span
+          >
         </button>
       {/each}
     </div>
@@ -228,7 +260,9 @@
     color: #888;
   }
 
-  .trace-iters, .trace-cost, .trace-duration {
+  .trace-iters,
+  .trace-cost,
+  .trace-duration {
     flex-shrink: 0;
     color: #888;
     min-width: 4rem;

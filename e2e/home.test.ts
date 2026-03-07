@@ -1,9 +1,13 @@
 import { test, expect } from "./fixtures";
 
 test.describe("Home view", () => {
-  test("shows empty state when no repos configured", async ({ tauriPage: page }) => {
+  test("shows empty state when no repos configured", async ({
+    tauriPage: page,
+  }) => {
     await expect(page.getByText("No repos configured yet.")).toBeVisible();
-    await expect(page.getByRole("button", { name: "+ Add repo" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "+ Add repo" }),
+    ).toBeVisible();
   });
 
   test("shows repo cards when repos exist", async ({ page, mockTauri }) => {
@@ -32,11 +36,16 @@ test.describe("Home view", () => {
     await page.goto("/");
 
     await expect(page.getByRole("button", { name: /my-app/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /api-server/ })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /api-server/ }),
+    ).toBeVisible();
     await expect(page.getByText("No repos configured yet.")).not.toBeVisible();
   });
 
-  test("navigates to repo detail on card click", async ({ page, mockTauri }) => {
+  test("navigates to repo detail on card click", async ({
+    page,
+    mockTauri,
+  }) => {
     await mockTauri({
       storeData: {
         repos: [
@@ -74,14 +83,20 @@ test.describe("Repo detail page", () => {
     ],
   };
 
-  async function navigateToRepoDetail(page: import("@playwright/test").Page, mockTauri: (opts?: import("./fixtures").TauriMockOptions) => Promise<void>) {
+  async function navigateToRepoDetail(
+    page: import("@playwright/test").Page,
+    mockTauri: (opts?: import("./fixtures").TauriMockOptions) => Promise<void>,
+  ) {
     await mockTauri({ storeData: repoStoreData });
     await page.goto("/");
     await page.getByRole("button", { name: /my-app/ }).click();
     await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
   }
 
-  test("settings collapsed by default with summary showing model and iterations", async ({ page, mockTauri }) => {
+  test("settings collapsed by default with summary showing model and iterations", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToRepoDetail(page, mockTauri);
 
     const details = page.locator("details");
@@ -95,7 +110,10 @@ test.describe("Repo detail page", () => {
     await expect(summary).toContainText("40 iters");
   });
 
-  test("settings can be expanded by clicking summary", async ({ page, mockTauri }) => {
+  test("settings can be expanded by clicking summary", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToRepoDetail(page, mockTauri);
 
     const details = page.locator("details");
@@ -114,7 +132,10 @@ test.describe("Repo detail page", () => {
     await expect(page.locator("select")).toHaveCount(0);
   });
 
-  test("'Test Run' button visible instead of 'Mock'", async ({ page, mockTauri }) => {
+  test("'Test Run' button visible instead of 'Mock'", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToRepoDetail(page, mockTauri);
 
     // "Test Run" should be present
@@ -123,14 +144,23 @@ test.describe("Repo detail page", () => {
     await expect(page.getByRole("button", { name: "Mock" })).not.toBeVisible();
   });
 
-  test("hint text shown when no plan file is selected", async ({ page, mockTauri }) => {
+  test("hint text shown when no plan file is selected", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToRepoDetail(page, mockTauri);
 
     // When planFile is empty and not running, a hint should be displayed
-    await expect(page.getByText("Select a prompt file to start a run")).toBeVisible();
+    await expect(
+      page.getByText("Select a prompt file to start a run"),
+    ).toBeVisible();
 
     // After filling in the prompt file, the hint should disappear
-    await page.getByPlaceholder("docs/plans/my-feature-design.md").fill("docs/plan.md");
-    await expect(page.getByText("Select a prompt file to start a run")).not.toBeVisible();
+    await page
+      .getByPlaceholder("docs/plans/my-feature-design.md")
+      .fill("docs/plan.md");
+    await expect(
+      page.getByText("Select a prompt file to start a run"),
+    ).not.toBeVisible();
   });
 });

@@ -54,7 +54,10 @@ export async function addLocalRepo(path: string): Promise<RepoConfig> {
   return repo;
 }
 
-export async function addSshRepo(sshHost: string, remotePath: string): Promise<RepoConfig> {
+export async function addSshRepo(
+  sshHost: string,
+  remotePath: string,
+): Promise<RepoConfig> {
   const repos = await loadRepos();
   const name = remotePath.replace(/\/+$/, "").split("/").pop() || remotePath;
   const repo: SshRepoConfig = {

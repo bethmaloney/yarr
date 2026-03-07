@@ -34,8 +34,14 @@ async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
       // Reconstruct function handlers from serialized strings
       for (const key of Object.keys(invokeHandlers)) {
         const val = invokeHandlers[key];
-        if (val && typeof val === "object" && "__fn" in (val as Record<string, unknown>)) {
-          invokeHandlers[key] = new Function("return " + (val as Record<string, string>).__fn)();
+        if (
+          val &&
+          typeof val === "object" &&
+          "__fn" in (val as Record<string, unknown>)
+        ) {
+          invokeHandlers[key] = new Function(
+            "return " + (val as Record<string, string>).__fn,
+          )();
         }
       }
       const store = new Map<string, unknown>(Object.entries(storeData));
@@ -152,7 +158,10 @@ async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
   );
 }
 
-export const test = base.extend<{ tauriPage: Page; mockTauri: (opts?: TauriMockOptions) => Promise<void> }>({
+export const test = base.extend<{
+  tauriPage: Page;
+  mockTauri: (opts?: TauriMockOptions) => Promise<void>;
+}>({
   mockTauri: async ({ page }, use) => {
     await use(async (opts?: TauriMockOptions) => {
       await injectTauriMocks(page, opts);
