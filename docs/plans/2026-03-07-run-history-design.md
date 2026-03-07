@@ -324,11 +324,11 @@ Add Rust tests for the new TraceCollector methods and event serialization round-
 - Use `tempdir` for test output directories
 
 **Checklist:**
-- [ ] Add serde round-trip test for `SessionEvent`
-- [ ] Add finalize test (writes both files)
-- [ ] Add list_traces test (sorting)
-- [ ] Add read_trace / read_events tests
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Add serde round-trip test for `SessionEvent`
+- [x] Add finalize test (writes both files)
+- [x] Add list_traces test (sorting)
+- [x] Add read_trace / read_events tests
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -345,4 +345,4 @@ Add Rust tests for the new TraceCollector methods and event serialization round-
 | 7 | Add History button to RepoDetail | Done |
 | 8 | Create HistoryView.svelte | Done |
 | 9 | Create RunDetail.svelte | Done |
-| 10 | Tests for trace persistence and listing | Not Started |
+| 10 | Tests for trace persistence and listing | Done |
