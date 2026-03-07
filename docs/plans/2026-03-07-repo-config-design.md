@@ -204,8 +204,8 @@ Extract the events stream UI from `App.svelte` into a reusable component.
 - Move only the events-related styles (`.events`, `.events-header`, `.events-scroll`, `.event`, `.event-emoji`, `.event-text`, `.event-time`, `.jump-bottom`, `ul`, plus the per-kind color classes)
 
 **Checklist:**
-- [ ] Create `src/EventsList.svelte` with props, logic, markup, and styles
-- [ ] Verify: `npx tsc --noEmit` passes
+- [x] Create `src/EventsList.svelte` with props, logic, markup, and styles
+- [x] Verify: `npx tsc --noEmit` passes
 
 ---
 
@@ -321,7 +321,7 @@ Verify everything compiles and works together.
 | 1 | `repos.ts` — RepoConfig type + CRUD helpers | Done |
 | 2 | `repos.test.ts` — unit tests for CRUD | Done |
 | 3 | Backend — parameterize `run_session`, tag events | Done |
-| 4 | `EventsList.svelte` — extract events component | Not Started |
+| 4 | `EventsList.svelte` — extract events component | Done |
 | 5 | `RepoCard.svelte` — single repo card | Not Started |
 | 6 | `HomeView.svelte` — home page with repo grid | Not Started |
 | 7 | `RepoDetail.svelte` — repo workspace view | Not Started |
