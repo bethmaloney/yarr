@@ -183,10 +183,10 @@ Update `run_session` to accept config values and wrap events with `repo_id`.
 - Update `run_mock_session` similarly: add `repo_id: String` parameter, wrap events with tag
 
 **Checklist:**
-- [ ] Add `TaggedSessionEvent` struct
-- [ ] Update `run_session` signature and body
-- [ ] Update `run_mock_session` signature and body
-- [ ] Verify: `cd src-tauri && cargo check` passes
+- [x] Add `TaggedSessionEvent` struct
+- [x] Update `run_session` signature and body
+- [x] Update `run_mock_session` signature and body
+- [x] Verify: `cd src-tauri && cargo check` passes
 
 ---
 
@@ -320,7 +320,7 @@ Verify everything compiles and works together.
 |------|-------------|--------|
 | 1 | `repos.ts` — RepoConfig type + CRUD helpers | Done |
 | 2 | `repos.test.ts` — unit tests for CRUD | Done |
-| 3 | Backend — parameterize `run_session`, tag events | Not Started |
+| 3 | Backend — parameterize `run_session`, tag events | Done |
 | 4 | `EventsList.svelte` — extract events component | Not Started |
 | 5 | `RepoCard.svelte` — single repo card | Not Started |
 | 6 | `HomeView.svelte` — home page with repo grid | Not Started |
