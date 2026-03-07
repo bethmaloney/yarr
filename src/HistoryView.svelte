@@ -2,21 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import type { RepoConfig } from "./repos";
-
-  type SessionTrace = {
-    session_id: string;
-    repo_path: string;
-    prompt: string;
-    plan_file: string | null;
-    repo_id: string | null;
-    start_time: string;
-    end_time: string | null;
-    outcome: string;
-    total_iterations: number;
-    total_cost_usd: number;
-    total_input_tokens: number;
-    total_output_tokens: number;
-  };
+  import type { SessionTrace } from "./types";
 
   let { repoId, repos, onBack, onSelectRun }: {
     repoId: string | undefined;

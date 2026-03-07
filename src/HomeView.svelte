@@ -1,33 +1,7 @@
 <script lang="ts">
   import type { RepoConfig } from "./repos";
+  import type { SessionState, RepoStatus } from "./types";
   import RepoCard from "./RepoCard.svelte";
-
-  type SessionEvent = {
-    kind: string;
-    session_id?: string;
-    iteration?: number;
-    tool_name?: string;
-    text?: string;
-    result?: Record<string, unknown>;
-    outcome?: string;
-    _ts?: number;
-  };
-
-  type SessionTrace = {
-    session_id: string;
-    outcome: string;
-    total_iterations: number;
-    total_cost_usd: number;
-  };
-
-  type SessionState = {
-    running: boolean;
-    events: SessionEvent[];
-    trace: SessionTrace | null;
-    error: string | null;
-  };
-
-  type RepoStatus = "idle" | "running" | "completed" | "failed";
 
   let { repos, sessions, onSelectRepo, onAddRepo, onHistory }: {
     repos: RepoConfig[];

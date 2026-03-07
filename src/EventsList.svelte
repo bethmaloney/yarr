@@ -1,16 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-
-  type SessionEvent = {
-    kind: string;
-    session_id?: string;
-    iteration?: number;
-    tool_name?: string;
-    text?: string;
-    result?: Record<string, unknown>;
-    outcome?: string;
-    _ts?: number;
-  };
+  import type { SessionEvent } from "./types";
 
   let { events }: { events: SessionEvent[] } = $props();
 

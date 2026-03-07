@@ -9,36 +9,7 @@
   import RepoDetail from "./RepoDetail.svelte";
   import HistoryView from "./HistoryView.svelte";
   import RunDetail from "./RunDetail.svelte";
-
-  type SessionEvent = {
-    kind: string;
-    session_id?: string;
-    iteration?: number;
-    tool_name?: string;
-    text?: string;
-    result?: Record<string, unknown>;
-    outcome?: string;
-    _ts?: number;
-  };
-
-  type SessionTrace = {
-    session_id: string;
-    outcome: string;
-    total_iterations: number;
-    total_cost_usd: number;
-  };
-
-  type SessionState = {
-    running: boolean;
-    events: SessionEvent[];
-    trace: SessionTrace | null;
-    error: string | null;
-  };
-
-  type TaggedSessionEvent = {
-    repo_id: string;
-    event: SessionEvent;
-  };
+  import type { SessionEvent, SessionTrace, SessionState, TaggedSessionEvent } from "./types";
 
   let currentView:
     | { kind: "home" }

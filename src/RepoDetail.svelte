@@ -4,29 +4,12 @@
   import { onMount } from "svelte";
   import { loadRecents } from "./recents";
   import type { RepoConfig } from "./repos";
+  import type { SessionState } from "./types";
   import EventsList from "./EventsList.svelte";
-
-  type SessionEvent = {
-    kind: string;
-    session_id?: string;
-    iteration?: number;
-    tool_name?: string;
-    text?: string;
-    result?: Record<string, unknown>;
-    outcome?: string;
-    _ts?: number;
-  };
-
-  type SessionTrace = {
-    session_id: string;
-    outcome: string;
-    total_iterations: number;
-    total_cost_usd: number;
-  };
 
   let { repo, session, onBack, onRun, onMockRun, onUpdateRepo, onHistory }: {
     repo: RepoConfig;
-    session: { running: boolean; events: SessionEvent[]; trace: SessionTrace | null; error: string | null };
+    session: SessionState;
     onBack: () => void;
     onRun: (planFile: string) => void;
     onMockRun: () => void;

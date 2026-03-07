@@ -98,14 +98,14 @@ Create `src/types.ts` with all shared type definitions. Update all components to
 - Keep `RepoConfig` in `repos.ts` where it already lives
 
 **Checklist:**
-- [ ] Create `src/types.ts` with all shared types
-- [ ] Update `App.svelte` — remove local types, add import
-- [ ] Update `HomeView.svelte` — remove local types, add import
-- [ ] Update `RepoDetail.svelte` — remove local types, add import
-- [ ] Update `RunDetail.svelte` — remove local types, add import
-- [ ] Update `EventsList.svelte` — remove local types, add import
-- [ ] Update `HistoryView.svelte` — remove local types, add import
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Create `src/types.ts` with all shared types
+- [x] Update `App.svelte` — remove local types, add import
+- [x] Update `HomeView.svelte` — remove local types, add import
+- [x] Update `RepoDetail.svelte` — remove local types, add import
+- [x] Update `RunDetail.svelte` — remove local types, add import
+- [x] Update `EventsList.svelte` — remove local types, add import
+- [x] Update `HistoryView.svelte` — remove local types, add import
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -482,7 +482,7 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Extract shared types into `src/types.ts` | Not Started |
+| 1 | Extract shared types into `src/types.ts` | Done |
 | 2 | Add Breadcrumbs component | Not Started |
 | 3 | Repo Detail -- collapse Settings, remove recents, rename Mock | Not Started |
 | 4 | Add `read_file_preview` Tauri command | Not Started |

@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { RepoConfig } from "./repos";
+  import type { RepoStatus } from "./types";
 
   let { repo, status, onclick }: {
     repo: RepoConfig;
-    status: "idle" | "running" | "completed" | "failed";
+    status: RepoStatus;
     onclick: () => void;
   } = $props();
 

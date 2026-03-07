@@ -1,34 +1,8 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import type { SessionEvent, SessionTrace } from "./types";
   import EventsList from "./EventsList.svelte";
-
-  type SessionEvent = {
-    kind: string;
-    session_id?: string;
-    iteration?: number;
-    tool_name?: string;
-    text?: string;
-    result?: Record<string, unknown>;
-    outcome?: string;
-    _ts?: number;
-  };
-
-  type SessionTrace = {
-    session_id: string;
-    repo_path: string;
-    prompt: string;
-    plan_file: string | null;
-    start_time: string;
-    end_time: string | null;
-    outcome: string;
-    total_iterations: number;
-    total_cost_usd: number;
-    total_input_tokens: number;
-    total_output_tokens: number;
-    total_cache_read_tokens: number;
-    total_cache_creation_tokens: number;
-  };
 
   let { repoId, sessionId, onBack }: {
     repoId: string;
