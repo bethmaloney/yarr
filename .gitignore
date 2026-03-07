@@ -5,3 +5,5 @@
 /src-tauri/target
 /src-tauri/traces
 /src-tauri/gen
+.playwright-cli/
+screenshots/

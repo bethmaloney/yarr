@@ -1,3 +1,4 @@
+import "./browser-mock";
 import App from "./App.svelte";
 import { mount } from "svelte";
 
