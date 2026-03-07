@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::mpsc;
 
-use super::{ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider};
+use super::{ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
 use crate::output::*;
 
 pub struct MockRuntime {
@@ -165,11 +165,11 @@ impl RuntimeProvider for MockRuntime {
             })
         });
 
-        let abort_handle = completion.abort_handle();
+        let abort_handle = TaskAbortHandle(completion.abort_handle());
         Ok(RunningProcess {
             events: rx,
             completion,
-            abort_handle,
+            abort_handle: Box::new(abort_handle),
         })
     }
 

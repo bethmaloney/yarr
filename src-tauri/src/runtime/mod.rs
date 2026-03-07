@@ -20,6 +20,21 @@ pub struct ClaudeInvocation {
     pub extra_args: Vec<String>,
 }
 
+/// Trait for aborting a running process. Implementations can do
+/// platform-specific cleanup (e.g. killing WSL child processes).
+pub trait AbortHandle: Send + Sync {
+    fn abort(&self);
+}
+
+/// Simple abort handle that just aborts the tokio task (used by LocalRuntime/MockRuntime)
+pub struct TaskAbortHandle(pub tokio::task::AbortHandle);
+
+impl AbortHandle for TaskAbortHandle {
+    fn abort(&self) {
+        self.0.abort();
+    }
+}
+
 /// A handle to a running Claude process.
 /// Provides a channel of streaming events and a way to wait for completion.
 pub struct RunningProcess {
@@ -27,8 +42,8 @@ pub struct RunningProcess {
     pub events: mpsc::Receiver<StreamEvent>,
     /// Wait for the process to exit. Returns (exit_code, wall_time_ms).
     pub completion: tokio::task::JoinHandle<Result<ProcessExit>>,
-    /// Abort handle for the completion task (kills the child process via kill_on_drop)
-    pub abort_handle: tokio::task::AbortHandle,
+    /// Abort handle that kills the child process and cleans up
+    pub abort_handle: Box<dyn AbortHandle>,
 }
 
 #[derive(Debug, Clone)]

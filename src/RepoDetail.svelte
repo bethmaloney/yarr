@@ -159,6 +159,10 @@
       <dl>
         <dt>Outcome</dt>
         <dd>{session.trace.outcome}</dd>
+        {#if session.trace.failure_reason}
+          <dt>Reason</dt>
+          <dd class="failure-reason">{session.trace.failure_reason}</dd>
+        {/if}
         <dt>Iterations</dt>
         <dd>{session.trace.total_iterations}</dd>
         <dt>Total Cost</dt>
@@ -316,6 +320,12 @@
 
   button.danger:hover:not(:disabled) {
     background: #ef4444;
+  }
+
+  .failure-reason {
+    color: #f87171;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .error pre {

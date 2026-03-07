@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::{ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider};
+use super::{ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
 use crate::output::StreamEvent;
 
 pub struct LocalRuntime {
@@ -111,11 +111,11 @@ impl RuntimeProvider for LocalRuntime {
             })
         });
 
-        let abort_handle = completion.abort_handle();
+        let abort_handle = TaskAbortHandle(completion.abort_handle());
         Ok(RunningProcess {
             events: rx,
             completion,
-            abort_handle,
+            abort_handle: Box::new(abort_handle),
         })
     }
 

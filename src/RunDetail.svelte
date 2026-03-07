@@ -79,6 +79,10 @@
       <dl>
         <dt>Outcome</dt>
         <dd><span class="trace-badge {badge.cls}">{badge.label}</span></dd>
+        {#if trace.failure_reason}
+          <dt>Reason</dt>
+          <dd class="failure-reason">{trace.failure_reason}</dd>
+        {/if}
         <dt>Plan</dt>
         <dd>{trace.plan_file ?? "\u2014"}</dd>
         <dt>Iterations</dt>
@@ -167,6 +171,12 @@
   dd {
     margin: 0;
     font-size: 0.85rem;
+  }
+
+  .failure-reason {
+    color: #f87171;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .mono {

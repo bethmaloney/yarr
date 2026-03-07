@@ -1,11 +1,35 @@
 use anyhow::Result;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::{ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider};
+use super::{AbortHandle, ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider};
 use crate::output::StreamEvent;
+
+/// Abort handle that kills the WSL child process tree before aborting the task.
+struct WslAbortHandle {
+    task_handle: tokio::task::AbortHandle,
+    wsl_pid: Arc<std::sync::Mutex<Option<u32>>>,
+}
+
+impl AbortHandle for WslAbortHandle {
+    fn abort(&self) {
+        // Try to kill the process tree inside WSL before aborting the task
+        if let Some(pid) = *self.wsl_pid.lock().unwrap() {
+            tracing::info!("Killing WSL process tree (pid={pid})");
+            // Use kill with negative PID to kill the process group, fall back to single kill
+            let _ = std::process::Command::new("wsl")
+                .args(["-e", "kill", "--", &format!("-{pid}")])
+                .output();
+            let _ = std::process::Command::new("wsl")
+                .args(["-e", "kill", "-9", &pid.to_string()])
+                .output();
+        }
+        self.task_handle.abort();
+    }
+}
 
 pub struct WslRuntime {
     claude_bin: String,
@@ -25,13 +49,14 @@ impl WslRuntime {
 
     /// Build the shell command string for the Claude invocation.
     /// The prompt is piped via stdin, so it's not included in the command.
+    /// Echoes `__PID__=<pid>` to stderr so we can kill the process tree inside WSL.
     fn build_command(&self, invocation: &ClaudeInvocation) -> String {
         let wsl_dir = to_wsl_path(&invocation.working_dir);
 
         let mut parts = vec![
             format!("cd {}", shell_escape(&wsl_dir)),
             format!(
-                "&& {} -p --output-format stream-json --verbose",
+                "&& echo __PID__=$$ >&2 && exec {} -p --output-format stream-json --verbose",
                 shell_escape(&self.claude_bin)
             ),
         ];
@@ -79,6 +104,10 @@ impl RuntimeProvider for WslRuntime {
 
         let (tx, rx) = mpsc::channel::<StreamEvent>(64);
 
+        // Track the WSL-side PID so we can kill the process tree inside WSL
+        let wsl_pid: Arc<std::sync::Mutex<Option<u32>>> = Arc::new(std::sync::Mutex::new(None));
+        let wsl_pid_for_completion = wsl_pid.clone();
+
         // Spawn a task that reads stdout line-by-line and sends parsed events
         let reader_task = tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
@@ -105,13 +134,20 @@ impl RuntimeProvider for WslRuntime {
             // Wait for stdin to finish writing
             let _ = stdin_task.await;
 
-            // Collect stderr
+            // Collect stderr, extracting the WSL-side PID from the __PID__=<n> marker
             let mut stderr_buf = String::new();
             let mut stderr_reader = BufReader::new(stderr);
             let mut stderr_line = String::new();
             while let Ok(n) = stderr_reader.read_line(&mut stderr_line).await {
                 if n == 0 {
                     break;
+                }
+                if let Some(pid_str) = stderr_line.trim().strip_prefix("__PID__=") {
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        *wsl_pid_for_completion.lock().unwrap() = Some(pid);
+                    }
+                    stderr_line.clear();
+                    continue;
                 }
                 stderr_buf.push_str(&stderr_line);
                 stderr_line.clear();
@@ -128,11 +164,14 @@ impl RuntimeProvider for WslRuntime {
             })
         });
 
-        let abort_handle = completion.abort_handle();
+        let abort_handle = WslAbortHandle {
+            task_handle: completion.abort_handle(),
+            wsl_pid,
+        };
         Ok(RunningProcess {
             events: rx,
             completion,
-            abort_handle,
+            abort_handle: Box::new(abort_handle),
         })
     }
 
