@@ -5,6 +5,7 @@ pub mod session;
 pub mod ssh_orchestrator;
 pub mod trace;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -24,9 +25,9 @@ pub(crate) struct TaggedSessionEvent {
     event: SessionEvent,
 }
 
-/// Shared state for the active session's cancellation token
-struct ActiveSession {
-    cancel_token: Mutex<Option<CancellationToken>>,
+/// Shared state tracking cancellation tokens for all active sessions, keyed by repo_id
+struct ActiveSessions {
+    tokens: Mutex<HashMap<String, CancellationToken>>,
 }
 
 struct ActiveSshSessions {
@@ -45,8 +46,8 @@ pub(crate) enum RepoType {
 async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trace::SessionTrace, String> {
     let cancel_token = CancellationToken::new();
     {
-        let active = app.state::<ActiveSession>();
-        *active.cancel_token.lock().await = Some(cancel_token.clone());
+        let active = app.state::<ActiveSessions>();
+        active.tokens.lock().await.insert(repo_id.clone(), cancel_token.clone());
     }
 
     let runtime = MockRuntime::completing_after(3);
@@ -75,7 +76,10 @@ async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trac
     }));
 
     let result = runner.run(&runtime).await.map_err(|e| e.to_string());
-    *app.state::<ActiveSession>().cancel_token.lock().await = None;
+    {
+        let active = app.state::<ActiveSessions>();
+        active.tokens.lock().await.remove(&repo_id);
+    }
     result
 }
 
@@ -91,8 +95,8 @@ async fn run_session(
 ) -> Result<trace::SessionTrace, String> {
     let cancel_token = CancellationToken::new();
     {
-        let active = app.state::<ActiveSession>();
-        *active.cancel_token.lock().await = Some(cancel_token.clone());
+        let active = app.state::<ActiveSessions>();
+        active.tokens.lock().await.insert(repo_id.clone(), cancel_token.clone());
     }
 
     match &repo {
@@ -112,7 +116,7 @@ async fn run_session(
 
             // Verify plan file exists before building prompt
             if !plan_path.exists() {
-                *app.state::<ActiveSession>().cancel_token.lock().await = None;
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
                 return Err(format!("Plan file not found: {}", plan_path.display()));
             }
 
@@ -142,7 +146,7 @@ async fn run_session(
             }));
 
             let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
-            *app.state::<ActiveSession>().cancel_token.lock().await = None;
+            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
             result
         }
         RepoType::Ssh { ssh_host, remote_path } => {
@@ -151,7 +155,7 @@ async fn run_session(
             let plan_path = {
                 let p = std::path::Path::new(&plan_file);
                 if !p.is_absolute() {
-                    *app.state::<ActiveSession>().cancel_token.lock().await = None;
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
                     return Err("Plan file must be an absolute path for SSH repos".to_string());
                 }
                 p.to_path_buf()
@@ -204,7 +208,7 @@ async fn run_session(
                 let ssh_sessions = app.state::<ActiveSshSessions>();
                 ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
             }
-            *app.state::<ActiveSession>().cancel_token.lock().await = None;
+            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
             result
         }
     }
@@ -243,11 +247,18 @@ fn read_file_preview(path: String, max_lines: Option<u32>) -> Result<String, Str
 }
 
 #[tauri::command]
-async fn stop_session(app: tauri::AppHandle) -> Result<(), String> {
-    let active = app.state::<ActiveSession>();
-    let token = active.cancel_token.lock().await;
-    if let Some(ref t) = *token {
-        t.cancel();
+async fn get_active_sessions(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let active = app.state::<ActiveSessions>();
+    let repo_ids: Vec<String> = active.tokens.lock().await.keys().cloned().collect();
+    Ok(repo_ids)
+}
+
+#[tauri::command]
+async fn stop_session(app: tauri::AppHandle, repo_id: String) -> Result<(), String> {
+    let active = app.state::<ActiveSessions>();
+    let tokens = active.tokens.lock().await;
+    if let Some(token) = tokens.get(&repo_id) {
+        token.cancel();
         Ok(())
     } else {
         Err("No active session to stop".to_string())
@@ -283,13 +294,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .manage(ActiveSession {
-            cancel_token: Mutex::new(None),
+        .manage(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
         })
         .manage(ActiveSshSessions {
             sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
-        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview])
+        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, get_active_sessions, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview])
         .run(tauri::generate_context!())
         .expect("error running tauri application");
 }

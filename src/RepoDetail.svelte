@@ -91,7 +91,7 @@
 
   async function stopSession() {
     try {
-      await invoke("stop_session");
+      await invoke("stop_session", { repoId: repo.id });
     } catch (e) {
       console.error("Failed to stop session:", e);
     }

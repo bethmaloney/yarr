@@ -31,6 +31,24 @@
   let sshHost = $state("");
   let sshRemotePath = $state("");
 
+  async function syncActiveSession() {
+    const activeRepoIds = await invoke<string[]>("get_active_sessions");
+    for (const activeRepoId of activeRepoIds) {
+      const existing = sessions.get(activeRepoId);
+      if (!existing || !existing.running) {
+        sessions.set(activeRepoId, {
+          running: true,
+          events: existing?.events ?? [],
+          trace: null,
+          error: null,
+        });
+      }
+    }
+    if (activeRepoIds.length > 0) {
+      sessions = new Map(sessions);
+    }
+  }
+
   onMount(() => {
     loadRepos().then((r) => {
       repos = r;
@@ -43,6 +61,9 @@
       }
       latestTraces = m;
     }).catch(() => {});
+
+    // Check if a session was already running (e.g. after webview reload)
+    syncActiveSession();
 
     const unlisten = listen<TaggedSessionEvent>("session-event", (e) => {
       const { repo_id, event } = e.payload;
@@ -66,8 +87,20 @@
       }
     });
 
+    // Detect sleep/wake: if the time gap between intervals is large, we slept
+    let lastTick = Date.now();
+    const sleepDetector = setInterval(() => {
+      const now = Date.now();
+      if (now - lastTick > 10_000) {
+        // Gap > 10s means we likely slept; re-sync with backend
+        syncActiveSession();
+      }
+      lastTick = now;
+    }, 5_000);
+
     return () => {
       unlisten.then((fn) => fn());
+      clearInterval(sleepDetector);
     };
   });
 
