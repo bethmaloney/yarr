@@ -269,8 +269,8 @@ The detail view for a single repo: settings, plan picker, run controls, events.
 - Reuses styles from current App.svelte (inputs, buttons, dl/dt/dd, error pre)
 
 **Checklist:**
-- [ ] Create `src/RepoDetail.svelte` with all sections
-- [ ] Verify: `npx tsc --noEmit` passes
+- [x] Create `src/RepoDetail.svelte` with all sections
+- [x] Verify: `npx tsc --noEmit` passes
 
 ---
 
@@ -324,7 +324,7 @@ Verify everything compiles and works together.
 | 4 | `EventsList.svelte` — extract events component | Done |
 | 5 | `RepoCard.svelte` — single repo card | Done |
 | 6 | `HomeView.svelte` — home page with repo grid | Done |
-| 7 | `RepoDetail.svelte` — repo workspace view | Not Started |
+| 7 | `RepoDetail.svelte` — repo workspace view | Done |
 | 8 | `App.svelte` refactor — view router + session state | Not Started |
 | 9 | Integration verification | Not Started |
 
