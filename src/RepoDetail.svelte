@@ -226,7 +226,7 @@
     </section>
   {/if}
 
-  <EventsList events={session.events} />
+  <EventsList events={session.events} isLive={session.running} />
 
   {#if session.error}
     <section class="error">

@@ -388,12 +388,12 @@ Refactor EventsList to group events by iteration with collapsible sections.
 - Default: all collapsed for historical views, latest expanded for live
 
 **Checklist:**
-- [ ] Create `IterationGroup.svelte` with header + collapsible event list
-- [ ] Refactor `EventsList.svelte` to group events by iteration
-- [ ] Render standalone events (session_started, session_complete) outside groups
-- [ ] Manage expanded state per iteration
-- [ ] Style iteration header: bold, with summary stats
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Create `IterationGroup.svelte` with header + collapsible event list
+- [x] Refactor `EventsList.svelte` to group events by iteration
+- [x] Render standalone events (session_started, session_complete) outside groups
+- [x] Manage expanded state per iteration
+- [x] Style iteration header: bold, with summary stats
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -494,7 +494,7 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 10 | History view -- show prompt text | Done |
 | 11 | History view -- sortable columns | Done |
 | 13 | Run Detail -- session ID click-to-copy | Done |
-| 14 | Run Detail -- collapsible iteration groups | Not Started |
+| 14 | Run Detail -- collapsible iteration groups | Done |
 | 15 | Run Detail -- context window progress bar | Not Started |
 | 16 | Browser mock -- enrich sample data | Not Started |
 | 17 | Update E2E tests | Not Started |

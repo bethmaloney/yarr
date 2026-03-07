@@ -2,12 +2,66 @@
   import { untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import type { SessionEvent } from "./types";
+  import { groupEventsByIteration } from "./iteration-groups";
+  import IterationGroup from "./IterationGroup.svelte";
 
-  let { events }: { events: SessionEvent[] } = $props();
+  let { events, isLive = false }: { events: SessionEvent[]; isLive?: boolean } = $props();
 
   let eventsContainer: HTMLElement | undefined = $state();
   let autoScroll = $state(true);
   let expandedEvents = new SvelteSet<number>();
+  let expandedIterations = new SvelteSet<number>();
+
+  let grouped = $derived(groupEventsByIteration(events));
+
+  // Compute a mapping: for each iteration group, what is its starting global index in the flat events array.
+  // standalone "before" events come first, then iteration groups in order, then standalone "after" events.
+  let iterationGlobalStartIndices = $derived.by(() => {
+    const indices: Map<number, number> = new Map();
+    let offset = 0;
+    // Count "before" standalone events
+    for (const s of grouped.standaloneEvents) {
+      if (s.index === 'before') offset++;
+    }
+    for (const iter of grouped.iterations) {
+      indices.set(iter.iteration, offset);
+      offset += iter.events.length;
+    }
+    return indices;
+  });
+
+  let afterStartIndex = $derived.by(() => {
+    let offset = 0;
+    for (const s of grouped.standaloneEvents) {
+      if (s.index === 'before') offset++;
+    }
+    for (const iter of grouped.iterations) {
+      offset += iter.events.length;
+    }
+    return offset;
+  });
+
+  let lastExpandedIter = $state(-1);
+
+  $effect(() => {
+    if (isLive && grouped.iterations.length > 0) {
+      const lastIter = grouped.iterations[grouped.iterations.length - 1].iteration;
+      if (lastIter !== lastExpandedIter) {
+        lastExpandedIter = lastIter;
+        expandedIterations.add(lastIter);
+      }
+    }
+  });
+
+  function toggleIteration(iteration: number) {
+    if (expandedIterations.has(iteration)) expandedIterations.delete(iteration);
+    else expandedIterations.add(iteration);
+  }
+
+  function toggleEvent(globalIndex: number) {
+    if (expandedEvents.has(globalIndex)) expandedEvents.delete(globalIndex);
+    else expandedEvents.add(globalIndex);
+  }
 
   function eventEmoji(kind: string): string {
     switch (kind) {
@@ -109,38 +163,52 @@
       <h2>Events</h2>
       <span class="event-count">{events.length}</span>
     </div>
-    <div
-      class="events-scroll"
-      bind:this={eventsContainer}
-      onscroll={handleEventsScroll}
-    >
+    <div class="events-scroll" bind:this={eventsContainer} onscroll={handleEventsScroll}>
       <ul>
-        {#each events as ev, i (i)}
-          <li class="event {ev.kind}" class:expanded={expandedEvents.has(i)}>
+        {#each grouped.standaloneEvents.filter(s => s.index === 'before') as standalone, i}
+          <li class="event {standalone.event.kind}" class:expanded={expandedEvents.has(i)}>
             <button
               class="event-btn"
-              onclick={() => {
-                if (expandedEvents.has(i)) expandedEvents.delete(i);
-                else expandedEvents.add(i);
-              }}
+              onclick={() => toggleEvent(i)}
             >
-              <span class="event-emoji">{eventEmoji(ev.kind)}</span>
-              <span class="event-text">{eventLabel(ev)}</span>
-              <span class="event-time">{formatTime(ev._ts)}</span>
+              <span class="event-emoji">{eventEmoji(standalone.event.kind)}</span>
+              <span class="event-text">{eventLabel(standalone.event)}</span>
+              <span class="event-time">{formatTime(standalone.event._ts)}</span>
             </button>
-            {#if expandedEvents.has(i) && ev.kind === "tool_use" && ev.tool_input}
-              <pre class="tool-input-detail">{JSON.stringify(
-                  ev.tool_input,
-                  null,
-                  2,
-                )}</pre>
-            {/if}
+          </li>
+        {/each}
+
+        {#each grouped.iterations as iter}
+          <IterationGroup
+            group={iter}
+            expanded={expandedIterations.has(iter.iteration)}
+            onToggle={() => toggleIteration(iter.iteration)}
+            {eventEmoji}
+            {eventLabel}
+            {formatTime}
+            {expandedEvents}
+            {toggleEvent}
+            globalStartIndex={iterationGlobalStartIndices.get(iter.iteration) ?? 0}
+          />
+        {/each}
+
+        {#each grouped.standaloneEvents.filter(s => s.index === 'after') as standalone, i}
+          {@const globalIndex = afterStartIndex + i}
+          <li class="event {standalone.event.kind}" class:expanded={expandedEvents.has(globalIndex)}>
+            <button
+              class="event-btn"
+              onclick={() => toggleEvent(globalIndex)}
+            >
+              <span class="event-emoji">{eventEmoji(standalone.event.kind)}</span>
+              <span class="event-text">{eventLabel(standalone.event)}</span>
+              <span class="event-time">{formatTime(standalone.event._ts)}</span>
+            </button>
           </li>
         {/each}
       </ul>
     </div>
     {#if !autoScroll}
-      <button class="jump-bottom" onclick={jumpToBottom}>↓ New events</button>
+      <button class="jump-bottom" onclick={jumpToBottom}>{'\u2193'} New events</button>
     {/if}
   </section>
 {/if}
@@ -295,6 +363,11 @@
     color: #34d399;
   }
 
+  .event.session_complete {
+    color: #e8d44d;
+    font-weight: 600;
+  }
+
   .tool-input-detail {
     margin: 0 0.75rem 0.5rem 2.2rem;
     padding: 0.5rem 0.75rem;
@@ -307,10 +380,5 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow-x: auto;
-  }
-
-  .event.session_complete {
-    color: #e8d44d;
-    font-weight: 600;
   }
 </style>
