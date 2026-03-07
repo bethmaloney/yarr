@@ -87,7 +87,7 @@ In your prompt to the fixer, include:
 
 If there are only LOW issues, skip this step — those can be addressed in future iterations.
 
-### Step 6: Finalize
+### Step 6: Finalize and Stop
 
 After all sub-agents complete successfully:
 
@@ -96,6 +96,7 @@ After all sub-agents complete successfully:
    - Update any progress tracking table
 2. **Run tests** one final time to confirm everything passes.
 3. **Commit all changes** with a clear message describing what was implemented.
+4. **Output your iteration summary and stop.** See "When You Are Done" below. Do NOT continue to the next task.
 
 ## Sub-Agent Guidelines
 
@@ -107,21 +108,28 @@ After all sub-agents complete successfully:
 ## Rules
 
 - Implement ONE cohesive unit of work per iteration. Not more, not less.
+- **After completing one unit of work (Steps 1–6), you MUST stop.** Do not read the plan document again. Do not select the next task. Do not start another cycle. The orchestrator will re-invoke you for the next task automatically.
 - Implement functionality completely. Placeholders and stubs waste efforts and time redoing the same work.
 - If tests unrelated to your work fail, resolve them as part of the increment.
 - Keep the plan document current with learnings — future iterations depend on this to avoid duplicating efforts.
 - When you learn something new about how to run the application, update AGENTS.md (if present) but keep it brief and operational only. Status updates and progress notes belong in the plan document.
 - For any bugs you notice, resolve them or document them in the plan even if unrelated to the current work.
 
-## Completion Signal
+## When You Are Done
 
-If you look at the plan document and **every task is checked off** (`- [x]`), output exactly:
+After completing Step 6 (commit), output the following summary and then STOP:
 
 ```
-ALL TODO ITEMS COMPLETE
+ITERATION COMPLETE: <brief description of what was implemented>
 ```
 
-Otherwise, do your work and commit. Do NOT output the completion signal unless literally everything is done."#;
+If you look at the plan document at Step 1 and **every task is already checked off** (`- [x]`) with nothing left to do, output exactly:
+
+```
+<promise>COMPLETE</promise>
+```
+
+Do NOT output `<promise>COMPLETE</promise>` unless literally every task is done. Do NOT continue to another task after outputting your iteration summary."#;
 
 /// Build the full prompt by appending a plan document file reference.
 pub fn build_prompt(plan_file: &str) -> String {
