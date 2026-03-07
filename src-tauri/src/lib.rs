@@ -5,14 +5,27 @@ pub mod session;
 pub mod trace;
 
 use std::path::{Path, PathBuf};
+use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use runtime::{LocalRuntime, MockRuntime};
 use session::{SessionConfig, SessionRunner};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use trace::TraceCollector;
+
+/// Shared state for the active session's cancellation token
+struct ActiveSession {
+    cancel_token: Mutex<Option<CancellationToken>>,
+}
 
 #[tauri::command]
 async fn run_mock_session(app: tauri::AppHandle) -> Result<trace::SessionTrace, String> {
+    let cancel_token = CancellationToken::new();
+    {
+        let active = app.state::<ActiveSession>();
+        *active.cancel_token.lock().await = Some(cancel_token.clone());
+    }
+
     let runtime = MockRuntime::completing_after(3);
 
     let config = SessionConfig {
@@ -28,11 +41,13 @@ async fn run_mock_session(app: tauri::AppHandle) -> Result<trace::SessionTrace, 
     let collector = TraceCollector::new("./traces");
 
     let app_handle = app.clone();
-    let runner = SessionRunner::new(config, collector).on_event(Box::new(move |event| {
+    let runner = SessionRunner::new(config, collector, cancel_token).on_event(Box::new(move |event| {
         let _ = app_handle.emit("session-event", event.clone());
     }));
 
-    runner.run(&runtime).await.map_err(|e| e.to_string())
+    let result = runner.run(&runtime).await.map_err(|e| e.to_string());
+    *app.state::<ActiveSession>().cancel_token.lock().await = None;
+    result
 }
 
 #[tauri::command]
@@ -41,6 +56,12 @@ async fn run_session(
     repo_path: String,
     plan_file: String,
 ) -> Result<trace::SessionTrace, String> {
+    let cancel_token = CancellationToken::new();
+    {
+        let active = app.state::<ActiveSession>();
+        *active.cancel_token.lock().await = Some(cancel_token.clone());
+    }
+
     let repo = PathBuf::from(&repo_path);
 
     // Resolve plan file to absolute path for the @file reference
@@ -55,6 +76,7 @@ async fn run_session(
 
     // Verify plan file exists before building prompt
     if !plan_path.exists() {
+        *app.state::<ActiveSession>().cancel_token.lock().await = None;
         return Err(format!("Plan file not found: {}", plan_path.display()));
     }
 
@@ -75,11 +97,25 @@ async fn run_session(
     let collector = TraceCollector::new("./traces");
 
     let app_handle = app.clone();
-    let runner = SessionRunner::new(config, collector).on_event(Box::new(move |event| {
+    let runner = SessionRunner::new(config, collector, cancel_token).on_event(Box::new(move |event| {
         let _ = app_handle.emit("session-event", event.clone());
     }));
 
-    runner.run(&runtime).await.map_err(|e| e.to_string())
+    let result = runner.run(&runtime).await.map_err(|e| e.to_string());
+    *app.state::<ActiveSession>().cancel_token.lock().await = None;
+    result
+}
+
+#[tauri::command]
+async fn stop_session(app: tauri::AppHandle) -> Result<(), String> {
+    let active = app.state::<ActiveSession>();
+    let token = active.cancel_token.lock().await;
+    if let Some(ref t) = *token {
+        t.cancel();
+        Ok(())
+    } else {
+        Err("No active session to stop".to_string())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -87,7 +123,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![run_mock_session, run_session])
+        .manage(ActiveSession {
+            cancel_token: Mutex::new(None),
+        })
+        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session])
         .run(tauri::generate_context!())
         .expect("error running tauri application");
 }

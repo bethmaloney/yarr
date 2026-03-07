@@ -128,9 +128,11 @@ impl RuntimeProvider for WslRuntime {
             })
         });
 
+        let abort_handle = completion.abort_handle();
         Ok(RunningProcess {
             events: rx,
             completion,
+            abort_handle,
         })
     }
 

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use std::path::PathBuf;
+use tokio_util::sync::CancellationToken;
 
 use crate::output::{ContentBlock, ResultEvent, StreamEvent};
 use crate::runtime::{ClaudeInvocation, RuntimeProvider};
@@ -71,14 +72,16 @@ pub struct SessionRunner {
     config: SessionConfig,
     collector: TraceCollector,
     on_event: Option<OnSessionEvent>,
+    cancel_token: CancellationToken,
 }
 
 impl SessionRunner {
-    pub fn new(config: SessionConfig, collector: TraceCollector) -> Self {
+    pub fn new(config: SessionConfig, collector: TraceCollector, cancel_token: CancellationToken) -> Self {
         Self {
             config,
             collector,
             on_event: None,
+            cancel_token,
         }
     }
 
@@ -134,6 +137,13 @@ impl SessionRunner {
         let invocation = self.build_invocation();
 
         for iteration in 1..=self.config.max_iterations {
+            // Check cancellation before starting iteration
+            if self.cancel_token.is_cancelled() {
+                println!("[harness] Session cancelled before iteration {iteration}.");
+                state = SessionState::Cancelled { iteration };
+                break;
+            }
+
             let _ = SessionState::Running { iteration };
             println!(
                 "[harness] === Iteration {}/{} ===",
@@ -199,14 +209,28 @@ impl SessionRunner {
                         break;
                     }
 
+                    // Inter-iteration delay, but cancel-aware
                     if iteration < self.config.max_iterations {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(
-                            self.config.inter_iteration_delay_ms,
-                        ))
-                        .await;
+                        tokio::select! {
+                            _ = tokio::time::sleep(tokio::time::Duration::from_millis(
+                                self.config.inter_iteration_delay_ms,
+                            )) => {}
+                            _ = self.cancel_token.cancelled() => {
+                                println!("[harness] Session cancelled during inter-iteration delay.");
+                                state = SessionState::Cancelled { iteration };
+                                break;
+                            }
+                        }
                     }
                 }
                 Err(e) => {
+                    // Check if this was a cancellation-induced error
+                    if self.cancel_token.is_cancelled() {
+                        println!("[harness] Session cancelled during iteration {iteration}.");
+                        state = SessionState::Cancelled { iteration };
+                        break;
+                    }
+
                     let iter_end = Utc::now();
                     eprintln!("[harness] Process error on iteration {iteration}: {e}");
 
@@ -275,54 +299,64 @@ impl SessionRunner {
         let mut process = runtime.spawn_claude(invocation).await?;
         let mut result_event: Option<ResultEvent> = None;
 
-        // Consume streaming events
-        while let Some(event) = process.events.recv().await {
-            match &event {
-                StreamEvent::System(sys) => {
-                    if let Some(ref model) = sys.model {
-                        tracing::debug!("Iteration {iteration}: model={model}");
-                    }
-                }
-                StreamEvent::Assistant(assistant) => {
-                    for block in &assistant.message.content {
-                        match block {
-                            ContentBlock::ToolUse { name, .. } => {
-                                println!("  [{iteration}] tool: {name}");
-                                self.emit(SessionEvent::ToolUse {
-                                    iteration,
-                                    tool_name: name.clone(),
-                                });
+        // Consume streaming events, but bail if cancellation is requested
+        loop {
+            tokio::select! {
+                event = process.events.recv() => {
+                    let Some(event) = event else { break };
+                    match &event {
+                        StreamEvent::System(sys) => {
+                            if let Some(ref model) = sys.model {
+                                tracing::debug!("Iteration {iteration}: model={model}");
                             }
-                            ContentBlock::Text { text } => {
-                                let preview = if text.len() > 100 {
-                                    format!("{}...", &text[..100])
-                                } else {
-                                    text.clone()
-                                };
-                                println!("  [{iteration}] text: {preview}");
-                                self.emit(SessionEvent::AssistantText {
-                                    iteration,
-                                    text: text.clone(),
-                                });
+                        }
+                        StreamEvent::Assistant(assistant) => {
+                            for block in &assistant.message.content {
+                                match block {
+                                    ContentBlock::ToolUse { name, .. } => {
+                                        println!("  [{iteration}] tool: {name}");
+                                        self.emit(SessionEvent::ToolUse {
+                                            iteration,
+                                            tool_name: name.clone(),
+                                        });
+                                    }
+                                    ContentBlock::Text { text } => {
+                                        let preview = if text.len() > 100 {
+                                            format!("{}...", &text[..100])
+                                        } else {
+                                            text.clone()
+                                        };
+                                        println!("  [{iteration}] text: {preview}");
+                                        self.emit(SessionEvent::AssistantText {
+                                            iteration,
+                                            text: text.clone(),
+                                        });
+                                    }
+                                    ContentBlock::Unknown => {}
+                                }
                             }
-                            ContentBlock::Unknown => {}
+                        }
+                        StreamEvent::RateLimit(rl) => {
+                            if let Some(ref info) = rl.rate_limit_info {
+                                tracing::debug!(
+                                    "Rate limit: status={:?} type={:?}",
+                                    info.status,
+                                    info.rate_limit_type
+                                );
+                            }
+                        }
+                        StreamEvent::Result(r) => {
+                            result_event = Some(r.clone());
+                        }
+                        StreamEvent::User(_) => {
+                            // Tool results flowing back — not interesting for display
                         }
                     }
                 }
-                StreamEvent::RateLimit(rl) => {
-                    if let Some(ref info) = rl.rate_limit_info {
-                        tracing::debug!(
-                            "Rate limit: status={:?} type={:?}",
-                            info.status,
-                            info.rate_limit_type
-                        );
-                    }
-                }
-                StreamEvent::Result(r) => {
-                    result_event = Some(r.clone());
-                }
-                StreamEvent::User(_) => {
-                    // Tool results flowing back — not interesting for display
+                _ = self.cancel_token.cancelled() => {
+                    // Kill the child process
+                    process.abort_handle.abort();
+                    anyhow::bail!("Session cancelled");
                 }
             }
         }

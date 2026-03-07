@@ -27,6 +27,8 @@ pub struct RunningProcess {
     pub events: mpsc::Receiver<StreamEvent>,
     /// Wait for the process to exit. Returns (exit_code, wall_time_ms).
     pub completion: tokio::task::JoinHandle<Result<ProcessExit>>,
+    /// Abort handle for the completion task (kills the child process via kill_on_drop)
+    pub abort_handle: tokio::task::AbortHandle,
 }
 
 #[derive(Debug, Clone)]

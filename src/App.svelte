@@ -122,6 +122,14 @@
     }
   }
 
+  async function stopSession() {
+    try {
+      await invoke("stop_session");
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   function eventEmoji(kind: string): string {
     switch (kind) {
       case "session_started": return "🚀";
@@ -224,9 +232,15 @@
       <button type="submit" disabled={running || !repoPath || !planFile}>
         {running ? "Running..." : "Run"}
       </button>
-      <button type="button" onclick={runMockSession} disabled={running} class="secondary">
-        Mock
-      </button>
+      {#if running}
+        <button type="button" onclick={stopSession} class="danger">
+          Stop
+        </button>
+      {:else}
+        <button type="button" onclick={runMockSession} disabled={running} class="secondary">
+          Mock
+        </button>
+      {/if}
     </div>
   </form>
 
@@ -396,6 +410,15 @@
   button.secondary:hover:not(:disabled) {
     background: #444;
     color: #ccc;
+  }
+
+  button.danger {
+    background: #dc2626;
+    color: #fff;
+  }
+
+  button.danger:hover:not(:disabled) {
+    background: #ef4444;
   }
 
   section {
