@@ -338,6 +338,18 @@ if (!(window as any).__TAURI_INTERNALS__) {
       const sid = args.sessionId as string;
       return SAMPLE_EVENTS[sid] ?? [];
     }
+    if (cmd === "list_latest_traces") {
+      const latest = new Map<string, typeof SAMPLE_TRACES[0]>();
+      for (const t of SAMPLE_TRACES) {
+        if (t.repo_id) {
+          const existing = latest.get(t.repo_id);
+          if (!existing || t.start_time > existing.start_time) {
+            latest.set(t.repo_id, t);
+          }
+        }
+      }
+      return [...latest.values()];
+    }
     if (cmd === "read_file_preview") return "# Sample Plan\n\nThis is a stub preview for browser dev mode.\n\n## Steps\n";
     if (cmd === "stop_session") return;
 

@@ -42,6 +42,50 @@ test.describe("Home view", () => {
     await expect(page.getByText("No repos configured yet.")).not.toBeVisible();
   });
 
+  test("shows last run summary on repo card", async ({ page, mockTauri }) => {
+    await mockTauri({
+      storeData: {
+        repos: [
+          {
+            id: "repo-1",
+            path: "/home/user/projects/my-app",
+            name: "my-app",
+            model: "opus",
+            maxIterations: 40,
+            completionSignal: "ALL TODO ITEMS COMPLETE",
+          },
+        ],
+      },
+      invokeHandlers: {
+        list_latest_traces: () => [
+          {
+            session_id: "sess-abc-123",
+            repo_path: "/home/user/projects/my-app",
+            repo_id: "repo-1",
+            prompt: "Fix login bug",
+            plan_file: "plans/fix-login.md",
+            start_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            end_time: new Date(Date.now() - 1.8 * 60 * 60 * 1000).toISOString(),
+            outcome: "completed",
+            total_iterations: 3,
+            total_cost_usd: 0.4521,
+            total_input_tokens: 45200,
+            total_output_tokens: 12350,
+            total_cache_read_tokens: 8200,
+            total_cache_creation_tokens: 3100,
+          },
+        ],
+      },
+    });
+    await page.goto("/");
+
+    const card = page.getByRole("button", { name: /my-app/ });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("fix-login.md");
+    await expect(card).toContainText("$0.45");
+    await expect(card).toContainText("2h ago");
+  });
+
   test("navigates to repo detail on card click", async ({
     page,
     mockTauri,

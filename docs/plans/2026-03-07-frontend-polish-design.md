@@ -272,12 +272,12 @@ Show last run info on each repo card.
 - If no trace exists for a repo, show nothing extra
 
 **Checklist:**
-- [ ] Add `list_latest_traces` call in `App.svelte` onMount
-- [ ] Pass latest traces map through to `HomeView` and `RepoCard`
-- [ ] Add `lastTrace` optional prop to `RepoCard`
-- [ ] Render last run summary line with plan, cost, time ago
-- [ ] Add relative time helper
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `list_latest_traces` call in `App.svelte` onMount
+- [x] Pass latest traces map through to `HomeView` and `RepoCard`
+- [x] Add `lastTrace` optional prop to `RepoCard`
+- [x] Render last run summary line with plan, cost, time ago
+- [x] Add relative time helper
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -489,7 +489,7 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 5 | Repo Detail -- plan file preview | Done |
 | 6 | Home page -- toolbar alignment | Done |
 | 7 | Add `list_latest_traces` Tauri command | Done |
-| 8 | Home page -- repo cards with last run summary | Not Started |
+| 8 | Home page -- repo cards with last run summary | Done |
 | 9 | History view -- column headers | Not Started |
 | 10 | History view -- show prompt text | Not Started |
 | 11 | History view -- sortable columns | Not Started |

@@ -126,6 +126,7 @@ async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
         if (cmd === "list_traces") return [];
         if (cmd === "get_trace") return null;
         if (cmd === "get_trace_events") return [];
+        if (cmd === "list_latest_traces") return [];
         if (cmd === "read_file_preview") return "# Sample Plan\n\nStub preview content.\n";
         if (cmd === "stop_session") return;
 

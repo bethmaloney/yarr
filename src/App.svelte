@@ -26,6 +26,7 @@
     $state({ kind: "home" });
   let repos: RepoConfig[] = $state([]);
   let sessions = new SvelteMap<string, SessionState>();
+  let latestTraces: Map<string, SessionTrace> = $state(new Map());
   let addMode: null | "choosing" | "ssh-form" = $state(null);
   let sshHost = $state("");
   let sshRemotePath = $state("");
@@ -34,6 +35,14 @@
     loadRepos().then((r) => {
       repos = r;
     });
+
+    invoke<SessionTrace[]>("list_latest_traces").then(traces => {
+      const m = new Map<string, SessionTrace>();
+      for (const t of traces) {
+        if (t.repo_id) m.set(t.repo_id, t);
+      }
+      latestTraces = m;
+    }).catch(() => {});
 
     const unlisten = listen<TaggedSessionEvent>("session-event", (e) => {
       const { repo_id, event } = e.payload;
@@ -142,6 +151,7 @@
       });
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, trace });
+      latestTraces = new Map(latestTraces).set(repoId, trace);
       await saveRecent("promptFiles", planFile);
     } catch (e) {
       const session = sessions.get(repoId)!;
@@ -166,6 +176,7 @@
       const trace = await invoke<SessionTrace>("run_mock_session", { repoId });
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, trace });
+      latestTraces = new Map(latestTraces).set(repoId, trace);
     } catch (e) {
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, error: String(e) });
@@ -200,6 +211,7 @@
   <HomeView
     {repos}
     {sessions}
+    {latestTraces}
     {addMode}
     {sshHost}
     {sshRemotePath}

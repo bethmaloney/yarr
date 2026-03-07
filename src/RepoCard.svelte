@@ -1,14 +1,17 @@
 <script lang="ts">
   import type { RepoConfig } from "./repos";
-  import type { RepoStatus } from "./types";
+  import type { RepoStatus, SessionTrace } from "./types";
+  import { timeAgo } from "./time";
 
   let {
     repo,
     status,
+    lastTrace,
     onclick,
   }: {
     repo: RepoConfig;
     status: RepoStatus;
+    lastTrace?: SessionTrace;
     onclick: () => void;
   } = $props();
 
@@ -42,6 +45,17 @@
         : `${repo.sshHost}:${repo.remotePath}`}</span
     >
   </div>
+  {#if lastTrace}
+    <div class="last-run">
+      {#if lastTrace.plan_file}
+        <span class="plan-name">{lastTrace.plan_file.split(/[\\/]/).pop()}</span>
+        <span class="separator"> · </span>
+      {/if}
+      <span>${(lastTrace.total_cost_usd ?? 0).toFixed(2)}</span>
+      <span class="separator"> · </span>
+      <span>{timeAgo(lastTrace.start_time)}</span>
+    </div>
+  {/if}
   <div class="repo-status">
     <span
       class="status-dot"
@@ -107,6 +121,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .last-run {
+    font-size: 0.8rem;
+    color: #888;
+  }
+
+  .last-run .plan-name {
+    font-family: "SF Mono", "Fira Code", monospace;
   }
 
   .repo-status {

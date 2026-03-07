@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { RepoConfig } from "./repos";
-  import type { SessionState, RepoStatus } from "./types";
+  import type { SessionState, SessionTrace, RepoStatus } from "./types";
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import RepoCard from "./RepoCard.svelte";
 
   let {
     repos,
     sessions,
+    latestTraces,
     addMode,
     sshHost,
     sshRemotePath,
@@ -22,6 +23,7 @@
   }: {
     repos: RepoConfig[];
     sessions: Map<string, SessionState>;
+    latestTraces: Map<string, SessionTrace>;
     addMode: null | "choosing" | "ssh-form";
     sshHost: string;
     sshRemotePath: string;
@@ -104,6 +106,7 @@
         <RepoCard
           {repo}
           status={deriveStatus(repo.id)}
+          lastTrace={latestTraces.get(repo.id)}
           onclick={() => onSelectRepo(repo.id)}
         />
       {/each}
