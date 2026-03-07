@@ -52,7 +52,7 @@
       event._ts = Date.now();
       const session = sessions.get(repo_id);
       if (session) {
-        session.events.push(event);
+        sessions.set(repo_id, { ...session, events: [...session.events, event] });
         sessions = new Map(sessions);
       }
     });
