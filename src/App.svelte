@@ -254,19 +254,20 @@
       <div class="events-scroll" bind:this={eventsContainer} onscroll={handleEventsScroll}>
         <ul>
           {#each events as ev, i}
-            <li
-              class="event {ev.kind}"
-              class:expanded={expandedEvents.has(i)}
-              onclick={() => {
-                const next = new Set(expandedEvents);
-                if (next.has(i)) next.delete(i);
-                else next.add(i);
-                expandedEvents = next;
-              }}
-            >
-              <span class="event-emoji">{eventEmoji(ev.kind)}</span>
-              <span class="event-text">{eventLabel(ev)}</span>
-              <span class="event-time">{formatTime(ev._ts)}</span>
+            <li class="event {ev.kind}" class:expanded={expandedEvents.has(i)}>
+              <button
+                class="event-btn"
+                onclick={() => {
+                  const next = new Set(expandedEvents);
+                  if (next.has(i)) next.delete(i);
+                  else next.add(i);
+                  expandedEvents = next;
+                }}
+              >
+                <span class="event-emoji">{eventEmoji(ev.kind)}</span>
+                <span class="event-text">{eventLabel(ev)}</span>
+                <span class="event-time">{formatTime(ev._ts)}</span>
+              </button>
             </li>
           {/each}
         </ul>
@@ -515,18 +516,26 @@
   }
 
   .event {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    padding: 0.35rem 0.75rem;
-    font-family: "SF Mono", "Fira Code", monospace;
-    font-size: 0.85rem;
     border-bottom: 1px solid #1e1e38;
-    cursor: pointer;
   }
 
   .event:last-child {
     border-bottom: none;
+  }
+
+  .event-btn {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.35rem 0.75rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.85rem;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
   }
 
   .event-emoji {
@@ -543,7 +552,7 @@
     white-space: nowrap;
   }
 
-  .event.expanded .event-text {
+  .event.expanded .event-btn .event-text {
     white-space: pre-wrap;
     overflow: visible;
     word-break: break-word;
