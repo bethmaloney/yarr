@@ -96,7 +96,7 @@ After all sub-agents complete successfully:
    - Update any progress tracking table
 2. **Run tests** one final time to confirm everything passes.
 3. **Commit all changes** with a clear message describing what was implemented.
-4. **Output your iteration summary and stop.** See "When You Are Done" below. Do NOT continue to the next task.
+4. **Output your iteration summary and stop.** See "When You Are Done" below.
 
 ## Sub-Agent Guidelines
 
@@ -108,7 +108,7 @@ After all sub-agents complete successfully:
 ## Rules
 
 - Implement ONE cohesive unit of work per iteration. Not more, not less.
-- **After completing one unit of work (Steps 1–6), you MUST stop.** Do not read the plan document again. Do not select the next task. Do not start another cycle. The orchestrator will re-invoke you for the next task automatically.
+- **After completing one unit of work (Steps 1–6), you MUST stop.**
 - Implement functionality completely. Placeholders and stubs waste efforts and time redoing the same work.
 - If tests unrelated to your work fail, resolve them as part of the increment.
 - Keep the plan document current with learnings — future iterations depend on this to avoid duplicating efforts.
