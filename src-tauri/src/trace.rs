@@ -28,6 +28,7 @@ pub struct SessionTrace {
     pub session_id: String,
     pub repo_path: String,
     pub prompt: String,
+    #[serde(default)]
     pub plan_file: Option<String>,
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
@@ -372,6 +373,34 @@ mod tests {
         assert_eq!(trace.plan_file, None);
         assert_eq!(trace.repo_path, "/tmp/repo");
         assert_eq!(trace.prompt, "do stuff");
+    }
+
+    // ── Test 8: Backward compat — old trace JSON without plan_file key ──
+
+    #[test]
+    fn session_trace_backward_compat_without_plan_file() {
+        // Build a trace, serialize it, then strip the plan_file key to simulate an old-format file
+        let trace = make_test_trace(None);
+        let json = serde_json::to_string(&trace).expect("serialize SessionTrace");
+
+        // Parse into a generic Value, remove plan_file, and re-serialize
+        let mut value: serde_json::Value =
+            serde_json::from_str(&json).expect("parse as Value");
+        let obj = value.as_object_mut().expect("top-level object");
+        assert!(obj.remove("plan_file").is_some(), "plan_file key should have been present");
+
+        let old_format_json = serde_json::to_string(&value).expect("re-serialize without plan_file");
+
+        // Deserialize the old-format JSON — this would fail without #[serde(default)]
+        let restored: SessionTrace =
+            serde_json::from_str(&old_format_json).expect("deserialize old-format trace");
+
+        assert_eq!(restored.plan_file, None);
+        assert_eq!(restored.trace_id, trace.trace_id);
+        assert_eq!(restored.session_id, trace.session_id);
+        assert_eq!(restored.repo_path, trace.repo_path);
+        assert_eq!(restored.prompt, trace.prompt);
+        assert_eq!(restored.total_cost_usd, trace.total_cost_usd);
     }
 }
 
