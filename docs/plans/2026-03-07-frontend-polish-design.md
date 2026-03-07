@@ -295,9 +295,9 @@ Add a header row to the trace list.
 - Same `min-width` / `flex` values as the corresponding trace-row spans
 
 **Checklist:**
-- [ ] Add header row HTML
-- [ ] Style to match trace row widths
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add header row HTML
+- [x] Style to match trace row widths
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -314,9 +314,9 @@ Add truncated prompt column to history rows.
 - Also add "Prompt" to the column headers from Task 9
 
 **Checklist:**
-- [ ] Add prompt span to trace rows
-- [ ] Style with ellipsis overflow
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add prompt span to trace rows
+- [x] Style with ellipsis overflow
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -490,8 +490,8 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 6 | Home page -- toolbar alignment | Done |
 | 7 | Add `list_latest_traces` Tauri command | Done |
 | 8 | Home page -- repo cards with last run summary | Done |
-| 9 | History view -- column headers | Not Started |
-| 10 | History view -- show prompt text | Not Started |
+| 9 | History view -- column headers | Done |
+| 10 | History view -- show prompt text | Done |
 | 11 | History view -- sortable columns | Not Started |
 | 13 | Run Detail -- session ID click-to-copy | Not Started |
 | 14 | Run Detail -- collapsible iteration groups | Not Started |

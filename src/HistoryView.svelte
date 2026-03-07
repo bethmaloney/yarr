@@ -120,6 +120,18 @@
     </div>
   {:else}
     <div class="trace-list">
+      <div class="trace-header">
+        <span class="trace-date">Date</span>
+        {#if !repoId}
+          <span class="trace-repo">Repo</span>
+        {/if}
+        <span class="trace-plan">Plan</span>
+        <span class="trace-prompt">Prompt</span>
+        <span class="trace-badge-header">Status</span>
+        <span class="trace-iters">Iters</span>
+        <span class="trace-cost">Cost</span>
+        <span class="trace-duration">Duration</span>
+      </div>
       {#each traces as trace (trace.session_id)}
         {@const badge = outcomeBadge(trace.outcome)}
         <button
@@ -131,6 +143,7 @@
             <span class="trace-repo">{repoName(trace)}</span>
           {/if}
           <span class="trace-plan">{planFilename(trace.plan_file)}</span>
+          <span class="trace-prompt">{trace.prompt}</span>
           <span class="trace-badge {badge.cls}">{badge.label}</span>
           <span class="trace-iters">{trace.total_iterations} iters</span>
           <span class="trace-cost">${trace.total_cost_usd.toFixed(4)}</span>
@@ -181,6 +194,27 @@
     gap: 0.25rem;
   }
 
+  .trace-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.4rem 0.75rem;
+    color: #666;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .trace-badge-header {
+    flex-shrink: 0;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.7rem;
+    min-width: 5.5rem;
+    text-align: center;
+  }
+
   .trace-row {
     display: flex;
     align-items: center;
@@ -219,8 +253,19 @@
   }
 
   .trace-plan {
+    flex-shrink: 0;
+    min-width: 0;
+    width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #aaa;
+  }
+
+  .trace-prompt {
     flex: 1;
     min-width: 0;
+    max-width: 20rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -233,6 +278,8 @@
     border-radius: 10px;
     font-size: 0.75rem;
     font-weight: 600;
+    min-width: 5.5rem;
+    text-align: center;
   }
 
   .badge-success {
