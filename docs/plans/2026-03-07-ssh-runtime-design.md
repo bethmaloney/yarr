@@ -313,7 +313,49 @@ Create the foundation for running SSH commands, handling platform detection (dir
 
 ---
 
-### Task 6: SshRuntime — RuntimeProvider implementation
+### Task 6: RuntimeProvider — add `run_command` method
+
+Add a general-purpose `run_command` method to `RuntimeProvider` for executing arbitrary shell commands in the repo's working directory. This is needed by the post-loop checks feature (see `2026-03-08-post-loop-checks-design.md`) — checks like linters and tests need to run through the runtime so they work on local, WSL, and SSH repos.
+
+**Files to modify:**
+- `src-tauri/src/runtime/mod.rs`
+- `src-tauri/src/runtime/local.rs`
+- `src-tauri/src/runtime/wsl.rs`
+- `src-tauri/src/runtime/ssh.rs`
+- `src-tauri/src/runtime/mock.rs`
+
+**Pattern reference:** `src-tauri/src/runtime/local.rs:28-53` (LocalRuntime spawn_claude for process spawning patterns)
+
+**Details:**
+- Add to the `RuntimeProvider` trait:
+  ```rust
+  async fn run_command(
+      &self,
+      command: &str,
+      working_dir: &Path,
+      timeout: Duration,
+  ) -> Result<CommandOutput>;
+  ```
+- Add `CommandOutput` struct: `{ exit_code: i32, stdout: String, stderr: String }`
+- **LocalRuntime**: `bash -c "{command}"` with `current_dir(working_dir)`, kill on timeout
+- **WslRuntime**: `wsl bash -c "cd {wsl_path} && {command}"`, kill on timeout
+- **SshRuntime**: `ssh host "cd {remote_path} && {command}"` using existing `ssh_command()` helper, kill on timeout
+- **MockRuntime**: return configurable success/failure for tests
+- Timeout enforced by `tokio::time::timeout` wrapping the child process wait, killing the process if exceeded
+
+**Checklist:**
+- [ ] Define `CommandOutput` struct in `runtime/mod.rs`
+- [ ] Add `run_command` to `RuntimeProvider` trait
+- [ ] Implement for `LocalRuntime`
+- [ ] Implement for `WslRuntime`
+- [ ] Implement for `SshRuntime` (using `ssh_command()` helper)
+- [ ] Implement for `MockRuntime`
+- [ ] Add unit tests for `MockRuntime::run_command`
+- [ ] Verify: `cd src-tauri && cargo check && cargo test`
+
+---
+
+### Task 7: SshRuntime — RuntimeProvider implementation
 
 Implement the core `SshRuntime` struct that implements `RuntimeProvider`.
 
@@ -342,7 +384,7 @@ Implement the core `SshRuntime` struct that implements `RuntimeProvider`.
 
 ---
 
-### Task 7: SshRuntime — reconnection methods
+### Task 8: SshRuntime — reconnection methods
 
 Add the methods beyond `RuntimeProvider` that handle disconnect recovery.
 
@@ -378,7 +420,7 @@ Add the methods beyond `RuntimeProvider` that handle disconnect recovery.
 
 ---
 
-### Task 8: SshSessionOrchestrator
+### Task 9: SshSessionOrchestrator
 
 Create the orchestrator that wraps `SessionRunner` with disconnect/reconnect logic.
 
@@ -416,7 +458,7 @@ Create the orchestrator that wraps `SessionRunner` with disconnect/reconnect log
 
 ---
 
-### Task 9: Tauri commands for SSH sessions
+### Task 10: Tauri commands for SSH sessions
 
 Add the Tauri command handlers for SSH-specific operations: test connection, reconnect.
 
@@ -441,7 +483,7 @@ Add the Tauri command handlers for SSH-specific operations: test connection, rec
 
 ---
 
-### Task 10: Frontend session state — Disconnected and Reconnecting
+### Task 11: Frontend session state — Disconnected and Reconnecting
 
 Add disconnect/reconnect UI states and wire up the reconnect action.
 
@@ -469,7 +511,7 @@ Add disconnect/reconnect UI states and wire up the reconnect action.
 
 ---
 
-### Task 11: SSH runtime unit tests (Rust)
+### Task 12: SSH runtime unit tests (Rust)
 
 Test the SSH runtime components in isolation.
 
@@ -494,7 +536,7 @@ Test the SSH runtime components in isolation.
 
 ---
 
-### Task 12: Frontend tests for SSH repo flow
+### Task 13: Frontend tests for SSH repo flow
 
 Test the frontend handling of SSH repos and disconnect/reconnect states.
 
@@ -527,10 +569,11 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 3 | Update App.svelte to pass repo type to backend | Done |
 | 4 | Update repo configuration UI for SSH | Done |
 | 5 | SSH command helper module | Done |
-| 6 | SshRuntime — RuntimeProvider implementation | Not Started |
-| 7 | SshRuntime — reconnection methods | Not Started |
-| 8 | SshSessionOrchestrator | Not Started |
-| 9 | Tauri commands for SSH sessions | Not Started |
-| 10 | Frontend session state — Disconnected and Reconnecting | Not Started |
-| 11 | SSH runtime unit tests (Rust) | Not Started |
-| 12 | Frontend tests for SSH repo flow | Not Started |
+| 6 | RuntimeProvider — add `run_command` method | Not Started |
+| 7 | SshRuntime — RuntimeProvider implementation | Not Started |
+| 8 | SshRuntime — reconnection methods | Not Started |
+| 9 | SshSessionOrchestrator | Not Started |
+| 10 | Tauri commands for SSH sessions | Not Started |
+| 11 | Frontend session state — Disconnected and Reconnecting | Not Started |
+| 12 | SSH runtime unit tests (Rust) | Not Started |
+| 13 | Frontend tests for SSH repo flow | Not Started |
