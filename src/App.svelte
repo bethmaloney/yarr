@@ -110,14 +110,14 @@
         completionSignal: repo.completionSignal,
       });
       const session = sessions.get(repoId)!;
-      session.trace = trace;
+      sessions.set(repoId, { ...session, trace });
       await saveRecent("promptFiles", planFile);
     } catch (e) {
       const session = sessions.get(repoId)!;
-      session.error = String(e);
+      sessions.set(repoId, { ...session, error: String(e) });
     } finally {
       const session = sessions.get(repoId)!;
-      session.running = false;
+      sessions.set(repoId, { ...session, running: false });
       sessions = new Map(sessions);
     }
   }
@@ -129,13 +129,13 @@
     try {
       const trace = await invoke<SessionTrace>("run_mock_session", { repoId });
       const session = sessions.get(repoId)!;
-      session.trace = trace;
+      sessions.set(repoId, { ...session, trace });
     } catch (e) {
       const session = sessions.get(repoId)!;
-      session.error = String(e);
+      sessions.set(repoId, { ...session, error: String(e) });
     } finally {
       const session = sessions.get(repoId)!;
-      session.running = false;
+      sessions.set(repoId, { ...session, running: false });
       sessions = new Map(sessions);
     }
   }
