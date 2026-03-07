@@ -33,6 +33,7 @@
   let recentPromptFiles = $state<string[]>([]);
   let eventsContainer: HTMLElement | undefined = $state();
   let autoScroll = $state(true);
+  let expandedEvents = $state<Set<number>>(new Set());
 
   onMount(() => {
     const unlisten = listen<SessionEvent>("session-event", (e) => {
@@ -252,8 +253,17 @@
       </div>
       <div class="events-scroll" bind:this={eventsContainer} onscroll={handleEventsScroll}>
         <ul>
-          {#each events as ev}
-            <li class="event {ev.kind}">
+          {#each events as ev, i}
+            <li
+              class="event {ev.kind}"
+              class:expanded={expandedEvents.has(i)}
+              onclick={() => {
+                const next = new Set(expandedEvents);
+                if (next.has(i)) next.delete(i);
+                else next.add(i);
+                expandedEvents = next;
+              }}
+            >
               <span class="event-emoji">{eventEmoji(ev.kind)}</span>
               <span class="event-text">{eventLabel(ev)}</span>
               <span class="event-time">{formatTime(ev._ts)}</span>
@@ -512,6 +522,7 @@
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.85rem;
     border-bottom: 1px solid #1e1e38;
+    cursor: pointer;
   }
 
   .event:last-child {
@@ -521,6 +532,7 @@
   .event-emoji {
     flex-shrink: 0;
     font-size: 0.9rem;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   }
 
   .event-text {
@@ -529,6 +541,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .event.expanded .event-text {
+    white-space: pre-wrap;
+    overflow: visible;
+    word-break: break-word;
   }
 
   .event-time {
