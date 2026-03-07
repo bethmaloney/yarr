@@ -133,13 +133,13 @@ Create `Breadcrumbs.svelte` and integrate into all views, replacing standalone B
 - Each view passes its own crumbs array, using existing navigation callbacks
 
 **Checklist:**
-- [ ] Create `Breadcrumbs.svelte`
-- [ ] Integrate into `HomeView.svelte`
-- [ ] Integrate into `RepoDetail.svelte`
-- [ ] Integrate into `HistoryView.svelte`
-- [ ] Integrate into `RunDetail.svelte`
-- [ ] Remove old `.back-btn` styles from all views
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Create `Breadcrumbs.svelte`
+- [x] Integrate into `HomeView.svelte`
+- [x] Integrate into `RepoDetail.svelte`
+- [x] Integrate into `HistoryView.svelte`
+- [x] Integrate into `RunDetail.svelte`
+- [x] Remove old `.back-btn` styles from all views
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -483,7 +483,7 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Extract shared types into `src/types.ts` | Done |
-| 2 | Add Breadcrumbs component | Not Started |
+| 2 | Add Breadcrumbs component | Done |
 | 3 | Repo Detail -- collapse Settings, remove recents, rename Mock | Not Started |
 | 4 | Add `read_file_preview` Tauri command | Not Started |
 | 5 | Repo Detail -- plan file preview | Not Started |

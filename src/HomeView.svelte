@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { RepoConfig } from "./repos";
   import type { SessionState, RepoStatus } from "./types";
+  import Breadcrumbs from "./Breadcrumbs.svelte";
   import RepoCard from "./RepoCard.svelte";
 
   let { repos, sessions, onSelectRepo, onAddRepo, onHistory }: {
@@ -22,6 +23,7 @@
 </script>
 
 <main>
+  <Breadcrumbs crumbs={[{label: "Home"}]} />
   <header>
     <h1>Yarr</h1>
     <p class="subtitle">Claude Orchestrator</p>

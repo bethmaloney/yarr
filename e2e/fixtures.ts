@@ -17,7 +17,12 @@ const DEFAULT_REPOS: unknown[] = [];
  */
 async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
   const storeData = opts.storeData ?? { repos: DEFAULT_REPOS };
-  const invokeHandlers = opts.invokeHandlers ?? {};
+  // Pre-evaluate function handlers since addInitScript serializes args (functions aren't serializable)
+  const rawHandlers = opts.invokeHandlers ?? {};
+  const invokeHandlers: Record<string, unknown> = {};
+  for (const [cmd, handler] of Object.entries(rawHandlers)) {
+    invokeHandlers[cmd] = typeof handler === "function" ? handler() : handler;
+  }
 
   await page.addInitScript(
     ({ storeData, invokeHandlers }) => {

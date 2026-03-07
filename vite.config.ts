@@ -6,7 +6,7 @@ export default defineConfig({
   clearScreen: false,
   server: {
     strictPort: true,
-    port: 5173,
+    port: 5174,
   },
   test: {
     exclude: ["e2e/**", "node_modules/**"],

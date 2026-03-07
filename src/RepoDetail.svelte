@@ -5,6 +5,7 @@
   import { loadRecents } from "./recents";
   import type { RepoConfig } from "./repos";
   import type { SessionState } from "./types";
+  import Breadcrumbs from "./Breadcrumbs.svelte";
   import EventsList from "./EventsList.svelte";
 
   let { repo, session, onBack, onRun, onMockRun, onUpdateRepo, onHistory }: {
@@ -74,8 +75,7 @@
 </script>
 
 <main>
-  <button class="back-btn" type="button" onclick={onBack}>&larr; Back</button>
-  <button class="back-btn" type="button" onclick={onHistory}>History</button>
+  <Breadcrumbs crumbs={[{label: "Home", onclick: onBack}, {label: repo.name}]} />
 
   <header>
     <h1>{repo.name}</h1>
@@ -175,22 +175,6 @@
     max-width: 700px;
     margin: 0 auto;
     padding: 2rem;
-  }
-
-  .back-btn {
-    padding: 0.4rem 1rem;
-    font-size: 0.9rem;
-    background: #333;
-    color: #888;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 400;
-  }
-
-  .back-btn:hover {
-    background: #444;
-    color: #ccc;
   }
 
   header {

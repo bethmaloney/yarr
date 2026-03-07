@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import Breadcrumbs from "./Breadcrumbs.svelte";
   import type { SessionEvent, SessionTrace } from "./types";
   import EventsList from "./EventsList.svelte";
 
@@ -57,7 +58,7 @@
 </script>
 
 <main>
-  <button class="back-btn" type="button" onclick={onBack}>&larr; Back</button>
+  <Breadcrumbs crumbs={[{label: "Home"}, {label: "History", onclick: onBack}, {label: "Run " + sessionId}]} />
 
   {#if loading}
     <div class="empty-state"><p>Loading...</p></div>
@@ -104,22 +105,6 @@
     max-width: 700px;
     margin: 0 auto;
     padding: 2rem;
-  }
-
-  .back-btn {
-    padding: 0.4rem 1rem;
-    font-size: 0.9rem;
-    background: #333;
-    color: #888;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 400;
-  }
-
-  .back-btn:hover {
-    background: #444;
-    color: #ccc;
   }
 
   header {
