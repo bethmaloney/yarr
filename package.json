@@ -8,7 +8,11 @@
     "build": "vite build",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -16,11 +20,19 @@
     "@tauri-apps/plugin-store": "^2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.58.2",
     "@sveltejs/vite-plugin-svelte": "^5",
     "@tauri-apps/cli": "^2",
+    "eslint": "^10.0.3",
+    "eslint-plugin-svelte": "^3.15.0",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1",
+    "prettier-plugin-svelte": "^3.5.1",
     "svelte": "^5",
+    "svelte-eslint-parser": "^1.6.0",
     "typescript": "^5",
+    "typescript-eslint": "^8.56.1",
     "vite": "^6",
     "vitest": "^4.0.18"
   }

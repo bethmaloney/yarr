@@ -6,6 +6,7 @@
  * Import this at the top of main.ts — it's a no-op inside Tauri.
  */
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri injects this global at runtime
 if (!(window as any).__TAURI_INTERNALS__) {
   // -- Sample data for browser dev mode --
 
@@ -149,9 +150,10 @@ if (!(window as any).__TAURI_INTERNALS__) {
     ["repos", SAMPLE_REPOS],
     ["recents", { promptFiles: ["plans/fix-login.md", "plans/refactor-auth.md"] }],
   ]);
-  const callbacks = new Map<number, Function>();
+  type Callback = (...args: unknown[]) => void;
+  const callbacks = new Map<number, Callback>();
 
-  function registerCallback(cb: Function): number {
+  function registerCallback(cb: Callback): number {
     const id = Math.floor(Math.random() * 2 ** 32);
     callbacks.set(id, cb);
     return id;
@@ -207,6 +209,7 @@ if (!(window as any).__TAURI_INTERNALS__) {
     console.warn(`[browser-mock] unhandled invoke: ${cmd}`, args);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
   (window as any).__TAURI_INTERNALS__ = {
     invoke,
     transformCallback: registerCallback,
@@ -222,6 +225,7 @@ if (!(window as any).__TAURI_INTERNALS__) {
     },
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
   (window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
     unregisterListener: (_event: string, id: number) => callbacks.delete(id),
   };

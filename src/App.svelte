@@ -9,7 +9,8 @@
   import RepoDetail from "./RepoDetail.svelte";
   import HistoryView from "./HistoryView.svelte";
   import RunDetail from "./RunDetail.svelte";
-  import type { SessionEvent, SessionTrace, SessionState, TaggedSessionEvent } from "./types";
+  import { SvelteMap } from "svelte/reactivity";
+  import type { SessionTrace, SessionState, TaggedSessionEvent } from "./types";
 
   let currentView:
     | { kind: "home" }
@@ -18,7 +19,7 @@
     | { kind: "run"; repoId: string; sessionId: string; fromRepoId?: string }
     = $state({ kind: "home" });
   let repos: RepoConfig[] = $state([]);
-  let sessions: Map<string, SessionState> = $state(new Map());
+  let sessions = new SvelteMap<string, SessionState>();
 
   onMount(() => {
     loadRepos().then((r) => {
@@ -31,7 +32,6 @@
       const session = sessions.get(repo_id);
       if (session) {
         sessions.set(repo_id, { ...session, events: [...session.events, event] });
-        sessions = new Map(sessions);
       }
     });
 
@@ -69,7 +69,6 @@
     if (!repo) return;
 
     sessions.set(repoId, { running: true, events: [], trace: null, error: null });
-    sessions = new Map(sessions);
 
     try {
       const trace = await invoke<SessionTrace>("run_session", {
@@ -89,13 +88,11 @@
     } finally {
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, running: false });
-      sessions = new Map(sessions);
     }
   }
 
   async function handleMockRun(repoId: string) {
     sessions.set(repoId, { running: true, events: [], trace: null, error: null });
-    sessions = new Map(sessions);
 
     try {
       const trace = await invoke<SessionTrace>("run_mock_session", { repoId });
@@ -107,7 +104,6 @@
     } finally {
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, running: false });
-      sessions = new Map(sessions);
     }
   }
 
@@ -144,7 +140,6 @@
       onRun={(planFile) => handleRunSession(repoId, planFile)}
       onMockRun={() => handleMockRun(repoId)}
       onUpdateRepo={handleUpdateRepo}
-      onHistory={() => goHistory(repoId)}
     />
   {/if}
 {/if}

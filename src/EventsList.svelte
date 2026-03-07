@@ -1,12 +1,13 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
   import type { SessionEvent } from "./types";
 
   let { events }: { events: SessionEvent[] } = $props();
 
   let eventsContainer: HTMLElement | undefined = $state();
   let autoScroll = $state(true);
-  let expandedEvents = $state<Set<number>>(new Set());
+  let expandedEvents = new SvelteSet<number>();
 
   function eventEmoji(kind: string): string {
     switch (kind) {
@@ -51,7 +52,7 @@
       case "assistant_text":
         return `[${ev.iteration}] ${ev.text}`;
       case "iteration_complete":
-        return `Iteration ${ev.iteration} complete (cost: $${(ev.result as any)?.total_cost_usd?.toFixed(4) ?? "?"})`;
+        return `Iteration ${ev.iteration} complete (cost: $${(ev.result as Record<string, number> | undefined)?.total_cost_usd?.toFixed(4) ?? "?"})`;
       case "session_complete":
         return `Session complete: ${ev.outcome}`;
       default:
@@ -77,8 +78,7 @@
   }
 
   $effect(() => {
-    events.length;
-    if (untrack(() => autoScroll)) {
+    if (events.length > 0 && untrack(() => autoScroll)) {
       requestAnimationFrame(() => {
         eventsContainer?.scrollTo({ top: eventsContainer.scrollHeight, behavior: "smooth" });
       });
@@ -94,15 +94,13 @@
   </div>
   <div class="events-scroll" bind:this={eventsContainer} onscroll={handleEventsScroll}>
     <ul>
-      {#each events as ev, i}
+      {#each events as ev, i (i)}
         <li class="event {ev.kind}" class:expanded={expandedEvents.has(i)}>
           <button
             class="event-btn"
             onclick={() => {
-              const next = new Set(expandedEvents);
-              if (next.has(i)) next.delete(i);
-              else next.add(i);
-              expandedEvents = next;
+              if (expandedEvents.has(i)) expandedEvents.delete(i);
+              else expandedEvents.add(i);
             }}
           >
             <span class="event-emoji">{eventEmoji(ev.kind)}</span>

@@ -93,7 +93,7 @@
     </div>
   {:else}
     <div class="trace-list">
-      {#each traces as trace}
+      {#each traces as trace (trace.session_id)}
         {@const badge = outcomeBadge(trace.outcome)}
         <button class="trace-row" onclick={() => onSelectRun(traceRepoId(trace), trace.session_id)}>
           <span class="trace-date">{formatDate(trace.start_time)}</span>

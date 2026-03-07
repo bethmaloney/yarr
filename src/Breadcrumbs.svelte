@@ -5,7 +5,7 @@
 </script>
 
 <nav class="breadcrumbs">
-  {#each crumbs as crumb, i}
+  {#each crumbs as crumb, i (crumb.label)}
     {#if i > 0}
       <span class="separator">/</span>
     {/if}

@@ -6,14 +6,13 @@
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import EventsList from "./EventsList.svelte";
 
-  let { repo, session, onBack, onRun, onMockRun, onUpdateRepo, onHistory }: {
+  let { repo, session, onBack, onRun, onMockRun, onUpdateRepo }: {
     repo: RepoConfig;
     session: SessionState;
     onBack: () => void;
     onRun: (planFile: string) => void;
     onMockRun: () => void;
     onUpdateRepo: (repo: RepoConfig) => void;
-    onHistory: () => void;
   } = $props();
 
   // Local settings state, initialized from repo prop
@@ -42,7 +41,7 @@
       if (result !== null) {
         planFile = result;
       }
-    } catch (e) {
+    } catch {
       // silently fail
     }
   }

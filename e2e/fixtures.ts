@@ -27,10 +27,11 @@ async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
   await page.addInitScript(
     ({ storeData, invokeHandlers }) => {
       const store = new Map<string, unknown>(Object.entries(storeData));
-      const callbacks = new Map<number, Function>();
+      type Callback = (...args: unknown[]) => void;
+      const callbacks = new Map<number, Callback>();
       const eventListeners = new Map<string, number[]>();
 
-      function registerCallback(cb: Function, once = false): number {
+      function registerCallback(cb: Callback, once = false): number {
         const id = Math.floor(Math.random() * 2 ** 32);
         callbacks.set(id, (data: unknown) => {
           if (once) callbacks.delete(id);
@@ -112,6 +113,7 @@ async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
         console.warn(`[tauri-mock] unhandled invoke: ${cmd}`, args);
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
       (window as any).__TAURI_INTERNALS__ = {
         invoke,
         transformCallback: registerCallback,
@@ -127,6 +129,7 @@ async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
         },
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
       (window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
         unregisterListener: (event: string, id: number) => {
           unregisterCallback(id);
