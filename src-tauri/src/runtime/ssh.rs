@@ -228,18 +228,7 @@ impl SshRuntime {
             anyhow::bail!("Failed to recover events: {}", stderr);
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut events = Vec::new();
-        for line in stdout.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            match StreamEvent::parse_line(line) {
-                Ok(event) => events.push(event),
-                Err(e) => tracing::warn!("Failed to parse recovered event: {e}\n  line: {line}"),
-            }
-        }
-        Ok(events)
+        Ok(parse_log_lines(&stdout))
     }
 
     /// Resume tailing the log file from the given line, returning a RunningProcess.
@@ -415,6 +404,23 @@ impl RuntimeProvider for SshRuntime {
         }
         Ok(())
     }
+}
+
+/// Parse multiple lines of stream-json log output into events.
+/// Skips empty lines and warns on lines that fail to parse.
+pub(crate) fn parse_log_lines(input: &str) -> Vec<StreamEvent> {
+    let mut events = Vec::new();
+    for line in input.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        match StreamEvent::parse_line(line) {
+            Ok(event) => events.push(event),
+            Err(e) => tracing::warn!("Failed to parse recovered event: {e}\n  line: {line}"),
+        }
+    }
+    events
 }
 
 #[cfg(test)]
@@ -1886,5 +1892,103 @@ mod tests {
         let rate_limit_json = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1772845200,"rateLimitType":"five_hour"},"session_id":"abc"}"#;
         let state = SshRuntime::parse_remote_state("DEAD", rate_limit_json);
         assert_eq!(state, super::RemoteState::Dead);
+    }
+
+    // ── parse_log_lines tests ──────────────────────────────────────
+
+    const SYSTEM_INIT_JSON: &str = r#"{"type":"system","subtype":"init","cwd":"/tmp","session_id":"abc","model":"claude-opus-4-6","tools":["Bash","Read"]}"#;
+    const ASSISTANT_TEXT_JSON: &str = r#"{"type":"assistant","message":{"id":"msg_1","role":"assistant","model":"claude-opus-4-6","content":[{"type":"text","text":"hello"}],"stop_reason":null,"usage":{"input_tokens":10,"output_tokens":1}},"session_id":"abc"}"#;
+    const RESULT_SUCCESS_JSON: &str = r#"{"type":"result","subtype":"success","is_error":false,"duration_ms":1929,"duration_api_ms":1887,"num_turns":1,"result":"hello","session_id":"abc","total_cost_usd":0.041}"#;
+
+    #[test]
+    fn parse_log_lines_empty_input() {
+        let events = parse_log_lines("");
+        assert_eq!(events.len(), 0);
+    }
+
+    #[test]
+    fn parse_log_lines_single_event() {
+        let events = parse_log_lines(SYSTEM_INIT_JSON);
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], StreamEvent::System(_)));
+    }
+
+    #[test]
+    fn parse_log_lines_multiple_events() {
+        let input = format!("{}\n{}\n{}", SYSTEM_INIT_JSON, ASSISTANT_TEXT_JSON, RESULT_SUCCESS_JSON);
+        let events = parse_log_lines(&input);
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[0], StreamEvent::System(_)));
+        assert!(matches!(events[1], StreamEvent::Assistant(_)));
+        assert!(matches!(events[2], StreamEvent::Result(_)));
+    }
+
+    #[test]
+    fn parse_log_lines_skips_empty_lines() {
+        let input = format!("{}\n\n{}\n\n{}", SYSTEM_INIT_JSON, ASSISTANT_TEXT_JSON, RESULT_SUCCESS_JSON);
+        let events = parse_log_lines(&input);
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[0], StreamEvent::System(_)));
+        assert!(matches!(events[1], StreamEvent::Assistant(_)));
+        assert!(matches!(events[2], StreamEvent::Result(_)));
+    }
+
+    #[test]
+    fn parse_log_lines_skips_whitespace_only_lines() {
+        let input = format!("   \n{}\n\t\t\n{}\n   \t   ", SYSTEM_INIT_JSON, RESULT_SUCCESS_JSON);
+        let events = parse_log_lines(&input);
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], StreamEvent::System(_)));
+        assert!(matches!(events[1], StreamEvent::Result(_)));
+    }
+
+    #[test]
+    fn parse_log_lines_skips_invalid_json() {
+        let input = format!("{}\nnot valid json\n{}", SYSTEM_INIT_JSON, RESULT_SUCCESS_JSON);
+        let events = parse_log_lines(&input);
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], StreamEvent::System(_)));
+        assert!(matches!(events[1], StreamEvent::Result(_)));
+    }
+
+    #[test]
+    fn parse_log_lines_skips_partial_json() {
+        let input = format!("{}\n{{\"type\":\"result\",\"subtype\":\n{}", SYSTEM_INIT_JSON, RESULT_SUCCESS_JSON);
+        let events = parse_log_lines(&input);
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], StreamEvent::System(_)));
+        assert!(matches!(events[1], StreamEvent::Result(_)));
+    }
+
+    #[test]
+    fn parse_log_lines_handles_trailing_newline() {
+        let input = format!("{}\n{}\n", SYSTEM_INIT_JSON, RESULT_SUCCESS_JSON);
+        let events = parse_log_lines(&input);
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], StreamEvent::System(_)));
+        assert!(matches!(events[1], StreamEvent::Result(_)));
+    }
+
+    #[test]
+    fn parse_log_lines_preserves_event_order() {
+        let input = format!("{}\n{}\n{}", RESULT_SUCCESS_JSON, ASSISTANT_TEXT_JSON, SYSTEM_INIT_JSON);
+        let events = parse_log_lines(&input);
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[0], StreamEvent::Result(_)));
+        assert!(matches!(events[1], StreamEvent::Assistant(_)));
+        assert!(matches!(events[2], StreamEvent::System(_)));
+    }
+
+    #[test]
+    fn parse_log_lines_mixed_valid_and_invalid() {
+        let input = format!(
+            "\n{}\nnot json\n\n{}\n{{broken\n   \n{}\n",
+            SYSTEM_INIT_JSON, ASSISTANT_TEXT_JSON, RESULT_SUCCESS_JSON
+        );
+        let events = parse_log_lines(&input);
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[0], StreamEvent::System(_)));
+        assert!(matches!(events[1], StreamEvent::Assistant(_)));
+        assert!(matches!(events[2], StreamEvent::Result(_)));
     }
 }

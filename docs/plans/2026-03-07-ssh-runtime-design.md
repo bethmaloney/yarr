@@ -528,11 +528,11 @@ Test the SSH runtime components in isolation.
 - Consider a mock SSH helper for integration-style tests (or test against localhost if available)
 
 **Checklist:**
-- [ ] Test shell_escape edge cases
-- [ ] Test SSH command construction
-- [ ] Test remote state parsing
-- [ ] Test event recovery from log lines
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Test shell_escape edge cases
+- [x] Test SSH command construction
+- [x] Test remote state parsing
+- [x] Test event recovery from log lines
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -575,5 +575,5 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 9 | SshSessionOrchestrator | Done |
 | 10 | Tauri commands for SSH sessions | Done |
 | 11 | Frontend session state — Disconnected and Reconnecting | Done |
-| 12 | SSH runtime unit tests (Rust) | Not Started |
+| 12 | SSH runtime unit tests (Rust) | Done |
 | 13 | Frontend tests for SSH repo flow | Not Started |
