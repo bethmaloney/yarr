@@ -358,10 +358,10 @@ Add a copy button next to the session ID.
 - Style: small, inline, secondary button style
 
 **Checklist:**
-- [ ] Add copy button next to session ID
-- [ ] Implement clipboard write with feedback state
-- [ ] Style button inline with the dd element
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add copy button next to session ID
+- [x] Implement clipboard write with feedback state
+- [x] Style button inline with the dd element
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -493,7 +493,7 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 9 | History view -- column headers | Done |
 | 10 | History view -- show prompt text | Done |
 | 11 | History view -- sortable columns | Done |
-| 13 | Run Detail -- session ID click-to-copy | Not Started |
+| 13 | Run Detail -- session ID click-to-copy | Done |
 | 14 | Run Detail -- collapsible iteration groups | Not Started |
 | 15 | Run Detail -- context window progress bar | Not Started |
 | 16 | Browser mock -- enrich sample data | Not Started |

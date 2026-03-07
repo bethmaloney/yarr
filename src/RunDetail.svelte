@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import type { SessionEvent, SessionTrace } from "./types";
   import EventsList from "./EventsList.svelte";
@@ -19,6 +19,22 @@
   let events: SessionEvent[] = $state([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let copied = $state(false);
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function copySessionId() {
+    if (!trace) return;
+    try {
+      await navigator.clipboard.writeText(trace.session_id);
+      copied = true;
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => { copied = false; }, 1500);
+    } catch {
+      // silently fail if clipboard not available
+    }
+  }
+
+  onDestroy(() => clearTimeout(copyTimer));
 
   onMount(async () => {
     try {
@@ -122,7 +138,7 @@
           {trace.total_input_tokens.toLocaleString()} / {trace.total_output_tokens.toLocaleString()}
         </dd>
         <dt>Session ID</dt>
-        <dd class="mono">{trace.session_id}</dd>
+        <dd class="mono"><span>{trace.session_id}</span> <button class="copy-btn" onclick={copySessionId}>{copied ? "Copied!" : "Copy"}</button></dd>
       </dl>
     </section>
 
@@ -245,5 +261,17 @@
 
   .events-section {
     margin-top: 1.5rem;
+  }
+
+  .copy-btn {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    background: #333;
+    color: #aaa;
+    border: 1px solid #555;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-left: 0.5rem;
+    vertical-align: middle;
   }
 </style>
