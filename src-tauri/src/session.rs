@@ -76,6 +76,7 @@ pub struct SessionRunner {
     collector: TraceCollector,
     on_event: Option<OnSessionEvent>,
     cancel_token: CancellationToken,
+    accumulated_events: std::sync::Mutex<Vec<SessionEvent>>,
 }
 
 impl SessionRunner {
@@ -85,6 +86,7 @@ impl SessionRunner {
             collector,
             on_event: None,
             cancel_token,
+            accumulated_events: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -94,6 +96,7 @@ impl SessionRunner {
     }
 
     fn emit(&self, event: SessionEvent) {
+        self.accumulated_events.lock().unwrap().push(event.clone());
         if let Some(ref cb) = self.on_event {
             cb(&event);
         }
@@ -288,7 +291,11 @@ impl SessionRunner {
         let outcome = trace.outcome.clone();
         self.emit(SessionEvent::SessionComplete { outcome });
 
-        let trace_path = self.collector.finalize(&mut trace, &[]).await?;
+        let events: Vec<SessionEvent> = {
+            let guard = self.accumulated_events.lock().unwrap();
+            guard.clone()
+        };
+        let trace_path = self.collector.finalize(&mut trace, &events).await?;
         println!("\n[harness] Trace saved to: {}", trace_path.display());
 
         trace::print_trace_summary(&trace);
@@ -383,5 +390,79 @@ impl SessionRunner {
         result_event.ok_or_else(|| {
             anyhow::anyhow!("Claude process exited without emitting a result event")
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::MockRuntime;
+    use crate::trace::{SessionOutcome, TraceCollector};
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn run_accumulates_events_to_disk() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(2); // 2 working iterations + completion
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0, // no delay for tests
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        // The trace should show completion
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+        // MockRuntime::completing_after(2) does 2 working iterations + 1 completion = 3 total
+        assert_eq!(trace.total_iterations, 3);
+
+        // Now read back the events file and verify it has actual events
+        let events = TraceCollector::read_events(base_dir, "test-repo", &trace.session_id)
+            .expect("should read events file");
+
+        // Should NOT be empty — this is the whole point of Task 3
+        assert!(!events.is_empty(), "events file should have accumulated events");
+
+        // Should start with SessionStarted
+        match &events[0] {
+            SessionEvent::SessionStarted { .. } => {}
+            other => panic!("expected SessionStarted as first event, got {:?}", other),
+        }
+
+        // Should end with SessionComplete
+        match events.last().unwrap() {
+            SessionEvent::SessionComplete { outcome } => {
+                assert_eq!(*outcome, SessionOutcome::Completed);
+            }
+            other => panic!("expected SessionComplete as last event, got {:?}", other),
+        }
+
+        // Should have IterationStarted events (at least 3 — one per iteration)
+        let iteration_started_count = events.iter().filter(|e| matches!(e, SessionEvent::IterationStarted { .. })).count();
+        assert_eq!(iteration_started_count, 3, "should have 3 IterationStarted events");
+
+        // Should have IterationComplete events (3 iterations)
+        let iteration_complete_count = events.iter().filter(|e| matches!(e, SessionEvent::IterationComplete { .. })).count();
+        assert_eq!(iteration_complete_count, 3, "should have 3 IterationComplete events");
+
+        // Should have ToolUse events (each mock iteration emits 2 tool uses)
+        let tool_use_count = events.iter().filter(|e| matches!(e, SessionEvent::ToolUse { .. })).count();
+        assert!(tool_use_count >= 6, "should have at least 6 ToolUse events (2 per iteration × 3 iterations), got {}", tool_use_count);
+
+        // Should have AssistantText events (1 per iteration)
+        let text_count = events.iter().filter(|e| matches!(e, SessionEvent::AssistantText { .. })).count();
+        assert_eq!(text_count, 3, "should have 3 AssistantText events (1 per iteration)");
     }
 }

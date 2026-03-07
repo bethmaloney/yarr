@@ -148,11 +148,11 @@ Have `SessionRunner::run()` collect all emitted events into a vec and return the
 - Update call sites in `lib.rs` to handle the new return
 
 **Checklist:**
-- [ ] Add events vec in `run()`
-- [ ] Push events in `emit()` (refactor emit to also accumulate)
-- [ ] Pass events to `collector.finalize()`
-- [ ] Update `lib.rs` call sites for new finalize signature
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add events vec in `run()`
+- [x] Push events in `emit()` (refactor emit to also accumulate)
+- [x] Pass events to `collector.finalize()`
+- [x] Update `lib.rs` call sites for new finalize signature
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -338,7 +338,7 @@ Add Rust tests for the new TraceCollector methods and event serialization round-
 |------|-------------|--------|
 | 1 | Add `plan_file` + Deserialize to trace/event types | Done |
 | 2 | Update TraceCollector for app data dir + events file | Done |
-| 3 | Accumulate events in SessionRunner | Not Started |
+| 3 | Accumulate events in SessionRunner | Done |
 | 4 | Add Tauri commands for listing/reading traces | Not Started |
 | 5 | Extend frontend navigation with new views | Not Started |
 | 6 | Add History button to HomeView | Not Started |
