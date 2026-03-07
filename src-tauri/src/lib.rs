@@ -6,11 +6,13 @@ pub mod ssh_orchestrator;
 pub mod trace;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use runtime::{default_runtime, MockRuntime};
+use runtime::{default_runtime, MockRuntime, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
+use ssh_orchestrator::SshSessionOrchestrator;
 use tauri::{Emitter, Manager};
 use trace::TraceCollector;
 
@@ -25,6 +27,10 @@ pub(crate) struct TaggedSessionEvent {
 /// Shared state for the active session's cancellation token
 struct ActiveSession {
     cancel_token: Mutex<Option<CancellationToken>>,
+}
+
+struct ActiveSshSessions {
+    sessions: std::sync::Mutex<std::collections::HashMap<String, Arc<tokio::sync::Notify>>>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -89,58 +95,119 @@ async fn run_session(
         *active.cancel_token.lock().await = Some(cancel_token.clone());
     }
 
-    let (repo_path_buf, runtime): (PathBuf, Box<dyn runtime::RuntimeProvider>) = match &repo {
-        RepoType::Local { path } => (PathBuf::from(path), default_runtime()),
-        RepoType::Ssh { .. } => {
+    match &repo {
+        RepoType::Local { path } => {
+            let repo_path_buf = PathBuf::from(path);
+            let runtime = default_runtime();
+
+            // Resolve plan file to absolute path for the @file reference
+            let plan_path = {
+                let p = Path::new(&plan_file);
+                if p.is_relative() {
+                    repo_path_buf.join(p)
+                } else {
+                    p.to_path_buf()
+                }
+            };
+
+            // Verify plan file exists before building prompt
+            if !plan_path.exists() {
+                *app.state::<ActiveSession>().cancel_token.lock().await = None;
+                return Err(format!("Plan file not found: {}", plan_path.display()));
+            }
+
+            let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
+
+            let config = SessionConfig {
+                repo_path: repo_path_buf,
+                prompt,
+                max_iterations,
+                completion_signal,
+                model: Some(model),
+                extra_args: vec!["--dangerously-skip-permissions".to_string()],
+                plan_file: Some(plan_file),
+                inter_iteration_delay_ms: 1000,
+            };
+
+            let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            let collector = TraceCollector::new(base_dir, &repo_id);
+
+            let app_handle = app.clone();
+            let repo_id_clone = repo_id.clone();
+            let runner = SessionRunner::new(config, collector, cancel_token).on_event(Box::new(move |event| {
+                let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                    repo_id: repo_id_clone.clone(),
+                    event: event.clone(),
+                });
+            }));
+
+            let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
             *app.state::<ActiveSession>().cancel_token.lock().await = None;
-            return Err("SSH runtime not yet implemented".to_string());
+            result
         }
-    };
+        RepoType::Ssh { ssh_host, remote_path } => {
+            let ssh_runtime = SshRuntime::new(ssh_host, remote_path);
 
-    // Resolve plan file to absolute path for the @file reference
-    let plan_path = {
-        let p = Path::new(&plan_file);
-        if p.is_relative() {
-            repo_path_buf.join(p)
-        } else {
-            p.to_path_buf()
+            let plan_path = {
+                let p = std::path::Path::new(&plan_file);
+                if !p.is_absolute() {
+                    *app.state::<ActiveSession>().cancel_token.lock().await = None;
+                    return Err("Plan file must be an absolute path for SSH repos".to_string());
+                }
+                p.to_path_buf()
+            };
+
+            // We can't verify the plan file exists on remote, skip the check
+            let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
+
+            let config = SessionConfig {
+                repo_path: PathBuf::from(remote_path),
+                prompt,
+                max_iterations,
+                completion_signal,
+                model: Some(model),
+                extra_args: vec!["--dangerously-skip-permissions".to_string()],
+                plan_file: Some(plan_file),
+                inter_iteration_delay_ms: 1000,
+            };
+
+            let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            let collector = TraceCollector::new(base_dir, &repo_id);
+
+            let orchestrator = SshSessionOrchestrator::new(
+                ssh_runtime,
+                config,
+                collector,
+                cancel_token.clone(),
+            );
+
+            // Store reconnect handle
+            let reconnect_notify = orchestrator.reconnect_notify();
+            {
+                let ssh_sessions = app.state::<ActiveSshSessions>();
+                ssh_sessions.sessions.lock().unwrap().insert(repo_id.clone(), reconnect_notify);
+            }
+
+            let app_handle = app.clone();
+            let repo_id_clone = repo_id.clone();
+            let orchestrator = orchestrator.on_event(Box::new(move |event| {
+                let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                    repo_id: repo_id_clone.clone(),
+                    event: event.clone(),
+                });
+            }));
+
+            let result = orchestrator.run().await.map_err(|e| e.to_string());
+
+            // Clean up
+            {
+                let ssh_sessions = app.state::<ActiveSshSessions>();
+                ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
+            }
+            *app.state::<ActiveSession>().cancel_token.lock().await = None;
+            result
         }
-    };
-
-    // Verify plan file exists before building prompt
-    if !plan_path.exists() {
-        *app.state::<ActiveSession>().cancel_token.lock().await = None;
-        return Err(format!("Plan file not found: {}", plan_path.display()));
     }
-
-    let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
-
-    let config = SessionConfig {
-        repo_path: repo_path_buf,
-        prompt,
-        max_iterations,
-        completion_signal,
-        model: Some(model),
-        extra_args: vec!["--dangerously-skip-permissions".to_string()],
-        plan_file: Some(plan_file),
-        inter_iteration_delay_ms: 1000,
-    };
-
-    let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let collector = TraceCollector::new(base_dir, &repo_id);
-
-    let app_handle = app.clone();
-    let repo_id_clone = repo_id.clone();
-    let runner = SessionRunner::new(config, collector, cancel_token).on_event(Box::new(move |event| {
-        let _ = app_handle.emit("session-event", TaggedSessionEvent {
-            repo_id: repo_id_clone.clone(),
-            event: event.clone(),
-        });
-    }));
-
-    let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
-    *app.state::<ActiveSession>().cancel_token.lock().await = None;
-    result
 }
 
 #[tauri::command]
@@ -173,6 +240,30 @@ async fn stop_session(app: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+async fn test_ssh_connection(ssh_host: String) -> Result<String, String> {
+    let rt = SshRuntime::new(&ssh_host, "");
+    use runtime::RuntimeProvider;
+    rt.health_check().await.map_err(|e| e.to_string())?;
+    Ok("Connection successful: tmux and claude are available".to_string())
+}
+
+#[tauri::command]
+async fn reconnect_session(app: tauri::AppHandle, repo_id: String) -> Result<(), String> {
+    let ssh_sessions = app.state::<ActiveSshSessions>();
+    let notify = {
+        let guard = ssh_sessions.sessions.lock().unwrap();
+        guard.get(&repo_id).cloned()
+    };
+    match notify {
+        Some(n) => {
+            n.notify_one();
+            Ok(())
+        }
+        None => Err(format!("No active SSH session for repo {repo_id}"))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -181,7 +272,10 @@ pub fn run() {
         .manage(ActiveSession {
             cancel_token: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, list_traces, get_trace, get_trace_events])
+        .manage(ActiveSshSessions {
+            sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
+        })
+        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, test_ssh_connection, reconnect_session, list_traces, get_trace, get_trace_events])
         .run(tauri::generate_context!())
         .expect("error running tauri application");
 }
@@ -292,5 +386,95 @@ mod tests {
         let json = r#"{ "type": "ssh", "sshHost": "host" }"#;
         let result = serde_json::from_str::<RepoType>(json);
         assert!(result.is_err(), "deserializing ssh without remotePath should fail");
+    }
+
+    // --- ActiveSshSessions state management tests ---
+
+    #[test]
+    fn test_active_ssh_sessions_insert_and_get() {
+        let state = ActiveSshSessions {
+            sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
+        };
+        let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+        state.sessions.lock().unwrap().insert("repo-1".to_string(), notify.clone());
+
+        let guard = state.sessions.lock().unwrap();
+        let retrieved = guard.get("repo-1");
+        assert!(retrieved.is_some(), "should find the inserted repo-1 handle");
+        assert!(std::sync::Arc::ptr_eq(retrieved.unwrap(), &notify));
+    }
+
+    #[test]
+    fn test_active_ssh_sessions_missing_repo() {
+        let state = ActiveSshSessions {
+            sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
+        };
+
+        let guard = state.sessions.lock().unwrap();
+        let retrieved = guard.get("nonexistent");
+        assert!(retrieved.is_none(), "looking up a missing repo should return None");
+    }
+
+    #[test]
+    fn test_active_ssh_sessions_remove() {
+        let state = ActiveSshSessions {
+            sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
+        };
+        let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+        state.sessions.lock().unwrap().insert("repo-1".to_string(), notify);
+
+        // Remove the entry
+        let removed = state.sessions.lock().unwrap().remove("repo-1");
+        assert!(removed.is_some(), "remove should return the previously inserted handle");
+
+        // Verify it is gone
+        let guard = state.sessions.lock().unwrap();
+        assert!(guard.get("repo-1").is_none(), "repo-1 should no longer be present after removal");
+    }
+
+    #[test]
+    fn test_active_ssh_sessions_multiple_repos() {
+        let state = ActiveSshSessions {
+            sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
+        };
+        let notify_a = std::sync::Arc::new(tokio::sync::Notify::new());
+        let notify_b = std::sync::Arc::new(tokio::sync::Notify::new());
+        let notify_c = std::sync::Arc::new(tokio::sync::Notify::new());
+
+        {
+            let mut guard = state.sessions.lock().unwrap();
+            guard.insert("repo-a".to_string(), notify_a.clone());
+            guard.insert("repo-b".to_string(), notify_b.clone());
+            guard.insert("repo-c".to_string(), notify_c.clone());
+        }
+
+        let guard = state.sessions.lock().unwrap();
+        assert!(std::sync::Arc::ptr_eq(guard.get("repo-a").unwrap(), &notify_a));
+        assert!(std::sync::Arc::ptr_eq(guard.get("repo-b").unwrap(), &notify_b));
+        assert!(std::sync::Arc::ptr_eq(guard.get("repo-c").unwrap(), &notify_c));
+        assert_eq!(guard.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_reconnect_notify_signals_waiter() {
+        let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+        let notify_clone = notify.clone();
+
+        // Spawn a task that waits for the notification
+        let waiter = tokio::spawn(async move {
+            notify_clone.notified().await;
+            true
+        });
+
+        // Signal the waiter
+        notify.notify_one();
+
+        // The waiter should complete promptly
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), waiter)
+            .await
+            .expect("waiter should complete within timeout")
+            .expect("spawned task should not panic");
+
+        assert!(result, "waiter should have received the notification and returned true");
     }
 }

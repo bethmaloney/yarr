@@ -474,12 +474,12 @@ Add the Tauri command handlers for SSH-specific operations: test connection, rec
 - Store active SSH orchestrators in app state (similar to how cancel tokens are stored)
 
 **Checklist:**
-- [ ] Add `test_ssh_connection` Tauri command
-- [ ] Add `reconnect_session` Tauri command
-- [ ] Update `run_session` to create `SshSessionOrchestrator` for SSH repos
-- [ ] Store orchestrators in Tauri managed state for reconnection
-- [ ] Register new commands in Tauri builder
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `test_ssh_connection` Tauri command
+- [x] Add `reconnect_session` Tauri command
+- [x] Update `run_session` to create `SshSessionOrchestrator` for SSH repos
+- [x] Store orchestrators in Tauri managed state for reconnection
+- [x] Register new commands in Tauri builder
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -573,7 +573,7 @@ Test the frontend handling of SSH repos and disconnect/reconnect states.
 | 7 | SshRuntime — RuntimeProvider implementation | Done |
 | 8 | SshRuntime — reconnection methods | Done |
 | 9 | SshSessionOrchestrator | Done |
-| 10 | Tauri commands for SSH sessions | Not Started |
+| 10 | Tauri commands for SSH sessions | Done |
 | 11 | Frontend session state — Disconnected and Reconnecting | Not Started |
 | 12 | SSH runtime unit tests (Rust) | Not Started |
 | 13 | Frontend tests for SSH repo flow | Not Started |
