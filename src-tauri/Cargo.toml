@@ -26,3 +26,6 @@ async-trait = "0.1"
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
 tokio-util = { version = "0.7.18", features = ["rt"] }
+
+[dev-dependencies]
+tempfile = "3"

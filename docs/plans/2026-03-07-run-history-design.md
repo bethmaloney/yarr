@@ -122,12 +122,12 @@ Change `TraceCollector` to write to `app_data_dir/traces/{repo_id}/` and write b
 - Update `TraceCollector::new()` call sites in `lib.rs` to pass `app.path().app_data_dir()`
 
 **Checklist:**
-- [ ] Refactor `TraceCollector::new()` to accept base_dir + repo_id
-- [ ] Update filename format to use full session_id
-- [ ] Update `finalize()` to write events file alongside trace
-- [ ] Add `list_traces()`, `list_all_traces()`, `read_trace()`, `read_events()` methods
-- [ ] Update call sites in `lib.rs`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Refactor `TraceCollector::new()` to accept base_dir + repo_id
+- [x] Update filename format to use full session_id
+- [x] Update `finalize()` to write events file alongside trace
+- [x] Add `list_traces()`, `list_all_traces()`, `read_trace()`, `read_events()` methods
+- [x] Update call sites in `lib.rs`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -337,7 +337,7 @@ Add Rust tests for the new TraceCollector methods and event serialization round-
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add `plan_file` + Deserialize to trace/event types | Done |
-| 2 | Update TraceCollector for app data dir + events file | Not Started |
+| 2 | Update TraceCollector for app data dir + events file | Done |
 | 3 | Accumulate events in SessionRunner | Not Started |
 | 4 | Add Tauri commands for listing/reading traces | Not Started |
 | 5 | Extend frontend navigation with new views | Not Started |

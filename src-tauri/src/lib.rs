@@ -47,7 +47,8 @@ async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trac
         inter_iteration_delay_ms: 100,
     };
 
-    let collector = TraceCollector::new("./traces");
+    let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let collector = TraceCollector::new(base_dir, &repo_id);
 
     let app_handle = app.clone();
     let repo_id_clone = repo_id.clone();
@@ -112,7 +113,8 @@ async fn run_session(
         inter_iteration_delay_ms: 1000,
     };
 
-    let collector = TraceCollector::new("./traces");
+    let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let collector = TraceCollector::new(base_dir, &repo_id);
 
     let app_handle = app.clone();
     let repo_id_clone = repo_id.clone();

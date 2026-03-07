@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::output::{ModelTokenUsage, TokenUsage};
@@ -78,10 +79,20 @@ pub struct TraceCollector {
     output_dir: PathBuf,
 }
 
+/// Validate that a path component does not contain traversal characters.
+fn validate_path_component(value: &str, name: &str) -> anyhow::Result<()> {
+    if value.is_empty() || value.contains('/') || value.contains('\\') || value.contains("..") {
+        anyhow::bail!("Invalid {name}: contains path traversal characters");
+    }
+    Ok(())
+}
+
 impl TraceCollector {
-    pub fn new(output_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(base_dir: impl Into<PathBuf>, repo_id: &str) -> Self {
+        validate_path_component(repo_id, "repo_id")
+            .expect("repo_id must not contain path traversal characters");
         Self {
-            output_dir: output_dir.into(),
+            output_dir: base_dir.into().join("traces").join(repo_id),
         }
     }
 
@@ -143,7 +154,11 @@ impl TraceCollector {
     }
 
     /// Finalize and persist the session trace to disk
-    pub async fn finalize(&self, trace: &mut SessionTrace) -> anyhow::Result<PathBuf> {
+    pub async fn finalize(
+        &self,
+        trace: &mut SessionTrace,
+        events: &[crate::session::SessionEvent],
+    ) -> anyhow::Result<PathBuf> {
         trace.end_time = Some(Utc::now());
 
         trace.total_cost_usd = trace
@@ -174,17 +189,105 @@ impl TraceCollector {
 
         tokio::fs::create_dir_all(&self.output_dir).await?;
 
-        let filename = format!(
-            "trace_{}_{}.json",
-            trace.session_id.split('-').next().unwrap_or("unknown"),
-            trace.start_time.format("%Y%m%d_%H%M%S")
-        );
-        let path = self.output_dir.join(&filename);
+        let trace_filename = format!("trace_{}.json", trace.session_id);
+        let trace_path = self.output_dir.join(&trace_filename);
 
         let json = serde_json::to_string_pretty(trace)?;
-        tokio::fs::write(&path, json).await?;
+        tokio::fs::write(&trace_path, json).await?;
 
-        Ok(path)
+        let events_filename = format!("events_{}.json", trace.session_id);
+        let events_path = self.output_dir.join(&events_filename);
+
+        let events_json = serde_json::to_string_pretty(events)?;
+        tokio::fs::write(&events_path, events_json).await?;
+
+        Ok(trace_path)
+    }
+
+    /// List traces. If repo_id is Some, read from base_dir/traces/{repo_id}/.
+    /// If None, read across all repo subdirs under base_dir/traces/.
+    /// Returns sorted by start_time descending.
+    pub fn list_traces(base_dir: &Path, repo_id: Option<&str>) -> anyhow::Result<Vec<SessionTrace>> {
+        let traces_dir = base_dir.join("traces");
+
+        let dirs_to_scan: Vec<PathBuf> = if let Some(id) = repo_id {
+            validate_path_component(id, "repo_id")?;
+            let dir = traces_dir.join(id);
+            if dir.exists() {
+                vec![dir]
+            } else {
+                return Ok(vec![]);
+            }
+        } else {
+            if !traces_dir.exists() {
+                return Ok(vec![]);
+            }
+            let mut dirs = Vec::new();
+            for entry in std::fs::read_dir(&traces_dir)? {
+                let entry = entry?;
+                if entry.file_type()?.is_dir() {
+                    dirs.push(entry.path());
+                }
+            }
+            dirs
+        };
+
+        let mut traces = Vec::new();
+        for dir in dirs_to_scan {
+            if !dir.exists() {
+                continue;
+            }
+            for entry in std::fs::read_dir(&dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.starts_with("trace_") && name.ends_with(".json") {
+                        let contents = match std::fs::read_to_string(&path) {
+                            Ok(c) => c,
+                            Err(e) => {
+                                warn!("Skipping unreadable trace file {:?}: {}", path, e);
+                                continue;
+                            }
+                        };
+                        match serde_json::from_str::<SessionTrace>(&contents) {
+                            Ok(trace) => traces.push(trace),
+                            Err(e) => {
+                                warn!("Skipping malformed trace file {:?}: {}", path, e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        traces.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        Ok(traces)
+    }
+
+    /// Read a single trace file
+    pub fn read_trace(base_dir: &Path, repo_id: &str, session_id: &str) -> anyhow::Result<SessionTrace> {
+        validate_path_component(repo_id, "repo_id")?;
+        validate_path_component(session_id, "session_id")?;
+        let path = base_dir
+            .join("traces")
+            .join(repo_id)
+            .join(format!("trace_{}.json", session_id));
+        let contents = std::fs::read_to_string(&path)?;
+        let trace: SessionTrace = serde_json::from_str(&contents)?;
+        Ok(trace)
+    }
+
+    /// Read the events file for a session
+    pub fn read_events(base_dir: &Path, repo_id: &str, session_id: &str) -> anyhow::Result<Vec<crate::session::SessionEvent>> {
+        validate_path_component(repo_id, "repo_id")?;
+        validate_path_component(session_id, "session_id")?;
+        let path = base_dir
+            .join("traces")
+            .join(repo_id)
+            .join(format!("events_{}.json", session_id));
+        let contents = std::fs::read_to_string(&path)?;
+        let events: Vec<crate::session::SessionEvent> = serde_json::from_str(&contents)?;
+        Ok(events)
     }
 }
 
@@ -354,7 +457,7 @@ mod tests {
 
     #[test]
     fn start_session_sets_plan_file() {
-        let collector = TraceCollector::new("/tmp/traces");
+        let collector = TraceCollector::new("/tmp", "traces");
         let trace = collector.start_session("/tmp/repo", "do stuff", Some("plan.md"));
 
         assert_eq!(trace.plan_file, Some("plan.md".to_string()));
@@ -367,7 +470,7 @@ mod tests {
 
     #[test]
     fn start_session_without_plan_file() {
-        let collector = TraceCollector::new("/tmp/traces");
+        let collector = TraceCollector::new("/tmp", "traces");
         let trace = collector.start_session("/tmp/repo", "do stuff", None);
 
         assert_eq!(trace.plan_file, None);
@@ -401,6 +504,278 @@ mod tests {
         assert_eq!(restored.repo_path, trace.repo_path);
         assert_eq!(restored.prompt, trace.prompt);
         assert_eq!(restored.total_cost_usd, trace.total_cost_usd);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Task 2 tests: TraceCollector with app data dir and event writing
+    // ══════════════════════════════════════════════════════════════
+
+    use tempfile::TempDir;
+
+    // ── Test 9: finalize writes both trace and events files ──
+
+    #[tokio::test]
+    async fn finalize_writes_both_trace_and_events_files() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "repo-1");
+        let mut trace = collector.start_session("/tmp/repo", "do the thing", None);
+        let session_id = trace.session_id.clone();
+
+        let events: Vec<SessionEvent> = vec![
+            SessionEvent::SessionStarted {
+                session_id: session_id.clone(),
+            },
+            SessionEvent::SessionComplete {
+                outcome: SessionOutcome::Completed,
+            },
+        ];
+
+        collector
+            .finalize(&mut trace, &events)
+            .await
+            .expect("finalize should succeed");
+
+        let trace_path = base_dir
+            .join("traces")
+            .join("repo-1")
+            .join(format!("trace_{}.json", session_id));
+        let events_path = base_dir
+            .join("traces")
+            .join("repo-1")
+            .join(format!("events_{}.json", session_id));
+
+        assert!(trace_path.exists(), "trace file should exist at {:?}", trace_path);
+        assert!(events_path.exists(), "events file should exist at {:?}", events_path);
+
+        // Read back and verify trace
+        let trace_json = std::fs::read_to_string(&trace_path).expect("read trace file");
+        let restored_trace: SessionTrace =
+            serde_json::from_str(&trace_json).expect("deserialize trace");
+        assert_eq!(restored_trace.session_id, session_id);
+
+        // Read back and verify events
+        let events_json = std::fs::read_to_string(&events_path).expect("read events file");
+        let restored_events: Vec<SessionEvent> =
+            serde_json::from_str(&events_json).expect("deserialize events");
+        assert_eq!(restored_events.len(), 2);
+    }
+
+    // ── Test 10: finalize uses full session_id in filenames ──
+
+    #[tokio::test]
+    async fn finalize_uses_full_session_id_in_filenames() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "repo-1");
+        let mut trace = collector.start_session("/tmp/repo", "do stuff", None);
+        let session_id = trace.session_id.clone();
+
+        let events: Vec<SessionEvent> = vec![];
+
+        let result_path = collector
+            .finalize(&mut trace, &events)
+            .await
+            .expect("finalize should succeed");
+
+        let filename = result_path
+            .file_name()
+            .expect("should have filename")
+            .to_str()
+            .expect("valid utf8");
+
+        // The full session_id (a UUID like "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+        // should appear in the filename, not just a truncated prefix
+        assert!(
+            filename.contains(&session_id),
+            "filename '{}' should contain the full session_id '{}'",
+            filename,
+            session_id,
+        );
+    }
+
+    // ── Test 11: list_traces returns sorted by start_time descending ──
+
+    #[tokio::test]
+    async fn list_traces_returns_sorted_by_start_time_desc() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "repo-1");
+
+        // Create 3 traces with different start_times
+        let mut trace1 = collector.start_session("/tmp/repo", "first", None);
+        trace1.start_time = Utc::now() - chrono::Duration::hours(3);
+        collector
+            .finalize(&mut trace1, &[])
+            .await
+            .expect("finalize trace1");
+
+        let mut trace2 = collector.start_session("/tmp/repo", "second", None);
+        trace2.start_time = Utc::now() - chrono::Duration::hours(1);
+        collector
+            .finalize(&mut trace2, &[])
+            .await
+            .expect("finalize trace2");
+
+        let mut trace3 = collector.start_session("/tmp/repo", "third", None);
+        trace3.start_time = Utc::now() - chrono::Duration::hours(2);
+        collector
+            .finalize(&mut trace3, &[])
+            .await
+            .expect("finalize trace3");
+
+        let traces = TraceCollector::list_traces(base_dir, Some("repo-1"))
+            .expect("list_traces should succeed");
+
+        assert_eq!(traces.len(), 3);
+
+        // Should be sorted by start_time descending (newest first)
+        assert!(
+            traces[0].start_time >= traces[1].start_time,
+            "traces[0] should be newer than traces[1]"
+        );
+        assert!(
+            traces[1].start_time >= traces[2].start_time,
+            "traces[1] should be newer than traces[2]"
+        );
+
+        // trace2 was the newest (1 hour ago), trace3 next (2 hours ago), trace1 oldest (3 hours ago)
+        assert_eq!(traces[0].prompt, "second");
+        assert_eq!(traces[1].prompt, "third");
+        assert_eq!(traces[2].prompt, "first");
+    }
+
+    // ── Test 12: list_traces across repos ──
+
+    #[tokio::test]
+    async fn list_traces_across_repos() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // Write traces to repo-1
+        let collector1 = TraceCollector::new(base_dir, "repo-1");
+        let mut trace1 = collector1.start_session("/tmp/repo1", "task for repo1", None);
+        collector1
+            .finalize(&mut trace1, &[])
+            .await
+            .expect("finalize trace1");
+
+        // Write traces to repo-2
+        let collector2 = TraceCollector::new(base_dir, "repo-2");
+        let mut trace2 = collector2.start_session("/tmp/repo2", "task for repo2", None);
+        collector2
+            .finalize(&mut trace2, &[])
+            .await
+            .expect("finalize trace2");
+
+        let mut trace3 = collector2.start_session("/tmp/repo2", "another task for repo2", None);
+        collector2
+            .finalize(&mut trace3, &[])
+            .await
+            .expect("finalize trace3");
+
+        // list_traces with None repo_id should return all traces across repos
+        let all_traces = TraceCollector::list_traces(base_dir, None)
+            .expect("list_traces across repos should succeed");
+
+        assert_eq!(all_traces.len(), 3, "should find all 3 traces across both repos");
+    }
+
+    // ── Test 13: read_trace returns correct trace ──
+
+    #[tokio::test]
+    async fn read_trace_returns_correct_trace() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "repo-1");
+        let mut trace = collector.start_session("/tmp/repo", "read me back", Some("plan.md"));
+        let session_id = trace.session_id.clone();
+
+        collector
+            .finalize(&mut trace, &[])
+            .await
+            .expect("finalize should succeed");
+
+        let restored = TraceCollector::read_trace(base_dir, "repo-1", &session_id)
+            .expect("read_trace should succeed");
+
+        assert_eq!(restored.session_id, session_id);
+        assert_eq!(restored.repo_path, "/tmp/repo");
+        assert_eq!(restored.prompt, "read me back");
+        assert_eq!(restored.plan_file, Some("plan.md".to_string()));
+        assert_eq!(restored.outcome, SessionOutcome::Running); // finalize may set end_time but outcome depends on implementation
+    }
+
+    // ── Test 14: read_events returns correct events ──
+
+    #[tokio::test]
+    async fn read_events_returns_correct_events() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "repo-1");
+        let mut trace = collector.start_session("/tmp/repo", "events test", None);
+        let session_id = trace.session_id.clone();
+
+        let events: Vec<SessionEvent> = vec![
+            SessionEvent::SessionStarted {
+                session_id: session_id.clone(),
+            },
+            SessionEvent::IterationStarted { iteration: 1 },
+            SessionEvent::ToolUse {
+                iteration: 1,
+                tool_name: "Bash".to_string(),
+            },
+            SessionEvent::AssistantText {
+                iteration: 1,
+                text: "Working on it...".to_string(),
+            },
+            SessionEvent::SessionComplete {
+                outcome: SessionOutcome::Completed,
+            },
+        ];
+
+        collector
+            .finalize(&mut trace, &events)
+            .await
+            .expect("finalize should succeed");
+
+        let restored_events = TraceCollector::read_events(base_dir, "repo-1", &session_id)
+            .expect("read_events should succeed");
+
+        assert_eq!(restored_events.len(), 5);
+
+        // Verify first event is SessionStarted with the right session_id
+        if let SessionEvent::SessionStarted { session_id: sid } = &restored_events[0] {
+            assert_eq!(sid.as_str(), session_id.as_str());
+        } else {
+            panic!("expected SessionStarted as first event");
+        }
+
+        // Verify last event is SessionComplete with Completed outcome
+        if let SessionEvent::SessionComplete { outcome } = &restored_events[4] {
+            assert_eq!(outcome.clone(), SessionOutcome::Completed);
+        } else {
+            panic!("expected SessionComplete as last event");
+        }
+    }
+
+    // ── Test 15: list_traces on empty/nonexistent dir returns empty vec ──
+
+    #[test]
+    fn list_traces_empty_dir() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // Don't create any traces — the repo subdir doesn't even exist
+        let traces = TraceCollector::list_traces(base_dir, Some("nonexistent-repo"))
+            .expect("list_traces on empty dir should return Ok, not error");
+
+        assert!(traces.is_empty(), "should return empty vec for nonexistent repo dir");
     }
 }
 

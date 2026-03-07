@@ -288,7 +288,7 @@ impl SessionRunner {
         let outcome = trace.outcome.clone();
         self.emit(SessionEvent::SessionComplete { outcome });
 
-        let trace_path = self.collector.finalize(&mut trace).await?;
+        let trace_path = self.collector.finalize(&mut trace, &[]).await?;
         println!("\n[harness] Trace saved to: {}", trace_path.display());
 
         trace::print_trace_summary(&trace);
