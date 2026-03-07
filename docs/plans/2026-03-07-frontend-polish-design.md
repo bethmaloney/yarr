@@ -184,9 +184,9 @@ Backend command to read first N lines of a file for the plan preview.
 - Return error if file doesn't exist or isn't readable
 
 **Checklist:**
-- [ ] Add `read_file_preview` command function
-- [ ] Register in Tauri command list
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `read_file_preview` command function
+- [x] Register in Tauri command list
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -206,10 +206,10 @@ Show a preview of the selected plan file below the file input.
 - Debounce or use `$effect` to react to planFile changes
 
 **Checklist:**
-- [ ] Add preview state and `$effect` to fetch preview on planFile change
-- [ ] Render preview `<pre>` block below the plan input row
-- [ ] Style preview box to match dark theme
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add preview state and `$effect` to fetch preview on planFile change
+- [x] Render preview `<pre>` block below the plan input row
+- [x] Style preview box to match dark theme
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -485,8 +485,8 @@ Update existing E2E tests for the new UI structure and add coverage for new feat
 | 1 | Extract shared types into `src/types.ts` | Done |
 | 2 | Add Breadcrumbs component | Done |
 | 3 | Repo Detail -- collapse Settings, remove recents, rename Mock | Done |
-| 4 | Add `read_file_preview` Tauri command | Not Started |
-| 5 | Repo Detail -- plan file preview | Not Started |
+| 4 | Add `read_file_preview` Tauri command | Done |
+| 5 | Repo Detail -- plan file preview | Done |
 | 6 | Home page -- toolbar alignment | Not Started |
 | 7 | Add `list_latest_traces` Tauri command | Not Started |
 | 8 | Home page -- repo cards with last run summary | Not Started |

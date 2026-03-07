@@ -229,6 +229,14 @@ fn get_trace_events(app: tauri::AppHandle, repo_id: String, session_id: String) 
 }
 
 #[tauri::command]
+fn read_file_preview(path: String, max_lines: Option<u32>) -> Result<String, String> {
+    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let limit = max_lines.unwrap_or(5) as usize;
+    let result: String = content.lines().take(limit).collect::<Vec<_>>().join("\n");
+    Ok(result)
+}
+
+#[tauri::command]
 async fn stop_session(app: tauri::AppHandle) -> Result<(), String> {
     let active = app.state::<ActiveSession>();
     let token = active.cancel_token.lock().await;
@@ -275,7 +283,7 @@ pub fn run() {
         .manage(ActiveSshSessions {
             sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
-        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, test_ssh_connection, reconnect_session, list_traces, get_trace, get_trace_events])
+        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, test_ssh_connection, reconnect_session, list_traces, get_trace, get_trace_events, read_file_preview])
         .run(tauri::generate_context!())
         .expect("error running tauri application");
 }
@@ -476,5 +484,67 @@ mod tests {
             .expect("spawned task should not panic");
 
         assert!(result, "waiter should have received the notification and returned true");
+    }
+
+    #[test]
+    fn read_file_preview_returns_first_n_lines() {
+        use std::io::Write;
+        let mut file = tempfile::NamedTempFile::new().expect("failed to create temp file");
+        for i in 1..=10 {
+            writeln!(file, "line {}", i).expect("failed to write");
+        }
+        let path = file.path().to_string_lossy().to_string();
+
+        let result = read_file_preview(path, Some(3)).expect("should return Ok");
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], "line 1");
+        assert_eq!(lines[2], "line 3");
+    }
+
+    #[test]
+    fn read_file_preview_defaults_to_five_lines() {
+        use std::io::Write;
+        let mut file = tempfile::NamedTempFile::new().expect("failed to create temp file");
+        for i in 1..=10 {
+            writeln!(file, "line {}", i).expect("failed to write");
+        }
+        let path = file.path().to_string_lossy().to_string();
+
+        let result = read_file_preview(path, None).expect("should return Ok");
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 5);
+        assert_eq!(lines[0], "line 1");
+        assert_eq!(lines[4], "line 5");
+    }
+
+    #[test]
+    fn read_file_preview_returns_all_when_fewer_than_max() {
+        use std::io::Write;
+        let mut file = tempfile::NamedTempFile::new().expect("failed to create temp file");
+        writeln!(file, "first").expect("failed to write");
+        writeln!(file, "second").expect("failed to write");
+        let path = file.path().to_string_lossy().to_string();
+
+        let result = read_file_preview(path, Some(5)).expect("should return Ok");
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0], "first");
+        assert_eq!(lines[1], "second");
+    }
+
+    #[test]
+    fn read_file_preview_empty_file() {
+        let file = tempfile::NamedTempFile::new().expect("failed to create temp file");
+        let path = file.path().to_string_lossy().to_string();
+
+        let result = read_file_preview(path, None).expect("should return Ok");
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn read_file_preview_nonexistent_file() {
+        let result = read_file_preview("/tmp/nonexistent_file_that_does_not_exist_12345.txt".to_string(), None);
+        assert!(result.is_err(), "should return Err for nonexistent file");
     }
 }

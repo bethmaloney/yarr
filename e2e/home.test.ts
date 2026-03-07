@@ -163,4 +163,58 @@ test.describe("Repo detail page", () => {
       page.getByText("Select a prompt file to start a run"),
     ).not.toBeVisible();
   });
+
+  async function navigateToRepoDetailWithHandlers(
+    page: import("@playwright/test").Page,
+    mockTauri: (opts?: import("./fixtures").TauriMockOptions) => Promise<void>,
+    invokeHandlers: Record<string, unknown>,
+  ) {
+    await mockTauri({ storeData: repoStoreData, invokeHandlers });
+    await page.goto("/");
+    await page.getByRole("button", { name: /my-app/ }).click();
+    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
+  }
+
+  test("shows plan file preview when prompt file is entered", async ({ page, mockTauri }) => {
+    const previewContent = "# Fix Login Bug\n\nImplement the fix for the login timeout issue.\n\n## Steps";
+    await navigateToRepoDetailWithHandlers(page, mockTauri, {
+      read_file_preview: previewContent,
+    });
+
+    // Fill in the prompt file input
+    await page.getByPlaceholder("docs/plans/my-feature-design.md").fill("docs/plans/fix-login.md");
+
+    // Wait for the preview to appear in a <pre> element
+    const preview = page.locator("pre");
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText("# Fix Login Bug");
+    await expect(preview).toContainText("Implement the fix for the login timeout issue.");
+    await expect(preview).toContainText("## Steps");
+  });
+
+  test("hides preview when prompt file is cleared", async ({ page, mockTauri }) => {
+    const previewContent = "# Fix Login Bug\n\nImplement the fix for the login timeout issue.\n\n## Steps";
+    await navigateToRepoDetailWithHandlers(page, mockTauri, {
+      read_file_preview: previewContent,
+    });
+
+    // Fill in the prompt file input and verify preview appears
+    const input = page.getByPlaceholder("docs/plans/my-feature-design.md");
+    await input.fill("docs/plans/fix-login.md");
+    const preview = page.locator("pre");
+    await expect(preview).toBeVisible();
+
+    // Clear the input and verify preview disappears
+    await input.fill("");
+    await expect(preview).not.toBeVisible();
+  });
+
+  test("no preview shown when plan file is empty", async ({ page, mockTauri }) => {
+    await navigateToRepoDetail(page, mockTauri);
+
+    // Without filling in the prompt file input, no <pre> preview should exist
+    const planSection = page.locator(".plan-section");
+    await expect(planSection).toBeVisible();
+    await expect(planSection.locator("pre")).toHaveCount(0);
+  });
 });

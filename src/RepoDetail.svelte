@@ -37,6 +37,31 @@
   });
 
   let planFile = $state("");
+  let previewContent = $state("");
+  let previewLoading = $state(false);
+
+  $effect(() => {
+    const file = planFile;
+    if (!file) {
+      previewContent = "";
+      previewLoading = false;
+      return;
+    }
+    previewLoading = true;
+    invoke("read_file_preview", { path: file })
+      .then((result) => {
+        if (planFile === file) {
+          previewContent = result as string;
+          previewLoading = false;
+        }
+      })
+      .catch(() => {
+        if (planFile === file) {
+          previewContent = "";
+          previewLoading = false;
+        }
+      });
+  });
 
   async function browsePrompt() {
     try {
@@ -152,6 +177,11 @@
         >
       </div>
     </label>
+    {#if previewLoading}
+      <p class="preview-loading">Loading...</p>
+    {:else if previewContent}
+      <pre class="plan-preview">{previewContent}</pre>
+    {/if}
   </section>
 
   <div class="actions">
@@ -428,5 +458,26 @@
     margin: 0;
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.85rem;
+  }
+
+  .preview-loading {
+    color: #666;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+  }
+
+  .plan-preview {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    background: #12122a;
+    color: #888;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid #333;
+    overflow-x: auto;
+    max-height: 8rem;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 </style>

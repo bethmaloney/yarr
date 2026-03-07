@@ -338,6 +338,7 @@ if (!(window as any).__TAURI_INTERNALS__) {
       const sid = args.sessionId as string;
       return SAMPLE_EVENTS[sid] ?? [];
     }
+    if (cmd === "read_file_preview") return "# Sample Plan\n\nThis is a stub preview for browser dev mode.\n\n## Steps\n";
     if (cmd === "stop_session") return;
 
     console.warn(`[browser-mock] unhandled invoke: ${cmd}`, args);
