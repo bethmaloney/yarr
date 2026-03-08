@@ -5,6 +5,7 @@
   import type { Check, SessionState } from "./types";
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import EventsList from "./EventsList.svelte";
+  import { sessionContextColor } from "./context-bar";
 
   let {
     repo,
@@ -448,6 +449,15 @@
         <dd>{session.trace.total_iterations}</dd>
         <dt>Total Cost</dt>
         <dd>${session.trace.total_cost_usd.toFixed(4)}</dd>
+        {#if session.trace.context_window}
+          {@const ctxPercent = Math.round((session.trace.final_context_tokens! / session.trace.context_window) * 100)}
+          <dt>Context</dt>
+          <dd>
+            <span style="color: {sessionContextColor(ctxPercent)}" title="{session.trace.final_context_tokens!.toLocaleString()} tokens">
+              {ctxPercent}%
+            </span>
+          </dd>
+        {/if}
         <dt>Session ID</dt>
         <dd>{session.trace.session_id}</dd>
       </dl>

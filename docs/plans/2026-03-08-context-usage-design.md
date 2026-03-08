@@ -215,9 +215,9 @@ Add context usage percentage to the session summary card.
 **Checklist:**
 - [x] Update TypeScript `SessionTrace` type
 - [x] Add `sessionContextColor` function
-- [ ] Add context row to RepoDetail session summary
-- [ ] Verify hover tooltip shows formatted token count
-- [ ] `npx tsc --noEmit` passes
+- [x] Add context row to RepoDetail session summary
+- [x] Verify hover tooltip shows formatted token count
+- [x] `npx tsc --noEmit` passes
 
 ---
 
@@ -237,10 +237,10 @@ Show context usage inline on the home page cards.
 - Use `sessionContextColor()` from `context-bar.ts`
 
 **Checklist:**
-- [ ] Add context percentage span to RepoCard
-- [ ] Apply color styling
-- [ ] Only render when data available
-- [ ] `npx tsc --noEmit` passes
+- [x] Add context percentage span to RepoCard
+- [x] Apply color styling
+- [x] Only render when data available
+- [x] `npx tsc --noEmit` passes
 
 ---
 
@@ -274,6 +274,6 @@ Update test helpers for new fields and add a test for context tracking.
 | 1 | Track last_context_tokens in run_iteration | Done |
 | 2 | Add context fields to SpanAttributes/SessionTrace | Done |
 | 3 | Wire context data through run loop | Done |
-| 4 | TypeScript types + RepoDetail display | Not Started |
-| 5 | RepoCard context percentage | Not Started |
+| 4 | TypeScript types + RepoDetail display | Done |
+| 5 | RepoCard context percentage | Done |
 | 6 | Update tests | Done |

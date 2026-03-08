@@ -2,6 +2,7 @@
   import type { RepoConfig } from "./repos";
   import type { RepoStatus, SessionTrace } from "./types";
   import { timeAgo } from "./time";
+  import { sessionContextColor } from "./context-bar";
 
   let {
     repo,
@@ -54,6 +55,11 @@
         <span class="separator"> · </span>
       {/if}
       <span>${(lastTrace.total_cost_usd ?? 0).toFixed(2)}</span>
+      {#if lastTrace.context_window}
+        {@const ctxPct = Math.round(((lastTrace.final_context_tokens ?? 0) / lastTrace.context_window) * 100)}
+        <span class="separator"> · </span>
+        <span style="color: {sessionContextColor(ctxPct)}">{ctxPct}%</span>
+      {/if}
       <span class="separator"> · </span>
       <span>{timeAgo(lastTrace.start_time)}</span>
     </div>
