@@ -89,6 +89,9 @@
                 2,
               )}</pre>
           {/if}
+          {#if expandedEvents.has(globalIndex) && ev.kind === "check_failed" && ev.output}
+            <pre class="tool-input-detail">{ev.output}</pre>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -225,6 +228,26 @@
   .event.session_complete {
     color: #e8d44d;
     font-weight: 600;
+  }
+
+  .event.check_started {
+    color: #60a5fa;
+  }
+
+  .event.check_passed {
+    color: #34d399;
+  }
+
+  .event.check_failed {
+    color: #f87171;
+  }
+
+  .event.check_fix_started {
+    color: #fbbf24;
+  }
+
+  .event.check_fix_complete {
+    color: #a78bfa;
   }
 
   .context-bar {
