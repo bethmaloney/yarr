@@ -327,11 +327,11 @@ Wire up the 1-shot view in App.svelte navigation and event handling.
 - OneShotView receives same SessionState from sessions map
 
 **Checklist:**
-- [ ] Add `oneshot` kind to currentView type in App.svelte
-- [ ] Add "1-Shot" navigation button in RepoDetail.svelte
-- [ ] Add OneShotView rendering block in App.svelte template
-- [ ] Wire up onBack callback to return to repo view
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `oneshot` kind to currentView type in App.svelte
+- [x] Add "1-Shot" navigation button in RepoDetail.svelte
+- [x] Add OneShotView rendering block in App.svelte template
+- [x] Wire up onBack callback to return to repo view
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -419,7 +419,7 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 | 4 | Add OneShotRunner | Done |
 | 5 | Add Tauri commands for 1-shot | Done |
 | 6 | Add OneShotView frontend component | Done |
-| 7 | Integrate OneShotView into App navigation | Not Started |
+| 7 | Integrate OneShotView into App navigation | Done |
 | 8 | Add Type column to HistoryView | Not Started |
 | 9 | Tests for OneShotRunner | Not Started |
 | 10 | Frontend tests for OneShotView | Not Started |

@@ -15,6 +15,7 @@
   import RepoDetail from "./RepoDetail.svelte";
   import HistoryView from "./HistoryView.svelte";
   import RunDetail from "./RunDetail.svelte";
+  import OneShotView from "./OneShotView.svelte";
   import { SvelteMap } from "svelte/reactivity";
   import type { SessionTrace, SessionState, TaggedSessionEvent } from "./types";
 
@@ -22,7 +23,8 @@
     | { kind: "home" }
     | { kind: "repo"; repoId: string }
     | { kind: "history"; repoId?: string }
-    | { kind: "run"; repoId: string; sessionId: string; fromRepoId?: string } =
+    | { kind: "run"; repoId: string; sessionId: string; fromRepoId?: string }
+    | { kind: "oneshot"; repoId: string } =
     $state({ kind: "home" });
   let repos: RepoConfig[] = $state([]);
   let sessions = new SvelteMap<string, SessionState>();
@@ -175,6 +177,10 @@
     currentView = { kind: "run", repoId, sessionId, fromRepoId };
   }
 
+  function goOneShot(repoId: string) {
+    currentView = { kind: "oneshot", repoId };
+  }
+
   async function handleRunSession(repoId: string, planFile: string) {
     const repo = repos.find((r) => r.id === repoId);
     if (!repo) return;
@@ -313,6 +319,25 @@
         currentView.kind === "run" ? currentView.fromRepoId : undefined,
       )}
   />
+{:else if currentView.kind === "oneshot"}
+  {@const repoId = currentView.repoId}
+  {@const repo = repos.find((r) => r.id === repoId)}
+  {#if repo}
+    {@const sessionState = sessions.get(repoId) ?? {
+      running: false,
+      disconnected: false,
+      reconnecting: false,
+      events: [],
+      trace: null,
+      error: null,
+    }}
+    <OneShotView
+      {repo}
+      session={sessionState}
+      onBack={() => selectRepo(repoId)}
+      onHome={goHome}
+    />
+  {/if}
 {:else if currentView.kind === "repo"}
   {@const repoId = currentView.repoId}
   {@const repo = repos.find((r) => r.id === repoId)}
@@ -333,6 +358,7 @@
       onMockRun={() => handleMockRun(repoId)}
       onUpdateRepo={handleUpdateRepo}
       onReconnect={() => handleReconnect(repoId)}
+      onOneShot={() => goOneShot(repoId)}
     />
   {/if}
 {/if}

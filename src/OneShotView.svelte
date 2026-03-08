@@ -14,10 +14,12 @@
     repo,
     session,
     onBack,
+    onHome,
   }: {
     repo: RepoConfig;
     session: SessionState;
     onBack: () => void;
+    onHome: () => void;
   } = $props();
 
   let title = $state("");
@@ -52,7 +54,7 @@
 <main>
   <Breadcrumbs
     crumbs={[
-      { label: "Home", onclick: onBack },
+      { label: "Home", onclick: onHome },
       { label: repo.name, onclick: onBack },
       { label: "1-Shot" },
     ]}

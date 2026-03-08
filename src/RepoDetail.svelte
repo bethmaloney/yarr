@@ -14,6 +14,7 @@
     onMockRun,
     onUpdateRepo,
     onReconnect,
+    onOneShot,
   }: {
     repo: RepoConfig;
     session: SessionState;
@@ -22,6 +23,7 @@
     onMockRun: () => void;
     onUpdateRepo: (repo: RepoConfig) => void;
     onReconnect: () => void;
+    onOneShot: () => void;
   } = $props();
 
   // Local settings state, initialized from repo prop
@@ -309,6 +311,14 @@
           Test Run
         </button>
       {/if}
+      <button
+        type="button"
+        onclick={onOneShot}
+        disabled={session.running}
+        class="secondary"
+      >
+        1-Shot
+      </button>
     {/if}
   </div>
 
