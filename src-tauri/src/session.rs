@@ -115,6 +115,24 @@ pub enum SessionEvent {
     CheckFixStarted { iteration: u32, check_name: String, attempt: u32 },
     /// A fix agent has completed
     CheckFixComplete { iteration: u32, check_name: String, attempt: u32, success: bool },
+    /// 1-shot session has started
+    OneShotStarted { title: String, merge_strategy: String },
+    /// Design phase has begun
+    DesignPhaseStarted,
+    /// Design phase completed, plan file written
+    DesignPhaseComplete { plan_file: String },
+    /// Implementation phase has begun
+    ImplementationPhaseStarted,
+    /// Implementation phase completed
+    ImplementationPhaseComplete,
+    /// Git finalize started (merge or push)
+    GitFinalizeStarted { strategy: String },
+    /// Git finalize completed
+    GitFinalizeComplete,
+    /// 1-shot completed successfully
+    OneShotComplete,
+    /// 1-shot failed
+    OneShotFailed { reason: String },
 }
 
 /// Callback for receiving session events (Tauri IPC hookpoint)
@@ -1429,6 +1447,72 @@ mod tests {
             "PostCompletion check should run exactly once (after completion), got {}",
             check_started_count
         );
+    }
+
+    // =========================================================================
+    // 1-shot: SessionEvent oneshot variant serialization
+    // =========================================================================
+
+    #[test]
+    fn oneshot_event_variants_serialize_correctly() {
+        // 1. OneShotStarted
+        let event = SessionEvent::OneShotStarted {
+            title: "Implement auth module".to_string(),
+            merge_strategy: "squash".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize OneShotStarted");
+        assert_eq!(json["kind"], "one_shot_started");
+        assert_eq!(json["title"], "Implement auth module");
+        assert_eq!(json["merge_strategy"], "squash");
+
+        // 2. DesignPhaseStarted
+        let event = SessionEvent::DesignPhaseStarted;
+        let json = serde_json::to_value(&event).expect("serialize DesignPhaseStarted");
+        assert_eq!(json["kind"], "design_phase_started");
+
+        // 3. DesignPhaseComplete
+        let event = SessionEvent::DesignPhaseComplete {
+            plan_file: "/tmp/plan.md".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize DesignPhaseComplete");
+        assert_eq!(json["kind"], "design_phase_complete");
+        assert_eq!(json["plan_file"], "/tmp/plan.md");
+
+        // 4. ImplementationPhaseStarted
+        let event = SessionEvent::ImplementationPhaseStarted;
+        let json = serde_json::to_value(&event).expect("serialize ImplementationPhaseStarted");
+        assert_eq!(json["kind"], "implementation_phase_started");
+
+        // 5. ImplementationPhaseComplete
+        let event = SessionEvent::ImplementationPhaseComplete;
+        let json = serde_json::to_value(&event).expect("serialize ImplementationPhaseComplete");
+        assert_eq!(json["kind"], "implementation_phase_complete");
+
+        // 6. GitFinalizeStarted
+        let event = SessionEvent::GitFinalizeStarted {
+            strategy: "squash".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize GitFinalizeStarted");
+        assert_eq!(json["kind"], "git_finalize_started");
+        assert_eq!(json["strategy"], "squash");
+
+        // 7. GitFinalizeComplete
+        let event = SessionEvent::GitFinalizeComplete;
+        let json = serde_json::to_value(&event).expect("serialize GitFinalizeComplete");
+        assert_eq!(json["kind"], "git_finalize_complete");
+
+        // 8. OneShotComplete
+        let event = SessionEvent::OneShotComplete;
+        let json = serde_json::to_value(&event).expect("serialize OneShotComplete");
+        assert_eq!(json["kind"], "one_shot_complete");
+
+        // 9. OneShotFailed
+        let event = SessionEvent::OneShotFailed {
+            reason: "Design phase timed out".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize OneShotFailed");
+        assert_eq!(json["kind"], "one_shot_failed");
+        assert_eq!(json["reason"], "Design phase timed out");
     }
 
     #[tokio::test]

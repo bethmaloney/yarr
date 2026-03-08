@@ -21,6 +21,11 @@ export type SessionEvent = {
   output?: string;
   attempt?: number;
   success?: boolean;
+  title?: string;
+  merge_strategy?: string;
+  plan_file?: string;
+  strategy?: string;
+  reason?: string;
   _ts?: number;
 };
 

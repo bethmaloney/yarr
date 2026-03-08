@@ -22,12 +22,25 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
   let currentGroup: IterationGroup | null = null;
 
   for (const ev of events) {
-    if (ev.kind === "session_started") {
+    if (
+      ev.kind === "session_started" ||
+      ev.kind === "one_shot_started" ||
+      ev.kind === "design_phase_started" ||
+      ev.kind === "design_phase_complete" ||
+      ev.kind === "implementation_phase_started" ||
+      ev.kind === "implementation_phase_complete" ||
+      ev.kind === "git_finalize_started" ||
+      ev.kind === "git_finalize_complete"
+    ) {
       standaloneEvents.push({ index: "before", event: ev });
       continue;
     }
 
-    if (ev.kind === "session_complete") {
+    if (
+      ev.kind === "session_complete" ||
+      ev.kind === "one_shot_complete" ||
+      ev.kind === "one_shot_failed"
+    ) {
       // Finalize any open group before adding standalone
       if (currentGroup) {
         iterations.push(currentGroup);

@@ -345,6 +345,81 @@ describe("Check", () => {
   });
 });
 
+describe("SessionEvent oneshot fields", () => {
+  it("accepts a one_shot_started event with title and merge_strategy", () => {
+    const event: SessionEvent = {
+      kind: "one_shot_started",
+      title: "Implement auth module",
+      merge_strategy: "squash",
+    };
+    expect(event.kind).toBe("one_shot_started");
+    expect(event.title).toBe("Implement auth module");
+    expect(event.merge_strategy).toBe("squash");
+  });
+
+  it("accepts a design_phase_started event with just kind", () => {
+    const event: SessionEvent = {
+      kind: "design_phase_started",
+    };
+    expect(event.kind).toBe("design_phase_started");
+  });
+
+  it("accepts a design_phase_complete event with plan_file", () => {
+    const event: SessionEvent = {
+      kind: "design_phase_complete",
+      plan_file: "/tmp/plan.md",
+    };
+    expect(event.kind).toBe("design_phase_complete");
+    expect(event.plan_file).toBe("/tmp/plan.md");
+  });
+
+  it("accepts an implementation_phase_started event with just kind", () => {
+    const event: SessionEvent = {
+      kind: "implementation_phase_started",
+    };
+    expect(event.kind).toBe("implementation_phase_started");
+  });
+
+  it("accepts an implementation_phase_complete event with just kind", () => {
+    const event: SessionEvent = {
+      kind: "implementation_phase_complete",
+    };
+    expect(event.kind).toBe("implementation_phase_complete");
+  });
+
+  it("accepts a git_finalize_started event with strategy", () => {
+    const event: SessionEvent = {
+      kind: "git_finalize_started",
+      strategy: "squash",
+    };
+    expect(event.kind).toBe("git_finalize_started");
+    expect(event.strategy).toBe("squash");
+  });
+
+  it("accepts a git_finalize_complete event with just kind", () => {
+    const event: SessionEvent = {
+      kind: "git_finalize_complete",
+    };
+    expect(event.kind).toBe("git_finalize_complete");
+  });
+
+  it("accepts a one_shot_complete event with just kind", () => {
+    const event: SessionEvent = {
+      kind: "one_shot_complete",
+    };
+    expect(event.kind).toBe("one_shot_complete");
+  });
+
+  it("accepts a one_shot_failed event with reason", () => {
+    const event: SessionEvent = {
+      kind: "one_shot_failed",
+      reason: "Design phase timed out",
+    };
+    expect(event.kind).toBe("one_shot_failed");
+    expect(event.reason).toBe("Design phase timed out");
+  });
+});
+
 describe("SessionEvent check fields", () => {
   it("accepts a check_started event with check_name", () => {
     const event: SessionEvent = {

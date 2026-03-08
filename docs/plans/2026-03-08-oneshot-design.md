@@ -181,10 +181,10 @@ Add the new event variants to `SessionEvent` for tracking 1-shot progress.
 - Update frontend `SessionEvent` kind union type
 
 **Checklist:**
-- [ ] Add 9 new variants to `SessionEvent` enum in `session.rs`
-- [ ] Update `SessionEvent` kind type in `src/types.ts` to include new event kinds
-- [ ] Add any new fields to the frontend `SessionEvent` type (title, merge_strategy, plan_file, strategy, reason)
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add 9 new variants to `SessionEvent` enum in `session.rs`
+- [x] Update `SessionEvent` kind type in `src/types.ts` to include new event kinds
+- [x] Add any new fields to the frontend `SessionEvent` type (title, merge_strategy, plan_file, strategy, reason)
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -414,7 +414,7 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add session_type to SessionTrace | Done |
-| 2 | Add 1-shot SessionEvent variants | Not Started |
+| 2 | Add 1-shot SessionEvent variants | Done |
 | 3 | Add design phase prompt | Not Started |
 | 4 | Add OneShotRunner | Not Started |
 | 5 | Add Tauri commands for 1-shot | Not Started |

@@ -24,6 +24,24 @@ export function eventEmoji(kind: string): string {
       return "\u{1F6E0}\uFE0F";
     case "check_fix_complete":
       return "\u{1F504}";
+    case "one_shot_started":
+      return "\u{1F3AF}";
+    case "design_phase_started":
+      return "\u{1F4D0}";
+    case "design_phase_complete":
+      return "\u{1F4CB}";
+    case "implementation_phase_started":
+      return "\u{1F528}";
+    case "implementation_phase_complete":
+      return "\u2705";
+    case "git_finalize_started":
+      return "\u{1F4E6}";
+    case "git_finalize_complete":
+      return "\u2705";
+    case "one_shot_complete":
+      return "\u{1F3C1}";
+    case "one_shot_failed":
+      return "\u274C";
     default:
       return "\u{1F4CB}";
   }
@@ -73,6 +91,24 @@ export function eventLabel(ev: SessionEvent): string {
       return `Fix attempt ${ev.attempt}: ${ev.check_name}`;
     case "check_fix_complete":
       return `Fix attempt ${ev.attempt} ${ev.success ? "succeeded" : "failed"}: ${ev.check_name}`;
+    case "one_shot_started":
+      return `1-Shot started: ${ev.title} (${ev.merge_strategy})`;
+    case "design_phase_started":
+      return "Design phase started";
+    case "design_phase_complete":
+      return `Design phase complete: ${ev.plan_file}`;
+    case "implementation_phase_started":
+      return "Implementation phase started";
+    case "implementation_phase_complete":
+      return "Implementation phase complete";
+    case "git_finalize_started":
+      return `Git finalize started: ${ev.strategy}`;
+    case "git_finalize_complete":
+      return "Git finalize complete";
+    case "one_shot_complete":
+      return "1-Shot complete";
+    case "one_shot_failed":
+      return `1-Shot failed: ${ev.reason}`;
     default:
       return JSON.stringify(ev);
   }
