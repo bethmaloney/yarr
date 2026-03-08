@@ -48,7 +48,7 @@ export async function loadRepos(): Promise<RepoConfig[]> {
 
 export async function addLocalRepo(path: string): Promise<RepoConfig> {
   const repos = await loadRepos();
-  const name = path.replace(/\/+$/, "").split("/").pop() || path;
+  const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
   const repo: LocalRepoConfig = {
     type: "local",
     id: crypto.randomUUID(),

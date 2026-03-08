@@ -165,7 +165,8 @@
     currentView = { kind: "repo", repoId: id };
   }
 
-  function goHome() {
+  async function goHome() {
+    repos = await loadRepos();
     currentView = { kind: "home" };
   }
 
@@ -319,6 +320,7 @@
       goHistory(
         currentView.kind === "run" ? currentView.fromRepoId : undefined,
       )}
+    onHome={goHome}
   />
 {:else if currentView.kind === "oneshot"}
   {@const repoId = currentView.repoId}

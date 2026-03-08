@@ -88,9 +88,21 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
     if (ev.kind === "iteration_complete") {
       const result = ev.result;
       currentGroup.cost = (result?.total_cost_usd as number) ?? 0;
-      currentGroup.inputTokens = (result?.input_tokens as number) ?? 0;
-      currentGroup.outputTokens = (result?.output_tokens as number) ?? 0;
-      currentGroup.contextWindow = (result?.context_window as number) ?? 0;
+      const usage = result?.usage as Record<string, number> | undefined;
+      currentGroup.inputTokens =
+        (usage?.input_tokens ?? 0) +
+        (usage?.cache_read_input_tokens ?? 0) +
+        (usage?.cache_creation_input_tokens ?? 0);
+      currentGroup.outputTokens = usage?.output_tokens ?? 0;
+      // context_window is inside modelUsage (per-model), take the max
+      const modelUsage = result?.model_usage as
+        | Record<string, Record<string, number>>
+        | undefined;
+      currentGroup.contextWindow = modelUsage
+        ? Math.max(
+            ...Object.values(modelUsage).map((m) => m?.contextWindow ?? 0),
+          )
+        : 0;
       currentGroup.endTs = ev._ts;
     }
   }

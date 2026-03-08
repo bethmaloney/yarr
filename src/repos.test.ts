@@ -196,6 +196,18 @@ describe("addLocalRepo", () => {
     expect(repo.name).toBe("yarr");
   });
 
+  it("derives name from WSL path with backslashes", async () => {
+    const repo = await addLocalRepo(
+      "\\\\wsl.localhost\\Ubuntu-24.04\\home\\beth\\repos\\yarr2",
+    );
+    expect(repo.name).toBe("yarr2");
+  });
+
+  it("derives name from Windows path with backslashes", async () => {
+    const repo = await addLocalRepo("C:\\Users\\beth\\repos\\project");
+    expect(repo.name).toBe("project");
+  });
+
   it("applies defaults for model, maxIterations, and completionSignal", async () => {
     const repo = await addLocalRepo("/home/beth/repos/yarr");
     expect(repo.model).toBe("opus");

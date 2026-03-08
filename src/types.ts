@@ -55,6 +55,8 @@ export type SessionTrace = {
   total_output_tokens: number;
   total_cache_read_tokens: number;
   total_cache_creation_tokens: number;
+  context_window?: number;
+  final_context_tokens?: number;
 };
 
 export type SessionState = {

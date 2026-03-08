@@ -47,6 +47,10 @@ pub struct SessionTrace {
     pub total_output_tokens: u64,
     pub total_cache_read_tokens: u64,
     pub total_cache_creation_tokens: u64,
+    #[serde(default)]
+    pub context_window: u64,
+    #[serde(default)]
+    pub final_context_tokens: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -61,6 +65,8 @@ pub struct SpanAttributes {
     pub result_preview: String,
     pub token_usage: TokenUsage,
     pub model_token_usage: HashMap<String, ModelTokenUsage>,
+    #[serde(default)]
+    pub final_context_tokens: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -133,6 +139,8 @@ impl TraceCollector {
             total_output_tokens: 0,
             total_cache_read_tokens: 0,
             total_cache_creation_tokens: 0,
+            context_window: 0,
+            final_context_tokens: 0,
         }
     }
 
@@ -165,6 +173,15 @@ impl TraceCollector {
         trace.total_cache_read_tokens += span.attributes.token_usage.cache_read_input_tokens;
         trace.total_cache_creation_tokens += span.attributes.token_usage.cache_creation_input_tokens;
         trace.total_iterations += 1;
+
+        // Context fields: always overwrite with latest iteration (last call wins)
+        trace.final_context_tokens = span.attributes.final_context_tokens;
+        trace.context_window = span.attributes.model_token_usage
+            .values()
+            .map(|m| m.context_window)
+            .max()
+            .unwrap_or(0);
+
         trace.iterations.push(span);
     }
 
@@ -201,6 +218,16 @@ impl TraceCollector {
             .iter()
             .map(|s| s.attributes.token_usage.cache_creation_input_tokens)
             .sum();
+
+        // Context fields: use last iteration's values
+        if let Some(last) = trace.iterations.last() {
+            trace.final_context_tokens = last.attributes.final_context_tokens;
+            trace.context_window = last.attributes.model_token_usage
+                .values()
+                .map(|m| m.context_window)
+                .max()
+                .unwrap_or(0);
+        }
 
         tokio::fs::create_dir_all(&self.output_dir).await?;
 
@@ -366,6 +393,8 @@ mod tests {
             total_output_tokens: 50,
             total_cache_read_tokens: 10,
             total_cache_creation_tokens: 5,
+            context_window: 0,
+            final_context_tokens: 0,
         }
     }
 
@@ -1066,6 +1095,217 @@ mod tests {
         assert_eq!(restored.prompt, trace.prompt);
         assert_eq!(restored.plan_file, Some("plan.md".to_string()));
         assert_eq!(restored.total_cost_usd, trace.total_cost_usd);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Tests for context window usage tracking
+    // ══════════════════════════════════════════════════════════════
+
+    /// Helper to build SpanAttributes with context window fields for testing
+    fn make_test_span_attrs(
+        iteration: u32,
+        final_context_tokens: u64,
+        context_window: u64,
+    ) -> SpanAttributes {
+        use crate::output::{ModelTokenUsage, TokenUsage};
+        SpanAttributes {
+            iteration,
+            claude_session_id: None,
+            cost_usd: 0.01,
+            num_turns: Some(1),
+            api_duration_ms: Some(500),
+            completion_signal_found: false,
+            exit_code: 0,
+            result_preview: "test".to_string(),
+            token_usage: TokenUsage {
+                input_tokens: 1000,
+                output_tokens: 200,
+                cache_read_input_tokens: 500,
+                cache_creation_input_tokens: 100,
+            },
+            model_token_usage: HashMap::from([(
+                "test-model".to_string(),
+                ModelTokenUsage {
+                    input_tokens: 1000,
+                    output_tokens: 200,
+                    cache_read_input_tokens: 500,
+                    cache_creation_input_tokens: 100,
+                    cost_usd: 0.01,
+                    context_window,
+                    max_output_tokens: 32000,
+                },
+            )]),
+            final_context_tokens,
+        }
+    }
+
+    // ── Test A: Backward compat — old trace JSON without context fields ──
+
+    #[test]
+    fn session_trace_backward_compat_without_context_fields() {
+        let trace = make_test_trace(None);
+        let json = serde_json::to_string(&trace).expect("serialize SessionTrace");
+
+        // Parse into a generic Value, remove context_window and final_context_tokens
+        // to simulate an old-format file that predates these fields
+        let mut value: serde_json::Value =
+            serde_json::from_str(&json).expect("parse as Value");
+        let obj = value.as_object_mut().expect("top-level object");
+        obj.remove("context_window");
+        obj.remove("final_context_tokens");
+
+        let old_format_json =
+            serde_json::to_string(&value).expect("re-serialize without context fields");
+
+        // Deserialize the old-format JSON — this would fail without #[serde(default)]
+        let restored: SessionTrace =
+            serde_json::from_str(&old_format_json).expect("deserialize old-format trace");
+
+        assert_eq!(restored.context_window, 0, "context_window should default to 0");
+        assert_eq!(
+            restored.final_context_tokens, 0,
+            "final_context_tokens should default to 0"
+        );
+        // Verify other fields still round-trip correctly
+        assert_eq!(restored.trace_id, trace.trace_id);
+        assert_eq!(restored.session_id, trace.session_id);
+        assert_eq!(restored.total_cost_usd, trace.total_cost_usd);
+    }
+
+    // ── Test B: SessionTrace round-trip with context fields ──
+
+    #[test]
+    fn session_trace_round_trip_with_context_fields() {
+        let mut trace = make_test_trace(None);
+        trace.context_window = 200_000;
+        trace.final_context_tokens = 95_000;
+
+        let json = serde_json::to_string(&trace).expect("serialize SessionTrace");
+        let restored: SessionTrace =
+            serde_json::from_str(&json).expect("deserialize SessionTrace");
+
+        assert_eq!(restored.context_window, 200_000);
+        assert_eq!(restored.final_context_tokens, 95_000);
+        assert_eq!(restored.trace_id, trace.trace_id);
+        assert_eq!(restored.total_cost_usd, trace.total_cost_usd);
+    }
+
+    // ── Test C: record_iteration sets context fields (last call wins) ──
+
+    #[test]
+    fn record_iteration_sets_context_fields_last_call_wins() {
+        let collector = TraceCollector::new("/tmp", "test-repo");
+        let mut trace = collector.start_session("/tmp/repo", "context test", None);
+
+        let now = Utc::now();
+        let later = now + chrono::Duration::seconds(10);
+
+        // First iteration: context_window=200_000, final_context_tokens=50_000
+        let attrs1 = make_test_span_attrs(1, 50_000, 200_000);
+        collector.record_iteration(&mut trace, now, later, attrs1, false);
+
+        // After first iteration, trace should reflect first iteration's values
+        assert_eq!(trace.context_window, 200_000);
+        assert_eq!(trace.final_context_tokens, 50_000);
+
+        // Second iteration: context_window=180_000, final_context_tokens=120_000
+        let attrs2 = make_test_span_attrs(2, 120_000, 180_000);
+        collector.record_iteration(&mut trace, later, later + chrono::Duration::seconds(10), attrs2, false);
+
+        // After second iteration, trace should reflect the LAST iteration's values
+        assert_eq!(
+            trace.context_window, 180_000,
+            "context_window should be overwritten by last iteration"
+        );
+        assert_eq!(
+            trace.final_context_tokens, 120_000,
+            "final_context_tokens should be overwritten by last iteration"
+        );
+    }
+
+    // ── Test D: finalize recomputes context from last iteration ──
+
+    #[tokio::test]
+    async fn finalize_recomputes_context_from_last_iteration() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let mut trace = collector.start_session("/tmp/repo", "finalize context test", None);
+
+        let now = Utc::now();
+
+        // Manually construct two iteration spans with different context values
+        let span1 = IterationSpan {
+            trace_id: trace.trace_id.clone(),
+            span_id: "span-iter-1".to_string(),
+            parent_span_id: trace.root_span_id.clone(),
+            operation_name: "ralph.iteration.1".to_string(),
+            start_time: now,
+            end_time: now + chrono::Duration::seconds(5),
+            duration_ms: 5000,
+            status: SpanStatus::Ok,
+            attributes: make_test_span_attrs(1, 60_000, 200_000),
+        };
+
+        let span2 = IterationSpan {
+            trace_id: trace.trace_id.clone(),
+            span_id: "span-iter-2".to_string(),
+            parent_span_id: trace.root_span_id.clone(),
+            operation_name: "ralph.iteration.2".to_string(),
+            start_time: now + chrono::Duration::seconds(5),
+            end_time: now + chrono::Duration::seconds(10),
+            duration_ms: 5000,
+            status: SpanStatus::Ok,
+            attributes: make_test_span_attrs(2, 150_000, 180_000),
+        };
+
+        trace.iterations.push(span1);
+        trace.iterations.push(span2);
+
+        // Deliberately set context fields to wrong values before finalize
+        trace.context_window = 999;
+        trace.final_context_tokens = 999;
+
+        let events: Vec<SessionEvent> = vec![];
+        collector
+            .finalize(&mut trace, &events)
+            .await
+            .expect("finalize should succeed");
+
+        // finalize should recompute context_window and final_context_tokens
+        // from the LAST iteration
+        assert_eq!(
+            trace.context_window, 180_000,
+            "finalize should set context_window from last iteration's model_token_usage"
+        );
+        assert_eq!(
+            trace.final_context_tokens, 150_000,
+            "finalize should set final_context_tokens from last iteration's SpanAttributes"
+        );
+    }
+
+    // ── Test: backward compat — old IterationSpan without final_context_tokens ──
+
+    #[test]
+    fn span_attributes_backward_compat_without_final_context_tokens() {
+        // Build a SpanAttributes, serialize it, strip final_context_tokens, deserialize
+        let attrs = make_test_span_attrs(1, 50000, 200000);
+        let json = serde_json::to_string(&attrs).expect("serialize SpanAttributes");
+
+        let mut value: serde_json::Value = serde_json::from_str(&json).expect("parse as Value");
+        let obj = value.as_object_mut().expect("top-level object");
+        assert!(
+            obj.remove("final_context_tokens").is_some(),
+            "final_context_tokens key should have been present"
+        );
+
+        let old_format_json = serde_json::to_string(&value).expect("re-serialize");
+        let restored: SpanAttributes =
+            serde_json::from_str(&old_format_json).expect("deserialize old-format SpanAttributes");
+
+        assert_eq!(restored.final_context_tokens, 0);
+        assert_eq!(restored.iteration, 1);
     }
 }
 

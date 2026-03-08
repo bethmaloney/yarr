@@ -81,17 +81,77 @@ pub fn generate_short_id() -> String {
 }
 
 /// Compute the worktree path: `~/.yarr/worktrees/<repo_id>-oneshot-<short_id>`
+///
+/// Returns a Unix-style path. On all platforms the worktree lives on the
+/// Unix filesystem (directly on Linux/macOS, inside WSL on Windows).
+/// On Windows, queries WSL for `$HOME` since the Windows-side HOME env var
+/// doesn't correspond to the WSL home directory.
 pub fn worktree_path(repo_id: &str, short_id: &str) -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home)
-        .join(".yarr")
-        .join("worktrees")
-        .join(format!("{}-oneshot-{}", repo_id, short_id))
+    let home = resolve_unix_home();
+    // Build path with forward slashes explicitly — PathBuf::join uses
+    // backslashes on Windows which would break Unix/WSL paths.
+    PathBuf::from(format!(
+        "{home}/.yarr/worktrees/{}-oneshot-{short_id}",
+        repo_id
+    ))
+}
+
+/// Get the Unix home directory path.
+/// On Windows, queries WSL for `$HOME`. On Unix, uses the `HOME` env var.
+fn resolve_unix_home() -> String {
+    if cfg!(windows) {
+        // Query WSL for the home directory
+        if let Ok(output) = std::process::Command::new("wsl")
+            .args(["-e", "bash", "-lc", "echo $HOME"])
+            .output()
+        {
+            let home = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !home.is_empty() && home.starts_with('/') {
+                return home;
+            }
+        }
+        "/tmp".to_string()
+    } else {
+        std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())
+    }
 }
 
 /// Compute the branch name: `oneshot/<slug>-<short_id>`
 pub fn branch_name(slug: &str, short_id: &str) -> String {
     format!("oneshot/{}-{}", slug, short_id)
+}
+
+/// Result from a Claude phase invocation with diagnostic details.
+struct ClaudePhaseResult {
+    text: String,
+    had_error: bool,
+    exit_code: i32,
+    stderr: String,
+}
+
+impl ClaudePhaseResult {
+    /// Build a human-readable error detail string for failed phases.
+    fn error_detail(&self) -> String {
+        let mut parts = Vec::new();
+        if self.exit_code != 0 {
+            parts.push(format!("exit code {}", self.exit_code));
+        }
+        let stderr_trimmed = self.stderr.trim();
+        if !stderr_trimmed.is_empty() {
+            // Truncate stderr to avoid huge messages
+            let truncated = if stderr_trimmed.len() > 500 {
+                format!("{}...", &stderr_trimmed[..500])
+            } else {
+                stderr_trimmed.to_string()
+            };
+            parts.push(truncated);
+        }
+        if parts.is_empty() {
+            "unknown error".to_string()
+        } else {
+            parts.join(": ")
+        }
+    }
 }
 
 /// Orchestrates a 1-shot autonomous implementation session.
@@ -162,12 +222,12 @@ impl OneShotRunner {
     }
 
     /// Spawn claude and drain all events from the process, collecting text output.
-    /// Returns the collected text from all AssistantEvent text blocks and the ResultEvent.
+    /// Returns the collected text, whether an error occurred, and diagnostic details.
     async fn run_claude_phase(
         &self,
         runtime: &dyn RuntimeProvider,
         invocation: &ClaudeInvocation,
-    ) -> Result<(String, bool)> {
+    ) -> Result<ClaudePhaseResult> {
         let mut process = runtime.spawn_claude(invocation).await?;
 
         // Register abort handle if we have a registry
@@ -213,7 +273,12 @@ impl OneShotRunner {
             had_error = true;
         }
 
-        Ok((collected_text, had_error))
+        Ok(ClaudePhaseResult {
+            text: collected_text,
+            had_error,
+            exit_code: exit.exit_code,
+            stderr: exit.stderr,
+        })
     }
 
     /// Extract a plan file path from the design phase output text.
@@ -265,7 +330,17 @@ impl OneShotRunner {
             return Err(anyhow::anyhow!("Cancelled"));
         }
 
-        // 1. Create worktree
+        // 1. Create worktree (ensure parent directory exists first)
+        if let Some(parent) = wt_path.parent() {
+            let _ = runtime
+                .run_command(
+                    &format!("mkdir -p {}", parent.display()),
+                    &self.config.repo_path,
+                    Duration::from_secs(30),
+                )
+                .await;
+        }
+
         let output = runtime
             .run_command(
                 &format!("git worktree add {} -b {}", wt_path.display(), branch),
@@ -319,11 +394,12 @@ impl OneShotRunner {
         let design_result = self.run_claude_phase(runtime, &design_invocation).await;
 
         match design_result {
-            Ok((design_text, design_error)) => {
-                if design_error {
+            Ok(design) => {
+                if design.had_error {
+                    let detail = design.error_detail();
                     self.cleanup_worktree(runtime, &wt_path).await;
                     self.emit(SessionEvent::OneShotFailed {
-                        reason: "Design phase Claude invocation failed".to_string(),
+                        reason: format!("Design phase Claude invocation failed: {}", detail),
                     });
                     trace.outcome = SessionOutcome::Failed;
                     trace.end_time = Some(Utc::now());
@@ -333,13 +409,13 @@ impl OneShotRunner {
                 }
 
                 // Try to extract plan file path from output
-                let plan_file = self.extract_plan_file_from_output(&design_text);
+                let plan_file = self.extract_plan_file_from_output(&design.text);
 
                 // Determine the plan file path
                 let plan_file_path = if let Some(p) = plan_file {
                     // Found a plan file reference in the output
                     p
-                } else if design_text.contains("<promise>COMPLETE</promise>") {
+                } else if design.text.contains("<promise>COMPLETE</promise>") {
                     // Claude claimed completion but didn't reference a plan file.
                     // This indicates the design phase completed without producing a plan.
                     self.cleanup_worktree(runtime, &wt_path).await;
@@ -379,8 +455,8 @@ impl OneShotRunner {
                 // 3. Implementation phase
                 self.emit(SessionEvent::ImplementationPhaseStarted);
 
-                let plan_file_abs = wt_path.join(&plan_file_path);
-                let impl_prompt = prompt::build_prompt(&plan_file_abs.to_string_lossy());
+                let plan_file_abs = format!("{}/{}", wt_path.display(), plan_file_path);
+                let impl_prompt = prompt::build_prompt(&plan_file_abs);
                 let impl_invocation = ClaudeInvocation {
                     prompt: impl_prompt,
                     working_dir: wt_path.clone(),
@@ -392,11 +468,12 @@ impl OneShotRunner {
                 let impl_result = self.run_claude_phase(runtime, &impl_invocation).await;
 
                 match impl_result {
-                    Ok((_impl_text, impl_error)) => {
-                        if impl_error {
+                    Ok(impl_phase) => {
+                        if impl_phase.had_error {
+                            let detail = impl_phase.error_detail();
                             self.cleanup_worktree(runtime, &wt_path).await;
                             self.emit(SessionEvent::OneShotFailed {
-                                reason: "Implementation phase Claude invocation failed".to_string(),
+                                reason: format!("Implementation phase Claude invocation failed: {}", detail),
                             });
                             trace.outcome = SessionOutcome::Failed;
                             trace.end_time = Some(Utc::now());
@@ -752,11 +829,12 @@ mod tests {
     #[test]
     fn test_worktree_path_starts_with_home() {
         let path = worktree_path("repo", "id1234");
-        // Should be an absolute path starting with the home directory
+        // Should be an absolute Unix path (starts with /)
+        let path_str = path.to_string_lossy();
         assert!(
-            path.is_absolute(),
-            "worktree_path should be absolute, got: '{}'",
-            path.display()
+            path_str.starts_with('/'),
+            "worktree_path should start with '/', got: '{}'",
+            path_str
         );
     }
 

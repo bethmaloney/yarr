@@ -5,6 +5,7 @@
   import type { Check, SessionState } from "./types";
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import EventsList from "./EventsList.svelte";
+  import { sessionContextColor } from "./context-bar";
 
   let {
     repo,
@@ -21,17 +22,21 @@
     onBack: () => void;
     onRun: (planFile: string) => void;
     onMockRun: () => void;
-    onUpdateRepo: (repo: RepoConfig) => void;
+    onUpdateRepo: (repo: RepoConfig) => Promise<void>;
     onReconnect: () => void;
     onOneShot: () => void;
   } = $props();
 
   // Local settings state, initialized from repo prop
-  let model = $state("");
-  let maxIterations = $state(1);
-  let completionSignal = $state("");
-  let envVars: { key: string; value: string }[] = $state([]);
-  let checks: Check[] = $state([]);
+  let editingName = $state(false);
+  let nameInput = $state(repo.name);
+  let model = $state(repo.model);
+  let maxIterations = $state(repo.maxIterations);
+  let completionSignal = $state(repo.completionSignal);
+  let envVars: { key: string; value: string }[] = $state(
+    Object.entries(repo.envVars ?? {}).map(([key, value]) => ({ key, value })),
+  );
+  let checks: Check[] = $state(repo.checks ?? []);
   let checksOpen = $state(false);
   let gitSyncEnabled = $state(false);
   let gitSyncModel = $state("");
@@ -40,6 +45,8 @@
 
   // Re-sync local state when repo prop changes (e.g., navigating to a different repo)
   $effect(() => {
+    nameInput = repo.name;
+    editingName = false;
     model = repo.model;
     maxIterations = repo.maxIterations;
     completionSignal = repo.completionSignal;
@@ -119,6 +126,23 @@
     });
   }
 
+  async function saveName() {
+    const trimmed = nameInput.trim();
+    if (trimmed && trimmed !== repo.name) {
+      await onUpdateRepo({ ...repo, name: trimmed });
+    }
+    editingName = false;
+  }
+
+  function handleNameKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      saveName();
+    } else if (e.key === "Escape") {
+      nameInput = repo.name;
+      editingName = false;
+    }
+  }
+
   async function stopSession() {
     try {
       await invoke("stop_session", { repoId: repo.id });
@@ -134,7 +158,22 @@
   />
 
   <header>
-    <h1>{repo.name}</h1>
+    {#if editingName}
+      <input
+        class="name-input"
+        type="text"
+        bind:value={nameInput}
+        onblur={saveName}
+        onkeydown={handleNameKeydown}
+        autofocus
+      />
+    {:else}
+      <h1>
+        <button class="name-edit" onclick={() => { editingName = true; }}>
+          {repo.name}
+        </button>
+      </h1>
+    {/if}
     <p class="repo-path">
       {repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`}
     </p>
@@ -410,6 +449,15 @@
         <dd>{session.trace.total_iterations}</dd>
         <dt>Total Cost</dt>
         <dd>${session.trace.total_cost_usd.toFixed(4)}</dd>
+        {#if session.trace.context_window}
+          {@const ctxPercent = Math.round((session.trace.final_context_tokens! / session.trace.context_window) * 100)}
+          <dt>Context</dt>
+          <dd>
+            <span style="color: {sessionContextColor(ctxPercent)}" title="{session.trace.final_context_tokens!.toLocaleString()} tokens">
+              {ctxPercent}%
+            </span>
+          </dd>
+        {/if}
         <dt>Session ID</dt>
         <dd>{session.trace.session_id}</dd>
       </dl>
@@ -433,6 +481,30 @@
     font-size: 2rem;
     margin-bottom: 0;
     color: #e8d44d;
+  }
+
+  .name-edit {
+    all: unset;
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+  }
+
+  .name-edit:hover {
+    background: #e8d44d;
+    color: #1a1a2e;
+    border-bottom-color: transparent;
+  }
+
+  .name-input {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #e8d44d;
+    background: #16213e;
+    border: 1px solid #e8d44d;
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    font-family: inherit;
+    width: 100%;
   }
 
   .repo-path {

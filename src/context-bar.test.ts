@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { formatTokenCount, contextBarColor } from "./context-bar";
+import {
+  formatTokenCount,
+  contextBarColor,
+  sessionContextColor,
+} from "./context-bar";
 
 describe("formatTokenCount", () => {
   it('formats 0 as "0"', () => {
@@ -63,5 +67,31 @@ describe("contextBarColor", () => {
 
   it("returns red for 100%", () => {
     expect(contextBarColor(100)).toBe("#f87171");
+  });
+});
+
+describe("sessionContextColor", () => {
+  it("returns green for 0%", () => {
+    expect(sessionContextColor(0)).toBe("#34d399");
+  });
+
+  it("returns green for 59%", () => {
+    expect(sessionContextColor(59)).toBe("#34d399");
+  });
+
+  it("returns yellow for 60%", () => {
+    expect(sessionContextColor(60)).toBe("#fbbf24");
+  });
+
+  it("returns yellow for 85%", () => {
+    expect(sessionContextColor(85)).toBe("#fbbf24");
+  });
+
+  it("returns red for 86%", () => {
+    expect(sessionContextColor(86)).toBe("#f87171");
+  });
+
+  it("returns red for 100%", () => {
+    expect(sessionContextColor(100)).toBe("#f87171");
   });
 });
