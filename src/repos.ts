@@ -1,4 +1,5 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
+import type { Check } from "./types";
 
 const store = new LazyStore("repos.json");
 
@@ -11,6 +12,7 @@ type LocalRepoConfig = {
   maxIterations: number;
   completionSignal: string;
   envVars?: Record<string, string>;
+  checks?: Check[];
 };
 
 type SshRepoConfig = {
@@ -23,6 +25,7 @@ type SshRepoConfig = {
   maxIterations: number;
   completionSignal: string;
   envVars?: Record<string, string>;
+  checks?: Check[];
 };
 
 export type RepoConfig = LocalRepoConfig | SshRepoConfig;
@@ -32,7 +35,10 @@ export async function loadRepos(): Promise<RepoConfig[]> {
   if (!repos) return [];
   return repos.map((r) => {
     if (!r.type) {
-      return { ...r, type: "local" } as RepoConfig;
+      r.type = "local";
+    }
+    if (!r.checks) {
+      r.checks = [];
     }
     return r as RepoConfig;
   });
@@ -49,6 +55,7 @@ export async function addLocalRepo(path: string): Promise<RepoConfig> {
     model: "opus",
     maxIterations: 40,
     completionSignal: "ALL TODO ITEMS COMPLETE",
+    checks: [],
   };
   repos.push(repo);
   await store.set("repos", repos);
@@ -71,6 +78,7 @@ export async function addSshRepo(
     model: "opus",
     maxIterations: 40,
     completionSignal: "ALL TODO ITEMS COMPLETE",
+    checks: [],
   };
   repos.push(repo);
   await store.set("repos", repos);

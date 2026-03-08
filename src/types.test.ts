@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type {
+  Check,
   SessionEvent,
   SessionTrace,
   SessionState,
@@ -276,5 +277,126 @@ describe("TaggedSessionEvent", () => {
     expect(tagged.repo_id).toBe("repo-xyz");
     expect(tagged.event.kind).toBe("system");
     expect(tagged.event.text).toBeUndefined();
+  });
+});
+
+describe("Check", () => {
+  it("accepts a Check with all required fields", () => {
+    const check: Check = {
+      name: "lint",
+      command: "npm run lint",
+      when: "each_iteration",
+      timeoutSecs: 60,
+      maxRetries: 3,
+    };
+    expect(check.name).toBe("lint");
+    expect(check.command).toBe("npm run lint");
+    expect(check.when).toBe("each_iteration");
+    expect(check.timeoutSecs).toBe(60);
+    expect(check.maxRetries).toBe(3);
+  });
+
+  it("accepts a Check with optional fields omitted", () => {
+    const check: Check = {
+      name: "typecheck",
+      command: "npx tsc --noEmit",
+      when: "post_completion",
+      timeoutSecs: 120,
+      maxRetries: 2,
+    };
+    expect(check.prompt).toBeUndefined();
+    expect(check.model).toBeUndefined();
+  });
+
+  it("accepts a Check with all optional fields populated", () => {
+    const check: Check = {
+      name: "test",
+      command: "npm test",
+      when: "post_completion",
+      prompt: "Fix failing tests",
+      model: "sonnet",
+      timeoutSecs: 300,
+      maxRetries: 5,
+    };
+    expect(check.prompt).toBe("Fix failing tests");
+    expect(check.model).toBe("sonnet");
+  });
+
+  it("accepts when value each_iteration", () => {
+    const check: Check = {
+      name: "format",
+      command: "npx prettier --check .",
+      when: "each_iteration",
+      timeoutSecs: 30,
+      maxRetries: 1,
+    };
+    expect(check.when).toBe("each_iteration");
+  });
+
+  it("accepts when value post_completion", () => {
+    const check: Check = {
+      name: "build",
+      command: "npm run build",
+      when: "post_completion",
+      timeoutSecs: 180,
+      maxRetries: 2,
+    };
+    expect(check.when).toBe("post_completion");
+  });
+});
+
+describe("SessionEvent check fields", () => {
+  it("accepts a check_started event with check_name", () => {
+    const event: SessionEvent = {
+      kind: "check_started",
+      check_name: "lint",
+    };
+    expect(event.kind).toBe("check_started");
+    expect(event.check_name).toBe("lint");
+  });
+
+  it("accepts a check_failed event with check_name and output", () => {
+    const event: SessionEvent = {
+      kind: "check_failed",
+      check_name: "typecheck",
+      output: "error TS2304: Cannot find name 'Foo'",
+    };
+    expect(event.kind).toBe("check_failed");
+    expect(event.check_name).toBe("typecheck");
+    expect(event.output).toBe("error TS2304: Cannot find name 'Foo'");
+  });
+
+  it("accepts a check_fix_started event with check_name and attempt", () => {
+    const event: SessionEvent = {
+      kind: "check_fix_started",
+      check_name: "lint",
+      attempt: 1,
+    };
+    expect(event.kind).toBe("check_fix_started");
+    expect(event.check_name).toBe("lint");
+    expect(event.attempt).toBe(1);
+  });
+
+  it("accepts a check_fix_complete event with check_name, attempt, and success", () => {
+    const event: SessionEvent = {
+      kind: "check_fix_complete",
+      check_name: "test",
+      attempt: 2,
+      success: true,
+    };
+    expect(event.kind).toBe("check_fix_complete");
+    expect(event.check_name).toBe("test");
+    expect(event.attempt).toBe(2);
+    expect(event.success).toBe(true);
+  });
+
+  it("accepts a check_fix_complete event where success is false", () => {
+    const event: SessionEvent = {
+      kind: "check_fix_complete",
+      check_name: "build",
+      attempt: 3,
+      success: false,
+    };
+    expect(event.success).toBe(false);
   });
 });

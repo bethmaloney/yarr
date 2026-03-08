@@ -47,6 +47,7 @@ describe("loadRepos", () => {
         model: "opus",
         maxIterations: 40,
         completionSignal: "ALL TODO ITEMS COMPLETE",
+        checks: [],
       },
       {
         type: "ssh",
@@ -57,6 +58,7 @@ describe("loadRepos", () => {
         model: "sonnet",
         maxIterations: 20,
         completionSignal: "DONE",
+        checks: [],
       },
     ];
     mockData.set("repos", existing);
@@ -132,6 +134,36 @@ describe("loadRepos", () => {
       expect(result[0].remotePath).toBe("/home/beth/repos/project");
     }
   });
+
+  it("migrates repos without checks field to have checks: []", async () => {
+    const reposWithoutChecks = [
+      {
+        type: "local",
+        id: "no-checks-1",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+      {
+        type: "ssh",
+        id: "no-checks-2",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ];
+    mockData.set("repos", reposWithoutChecks);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(2);
+    expect(result[0]).toHaveProperty("checks", []);
+    expect(result[1]).toHaveProperty("checks", []);
+  });
 });
 
 describe("addLocalRepo", () => {
@@ -202,7 +234,13 @@ describe("addLocalRepo", () => {
       model: "opus",
       maxIterations: 40,
       completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
     });
+  });
+
+  it("includes checks: [] in defaults", async () => {
+    const repo = await addLocalRepo("/home/beth/repos/yarr");
+    expect(repo).toHaveProperty("checks", []);
   });
 });
 
@@ -276,7 +314,13 @@ describe("addSshRepo", () => {
       model: "opus",
       maxIterations: 40,
       completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
     });
+  });
+
+  it("includes checks: [] in defaults", async () => {
+    const repo = await addSshRepo("dev-server", "/home/beth/repos/project");
+    expect(repo).toHaveProperty("checks", []);
   });
 });
 
@@ -359,6 +403,7 @@ describe("updateRepo", () => {
         model: "opus",
         maxIterations: 40,
         completionSignal: "ALL TODO ITEMS COMPLETE",
+        checks: [],
       },
     ];
     mockData.set("repos", existing);
@@ -421,6 +466,7 @@ describe("removeRepo", () => {
         model: "opus",
         maxIterations: 40,
         completionSignal: "ALL TODO ITEMS COMPLETE",
+        checks: [],
       },
     ];
     mockData.set("repos", existing);

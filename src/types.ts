@@ -1,3 +1,13 @@
+export type Check = {
+  name: string;
+  command: string;
+  when: "each_iteration" | "post_completion";
+  prompt?: string;
+  model?: string;
+  timeoutSecs: number;
+  maxRetries: number;
+};
+
 export type SessionEvent = {
   kind: string;
   session_id?: string;
@@ -7,6 +17,10 @@ export type SessionEvent = {
   text?: string;
   result?: Record<string, unknown>;
   outcome?: string;
+  check_name?: string;
+  output?: string;
+  attempt?: number;
+  success?: boolean;
   _ts?: number;
 };
 

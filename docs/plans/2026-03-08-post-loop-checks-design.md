@@ -416,12 +416,12 @@ Wire checks from the frontend IPC call through to `SessionConfig`.
 - In `repos.ts`: handle migration in `loadRepos` — if a repo has no `checks` field, default to `[]`
 
 **Checklist:**
-- [ ] Add `Check` type to `types.ts`
-- [ ] Add check-related fields to `SessionEvent`
-- [ ] Add `checks` field to both repo config types
-- [ ] Update `addLocalRepo` and `addSshRepo` defaults
-- [ ] Add migration fallback in `loadRepos`
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `Check` type to `types.ts`
+- [x] Add check-related fields to `SessionEvent`
+- [x] Add `checks` field to both repo config types
+- [x] Update `addLocalRepo` and `addSshRepo` defaults
+- [x] Add migration fallback in `loadRepos`
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -583,7 +583,7 @@ Add visual treatment for check-related events.
 | 7 | run_checks method on SessionRunner | Done |
 | 8 | Integrate run_checks into session loop | Done |
 | 9 | Pass checks through Tauri command | Done |
-| 10 | Frontend Check type + RepoConfig update | Not Started |
+| 10 | Frontend Check type + RepoConfig update | Done |
 | 11 | Checks settings UI in RepoDetail | Not Started |
 | 12 | Pass checks from App.svelte to invoke | Not Started |
 | 13 | Display check events in EventsList | Not Started |

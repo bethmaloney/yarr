@@ -19,6 +19,7 @@ pub enum CheckWhen {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Check {
     pub name: String,
     pub command: String,
@@ -767,8 +768,8 @@ mod tests {
         assert_eq!(json["when"], "each_iteration");
         assert_eq!(json["prompt"], "Fix lint errors");
         assert_eq!(json["model"], "claude-sonnet");
-        assert_eq!(json["timeout_secs"], 600);
-        assert_eq!(json["max_retries"], 5);
+        assert_eq!(json["timeoutSecs"], 600);
+        assert_eq!(json["maxRetries"], 5);
     }
 
     #[test]
@@ -779,8 +780,8 @@ mod tests {
             "when": "post_completion",
             "prompt": "Fix failing tests",
             "model": "claude-opus",
-            "timeout_secs": 300,
-            "max_retries": 2
+            "timeoutSecs": 300,
+            "maxRetries": 2
         });
 
         let check: Check = serde_json::from_value(json).expect("deserialize Check");
