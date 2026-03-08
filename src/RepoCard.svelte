@@ -15,7 +15,7 @@
     onclick: () => void;
   } = $props();
 
-  const statusColors: Record<typeof status, string> = {
+  const statusColors: Record<RepoStatus, string> = {
     idle: "#888",
     running: "#e8d44d",
     completed: "#34d399",
@@ -23,7 +23,7 @@
     disconnected: "#f59e0b",
   };
 
-  const statusLabels: Record<typeof status, string> = {
+  const statusLabels: Record<RepoStatus, string> = {
     idle: "Idle",
     running: "Running",
     completed: "Completed",

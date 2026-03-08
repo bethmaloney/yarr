@@ -24,7 +24,7 @@
 
   let title = $state("");
   let prompt = $state("");
-  let model = $state(repo.model);
+  let model = $state("");
   let mergeStrategy = $state("merge_to_main");
 
   $effect(() => {

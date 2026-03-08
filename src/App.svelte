@@ -27,7 +27,7 @@
     | { kind: "oneshot"; repoId: string } =
     $state({ kind: "home" });
   let repos: RepoConfig[] = $state([]);
-  let sessions = new SvelteMap<string, SessionState>();
+  let sessions: SvelteMap<string, SessionState> = $state(new SvelteMap());
   let latestTraces: Map<string, SessionTrace> = $state(new Map());
   let addMode: null | "choosing" | "ssh-form" = $state(null);
   let sshHost = $state("");
@@ -363,12 +363,3 @@
     />
   {/if}
 {/if}
-
-<style>
-  :global(body) {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #1a1a2e;
-    color: #e0e0e0;
-  }
-</style>

@@ -27,18 +27,16 @@
   } = $props();
 
   // Local settings state, initialized from repo prop
-  let model = $state(repo.model);
-  let maxIterations = $state(repo.maxIterations);
-  let completionSignal = $state(repo.completionSignal);
-  let envVars: { key: string; value: string }[] = $state(
-    Object.entries(repo.envVars ?? {}).map(([key, value]) => ({ key, value })),
-  );
-  let checks: Check[] = $state(repo.checks ?? []);
+  let model = $state("");
+  let maxIterations = $state(1);
+  let completionSignal = $state("");
+  let envVars: { key: string; value: string }[] = $state([]);
+  let checks: Check[] = $state([]);
   let checksOpen = $state(false);
-  let gitSyncEnabled = $state(repo.gitSync?.enabled ?? false);
-  let gitSyncModel = $state(repo.gitSync?.model ?? "");
-  let gitSyncMaxRetries = $state(repo.gitSync?.maxPushRetries ?? 3);
-  let gitSyncPrompt = $state(repo.gitSync?.conflictPrompt ?? "");
+  let gitSyncEnabled = $state(false);
+  let gitSyncModel = $state("");
+  let gitSyncMaxRetries = $state(3);
+  let gitSyncPrompt = $state("");
 
   // Re-sync local state when repo prop changes (e.g., navigating to a different repo)
   $effect(() => {
