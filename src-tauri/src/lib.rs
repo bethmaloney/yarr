@@ -61,6 +61,8 @@ async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trac
         extra_args: vec![],
         plan_file: None,
         inter_iteration_delay_ms: 100,
+        env_vars: HashMap::new(),
+        checks: Vec::new(),
     };
 
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -92,6 +94,7 @@ async fn run_session(
     model: String,
     max_iterations: u32,
     completion_signal: String,
+    env_vars: Option<HashMap<String, String>>,
 ) -> Result<trace::SessionTrace, String> {
     let cancel_token = CancellationToken::new();
     {
@@ -131,6 +134,8 @@ async fn run_session(
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 plan_file: Some(plan_file),
                 inter_iteration_delay_ms: 1000,
+                env_vars: env_vars.unwrap_or_default(),
+                checks: Vec::new(),
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -173,6 +178,8 @@ async fn run_session(
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 plan_file: Some(plan_file),
                 inter_iteration_delay_ms: 1000,
+                env_vars: env_vars.unwrap_or_default(),
+                checks: Vec::new(),
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;

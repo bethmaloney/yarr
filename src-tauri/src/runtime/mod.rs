@@ -20,6 +20,7 @@ pub struct ClaudeInvocation {
     pub working_dir: std::path::PathBuf,
     pub model: Option<String>,
     pub extra_args: Vec<String>,
+    pub env_vars: std::collections::HashMap<String, String>,
 }
 
 /// Trait for aborting a running process. Implementations can do
@@ -66,6 +67,14 @@ pub fn default_runtime() -> Box<dyn RuntimeProvider> {
     }
 }
 
+/// Output from running an arbitrary shell command
+#[derive(Debug, Clone)]
+pub struct CommandOutput {
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
 /// Abstraction over execution environments.
 /// Implement this trait to add new runtimes (SSH, macOS local, etc.)
 #[async_trait::async_trait]
@@ -79,4 +88,12 @@ pub trait RuntimeProvider: Send + Sync {
 
     /// Check if the runtime is available and claude is installed
     async fn health_check(&self) -> Result<()>;
+
+    /// Run an arbitrary shell command and return its output
+    async fn run_command(
+        &self,
+        command: &str,
+        working_dir: &std::path::Path,
+        timeout: std::time::Duration,
+    ) -> Result<CommandOutput>;
 }

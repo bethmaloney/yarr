@@ -3,12 +3,14 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::mpsc;
 
-use super::{ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
+use super::{ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
 use crate::output::*;
 
 pub struct MockRuntime {
     scenarios: Vec<MockScenario>,
     call_count: AtomicUsize,
+    pub command_results: Vec<CommandOutput>,
+    command_call_count: AtomicUsize,
 }
 
 /// What a single mock invocation should emit
@@ -40,6 +42,8 @@ impl MockRuntime {
         Self {
             scenarios,
             call_count: AtomicUsize::new(0),
+            command_results: Vec::new(),
+            command_call_count: AtomicUsize::new(0),
         }
     }
 }
@@ -175,5 +179,89 @@ impl RuntimeProvider for MockRuntime {
 
     async fn health_check(&self) -> Result<()> {
         Ok(())
+    }
+
+    async fn run_command(
+        &self,
+        _command: &str,
+        _working_dir: &std::path::Path,
+        _timeout: std::time::Duration,
+    ) -> Result<CommandOutput> {
+        if self.command_results.is_empty() {
+            return Ok(CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            });
+        }
+        let idx = self.command_call_count.fetch_add(1, Ordering::SeqCst);
+        let result = &self.command_results[idx.min(self.command_results.len() - 1)];
+        Ok(result.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RuntimeProvider;
+
+    #[tokio::test]
+    async fn mock_runtime_run_command_default_success() {
+        let runtime = MockRuntime::completing_after(1);
+        let output = runtime
+            .run_command("echo hello", &std::path::PathBuf::from("/tmp"), std::time::Duration::from_secs(60))
+            .await
+            .expect("run_command should succeed");
+        assert_eq!(output.exit_code, 0);
+        assert!(output.stdout.is_empty(), "default stdout should be empty");
+        assert!(output.stderr.is_empty(), "default stderr should be empty");
+    }
+
+    #[tokio::test]
+    async fn mock_runtime_run_command_configured_results() {
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![CommandOutput {
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: "lint failed".to_string(),
+        }];
+
+        let output = runtime
+            .run_command("npm run lint", &std::path::PathBuf::from("/project"), std::time::Duration::from_secs(60))
+            .await
+            .expect("run_command should succeed even with non-zero exit");
+        assert_eq!(output.exit_code, 1);
+        assert_eq!(output.stderr, "lint failed");
+    }
+
+    #[tokio::test]
+    async fn mock_runtime_run_command_cycles_results() {
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            CommandOutput {
+                exit_code: 1,
+                stdout: "first".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: "second".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let out1 = runtime
+            .run_command("cmd", &std::path::PathBuf::from("/tmp"), std::time::Duration::from_secs(60))
+            .await
+            .expect("first call");
+        assert_eq!(out1.exit_code, 1);
+        assert_eq!(out1.stdout, "first");
+
+        let out2 = runtime
+            .run_command("cmd", &std::path::PathBuf::from("/tmp"), std::time::Duration::from_secs(60))
+            .await
+            .expect("second call");
+        assert_eq!(out2.exit_code, 0);
+        assert_eq!(out2.stdout, "second");
     }
 }
