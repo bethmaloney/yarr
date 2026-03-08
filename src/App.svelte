@@ -205,6 +205,7 @@
         maxIterations: repo.maxIterations,
         completionSignal: repo.completionSignal,
         envVars: repo.envVars ?? {},
+        checks: repo.checks ?? [],
       });
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, trace });

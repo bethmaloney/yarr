@@ -2,7 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import type { RepoConfig } from "./repos";
-  import type { SessionState } from "./types";
+  import type { Check, SessionState } from "./types";
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import EventsList from "./EventsList.svelte";
 
@@ -31,6 +31,8 @@
   let envVars: { key: string; value: string }[] = $state(
     Object.entries(repo.envVars ?? {}).map(([key, value]) => ({ key, value })),
   );
+  let checks: Check[] = $state(repo.checks ?? []);
+  let checksOpen = $state(false);
 
   // Re-sync local state when repo prop changes (e.g., navigating to a different repo)
   $effect(() => {
@@ -41,6 +43,7 @@
       key,
       value,
     }));
+    checks = repo.checks ?? [];
   });
 
   let planFile = $state("");
@@ -98,6 +101,7 @@
       maxIterations,
       completionSignal,
       envVars: envVarsRecord,
+      checks,
     });
   }
 
@@ -198,6 +202,58 @@
         {/if}
       </div>
     </div>
+  </details>
+
+  <details class="checks" bind:open={checksOpen}>
+    <summary>Checks — {checks.length} configured</summary>
+    {#if checksOpen}
+      <div class="checks-form">
+        {#each checks as check, i}
+          <details class="check-entry">
+            <summary>
+              <span class="check-summary-text">{check.name || "New Check"}</span>
+              <button
+                type="button"
+                class="check-remove"
+                disabled={session.running}
+                onclick={(e) => { e.preventDefault(); checks = checks.filter((_, j) => j !== i); }}
+              >&times;</button>
+            </summary>
+            <div class="check-fields">
+              <label>
+                Name
+                <input type="text" bind:value={check.name} disabled={session.running} />
+              </label>
+              <label>
+                Command
+                <input type="text" bind:value={check.command} disabled={session.running} />
+              </label>
+              <label>
+                When
+                <select bind:value={check.when} disabled={session.running}>
+                  <option value="each_iteration">each_iteration</option>
+                  <option value="post_completion">post_completion</option>
+                </select>
+              </label>
+              <label>
+                Timeout
+                <input type="number" bind:value={check.timeoutSecs} min="1" disabled={session.running} />
+              </label>
+              <label>
+                Retries
+                <input type="number" bind:value={check.maxRetries} min="0" disabled={session.running} />
+              </label>
+            </div>
+          </details>
+        {/each}
+        <button
+          type="button"
+          class="secondary check-add"
+          disabled={session.running}
+          onclick={() => { checks = [...checks, { name: "", command: "", when: "each_iteration", timeoutSecs: 300, maxRetries: 1 }]; }}
+        >Add Check</button>
+      </div>
+    {/if}
   </details>
 
   <section class="plan-section">
@@ -337,6 +393,91 @@
     border-bottom: 1px solid #333;
     padding-bottom: 0.3rem;
     cursor: pointer;
+  }
+
+  details.checks {
+    margin-top: 1.5rem;
+  }
+
+  details.checks > summary {
+    font-size: 1rem;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #333;
+    padding-bottom: 0.3rem;
+    cursor: pointer;
+  }
+
+  .checks-form {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  details.check-entry {
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 0.75rem;
+  }
+
+  details.check-entry summary {
+    font-size: 0.9rem;
+    color: #ccc;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .check-fields {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .check-remove {
+    padding: 0.3rem 0.5rem;
+    font-size: 1rem;
+    line-height: 1;
+    background: transparent;
+    color: #666;
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+
+  .check-remove:hover:not(:disabled) {
+    color: #f87171;
+    border-color: #f87171;
+    background: transparent;
+  }
+
+  .check-add {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.6rem;
+  }
+
+  select {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.9rem;
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+
+  select:disabled {
+    opacity: 0.5;
+  }
+
+  select:focus {
+    outline: none;
+    border-color: #e8d44d;
   }
 
   h2 {
