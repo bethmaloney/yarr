@@ -367,9 +367,10 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 - `GitSyncConfig` is already deserializable from frontend JSON via serde derives
 
 **Checklist:**
-- [ ] Add `git_sync` parameter to `run_session`
-- [ ] Wire into `SessionConfig`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `git_sync` parameter to `run_session`
+- [x] Wire into `SessionConfig`
+- [x] Add `rename_all = "camelCase"` to `GitSyncConfig` serde attribute for frontend compatibility
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -536,7 +537,7 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 | 3 | Default conflict resolution prompt | Done |
 | 4 | git_sync method on SessionRunner | Done |
 | 5 | Integrate git_sync into session loop | Done |
-| 6 | Pass GitSyncConfig through Tauri command | Not Started |
+| 6 | Pass GitSyncConfig through Tauri command | Done |
 | 7 | Frontend GitSyncConfig type + RepoConfig update | Not Started |
 | 8 | Git Sync settings UI in RepoDetail | Not Started |
 | 9 | Pass gitSync from App.svelte to invoke | Not Started |

@@ -33,7 +33,7 @@ pub struct Check {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, rename_all = "camelCase")]
 pub struct GitSyncConfig {
     pub enabled: bool,
     pub conflict_prompt: Option<String>,
@@ -1884,18 +1884,18 @@ mod tests {
 
         let json = serde_json::to_value(&config).expect("serialize GitSyncConfig");
         assert_eq!(json["enabled"], true);
-        assert_eq!(json["conflict_prompt"], "Resolve these merge conflicts");
+        assert_eq!(json["conflictPrompt"], "Resolve these merge conflicts");
         assert_eq!(json["model"], "sonnet");
-        assert_eq!(json["max_push_retries"], 5);
+        assert_eq!(json["maxPushRetries"], 5);
     }
 
     #[test]
     fn git_sync_config_deserializes_from_json() {
         let json = serde_json::json!({
             "enabled": true,
-            "conflict_prompt": "Fix conflicts please",
+            "conflictPrompt": "Fix conflicts please",
             "model": "opus",
-            "max_push_retries": 7
+            "maxPushRetries": 7
         });
 
         let config: GitSyncConfig = serde_json::from_value(json).expect("deserialize GitSyncConfig");
@@ -1909,7 +1909,7 @@ mod tests {
     fn git_sync_config_deserializes_with_optional_fields_absent() {
         let json = serde_json::json!({
             "enabled": false,
-            "max_push_retries": 2
+            "maxPushRetries": 2
         });
 
         let config: GitSyncConfig = serde_json::from_value(json).expect("deserialize GitSyncConfig with absent optionals");

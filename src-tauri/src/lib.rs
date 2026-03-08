@@ -109,6 +109,7 @@ async fn run_session(
     completion_signal: String,
     env_vars: Option<HashMap<String, String>>,
     checks: Option<Vec<session::Check>>,
+    git_sync: Option<session::GitSyncConfig>,
 ) -> Result<trace::SessionTrace, String> {
     let cancel_token = CancellationToken::new();
     {
@@ -150,7 +151,7 @@ async fn run_session(
                 inter_iteration_delay_ms: 1000,
                 env_vars: env_vars.unwrap_or_default(),
                 checks: checks.unwrap_or_default(),
-                git_sync: None,
+                git_sync,
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -198,7 +199,7 @@ async fn run_session(
                 inter_iteration_delay_ms: 1000,
                 env_vars: env_vars.unwrap_or_default(),
                 checks: checks.unwrap_or_default(),
-                git_sync: None,
+                git_sync,
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -820,5 +821,71 @@ mod tests {
         assert_eq!(json["repo_id"], "repo-4");
         assert_eq!(json["event"]["kind"], "one_shot_failed");
         assert_eq!(json["event"]["reason"], "design phase timed out");
+    }
+
+    // --- GitSyncConfig deserialization tests ---
+
+    #[test]
+    fn git_sync_config_deserializes_from_camel_case_json() {
+        let json = r#"{ "enabled": true, "conflictPrompt": "custom prompt", "model": "opus", "maxPushRetries": 5 }"#;
+        let config: session::GitSyncConfig =
+            serde_json::from_str(json).expect("deserialization should succeed");
+        assert!(config.enabled);
+        assert_eq!(config.conflict_prompt.as_deref(), Some("custom prompt"));
+        assert_eq!(config.model.as_deref(), Some("opus"));
+        assert_eq!(config.max_push_retries, 5);
+    }
+
+    #[test]
+    fn git_sync_config_deserializes_with_defaults_from_empty_object() {
+        let json = r#"{}"#;
+        let config: session::GitSyncConfig =
+            serde_json::from_str(json).expect("deserialization of empty object should succeed");
+        assert!(!config.enabled);
+        assert!(config.conflict_prompt.is_none());
+        assert!(config.model.is_none());
+        assert_eq!(config.max_push_retries, 3);
+    }
+
+    #[test]
+    fn git_sync_config_deserializes_with_partial_fields() {
+        let json = r#"{ "enabled": false }"#;
+        let config: session::GitSyncConfig =
+            serde_json::from_str(json).expect("deserialization with only enabled should succeed");
+        assert!(!config.enabled);
+        assert!(config.conflict_prompt.is_none());
+        assert!(config.model.is_none());
+        assert_eq!(config.max_push_retries, 3);
+    }
+
+    #[test]
+    fn git_sync_config_option_none_is_valid() {
+        let config: Option<session::GitSyncConfig> = None;
+        assert!(config.is_none());
+
+        // Also verify that JSON null deserializes to None
+        let json = r#"null"#;
+        let config: Option<session::GitSyncConfig> =
+            serde_json::from_str(json).expect("null should deserialize to None");
+        assert!(config.is_none());
+    }
+
+    #[test]
+    fn git_sync_config_round_trip() {
+        let original = session::GitSyncConfig {
+            enabled: true,
+            conflict_prompt: Some("resolve conflicts carefully".to_string()),
+            model: Some("sonnet".to_string()),
+            max_push_retries: 7,
+        };
+
+        let serialized = serde_json::to_string(&original).expect("serialization should succeed");
+        let deserialized: session::GitSyncConfig =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
+
+        assert_eq!(deserialized.enabled, original.enabled);
+        assert_eq!(deserialized.conflict_prompt, original.conflict_prompt);
+        assert_eq!(deserialized.model, original.model);
+        assert_eq!(deserialized.max_push_retries, original.max_push_retries);
     }
 }

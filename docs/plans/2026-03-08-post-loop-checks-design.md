@@ -445,14 +445,14 @@ Add the "Checks" subsection to the repo settings panel.
 - Wire `checks` into the `onRun` flow — pass through `onUpdateRepo` so they're in the repo config
 
 **Checklist:**
-- [ ] Add local `checks` state initialized from `repo.checks`
-- [ ] Add Checks `<details>` section with list of check entries
-- [ ] Add "Add Check" button
-- [ ] Add remove button per check
-- [ ] Add form fields for each check property
-- [ ] Wire into `saveSettings`
-- [ ] Disable all fields when running
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add local `checks` state initialized from `repo.checks`
+- [x] Add Checks `<details>` section with list of check entries
+- [x] Add "Add Check" button
+- [x] Add remove button per check
+- [x] Add form fields for each check property
+- [x] Wire into `saveSettings`
+- [x] Disable all fields when running
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -471,9 +471,9 @@ Wire the checks from repo config through the Tauri IPC call.
 - Pass `checks` as a parameter to the `invoke("run_session", { ..., checks })` call
 
 **Checklist:**
-- [ ] Add `checks` to the invoke parameters
-- [ ] Ensure field naming matches between frontend and Rust serde
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `checks` to the invoke parameters
+- [x] Ensure field naming matches between frontend and Rust serde
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -584,8 +584,8 @@ Add visual treatment for check-related events.
 | 8 | Integrate run_checks into session loop | Done |
 | 9 | Pass checks through Tauri command | Done |
 | 10 | Frontend Check type + RepoConfig update | Done |
-| 11 | Checks settings UI in RepoDetail | Not Started |
-| 12 | Pass checks from App.svelte to invoke | Not Started |
+| 11 | Checks settings UI in RepoDetail | Done |
+| 12 | Pass checks from App.svelte to invoke | Done |
 | 13 | Display check events in EventsList | Not Started |
 | 14 | Rust tests for run_command and run_checks | Done |
 | 15 | Frontend unit tests for Check types | Not Started |
