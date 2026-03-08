@@ -592,7 +592,7 @@ mod tests {
     use super::*;
     use crate::runtime::{CommandOutput, MockRuntime};
     use crate::session::SessionEvent;
-    use crate::trace::{SessionOutcome, TraceCollector};
+    use crate::trace::TraceCollector;
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
 
@@ -1256,7 +1256,7 @@ mod tests {
             stderr: String::new(),
         }];
 
-        let result = runner.run(&runtime).await;
+        let _result = runner.run(&runtime).await;
 
         // The run should either error or complete with a failure trace
         let captured = events.lock().unwrap();
@@ -1305,7 +1305,7 @@ mod tests {
         // The MockRuntime::completing_after(0) produces a single scenario that completes
         // immediately. In a real failure scenario, the design phase would fail to
         // produce a plan file. The implementation should detect this and emit OneShotFailed.
-        let result = runner.run(&runtime).await;
+        let _result = runner.run(&runtime).await;
 
         let captured = events.lock().unwrap();
 
@@ -1370,7 +1370,7 @@ mod tests {
             stderr: "fatal: 'some-path' already exists".to_string(),
         }];
 
-        let result = runner.run(&runtime).await;
+        let _result = runner.run(&runtime).await;
 
         let captured = events.lock().unwrap();
 
@@ -1429,7 +1429,7 @@ mod tests {
             },
         ];
 
-        let result = runner.run(&runtime).await;
+        let _result = runner.run(&runtime).await;
 
         let captured = events.lock().unwrap();
 

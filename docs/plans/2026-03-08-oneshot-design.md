@@ -379,12 +379,12 @@ Add Rust tests for the 1-shot runner.
 - Use `tempfile::TempDir` for worktree paths in tests
 
 **Checklist:**
-- [ ] Add unit tests for slugify and name generation helpers
-- [ ] Add integration test for merge-to-main flow with MockRuntime
-- [ ] Add integration test for branch flow with MockRuntime
-- [ ] Add test for cancellation
-- [ ] Add test for failure handling
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Add unit tests for slugify and name generation helpers
+- [x] Add integration test for merge-to-main flow with MockRuntime
+- [x] Add integration test for branch flow with MockRuntime
+- [x] Add test for cancellation
+- [x] Add test for failure handling
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -421,5 +421,5 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 | 6 | Add OneShotView frontend component | Done |
 | 7 | Integrate OneShotView into App navigation | Done |
 | 8 | Add Type column to HistoryView | Done |
-| 9 | Tests for OneShotRunner | Not Started |
+| 9 | Tests for OneShotRunner | Done |
 | 10 | Frontend tests for OneShotView | Not Started |
