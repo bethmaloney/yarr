@@ -412,13 +412,13 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 - Wire into `saveSettings` -- include `gitSync` in the `onUpdateRepo` call
 
 **Checklist:**
-- [ ] Add local `gitSync` state initialized from repo
-- [ ] Add Git Sync `<details>` section with enable toggle
-- [ ] Add model, max retries, and prompt fields
-- [ ] Dim fields when disabled
-- [ ] Wire into `saveSettings`
-- [ ] Disable all fields when running
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add local `gitSync` state initialized from repo
+- [x] Add Git Sync `<details>` section with enable toggle
+- [x] Add model, max retries, and prompt fields
+- [x] Dim fields when disabled
+- [x] Wire into `saveSettings`
+- [x] Disable all fields when running
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -539,7 +539,7 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 | 5 | Integrate git_sync into session loop | Done |
 | 6 | Pass GitSyncConfig through Tauri command | Done |
 | 7 | Frontend GitSyncConfig type + RepoConfig update | Done |
-| 8 | Git Sync settings UI in RepoDetail | Not Started |
+| 8 | Git Sync settings UI in RepoDetail | Done |
 | 9 | Pass gitSync from App.svelte to invoke | Not Started |
 | 10 | Display git sync events in EventsList | Not Started |
 | 11 | Rust tests for git_sync | Not Started |

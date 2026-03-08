@@ -35,6 +35,10 @@
   );
   let checks: Check[] = $state(repo.checks ?? []);
   let checksOpen = $state(false);
+  let gitSyncEnabled = $state(repo.gitSync?.enabled ?? false);
+  let gitSyncModel = $state(repo.gitSync?.model ?? "");
+  let gitSyncMaxRetries = $state(repo.gitSync?.maxPushRetries ?? 3);
+  let gitSyncPrompt = $state(repo.gitSync?.conflictPrompt ?? "");
 
   // Re-sync local state when repo prop changes (e.g., navigating to a different repo)
   $effect(() => {
@@ -46,6 +50,10 @@
       value,
     }));
     checks = repo.checks ?? [];
+    gitSyncEnabled = repo.gitSync?.enabled ?? false;
+    gitSyncModel = repo.gitSync?.model ?? "";
+    gitSyncMaxRetries = repo.gitSync?.maxPushRetries ?? 3;
+    gitSyncPrompt = repo.gitSync?.conflictPrompt ?? "";
   });
 
   let planFile = $state("");
@@ -104,6 +112,12 @@
       completionSignal,
       envVars: envVarsRecord,
       checks,
+      gitSync: {
+        enabled: gitSyncEnabled,
+        model: gitSyncModel || undefined,
+        maxPushRetries: gitSyncMaxRetries,
+        conflictPrompt: gitSyncPrompt || undefined,
+      },
     });
   }
 
@@ -258,6 +272,49 @@
     {/if}
   </details>
 
+  <details class="git-sync">
+    <summary>Git Sync — {gitSyncEnabled ? "enabled" : "disabled"}</summary>
+    <div class="git-sync-form">
+      <label class="git-sync-toggle">
+        <input
+          type="checkbox"
+          bind:checked={gitSyncEnabled}
+          disabled={session.running}
+        />
+        Enable git sync
+      </label>
+      <div class="git-sync-fields" class:dimmed={!gitSyncEnabled}>
+        <label>
+          Model
+          <input
+            type="text"
+            bind:value={gitSyncModel}
+            placeholder="sonnet"
+            disabled={session.running || !gitSyncEnabled}
+          />
+        </label>
+        <label>
+          Max Push Retries
+          <input
+            type="number"
+            bind:value={gitSyncMaxRetries}
+            min="1"
+            disabled={session.running || !gitSyncEnabled}
+          />
+        </label>
+        <label>
+          Conflict Resolution Prompt
+          <textarea
+            bind:value={gitSyncPrompt}
+            placeholder="Resolve merge conflicts..."
+            disabled={session.running || !gitSyncEnabled}
+            rows="3"
+          ></textarea>
+        </label>
+      </div>
+    </div>
+  </details>
+
   <section class="plan-section">
     <h2>Plan</h2>
     <label>
@@ -393,6 +450,61 @@
 
   details.settings {
     margin-top: 1.5rem;
+  }
+
+  details.git-sync {
+    margin-top: 1rem;
+  }
+
+  details.git-sync summary {
+    font-size: 1rem;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #333;
+    padding-bottom: 0.3rem;
+    cursor: pointer;
+  }
+
+  .git-sync-form {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .git-sync-toggle {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 0.5rem !important;
+  }
+
+  .git-sync-toggle input[type="checkbox"] {
+    width: auto;
+  }
+
+  .git-sync-fields.dimmed {
+    opacity: 0.5;
+  }
+
+  textarea {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.9rem;
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    resize: vertical;
+  }
+
+  textarea:disabled {
+    opacity: 0.5;
+  }
+
+  textarea:focus {
+    outline: none;
+    border-color: #e8d44d;
   }
 
   details.settings summary {
