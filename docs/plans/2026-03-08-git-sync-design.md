@@ -343,11 +343,11 @@ Wire `git_sync` into the three call sites in `SessionRunner::run`.
 - Track `last_iteration` variable through the loop so it's available after the loop ends
 
 **Checklist:**
-- [ ] Add git_sync call after each successful iteration
-- [ ] Add git_sync call after completion signal
-- [ ] Add git_sync call on session exit (Failed/MaxIterations/Cancelled)
-- [ ] Track last_iteration for session-exit sync
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add git_sync call after each successful iteration
+- [x] Add git_sync call after completion signal
+- [x] Add git_sync call on session exit (Failed/MaxIterations/Cancelled)
+- [x] Track last_iteration for session-exit sync (extracted from SessionState instead of separate variable)
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -535,7 +535,7 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 | 2 | Git sync SessionEvent variants | Done |
 | 3 | Default conflict resolution prompt | Done |
 | 4 | git_sync method on SessionRunner | Done |
-| 5 | Integrate git_sync into session loop | Not Started |
+| 5 | Integrate git_sync into session loop | Done |
 | 6 | Pass GitSyncConfig through Tauri command | Not Started |
 | 7 | Frontend GitSyncConfig type + RepoConfig update | Not Started |
 | 8 | Git Sync settings UI in RepoDetail | Not Started |

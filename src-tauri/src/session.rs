@@ -422,7 +422,6 @@ impl SessionRunner {
         }
     }
 
-    #[allow(dead_code)]
     fn is_valid_branch_name(name: &str) -> bool {
         !name.is_empty()
             && name
@@ -803,6 +802,7 @@ impl SessionRunner {
                     state = SessionState::Evaluating { iteration };
 
                     self.run_checks(runtime, iteration, &CheckWhen::EachIteration, &self.config.checks).await;
+                    self.git_sync(runtime, iteration).await;
 
                     if self.cancel_token.is_cancelled() {
                         println!("[harness] Session cancelled after checks in iteration {iteration}.");
@@ -813,6 +813,7 @@ impl SessionRunner {
                     if has_signal {
                         println!("[harness] Completion signal detected! Stopping loop.");
                         self.run_checks(runtime, iteration, &CheckWhen::PostCompletion, &self.config.checks).await;
+                        self.git_sync(runtime, iteration).await;
                         state = SessionState::Completed {
                             iterations: iteration,
                         };
@@ -889,6 +890,20 @@ impl SessionRunner {
                 "[harness] Max iterations ({}) reached without completion signal.",
                 self.config.max_iterations
             );
+        }
+
+        // Session-exit git_sync: push partial progress for non-completed outcomes
+        match &state {
+            SessionState::Failed { iteration, .. } => {
+                self.git_sync(runtime, *iteration).await;
+            }
+            SessionState::MaxIterations { iterations } => {
+                self.git_sync(runtime, *iterations).await;
+            }
+            SessionState::Cancelled { iteration } => {
+                self.git_sync(runtime, *iteration).await;
+            }
+            _ => {}
         }
 
         trace.outcome = match &state {
@@ -2368,6 +2383,25 @@ mod tests {
         );
     }
 
+    /// Helper: generates command_results for N successful git_sync calls.
+    /// Each call consumes 2 results: branch detection + push.
+    fn git_sync_success_results(count: usize) -> Vec<CommandOutput> {
+        let mut results = Vec::new();
+        for _ in 0..count {
+            results.push(CommandOutput {
+                exit_code: 0,
+                stdout: "feature-branch\n".to_string(),
+                stderr: String::new(),
+            });
+            results.push(CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            });
+        }
+        results
+    }
+
     #[tokio::test]
     async fn git_sync_skipped_when_cancelled() {
         let tmp = TempDir::new().expect("create temp dir");
@@ -2401,6 +2435,229 @@ mod tests {
             events.is_empty(),
             "no events should be emitted when cancel token is already cancelled, got: {:?}",
             events
+        );
+    }
+
+    // =========================================================================
+    // Task 5: git_sync integration into session loop
+    // =========================================================================
+
+    #[tokio::test]
+    async fn git_sync_runs_after_each_iteration_in_loop() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let runner = make_runner_with_git_sync(
+            &tmp,
+            Some(GitSyncConfig {
+                enabled: true,
+                ..Default::default()
+            }),
+        );
+
+        // 2 working iterations + 1 completion = 3 total iterations
+        // git_sync runs:
+        //   - after EachIteration checks on iteration 1
+        //   - after EachIteration checks on iteration 2
+        //   - after EachIteration checks on iteration 3 (completion)
+        //   - after PostCompletion checks on iteration 3
+        // Total: 4 git_sync calls = 8 command results
+        let mut runtime = MockRuntime::completing_after(2);
+        runtime.command_results = git_sync_success_results(4);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let events = get_events(&runner);
+
+        // Count GitSyncStarted events — should be 4
+        let git_sync_started_count = events
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::GitSyncStarted { .. }))
+            .count();
+        assert_eq!(
+            git_sync_started_count, 4,
+            "should have 4 GitSyncStarted events (3 EachIteration + 1 PostCompletion), got {}",
+            git_sync_started_count
+        );
+
+        // Count GitSyncPushSucceeded events — should be 4
+        let push_succeeded_count = events
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::GitSyncPushSucceeded { .. }))
+            .count();
+        assert_eq!(
+            push_succeeded_count, 4,
+            "should have 4 GitSyncPushSucceeded events, got {}",
+            push_succeeded_count
+        );
+
+        // Verify ordering: each GitSyncStarted should come after its IterationComplete
+        let mut last_iteration_complete_idx: Option<usize> = None;
+        for (idx, event) in events.iter().enumerate() {
+            if matches!(event, SessionEvent::IterationComplete { .. }) {
+                last_iteration_complete_idx = Some(idx);
+            }
+            if matches!(event, SessionEvent::GitSyncStarted { .. }) {
+                assert!(
+                    last_iteration_complete_idx.is_some(),
+                    "GitSyncStarted at index {} should come after an IterationComplete",
+                    idx
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn git_sync_runs_after_completion_signal() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let runner = make_runner_with_git_sync(
+            &tmp,
+            Some(GitSyncConfig {
+                enabled: true,
+                ..Default::default()
+            }),
+        );
+
+        // Completes on first iteration
+        // git_sync runs:
+        //   - after EachIteration checks on iteration 1
+        //   - after PostCompletion checks on iteration 1
+        // Total: 2 git_sync calls = 4 command results
+        let mut runtime = MockRuntime::completing_after(0);
+        runtime.command_results = git_sync_success_results(2);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let events = get_events(&runner);
+
+        // Should have exactly 2 GitSyncStarted events
+        let git_sync_started_count = events
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::GitSyncStarted { .. }))
+            .count();
+        assert_eq!(
+            git_sync_started_count, 2,
+            "should have 2 GitSyncStarted events (EachIteration + PostCompletion), got {}",
+            git_sync_started_count
+        );
+
+        // The last GitSyncPushSucceeded should come before SessionComplete
+        let last_push_succeeded_idx = events
+            .iter()
+            .rposition(|e| matches!(e, SessionEvent::GitSyncPushSucceeded { .. }))
+            .expect("should have at least one GitSyncPushSucceeded");
+
+        let session_complete_idx = events
+            .iter()
+            .position(|e| matches!(e, SessionEvent::SessionComplete { .. }))
+            .expect("should have SessionComplete");
+
+        assert!(
+            last_push_succeeded_idx < session_complete_idx,
+            "last GitSyncPushSucceeded (idx={}) should come before SessionComplete (idx={})",
+            last_push_succeeded_idx,
+            session_complete_idx
+        );
+    }
+
+    #[tokio::test]
+    async fn git_sync_runs_on_session_exit_max_iterations() {
+        let tmp = TempDir::new().expect("create temp dir");
+
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            prompt: "Test prompt".to_string(),
+            max_iterations: 2,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: Some(GitSyncConfig {
+                enabled: true,
+                ..Default::default()
+            }),
+        };
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        // Never completes — will hit max_iterations=2
+        // git_sync runs:
+        //   - after EachIteration checks on iteration 1
+        //   - after EachIteration checks on iteration 2
+        //   - session-exit git_sync (MaxIterations)
+        // Total: 3 git_sync calls = 6 command results
+        let mut runtime = MockRuntime::completing_after(999);
+        runtime.command_results = git_sync_success_results(3);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::MaxIterationsReached);
+
+        let events = get_events(&runner);
+
+        // Should have 3 GitSyncStarted events (2 EachIteration + 1 session-exit)
+        let git_sync_started_count = events
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::GitSyncStarted { .. }))
+            .count();
+        assert_eq!(
+            git_sync_started_count, 3,
+            "should have 3 GitSyncStarted events (2 EachIteration + 1 session-exit), got {}",
+            git_sync_started_count
+        );
+
+        // The session-exit GitSyncPushSucceeded should come before SessionComplete
+        let last_push_succeeded_idx = events
+            .iter()
+            .rposition(|e| matches!(e, SessionEvent::GitSyncPushSucceeded { .. }))
+            .expect("should have at least one GitSyncPushSucceeded");
+
+        let session_complete_idx = events
+            .iter()
+            .position(|e| matches!(e, SessionEvent::SessionComplete { .. }))
+            .expect("should have SessionComplete");
+
+        assert!(
+            last_push_succeeded_idx < session_complete_idx,
+            "session-exit GitSyncPushSucceeded (idx={}) should come before SessionComplete (idx={})",
+            last_push_succeeded_idx,
+            session_complete_idx
+        );
+    }
+
+    #[tokio::test]
+    async fn no_git_sync_events_when_not_configured() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let runner = make_runner_with_git_sync(&tmp, None);
+
+        let runtime = MockRuntime::completing_after(1);
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let events = get_events(&runner);
+
+        let git_sync_event_count = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    SessionEvent::GitSyncStarted { .. }
+                        | SessionEvent::GitSyncPushSucceeded { .. }
+                        | SessionEvent::GitSyncConflict { .. }
+                        | SessionEvent::GitSyncConflictResolveStarted { .. }
+                        | SessionEvent::GitSyncConflictResolveComplete { .. }
+                        | SessionEvent::GitSyncFailed { .. }
+                )
+            })
+            .count();
+        assert_eq!(
+            git_sync_event_count, 0,
+            "should have no git sync events when git_sync is None, got {}",
+            git_sync_event_count
         );
     }
 }
