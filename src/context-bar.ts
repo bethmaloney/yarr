@@ -15,3 +15,9 @@ export function contextBarColor(percentage: number): string {
   if (percentage >= 50) return "#fbbf24";
   return "#34d399";
 }
+
+export function sessionContextColor(percentage: number): string {
+  if (percentage > 85) return "#f87171";
+  if (percentage >= 60) return "#fbbf24";
+  return "#34d399";
+}

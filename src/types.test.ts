@@ -122,6 +122,50 @@ describe("SessionTrace", () => {
     };
     expect(traceNullRepoId.repo_id).toBeNull();
   });
+
+  it("accepts a trace with context_window and final_context_tokens set", () => {
+    const traceWithContext: SessionTrace = {
+      session_id: "sess-004",
+      repo_path: "/home/beth/repos/yarr",
+      prompt: "add context tracking",
+      plan_file: null,
+      start_time: "2026-03-07T13:00:00Z",
+      end_time: "2026-03-07T13:10:00Z",
+      outcome: "completed",
+      failure_reason: null,
+      total_iterations: 3,
+      total_cost_usd: 0.25,
+      total_input_tokens: 8000,
+      total_output_tokens: 4000,
+      total_cache_read_tokens: 1000,
+      total_cache_creation_tokens: 500,
+      context_window: 200000,
+      final_context_tokens: 150000,
+    };
+    expect(traceWithContext.context_window).toBe(200000);
+    expect(traceWithContext.final_context_tokens).toBe(150000);
+  });
+
+  it("is backwards compatible without context_window and final_context_tokens", () => {
+    const traceWithoutContext: SessionTrace = {
+      session_id: "sess-005",
+      repo_path: "/home/beth/repos/other",
+      prompt: "fix bug",
+      plan_file: null,
+      start_time: "2026-03-07T14:00:00Z",
+      end_time: null,
+      outcome: "running",
+      failure_reason: null,
+      total_iterations: 0,
+      total_cost_usd: 0,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+      total_cache_read_tokens: 0,
+      total_cache_creation_tokens: 0,
+    };
+    expect(traceWithoutContext.context_window).toBeUndefined();
+    expect(traceWithoutContext.final_context_tokens).toBeUndefined();
+  });
 });
 
 describe("SessionState", () => {

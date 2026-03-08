@@ -236,6 +236,8 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                 result_preview: truncate_str(&result_text, 500).to_string(),
                 token_usage: result.token_usage(),
                 model_token_usage: result.model_token_usage(),
+                // TODO: track last_context_tokens from assistant messages (like session.rs does)
+                final_context_tokens: 0,
             },
             is_error,
         );

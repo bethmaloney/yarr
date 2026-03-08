@@ -762,7 +762,7 @@ impl SessionRunner {
             let iter_start = Utc::now();
 
             match self.run_iteration(runtime, &invocation, iteration).await {
-                Ok(result) => {
+                Ok((result, last_context_tokens)) => {
                     let iter_end = Utc::now();
                     let has_signal =
                         result.has_completion_signal(&self.config.completion_signal);
@@ -784,6 +784,7 @@ impl SessionRunner {
                             result_preview: result_text[..result_text.len().min(500)].to_string(),
                             token_usage: result.token_usage(),
                             model_token_usage: result.model_token_usage(),
+                            final_context_tokens: last_context_tokens,
                         },
                         is_error,
                     );
@@ -869,6 +870,7 @@ impl SessionRunner {
                             result_preview: format!("Process error: {e}"),
                             token_usage: Default::default(),
                             model_token_usage: Default::default(),
+                            final_context_tokens: 0,
                         },
                         true,
                     );
@@ -940,9 +942,10 @@ impl SessionRunner {
         runtime: &dyn RuntimeProvider,
         invocation: &ClaudeInvocation,
         iteration: u32,
-    ) -> Result<ResultEvent> {
+    ) -> Result<(ResultEvent, u64)> {
         let mut process = runtime.spawn_claude(invocation).await?;
         let mut result_event: Option<ResultEvent> = None;
+        let mut last_context_tokens: u64 = 0;
 
         // Register abort handle so it can be called on app exit
         let abort_arc: std::sync::Arc<dyn crate::runtime::AbortHandle> = std::sync::Arc::from(process.abort_handle);
@@ -988,6 +991,12 @@ impl SessionRunner {
                                     ContentBlock::Unknown => {}
                                 }
                             }
+                            if let Some(ref usage) = assistant.message.usage {
+                                last_context_tokens =
+                                    usage.input_tokens.unwrap_or(0)
+                                    + usage.cache_read_input_tokens.unwrap_or(0)
+                                    + usage.cache_creation_input_tokens.unwrap_or(0);
+                            }
                         }
                         StreamEvent::RateLimit(rl) => {
                             if let Some(ref info) = rl.rate_limit_info {
@@ -1027,9 +1036,9 @@ impl SessionRunner {
             );
         }
 
-        result_event.ok_or_else(|| {
-            anyhow::anyhow!("Claude process exited without emitting a result event")
-        })
+        result_event
+            .ok_or_else(|| anyhow::anyhow!("Claude process exited without emitting a result event"))
+            .map(|r| (r, last_context_tokens))
     }
 }
 

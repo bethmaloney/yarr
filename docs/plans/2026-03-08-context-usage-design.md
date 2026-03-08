@@ -136,11 +136,11 @@ Capture the last assistant message's effective context size during iteration pro
 - Change return type to `(ResultEvent, u64)` to return the last context tokens alongside the result
 
 **Checklist:**
-- [ ] Add `last_context_tokens` tracking variable
-- [ ] Update from each assistant event's usage
-- [ ] Change return type and return the tuple
-- [ ] Update call site in `run()` to destructure the tuple
-- [ ] `cargo check` passes
+- [x] Add `last_context_tokens` tracking variable
+- [x] Update from each assistant event's usage
+- [x] Change return type and return the tuple
+- [x] Update call site in `run()` to destructure the tuple
+- [x] `cargo check` passes
 
 ---
 
@@ -162,12 +162,12 @@ Store the context usage data in the trace data model.
 - In `finalize()`, recompute from last iteration (same pattern as other fields)
 
 **Checklist:**
-- [ ] Add field to `SpanAttributes`
-- [ ] Add fields to `SessionTrace` with `#[serde(default)]`
-- [ ] Update `start_session()` initializer
-- [ ] Update `record_iteration()` to set context fields
-- [ ] Update `finalize()` to recompute from last iteration
-- [ ] `cargo check` passes
+- [x] Add field to `SpanAttributes`
+- [x] Add fields to `SessionTrace` with `#[serde(default)]`
+- [x] Update `start_session()` initializer
+- [x] Update `record_iteration()` to set context fields
+- [x] Update `finalize()` to recompute from last iteration
+- [x] `cargo check` passes
 
 ---
 
@@ -186,9 +186,9 @@ Pass the captured `last_context_tokens` into `SpanAttributes` when recording ite
 - Also add `final_context_tokens: 0` to the error-path `SpanAttributes` (line ~517)
 
 **Checklist:**
-- [ ] Update successful iteration SpanAttributes
-- [ ] Update error-path SpanAttributes
-- [ ] `cargo check` passes
+- [x] Update successful iteration SpanAttributes
+- [x] Update error-path SpanAttributes
+- [x] `cargo check` passes
 
 ---
 
@@ -213,8 +213,8 @@ Add context usage percentage to the session summary card.
 - Only show when `context_window > 0`
 
 **Checklist:**
-- [ ] Update TypeScript `SessionTrace` type
-- [ ] Add `sessionContextColor` function
+- [x] Update TypeScript `SessionTrace` type
+- [x] Add `sessionContextColor` function
 - [ ] Add context row to RepoDetail session summary
 - [ ] Verify hover tooltip shows formatted token count
 - [ ] `npx tsc --noEmit` passes
@@ -260,10 +260,10 @@ Update test helpers for new fields and add a test for context tracking.
 - Add test: verify `record_iteration` overwrites context fields (last iteration wins)
 
 **Checklist:**
-- [ ] Update test helpers
-- [ ] Add backward compat test
-- [ ] Add record_iteration context test
-- [ ] `cargo test` passes
+- [x] Update test helpers
+- [x] Add backward compat test
+- [x] Add record_iteration context test
+- [x] `cargo test` passes
 
 ---
 
@@ -271,9 +271,9 @@ Update test helpers for new fields and add a test for context tracking.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Track last_context_tokens in run_iteration | Not Started |
-| 2 | Add context fields to SpanAttributes/SessionTrace | Not Started |
-| 3 | Wire context data through run loop | Not Started |
+| 1 | Track last_context_tokens in run_iteration | Done |
+| 2 | Add context fields to SpanAttributes/SessionTrace | Done |
+| 3 | Wire context data through run loop | Done |
 | 4 | TypeScript types + RepoDetail display | Not Started |
 | 5 | RepoCard context percentage | Not Started |
-| 6 | Update tests | Not Started |
+| 6 | Update tests | Done |
