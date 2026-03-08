@@ -518,4 +518,75 @@ describe("groupEventsByIteration", () => {
       expect(result.iterations[0].contextWindow).toBe(0);
     });
   });
+
+  describe("orphaned events (e.g. after sleep/wake)", () => {
+    it("creates an implicit group for events without a preceding iteration_started", () => {
+      const events: SessionEvent[] = [
+        makeEvent({
+          kind: "tool_use",
+          iteration: 3,
+          tool_name: "Read",
+          _ts: 5000,
+        }),
+        makeEvent({
+          kind: "assistant_text",
+          iteration: 3,
+          text: "Reading file...",
+          _ts: 5500,
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.standaloneEvents).toEqual([]);
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].iteration).toBe(3);
+      expect(result.iterations[0].events).toHaveLength(2);
+      expect(result.iterations[0].startTs).toBe(5000);
+    });
+
+    it("handles orphaned events followed by a normal iteration", () => {
+      const events: SessionEvent[] = [
+        makeEvent({
+          kind: "assistant_text",
+          iteration: 2,
+          text: "Orphaned text",
+          _ts: 4000,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 2,
+          _ts: 4500,
+          result: { total_cost_usd: 0.1, input_tokens: 1000, output_tokens: 300 },
+        }),
+        makeEvent({ kind: "iteration_started", iteration: 3, _ts: 5000 }),
+        makeEvent({
+          kind: "assistant_text",
+          iteration: 3,
+          text: "Normal text",
+          _ts: 5500,
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(2);
+      expect(result.iterations[0].iteration).toBe(2);
+      expect(result.iterations[0].cost).toBe(0.1);
+      expect(result.iterations[1].iteration).toBe(3);
+      expect(result.iterations[1].events).toHaveLength(2);
+    });
+
+    it("uses fallback iteration number when event has no iteration field", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "tool_use", tool_name: "Bash", _ts: 1000 }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].iteration).toBe(1);
+      expect(result.iterations[0].events).toHaveLength(1);
+    });
+  });
 });

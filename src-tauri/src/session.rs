@@ -159,6 +159,10 @@ fn build_fix_prompt(check: &Check, output: &str) -> String {
     }
 }
 
+/// Shared registry of abort handles for active child processes.
+/// Used to kill processes on app exit.
+pub type AbortRegistry = std::sync::Arc<std::sync::Mutex<Vec<std::sync::Arc<dyn crate::runtime::AbortHandle>>>>;
+
 /// Runs a Ralph loop session end-to-end
 pub struct SessionRunner {
     config: SessionConfig,
@@ -166,6 +170,7 @@ pub struct SessionRunner {
     on_event: Option<OnSessionEvent>,
     cancel_token: CancellationToken,
     accumulated_events: std::sync::Mutex<Vec<SessionEvent>>,
+    abort_registry: Option<AbortRegistry>,
 }
 
 impl SessionRunner {
@@ -176,12 +181,25 @@ impl SessionRunner {
             on_event: None,
             cancel_token,
             accumulated_events: std::sync::Mutex::new(Vec::new()),
+            abort_registry: None,
         }
     }
 
     pub fn on_event(mut self, cb: OnSessionEvent) -> Self {
         self.on_event = Some(cb);
         self
+    }
+
+    pub fn abort_registry(mut self, registry: AbortRegistry) -> Self {
+        self.abort_registry = Some(registry);
+        self
+    }
+
+    fn unregister_abort(&self, handle: &std::sync::Arc<dyn crate::runtime::AbortHandle>) {
+        if let Some(ref registry) = self.abort_registry {
+            let mut handles = registry.lock().unwrap();
+            handles.retain(|h| !std::sync::Arc::ptr_eq(h, handle));
+        }
     }
 
     fn emit(&self, event: SessionEvent) {
@@ -567,6 +585,12 @@ impl SessionRunner {
         let mut process = runtime.spawn_claude(invocation).await?;
         let mut result_event: Option<ResultEvent> = None;
 
+        // Register abort handle so it can be called on app exit
+        let abort_arc: std::sync::Arc<dyn crate::runtime::AbortHandle> = std::sync::Arc::from(process.abort_handle);
+        if let Some(ref registry) = self.abort_registry {
+            registry.lock().unwrap().push(abort_arc.clone());
+        }
+
         // Consume streaming events, but bail if cancellation is requested
         loop {
             tokio::select! {
@@ -625,7 +649,8 @@ impl SessionRunner {
                 }
                 _ = self.cancel_token.cancelled() => {
                     // Kill the child process
-                    process.abort_handle.abort();
+                    abort_arc.abort();
+                    self.unregister_abort(&abort_arc);
                     anyhow::bail!("Session cancelled");
                 }
             }
@@ -633,6 +658,7 @@ impl SessionRunner {
 
         // Wait for process to exit
         let exit = process.completion.await??;
+        self.unregister_abort(&abort_arc);
 
         if exit.exit_code != 0 && result_event.is_none() {
             anyhow::bail!(

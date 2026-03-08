@@ -55,18 +55,30 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
       continue;
     }
 
-    // Any other event goes into the current group
-    if (currentGroup) {
-      currentGroup.events.push(ev);
+    // Any other event goes into the current group.
+    // If there's no current group (e.g. events missed during sleep), create one.
+    if (!currentGroup) {
+      currentGroup = {
+        iteration: ev.iteration ?? iterations.length + 1,
+        events: [],
+        cost: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        contextWindow: 0,
+        startTs: ev._ts,
+        endTs: undefined,
+      };
+    }
 
-      if (ev.kind === "iteration_complete") {
-        const result = ev.result;
-        currentGroup.cost = (result?.total_cost_usd as number) ?? 0;
-        currentGroup.inputTokens = (result?.input_tokens as number) ?? 0;
-        currentGroup.outputTokens = (result?.output_tokens as number) ?? 0;
-        currentGroup.contextWindow = (result?.context_window as number) ?? 0;
-        currentGroup.endTs = ev._ts;
-      }
+    currentGroup.events.push(ev);
+
+    if (ev.kind === "iteration_complete") {
+      const result = ev.result;
+      currentGroup.cost = (result?.total_cost_usd as number) ?? 0;
+      currentGroup.inputTokens = (result?.input_tokens as number) ?? 0;
+      currentGroup.outputTokens = (result?.output_tokens as number) ?? 0;
+      currentGroup.contextWindow = (result?.context_window as number) ?? 0;
+      currentGroup.endTs = ev._ts;
     }
   }
 

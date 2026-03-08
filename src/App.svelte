@@ -33,6 +33,18 @@
 
   async function syncActiveSession() {
     const activeRepoIds = await invoke<string[]>("get_active_sessions");
+    const activeSet = new Set(activeRepoIds);
+    let changed = false;
+
+    // Mark sessions that completed during sleep as no longer running
+    for (const [repoId, session] of sessions) {
+      if (session.running && !activeSet.has(repoId)) {
+        sessions.set(repoId, { ...session, running: false });
+        changed = true;
+      }
+    }
+
+    // Mark sessions that are active but frontend doesn't know about
     for (const activeRepoId of activeRepoIds) {
       const existing = sessions.get(activeRepoId);
       if (!existing || !existing.running) {
@@ -42,9 +54,11 @@
           trace: null,
           error: null,
         });
+        changed = true;
       }
     }
-    if (activeRepoIds.length > 0) {
+
+    if (changed) {
       sessions = new SvelteMap(sessions);
     }
   }
@@ -64,45 +78,52 @@
       })
       .catch(() => {});
 
-    // Check if a session was already running (e.g. after webview reload)
-    syncActiveSession();
-
+    // Register event listener BEFORE syncing so we don't miss events
     const unlisten = listen<TaggedSessionEvent>("session-event", (e) => {
       const { repo_id, event } = e.payload;
       event._ts = Date.now();
-      const session = sessions.get(repo_id);
-      if (session) {
-        const updates: Partial<SessionState> = {
-          events: [...session.events, event],
-        };
-        if (event.kind === "disconnected") {
-          updates.disconnected = true;
-          updates.reconnecting = false;
-        } else if (event.kind === "reconnecting") {
-          updates.reconnecting = true;
-          updates.disconnected = false;
-        } else if (session.disconnected || session.reconnecting) {
-          updates.disconnected = false;
-          updates.reconnecting = false;
-        }
-        sessions.set(repo_id, { ...session, ...updates });
+      const session = sessions.get(repo_id) ?? {
+        running: true,
+        disconnected: false,
+        reconnecting: false,
+        events: [],
+        trace: null,
+        error: null,
+      };
+      const updates: Partial<SessionState> = {
+        events: [...session.events, event],
+      };
+      if (event.kind === "disconnected") {
+        updates.disconnected = true;
+        updates.reconnecting = false;
+      } else if (event.kind === "reconnecting") {
+        updates.reconnecting = true;
+        updates.disconnected = false;
+      } else if (event.kind === "session_complete") {
+        // Authoritatively mark session as not running when backend says it's done.
+        // This covers the case where the invoke promise was lost (e.g. webview reload).
+        updates.running = false;
+        updates.disconnected = false;
+        updates.reconnecting = false;
+      } else if (session.disconnected || session.reconnecting) {
+        updates.disconnected = false;
+        updates.reconnecting = false;
       }
+      sessions.set(repo_id, { ...session, ...updates });
     });
 
-    // Detect sleep/wake: if the time gap between intervals is large, we slept
-    let lastTick = Date.now();
-    const sleepDetector = setInterval(() => {
-      const now = Date.now();
-      if (now - lastTick > 10_000) {
-        // Gap > 10s means we likely slept; re-sync with backend
-        syncActiveSession();
-      }
-      lastTick = now;
+    // Check if a session was already running (e.g. after webview reload)
+    syncActiveSession();
+
+    // Periodically reconcile frontend state with backend.
+    // Catches drift from sleep/wake, missed events, or lost invoke promises.
+    const syncInterval = setInterval(() => {
+      syncActiveSession();
     }, 5_000);
 
     return () => {
       unlisten.then((fn) => fn());
-      clearInterval(sleepDetector);
+      clearInterval(syncInterval);
     };
   });
 

@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 use runtime::{default_runtime, MockRuntime, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use ssh_orchestrator::SshSessionOrchestrator;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, RunEvent};
 use trace::TraceCollector;
 
 /// Wraps a `SessionEvent` with a `repo_id` so the frontend can demux events
@@ -28,6 +28,13 @@ pub(crate) struct TaggedSessionEvent {
 /// Shared state tracking cancellation tokens for all active sessions, keyed by repo_id
 struct ActiveSessions {
     tokens: Mutex<HashMap<String, CancellationToken>>,
+}
+
+/// Shared abort registry for child processes. On app exit, all handles are aborted
+/// to kill processes that wouldn't die from token cancellation alone
+/// (e.g. WSL processes where killing wsl.exe doesn't kill the Linux-side claude).
+struct GlobalAbortRegistry {
+    inner: session::AbortRegistry,
 }
 
 struct ActiveSshSessions {
@@ -68,14 +75,17 @@ async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trac
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let collector = TraceCollector::new(base_dir, &repo_id);
 
+    let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
     let app_handle = app.clone();
     let repo_id_clone = repo_id.clone();
-    let runner = SessionRunner::new(config, collector, cancel_token).on_event(Box::new(move |event| {
-        let _ = app_handle.emit("session-event", TaggedSessionEvent {
-            repo_id: repo_id_clone.clone(),
-            event: event.clone(),
-        });
-    }));
+    let runner = SessionRunner::new(config, collector, cancel_token)
+        .abort_registry(abort_registry)
+        .on_event(Box::new(move |event| {
+            let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                repo_id: repo_id_clone.clone(),
+                event: event.clone(),
+            });
+        }));
 
     let result = runner.run(&runtime).await.map_err(|e| e.to_string());
     {
@@ -141,14 +151,17 @@ async fn run_session(
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
             let collector = TraceCollector::new(base_dir, &repo_id);
 
+            let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
             let app_handle = app.clone();
             let repo_id_clone = repo_id.clone();
-            let runner = SessionRunner::new(config, collector, cancel_token).on_event(Box::new(move |event| {
-                let _ = app_handle.emit("session-event", TaggedSessionEvent {
-                    repo_id: repo_id_clone.clone(),
-                    event: event.clone(),
-                });
-            }));
+            let runner = SessionRunner::new(config, collector, cancel_token)
+                .abort_registry(abort_registry)
+                .on_event(Box::new(move |event| {
+                    let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                        repo_id: repo_id_clone.clone(),
+                        event: event.clone(),
+                    });
+                }));
 
             let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
             app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
@@ -307,9 +320,30 @@ pub fn run() {
         .manage(ActiveSshSessions {
             sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
+        .manage(GlobalAbortRegistry {
+            inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+        })
         .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, get_active_sessions, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview])
-        .run(tauri::generate_context!())
-        .expect("error running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error building tauri application")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                // Cancel all cancellation tokens
+                let active = app.state::<ActiveSessions>();
+                if let Ok(guard) = active.tokens.try_lock() {
+                    for (repo_id, token) in guard.iter() {
+                        tracing::info!("Cancelling session for repo {repo_id} on exit");
+                        token.cancel();
+                    }
+                }
+                // Directly abort all child processes (kills WSL-side processes too)
+                let registry = app.state::<GlobalAbortRegistry>();
+                let handles = registry.inner.lock().unwrap();
+                for handle in handles.iter() {
+                    handle.abort();
+                }
+            }
+        });
 }
 
 #[cfg(test)]
