@@ -10,6 +10,7 @@ type LocalRepoConfig = {
   model: string;
   maxIterations: number;
   completionSignal: string;
+  envVars?: Record<string, string>;
 };
 
 type SshRepoConfig = {
@@ -21,6 +22,7 @@ type SshRepoConfig = {
   model: string;
   maxIterations: number;
   completionSignal: string;
+  envVars?: Record<string, string>;
 };
 
 export type RepoConfig = LocalRepoConfig | SshRepoConfig;

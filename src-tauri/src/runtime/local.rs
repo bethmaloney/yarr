@@ -43,14 +43,15 @@ impl RuntimeProvider for LocalRuntime {
 
         args.extend(invocation.extra_args.clone());
 
-        let mut child = Command::new(&self.claude_bin)
-            .args(&args)
+        let mut cmd = Command::new(&self.claude_bin);
+        cmd.args(&args)
             .current_dir(&invocation.working_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()?;
+            .kill_on_drop(true);
+        cmd.envs(&invocation.env_vars);
+        let mut child = cmd.spawn()?;
 
         // Pipe prompt via stdin, then close it
         let mut stdin = child.stdin.take().expect("stdin was piped");

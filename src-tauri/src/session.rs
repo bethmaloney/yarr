@@ -20,6 +20,8 @@ pub struct SessionConfig {
     pub plan_file: Option<String>,
     /// Delay between iterations (rate limit protection)
     pub inter_iteration_delay_ms: u64,
+    /// Extra environment variables to set when spawning Claude
+    pub env_vars: std::collections::HashMap<String, String>,
 }
 
 impl Default for SessionConfig {
@@ -33,6 +35,7 @@ impl Default for SessionConfig {
             extra_args: Vec::new(),
             plan_file: None,
             inter_iteration_delay_ms: 1000,
+            env_vars: std::collections::HashMap::new(),
         }
     }
 }
@@ -118,6 +121,7 @@ impl SessionRunner {
             working_dir: self.config.repo_path.clone(),
             model: self.config.model.clone(),
             extra_args: self.config.extra_args.clone(),
+            env_vars: self.config.env_vars.clone(),
         }
     }
 
@@ -431,6 +435,7 @@ mod tests {
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0, // no delay for tests
+            env_vars: std::collections::HashMap::new(),
         };
 
         let collector = TraceCollector::new(base_dir, "test-repo");

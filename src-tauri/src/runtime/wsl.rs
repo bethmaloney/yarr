@@ -55,11 +55,16 @@ impl WslRuntime {
 
         let mut parts = vec![
             format!("cd {}", shell_escape(&wsl_dir)),
-            format!(
-                "&& echo __PID__=$$ >&2 && exec {} -p --output-format stream-json --verbose",
-                shell_escape(&self.claude_bin)
-            ),
         ];
+
+        for (key, val) in &invocation.env_vars {
+            parts.push(format!("&& export {}={}", key, shell_escape(val)));
+        }
+
+        parts.push(format!(
+            "&& echo __PID__=$$ >&2 && exec {} -p --output-format stream-json --verbose",
+            shell_escape(&self.claude_bin)
+        ));
 
         if let Some(ref model) = invocation.model {
             parts.push(format!("--model {}", shell_escape(model)));

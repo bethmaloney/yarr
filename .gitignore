@@ -7,3 +7,4 @@
 /src-tauri/gen
 .playwright-cli/
 screenshots/
+test-results/

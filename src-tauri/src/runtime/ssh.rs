@@ -125,8 +125,13 @@ impl SshRuntime {
 
         // Build the inner command that runs inside tmux (executed by sh -c).
         // Values use shell_escape for proper quoting at the tmux shell layer.
+        let mut env_exports = String::new();
+        for (key, val) in &invocation.env_vars {
+            env_exports.push_str(&format!("export {}={} && ", key, shell_escape(val)));
+        }
+
         let tmux_body = format!(
-            "cd {escaped_remote_path} && {claude_cmd} 2>/tmp/yarr-{session_id}.stderr | tee ~/.yarr/logs/yarr-{session_id}.log"
+            "cd {escaped_remote_path} && {env_exports}{claude_cmd} 2>/tmp/yarr-{session_id}.stderr | tee ~/.yarr/logs/yarr-{session_id}.log"
         );
 
         // shell_escape the entire tmux body so it is passed as a single
@@ -666,6 +671,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command(session_id, &invocation);
         let std_cmd = cmd.as_std();
@@ -689,6 +695,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -712,6 +719,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -738,6 +746,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -772,6 +781,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command(session_id, &invocation);
         let std_cmd = cmd.as_std();
@@ -796,6 +806,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command(session_id, &invocation);
         let std_cmd = cmd.as_std();
@@ -819,6 +830,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: Some("claude-sonnet-4-20250514".to_string()),
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -842,6 +854,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -868,6 +881,7 @@ mod tests {
                 "--max-turns".to_string(),
                 "5".to_string(),
             ],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -896,6 +910,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -999,6 +1014,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/my project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -1026,6 +1042,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -1056,6 +1073,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -1079,6 +1097,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -1104,6 +1123,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -1127,6 +1147,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command(session_id, &invocation);
         let std_cmd = cmd.as_std();
@@ -1187,6 +1208,7 @@ mod tests {
                 "--allowedTools".to_string(),
                 "Bash,Read,Write".to_string(),
             ],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -1217,6 +1239,7 @@ mod tests {
             working_dir: PathBuf::from("/srv/app"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -1241,6 +1264,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -1283,6 +1307,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();
@@ -1312,6 +1337,7 @@ mod tests {
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
             extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
         };
         let cmd = rt.build_tmux_command("sess-1", &invocation);
         let std_cmd = cmd.as_std();

@@ -28,12 +28,19 @@
   let model = $state(repo.model);
   let maxIterations = $state(repo.maxIterations);
   let completionSignal = $state(repo.completionSignal);
+  let envVars: { key: string; value: string }[] = $state(
+    Object.entries(repo.envVars ?? {}).map(([key, value]) => ({ key, value })),
+  );
 
   // Re-sync local state when repo prop changes (e.g., navigating to a different repo)
   $effect(() => {
     model = repo.model;
     maxIterations = repo.maxIterations;
     completionSignal = repo.completionSignal;
+    envVars = Object.entries(repo.envVars ?? {}).map(([key, value]) => ({
+      key,
+      value,
+    }));
   });
 
   let planFile = $state("");
@@ -81,11 +88,16 @@
   }
 
   function saveSettings() {
+    const envVarsRecord: Record<string, string> = {};
+    for (const { key, value } of envVars) {
+      if (key.trim()) envVarsRecord[key.trim()] = value;
+    }
     onUpdateRepo({
       ...repo,
       model,
       maxIterations,
       completionSignal,
+      envVars: envVarsRecord,
     });
   }
 
@@ -144,6 +156,36 @@
           disabled={session.running}
         />
       </label>
+      <fieldset class="env-vars" disabled={session.running}>
+        <legend>Environment Variables</legend>
+        {#each envVars as envVar, i}
+          <div class="env-var-row">
+            <input
+              type="text"
+              bind:value={envVar.key}
+              placeholder="KEY"
+              class="env-key"
+            />
+            <span class="env-eq">=</span>
+            <input
+              type="text"
+              bind:value={envVar.value}
+              placeholder="value"
+              class="env-value"
+            />
+            <button
+              type="button"
+              class="env-remove"
+              onclick={() => { envVars = envVars.filter((_, j) => j !== i); }}
+            >&times;</button>
+          </div>
+        {/each}
+        <button
+          type="button"
+          class="secondary env-add"
+          onclick={() => { envVars = [...envVars, { key: "", value: "" }]; }}
+        >+ Add Variable</button>
+      </fieldset>
       <div class="settings-actions">
         <button
           type="button"
@@ -322,6 +364,63 @@
 
   label input[readonly] {
     opacity: 0.7;
+  }
+
+  .env-vars {
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin: 0;
+  }
+
+  .env-vars legend {
+    font-size: 0.85rem;
+    color: #888;
+    padding: 0 0.25rem;
+  }
+
+  .env-var-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .env-key {
+    flex: 2;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+
+  .env-eq {
+    color: #666;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+
+  .env-value {
+    flex: 3;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+
+  .env-remove {
+    padding: 0.3rem 0.5rem;
+    font-size: 1rem;
+    line-height: 1;
+    background: transparent;
+    color: #666;
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .env-remove:hover:not(:disabled) {
+    color: #f87171;
+    border-color: #f87171;
+    background: transparent;
+  }
+
+  .env-add {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.6rem;
   }
 
   .settings-actions {

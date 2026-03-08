@@ -137,6 +137,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             working_dir: self.config.repo_path.clone(),
             model: self.config.model.clone(),
             extra_args: self.config.extra_args.clone(),
+            env_vars: self.config.env_vars.clone(),
         }
     }
 
@@ -716,6 +717,7 @@ mod tests {
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
         }
     }
 
