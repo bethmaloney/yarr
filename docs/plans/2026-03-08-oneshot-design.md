@@ -240,16 +240,16 @@ Create the core runner that orchestrates the full 1-shot lifecycle.
 - Branch name: `oneshot/<slug>-<short-id>`
 
 **Checklist:**
-- [ ] Create `src-tauri/src/oneshot.rs` with `OneShotConfig`, `MergeStrategy`, `OneShotRunner`
-- [ ] Implement worktree creation (git worktree add)
-- [ ] Implement design phase (spawn Claude, stream, find plan file)
-- [ ] Implement implementation phase (spawn Claude with plan, stream)
-- [ ] Implement merge-to-main finalize (merge, push, delete branch, remove worktree)
-- [ ] Implement branch finalize (push branch, remove worktree)
-- [ ] Implement cancellation cleanup (kill process, remove worktree, delete branch)
-- [ ] Implement error handling (leave worktree on merge conflict/push failure)
-- [ ] Add `mod oneshot` to lib.rs
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Create `src-tauri/src/oneshot.rs` with `OneShotConfig`, `MergeStrategy`, `OneShotRunner`
+- [x] Implement worktree creation (git worktree add)
+- [x] Implement design phase (spawn Claude, stream, find plan file)
+- [x] Implement implementation phase (spawn Claude with plan, stream)
+- [x] Implement merge-to-main finalize (merge, push, delete branch, remove worktree)
+- [x] Implement branch finalize (push branch, remove worktree)
+- [x] Implement cancellation cleanup (kill process, remove worktree, delete branch)
+- [x] Implement error handling (leave worktree on merge conflict/push failure)
+- [x] Add `mod oneshot` to lib.rs
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -416,7 +416,7 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 | 1 | Add session_type to SessionTrace | Done |
 | 2 | Add 1-shot SessionEvent variants | Done |
 | 3 | Add design phase prompt | Done |
-| 4 | Add OneShotRunner | Not Started |
+| 4 | Add OneShotRunner | Done |
 | 5 | Add Tauri commands for 1-shot | Not Started |
 | 6 | Add OneShotView frontend component | Not Started |
 | 7 | Integrate OneShotView into App navigation | Not Started |

@@ -1,3 +1,4 @@
+pub mod oneshot;
 pub mod output;
 pub mod prompt;
 pub mod runtime;
