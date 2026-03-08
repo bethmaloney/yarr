@@ -195,6 +195,61 @@ describe("sortTraces", () => {
     });
   });
 
+  describe("sort by session_type", () => {
+    const traceOneshot = makeTrace({
+      session_id: "trace-oneshot",
+      session_type: "one_shot",
+      prompt: "Quick fix",
+    });
+
+    const traceRalph = makeTrace({
+      session_id: "trace-ralph",
+      session_type: "ralph_loop",
+      prompt: "Big refactor",
+    });
+
+    const traceUndefined = makeTrace({
+      session_id: "trace-undefined",
+      prompt: "No type set",
+      // session_type is intentionally omitted (undefined)
+    });
+
+    it("ascending — alphabetical: oneshot before ralph_loop", () => {
+      const result = sortTraces(
+        [traceRalph, traceOneshot],
+        "session_type",
+        "asc",
+      );
+      expect(ids(result)).toEqual(["trace-oneshot", "trace-ralph"]);
+    });
+
+    it("descending — reverse alphabetical: ralph_loop before oneshot", () => {
+      const result = sortTraces(
+        [traceOneshot, traceRalph],
+        "session_type",
+        "desc",
+      );
+      expect(ids(result)).toEqual(["trace-ralph", "trace-oneshot"]);
+    });
+
+    it("undefined session_type defaults to ralph_loop", () => {
+      // traceUndefined has no session_type, should sort as "ralph_loop"
+      // So oneshot < ralph_loop ≈ undefined
+      const result = sortTraces(
+        [traceUndefined, traceOneshot, traceRalph],
+        "session_type",
+        "asc",
+      );
+      const resultIds = ids(result);
+      // oneshot should come first
+      expect(resultIds[0]).toBe("trace-oneshot");
+      // ralph_loop and undefined should both sort after oneshot
+      // and maintain stable relative order between themselves
+      expect(resultIds.indexOf("trace-ralph")).toBeGreaterThan(0);
+      expect(resultIds.indexOf("trace-undefined")).toBeGreaterThan(0);
+    });
+  });
+
   describe("stability", () => {
     it("traces with the same value maintain their relative order", () => {
       // traceA and traceD both have outcome "completed"

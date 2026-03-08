@@ -7,7 +7,8 @@ export type SortField =
   | "outcome"
   | "total_iterations"
   | "total_cost_usd"
-  | "duration";
+  | "duration"
+  | "session_type";
 export type SortDir = "asc" | "desc";
 
 export function sortTraces(
@@ -51,6 +52,12 @@ export function sortTraces(
         if (aDur === null) return 1;
         if (bDur === null) return -1;
         return mul * (aDur - bDur);
+      }
+
+      case "session_type": {
+        const aVal = a.session_type ?? "ralph_loop";
+        const bVal = b.session_type ?? "ralph_loop";
+        return mul * aVal.localeCompare(bVal);
       }
     }
   });

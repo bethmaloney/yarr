@@ -145,6 +145,16 @@
               : "↑"
             : ""}
         </button>
+        <button
+          class="sort-btn trace-type"
+          onclick={() => toggleSort("session_type")}
+        >
+          Type {sortField === "session_type"
+            ? sortDir === "desc"
+              ? "↓"
+              : "↑"
+            : ""}
+        </button>
         {#if !repoId}
           <span class="trace-repo">Repo</span>
         {/if}
@@ -216,6 +226,7 @@
           onclick={() => onSelectRun(traceRepoId(trace), trace.session_id)}
         >
           <span class="trace-date">{formatDate(trace.start_time)}</span>
+          <span class="trace-type">{trace.session_type === "one_shot" ? "1-Shot" : "Ralph Loop"}</span>
           {#if !repoId}
             <span class="trace-repo">{repoName(trace)}</span>
           {/if}
@@ -317,6 +328,12 @@
     flex-shrink: 0;
     color: #888;
     min-width: 7rem;
+  }
+
+  .trace-type {
+    flex-shrink: 0;
+    color: #888;
+    min-width: 5.5rem;
   }
 
   .trace-repo {

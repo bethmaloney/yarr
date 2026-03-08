@@ -350,11 +350,11 @@ Display session type in history to distinguish Ralph loops from 1-shots.
 - Default display for traces missing session_type: "Ralph Loop"
 
 **Checklist:**
-- [ ] Add "Type" column header with sort button
-- [ ] Add session_type to sortField union
-- [ ] Add type cell to trace rows
-- [ ] Handle missing session_type (default to "Ralph Loop")
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add "Type" column header with sort button
+- [x] Add session_type to sortField union
+- [x] Add type cell to trace rows
+- [x] Handle missing session_type (default to "Ralph Loop")
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -420,6 +420,6 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 | 5 | Add Tauri commands for 1-shot | Done |
 | 6 | Add OneShotView frontend component | Done |
 | 7 | Integrate OneShotView into App navigation | Done |
-| 8 | Add Type column to HistoryView | Not Started |
+| 8 | Add Type column to HistoryView | Done |
 | 9 | Tests for OneShotRunner | Not Started |
 | 10 | Frontend tests for OneShotView | Not Started |
