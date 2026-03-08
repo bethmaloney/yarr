@@ -315,15 +315,15 @@ Core logic for the push-rebase-resolve flow.
 - Use `Duration::from_secs(120)` as timeout for git commands (generous for large repos)
 
 **Checklist:**
-- [ ] Add `git_sync` method
-- [ ] Implement push attempt
-- [ ] Implement push-with-upstream attempt
-- [ ] Implement pull-rebase loop
-- [ ] Implement conflict detection and Claude resolution
-- [ ] Handle rebase abort on failure
-- [ ] Handle cancellation
-- [ ] Emit all appropriate events
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `git_sync` method
+- [x] Implement push attempt
+- [x] Implement push-with-upstream attempt
+- [x] Implement pull-rebase loop
+- [x] Implement conflict detection and Claude resolution
+- [x] Handle rebase abort on failure
+- [x] Handle cancellation
+- [x] Emit all appropriate events
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -534,7 +534,7 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 | 1 | GitSyncConfig data model (Rust) | Done |
 | 2 | Git sync SessionEvent variants | Done |
 | 3 | Default conflict resolution prompt | Done |
-| 4 | git_sync method on SessionRunner | Not Started |
+| 4 | git_sync method on SessionRunner | Done |
 | 5 | Integrate git_sync into session loop | Not Started |
 | 6 | Pass GitSyncConfig through Tauri command | Not Started |
 | 7 | Frontend GitSyncConfig type + RepoConfig update | Not Started |
