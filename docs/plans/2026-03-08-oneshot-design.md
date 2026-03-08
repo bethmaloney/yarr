@@ -205,9 +205,9 @@ Create the non-interactive design prompt that produces a plan without asking cla
 - Prompt should instruct Claude not to ask clarifying questions — make its own decisions
 
 **Checklist:**
-- [ ] Add `DESIGN_PROMPT` constant to `prompt.rs`
-- [ ] Add `build_design_prompt(user_prompt: &str, title: &str) -> String` function
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `DESIGN_PROMPT` constant to `prompt.rs`
+- [x] Add `build_design_prompt(user_prompt: &str, title: &str) -> String` function
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -415,7 +415,7 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 |------|-------------|--------|
 | 1 | Add session_type to SessionTrace | Done |
 | 2 | Add 1-shot SessionEvent variants | Done |
-| 3 | Add design phase prompt | Not Started |
+| 3 | Add design phase prompt | Done |
 | 4 | Add OneShotRunner | Not Started |
 | 5 | Add Tauri commands for 1-shot | Not Started |
 | 6 | Add OneShotView frontend component | Not Started |

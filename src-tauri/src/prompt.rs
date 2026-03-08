@@ -135,3 +135,142 @@ Do NOT output `<promise>COMPLETE</promise>` unless literally every task is done.
 pub fn build_prompt(plan_file: &str) -> String {
     format!("{IMPLEMENTATION_PROMPT}\n\n---\n\n**Plan document:** @{plan_file}")
 }
+
+/// The design phase prompt used for planning sessions.
+/// Instructs Claude to analyze the codebase and produce an implementation plan.
+pub const DESIGN_PROMPT: &str = r#"# Design Phase — Software Architect
+
+You are a **software architect** tasked with designing a comprehensive implementation plan for a feature or change. You operate with full autonomy — do NOT ask clarifying questions. Make your own design decisions based on what you learn from the codebase.
+
+## Your Goal
+
+Analyze the codebase, understand the task, and produce a detailed implementation plan written to a Markdown file.
+
+## Workflow
+
+### Step 1: Understand the Codebase
+
+1. **Read `CLAUDE.md`** (if present) to understand the project's tech stack, conventions, and commands.
+2. **Explore the project structure** — list top-level directories and key files to understand the layout.
+3. **Read key files** — look at existing implementations, patterns, and conventions used in the codebase.
+4. **Identify patterns** — note how the project organizes code, names things, handles errors, writes tests, etc.
+
+### Step 2: Analyze the Task
+
+1. Read the user's task description carefully.
+2. Identify what needs to be built or changed.
+3. Determine which parts of the codebase will be affected.
+4. Consider edge cases, error handling, and testing requirements.
+
+### Step 3: Design the Implementation Plan
+
+Create a comprehensive implementation plan that includes:
+
+1. **Overview** — A brief summary of what will be implemented and why.
+2. **Ordered tasks** — Each task should have:
+   - A clear heading with a description of the work
+   - **Files to create or modify** — list every file path
+   - **Pattern references** — point to existing code that serves as a model to follow
+   - **Detailed checklist** — specific items to implement, each as a checkbox (`- [ ]`)
+3. **Progress tracking table** at the bottom — a table with columns for Task, Status, and Notes.
+
+### Step 4: Write the Plan
+
+Write the plan to `docs/plans/<date>-<slug>-design.md` where:
+- `<date>` is today's date in `YYYY-MM-DD` format
+- `<slug>` is a kebab-case version of the provided Title (e.g., if the title is "Login Feature", use `login-feature`)
+
+Create the `docs/plans/` directory if it does not exist.
+
+### Step 5: Signal Completion
+
+When the plan is fully written to disk, output exactly:
+
+```
+<promise>COMPLETE</promise>
+```
+
+## Rules
+
+- **Full autonomy** — do NOT ask clarifying questions. Make reasonable decisions and document your rationale in the plan.
+- **Be thorough** — the plan should be detailed enough that an implementer can follow it without needing additional context.
+- **Follow existing conventions** — reference specific files and patterns from the codebase so the implementer stays consistent.
+- **One plan file** — write everything to a single Markdown file.
+- **Do NOT implement anything** — this phase is design only. Do not write code, tests, or make changes beyond the plan document."#;
+
+/// Build the full design prompt by combining DESIGN_PROMPT with the user's task and title.
+pub fn build_design_prompt(user_prompt: &str, title: &str) -> String {
+    format!("{DESIGN_PROMPT}\n\n---\n\n**Title:** {title}\n\n**Task:** {user_prompt}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn design_prompt_constant_is_not_empty() {
+        assert!(
+            !DESIGN_PROMPT.is_empty(),
+            "DESIGN_PROMPT should not be empty"
+        );
+    }
+
+    #[test]
+    fn design_prompt_contains_key_instructions() {
+        let prompt = DESIGN_PROMPT;
+        assert!(
+            prompt.contains("implementation plan"),
+            "DESIGN_PROMPT should mention 'implementation plan'"
+        );
+        assert!(
+            prompt.contains("codebase"),
+            "DESIGN_PROMPT should mention 'codebase'"
+        );
+        assert!(
+            prompt.contains("<promise>COMPLETE</promise>"),
+            "DESIGN_PROMPT should contain '<promise>COMPLETE</promise>'"
+        );
+        assert!(
+            prompt.contains("clarifying questions"),
+            "DESIGN_PROMPT should mention 'clarifying questions'"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_includes_user_prompt() {
+        let result = build_design_prompt("Add a login page", "Login Feature");
+        assert!(
+            result.contains("Add a login page"),
+            "Result should contain the user prompt text"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_includes_title() {
+        let result = build_design_prompt("Add a login page", "Login Feature");
+        assert!(
+            result.contains("Login Feature"),
+            "Result should contain the title"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_includes_design_prompt_content() {
+        let result = build_design_prompt("Add a login page", "Login Feature");
+        // The result should contain content from DESIGN_PROMPT itself.
+        // We check for a phrase that must appear in the constant.
+        assert!(
+            result.contains("implementation plan"),
+            "Result should include content from DESIGN_PROMPT"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_handles_empty_inputs() {
+        let result = build_design_prompt("", "");
+        assert!(
+            !result.is_empty(),
+            "Result should be non-empty even with empty inputs"
+        );
+    }
+}
