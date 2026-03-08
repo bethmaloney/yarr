@@ -300,12 +300,12 @@ Create the 1-shot launch form and progress display.
 - Style: consistent with existing views (dark theme, monospace inputs, form layout)
 
 **Checklist:**
-- [ ] Create `src/OneShotView.svelte` with form and progress display
-- [ ] Implement form with title, prompt, model, merge strategy inputs
-- [ ] Implement run button calling `run_oneshot`
-- [ ] Implement progress display with phase indicators
-- [ ] Implement cancel button
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Create `src/OneShotView.svelte` with form and progress display
+- [x] Implement form with title, prompt, model, merge strategy inputs
+- [x] Implement run button calling `run_oneshot`
+- [x] Implement progress display with phase indicators
+- [x] Implement cancel button
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -418,7 +418,7 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 | 3 | Add design phase prompt | Done |
 | 4 | Add OneShotRunner | Done |
 | 5 | Add Tauri commands for 1-shot | Done |
-| 6 | Add OneShotView frontend component | Not Started |
+| 6 | Add OneShotView frontend component | Done |
 | 7 | Integrate OneShotView into App navigation | Not Started |
 | 8 | Add Type column to HistoryView | Not Started |
 | 9 | Tests for OneShotRunner | Not Started |
