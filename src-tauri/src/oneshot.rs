@@ -116,6 +116,15 @@ fn resolve_unix_home() -> String {
     }
 }
 
+/// Truncate a string for logging, appending "..." if truncated.
+fn truncate_for_log(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
+    }
+}
+
 /// Compute the branch name: `oneshot/<slug>-<short_id>`
 pub fn branch_name(slug: &str, short_id: &str) -> String {
     format!("oneshot/{}-{}", slug, short_id)
@@ -127,6 +136,8 @@ struct ClaudePhaseResult {
     had_error: bool,
     exit_code: i32,
     stderr: String,
+    /// File paths observed in Write/Edit tool_use inputs during this phase.
+    tool_file_paths: Vec<String>,
 }
 
 impl ClaudePhaseResult {
@@ -227,33 +238,83 @@ impl OneShotRunner {
         &self,
         runtime: &dyn RuntimeProvider,
         invocation: &ClaudeInvocation,
+        phase_name: &str,
     ) -> Result<ClaudePhaseResult> {
         let mut process = runtime.spawn_claude(invocation).await?;
 
-        // Register abort handle if we have a registry
+        // Register abort handle so it can be called on app exit,
+        // and keep a local Arc for cancellation during the event loop.
+        let abort_arc: std::sync::Arc<dyn crate::runtime::AbortHandle> =
+            std::sync::Arc::from(process.abort_handle);
         if let Some(ref registry) = self.abort_registry {
-            registry.lock().unwrap().push(
-                std::sync::Arc::from(process.abort_handle),
-            );
-            // We need to replace the abort handle since we moved it
-            // Actually, Arc::from consumes Box<dyn AbortHandle>.
-            // We won't need the abort handle after this, so it's fine.
+            registry.lock().unwrap().push(abort_arc.clone());
         }
 
         let mut collected_text = String::new();
         let mut had_error = false;
+        let mut tool_file_paths: Vec<String> = Vec::new();
 
-        // Drain events
-        while let Some(event) = process.events.recv().await {
+        // Drain events, but bail if cancellation is requested
+        loop {
+            let event = tokio::select! {
+                event = process.events.recv() => {
+                    let Some(event) = event else { break };
+                    event
+                }
+                _ = self.cancel_token.cancelled() => {
+                    tracing::info!("Phase cancelled, aborting Claude process");
+                    abort_arc.abort();
+                    anyhow::bail!("Cancelled");
+                }
+            };
             match &event {
                 StreamEvent::Assistant(assistant) => {
                     for block in &assistant.message.content {
-                        if let crate::output::ContentBlock::Text { text } = block {
-                            collected_text.push_str(text);
+                        match block {
+                            crate::output::ContentBlock::Text { text } => {
+                                tracing::debug!("Claude text output: {}", truncate_for_log(text, 200));
+                                collected_text.push_str(text);
+                                self.emit(SessionEvent::PhaseOutput {
+                                    phase: phase_name.to_string(),
+                                    output_type: "text".to_string(),
+                                    summary: truncate_for_log(text, 300),
+                                });
+                            }
+                            crate::output::ContentBlock::ToolUse { name, input, .. } => {
+                                tracing::debug!("Claude tool_use: {} input={}", name, truncate_for_log(&input.to_string(), 200));
+                                // Extract file paths from Write/Edit tool inputs
+                                if let Some(file_path) = input.get("file_path").and_then(|v| v.as_str()) {
+                                    tool_file_paths.push(file_path.to_string());
+                                }
+                                {
+                                    let tool_summary = match name.as_str() {
+                                        "Write" | "Edit" | "Read" => {
+                                            let fp = input.get("file_path").and_then(|v| v.as_str()).unwrap_or("?");
+                                            format!("{}: {}", name, fp)
+                                        }
+                                        "Bash" => {
+                                            let cmd = input.get("command").and_then(|v| v.as_str()).unwrap_or("?");
+                                            format!("{}: {}", name, truncate_for_log(cmd, 100))
+                                        }
+                                        "Glob" | "Grep" => {
+                                            let pat = input.get("pattern").and_then(|v| v.as_str()).unwrap_or("?");
+                                            format!("{}: {}", name, pat)
+                                        }
+                                        _ => name.to_string(),
+                                    };
+                                    self.emit(SessionEvent::PhaseOutput {
+                                        phase: phase_name.to_string(),
+                                        output_type: "tool_use".to_string(),
+                                        summary: tool_summary,
+                                    });
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
                 StreamEvent::Result(result) => {
+                    tracing::debug!("Claude result: is_error={}, result_text_len={}", result.is_error, result.result.as_ref().map(|t| t.len()).unwrap_or(0));
                     if result.is_error {
                         had_error = true;
                     }
@@ -269,6 +330,7 @@ impl OneShotRunner {
 
         // Wait for process completion
         let exit = process.completion.await??;
+        tracing::debug!("Claude process exited: code={}, stderr_len={}", exit.exit_code, exit.stderr.len());
         if exit.exit_code != 0 {
             had_error = true;
         }
@@ -278,6 +340,7 @@ impl OneShotRunner {
             had_error,
             exit_code: exit.exit_code,
             stderr: exit.stderr,
+            tool_file_paths,
         })
     }
 
@@ -391,12 +454,19 @@ impl OneShotRunner {
             env_vars: self.config.env_vars.clone(),
         };
 
-        let design_result = self.run_claude_phase(runtime, &design_invocation).await;
+        tracing::info!("Starting design phase for '{}'", self.config.title);
+        let design_result = self.run_claude_phase(runtime, &design_invocation, "design").await;
 
         match design_result {
             Ok(design) => {
+                tracing::info!(
+                    "Design phase finished: exit_code={}, had_error={}, text_len={}, tool_file_paths={:?}",
+                    design.exit_code, design.had_error, design.text.len(), design.tool_file_paths
+                );
+
                 if design.had_error {
                     let detail = design.error_detail();
+                    tracing::warn!("Design phase had error: {}", detail);
                     self.cleanup_worktree(runtime, &wt_path).await;
                     self.emit(SessionEvent::OneShotFailed {
                         reason: format!("Design phase Claude invocation failed: {}", detail),
@@ -408,19 +478,51 @@ impl OneShotRunner {
                     return Err(anyhow::anyhow!("Design phase failed"));
                 }
 
-                // Try to extract plan file path from output
+                // Try to extract plan file path from output text
                 let plan_file = self.extract_plan_file_from_output(&design.text);
+                tracing::debug!("Plan file from text extraction: {:?}", plan_file);
+
+                // Also try to find plan file from tool_use file paths
+                let plan_file_from_tools = design.tool_file_paths.iter()
+                    .find(|p| p.contains("docs/plans/") && p.ends_with(".md"))
+                    .or_else(|| design.tool_file_paths.iter().find(|p| p.ends_with("-design.md")))
+                    .cloned();
+                tracing::debug!("Plan file from tool_use paths: {:?}", plan_file_from_tools);
 
                 // Determine the plan file path
                 let plan_file_path = if let Some(p) = plan_file {
-                    // Found a plan file reference in the output
+                    // Found a plan file reference in the text output
+                    tracing::info!("Using plan file from text: {}", p);
                     p
+                } else if let Some(p) = plan_file_from_tools {
+                    // Found a plan file from tool_use inputs (Write/Edit)
+                    tracing::info!("Using plan file from tool_use: {}", p);
+                    // Make path relative if it's absolute and within the worktree
+                    let wt_prefix = format!("{}/", wt_path.display());
+                    if p.starts_with(&wt_prefix) {
+                        p[wt_prefix.len()..].to_string()
+                    } else {
+                        p
+                    }
                 } else if design.text.contains("<promise>COMPLETE</promise>") {
-                    // Claude claimed completion but didn't reference a plan file.
-                    // This indicates the design phase completed without producing a plan.
+                    // Claude claimed completion but didn't reference a plan file
+                    // in text or tools. Log what we have for debugging.
+                    tracing::warn!(
+                        "Design phase claimed COMPLETE but no plan file found. \
+                         text_len={}, tool_file_paths={:?}, text_preview={}",
+                        design.text.len(),
+                        design.tool_file_paths,
+                        truncate_for_log(&design.text, 500)
+                    );
                     self.cleanup_worktree(runtime, &wt_path).await;
                     self.emit(SessionEvent::OneShotFailed {
-                        reason: "Design phase did not produce a plan file".to_string(),
+                        reason: format!(
+                            "Design phase did not produce a plan file. \
+                             Claude output {} chars of text and used {} tool calls with file paths: {:?}",
+                            design.text.len(),
+                            design.tool_file_paths.len(),
+                            design.tool_file_paths
+                        ),
                     });
                     trace.outcome = SessionOutcome::Failed;
                     trace.end_time = Some(Utc::now());
@@ -432,7 +534,9 @@ impl OneShotRunner {
                     // Generate a default plan file path (Claude likely wrote it but
                     // didn't explicitly reference the path in its text output).
                     let date = Utc::now().format("%Y-%m-%d").to_string();
-                    format!("docs/plans/{}-{}-design.md", date, slug)
+                    let default_path = format!("docs/plans/{}-{}-design.md", date, slug);
+                    tracing::info!("No plan file found in output, using default: {}", default_path);
+                    default_path
                 };
 
                 self.emit(SessionEvent::DesignPhaseComplete {
@@ -465,7 +569,8 @@ impl OneShotRunner {
                     env_vars: self.config.env_vars.clone(),
                 };
 
-                let impl_result = self.run_claude_phase(runtime, &impl_invocation).await;
+                tracing::info!("Starting implementation phase");
+                let impl_result = self.run_claude_phase(runtime, &impl_invocation, "implementation").await;
 
                 match impl_result {
                     Ok(impl_phase) => {
@@ -518,19 +623,75 @@ impl OneShotRunner {
 
                 match self.config.merge_strategy {
                     MergeStrategy::MergeToMain => {
-                        // checkout main
+                        // All git operations happen inside the worktree to avoid
+                        // touching the user's main repo checkout.
+
+                        // 1. Fetch latest origin/main
+                        let fetch = runtime
+                            .run_command(
+                                "git fetch origin main",
+                                &wt_path,
+                                Duration::from_secs(120),
+                            )
+                            .await?;
+
+                        if fetch.exit_code != 0 {
+                            let fetch_err = if fetch.stderr.is_empty() { &fetch.stdout } else { &fetch.stderr };
+                            self.emit(SessionEvent::OneShotFailed {
+                                reason: format!(
+                                    "Failed to fetch origin/main: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree and push manually. Once done, remove the worktree with:\ngit worktree remove {}",
+                                    fetch_err, branch, wt_path.display(), wt_path.display()
+                                ),
+                            });
+                            trace.outcome = SessionOutcome::Failed;
+                            trace.end_time = Some(Utc::now());
+                            let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
+                            let _ = self.collector.finalize(&mut trace, &events).await;
+                            return Err(anyhow::anyhow!("Fetch failed"));
+                        }
+
+                        // 2. Rebase our branch onto origin/main
+                        let rebase = runtime
+                            .run_command(
+                                "git rebase origin/main",
+                                &wt_path,
+                                Duration::from_secs(120),
+                            )
+                            .await?;
+
+                        if rebase.exit_code != 0 {
+                            // Abort rebase to leave worktree in a clean state
+                            let _ = runtime.run_command("git rebase --abort", &wt_path, Duration::from_secs(30)).await;
+                            let rebase_err = if rebase.stderr.is_empty() { &rebase.stdout } else { &rebase.stderr };
+                            self.emit(SessionEvent::OneShotFailed {
+                                reason: format!(
+                                    "Rebase onto origin/main failed (conflicts): {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree, rebase manually, then push. Once done, remove the worktree with:\ngit worktree remove {}",
+                                    rebase_err, branch, wt_path.display(), wt_path.display()
+                                ),
+                            });
+                            trace.outcome = SessionOutcome::Failed;
+                            trace.end_time = Some(Utc::now());
+                            let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
+                            let _ = self.collector.finalize(&mut trace, &events).await;
+                            return Err(anyhow::anyhow!("Rebase failed"));
+                        }
+
+                        // 3. Checkout main in the worktree
                         let checkout = runtime
                             .run_command(
                                 "git checkout main",
-                                &self.config.repo_path,
+                                &wt_path,
                                 Duration::from_secs(60),
                             )
                             .await?;
 
                         if checkout.exit_code != 0 {
-                            self.cleanup_worktree(runtime, &wt_path).await;
+                            let checkout_err = if checkout.stderr.is_empty() { &checkout.stdout } else { &checkout.stderr };
                             self.emit(SessionEvent::OneShotFailed {
-                                reason: "Failed to checkout main".to_string(),
+                                reason: format!(
+                                    "Failed to checkout main in worktree: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nOnce done, remove the worktree with:\ngit worktree remove {}",
+                                    checkout_err, branch, wt_path.display(), wt_path.display()
+                                ),
                             });
                             trace.outcome = SessionOutcome::Failed;
                             trace.end_time = Some(Utc::now());
@@ -539,27 +700,21 @@ impl OneShotRunner {
                             return Err(anyhow::anyhow!("Failed to checkout main"));
                         }
 
-                        // merge branch
+                        // 4. Fast-forward merge the rebased branch
                         let merge = runtime
                             .run_command(
-                                &format!("git merge {}", branch),
-                                &self.config.repo_path,
+                                &format!("git merge --ff-only {}", branch),
+                                &wt_path,
                                 Duration::from_secs(60),
                             )
                             .await?;
 
                         if merge.exit_code != 0 {
-                            // Abort the failed merge to restore clean main
-                            let _ = runtime.run_command("git merge --abort", &self.config.repo_path, Duration::from_secs(30)).await;
-                            // Don't cleanup worktree -- leave for manual resolution (per spec)
+                            let merge_err = if merge.stderr.is_empty() { &merge.stdout } else { &merge.stderr };
                             self.emit(SessionEvent::OneShotFailed {
                                 reason: format!(
-                                    "Merge failed: {}",
-                                    if merge.stderr.is_empty() {
-                                        &merge.stdout
-                                    } else {
-                                        &merge.stderr
-                                    }
+                                    "Fast-forward merge failed: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, merge manually then remove the worktree with:\ngit worktree remove {}",
+                                    merge_err, branch, wt_path.display(), wt_path.display()
                                 ),
                             });
                             trace.outcome = SessionOutcome::Failed;
@@ -569,18 +724,22 @@ impl OneShotRunner {
                             return Err(anyhow::anyhow!("Merge failed"));
                         }
 
-                        // push
+                        // 5. Push main
                         let push = runtime
                             .run_command(
-                                "git push",
-                                &self.config.repo_path,
-                                Duration::from_secs(60),
+                                "git push origin main",
+                                &wt_path,
+                                Duration::from_secs(120),
                             )
                             .await?;
+
                         if push.exit_code != 0 {
-                            // Don't cleanup worktree on push failure (per spec)
+                            let push_err = if push.stderr.is_empty() { &push.stdout } else { &push.stderr };
                             self.emit(SessionEvent::OneShotFailed {
-                                reason: format!("Push failed: {}", if push.stderr.is_empty() { &push.stdout } else { &push.stderr }),
+                                reason: format!(
+                                    "Push failed: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree, pull/rebase, then push manually. Once done, remove the worktree with:\ngit worktree remove {}",
+                                    push_err, branch, wt_path.display(), wt_path.display()
+                                ),
                             });
                             trace.outcome = SessionOutcome::Failed;
                             trace.end_time = Some(Utc::now());
@@ -589,16 +748,15 @@ impl OneShotRunner {
                             return Err(anyhow::anyhow!("Push failed"));
                         }
 
-                        // delete branch
+                        // 6. Clean up: delete branch and remove worktree
                         let _ = runtime
                             .run_command(
                                 &format!("git branch -d {}", branch),
-                                &self.config.repo_path,
+                                &wt_path,
                                 Duration::from_secs(60),
                             )
                             .await;
 
-                        // remove worktree
                         let _ = runtime
                             .run_command(
                                 &format!("git worktree remove {}", wt_path.display()),
@@ -618,8 +776,12 @@ impl OneShotRunner {
                             .await?;
                         if push.exit_code != 0 {
                             // Don't cleanup worktree on push failure
+                            let push_err = if push.stderr.is_empty() { &push.stdout } else { &push.stderr };
                             self.emit(SessionEvent::OneShotFailed {
-                                reason: format!("Push failed: {}", if push.stderr.is_empty() { &push.stdout } else { &push.stderr }),
+                                reason: format!(
+                                    "Push failed: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree, pull/rebase, then push manually. Once done, remove the worktree with:\ngit worktree remove {}",
+                                    push_err, branch, wt_path.display(), wt_path.display()
+                                ),
                             });
                             trace.outcome = SessionOutcome::Failed;
                             trace.end_time = Some(Utc::now());
@@ -1052,16 +1214,36 @@ mod tests {
         // So completing_after(1) provides enough scenarios for 2 spawn_claude calls
 
         // Command results in order:
-        // 1. git worktree add (success)
-        // 2. git checkout main (success)
-        // 3. git merge <branch> (success)
-        // 4. git push (success)
-        // 5. git branch -d <branch> (success)
-        // 6. git worktree remove <path> (success)
+        // 1. mkdir -p (success, ignored)
+        // 2. git worktree add (success)
+        // 3. git fetch origin main (success)
+        // 4. git rebase origin/main (success)
+        // 5. git checkout main (success)
+        // 6. git merge --ff-only <branch> (success)
+        // 7. git push origin main (success)
+        // 8. git branch -d <branch> (success)
+        // 9. git worktree remove <path> (success)
+        // MockRuntime returns success by default when command_results is
+        // exhausted, so we only need to provide the first few explicitly.
         runtime.command_results = vec![
             CommandOutput {
                 exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
                 stderr: String::new(),
             },
             CommandOutput {
@@ -1071,7 +1253,7 @@ mod tests {
             },
             CommandOutput {
                 exit_code: 0,
-                stdout: "Merge made by the 'ort' strategy.".to_string(),
+                stdout: "Already up to date.".to_string(),
                 stderr: String::new(),
             },
             CommandOutput {
@@ -1472,18 +1654,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_oneshot_git_finalize_failure_merge() {
+    async fn test_oneshot_git_finalize_failure_rebase_conflict() {
         let tmp = TempDir::new().expect("create temp dir");
         let (runner, events) = setup_runner_with_events(&tmp, MergeStrategy::MergeToMain);
 
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command results:
-        // 1. worktree add (success)
-        // 2. checkout main (success)
-        // 3. merge (FAIL — conflict)
-        // 4. worktree remove (cleanup)
+        // 1. mkdir -p (success)
+        // 2. git worktree add (success)
+        // 3. git fetch origin main (success)
+        // 4. git rebase origin/main (FAIL — conflict)
+        // 5. git rebase --abort (cleanup)
         runtime.command_results = vec![
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
@@ -1491,7 +1679,7 @@ mod tests {
             },
             CommandOutput {
                 exit_code: 0,
-                stdout: "Switched to branch 'main'".to_string(),
+                stdout: String::new(),
                 stderr: String::new(),
             },
             CommandOutput {
@@ -1499,7 +1687,7 @@ mod tests {
                 stdout: String::new(),
                 stderr: "CONFLICT (content): Merge conflict in src/main.rs".to_string(),
             },
-            // Cleanup: worktree remove
+            // rebase --abort cleanup
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -1520,21 +1708,36 @@ mod tests {
             *captured
         );
 
-        // Should have OneShotFailed (due to merge conflict)
+        // Should have OneShotFailed (due to rebase conflict)
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
         assert!(
-            captured
-                .iter()
-                .any(|e| matches!(e, SessionEvent::OneShotFailed { .. })),
-            "should emit OneShotFailed when merge fails, events: {:?}",
+            failed_event.is_some(),
+            "should emit OneShotFailed when rebase fails, events: {:?}",
             *captured
         );
+
+        // Verify the failure reason mentions rebase and worktree path
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.contains("Rebase"),
+                "failure reason should mention rebase, got: {}",
+                reason
+            );
+            assert!(
+                reason.contains("worktree"),
+                "failure reason should mention worktree path, got: {}",
+                reason
+            );
+        }
 
         // Should NOT have OneShotComplete
         assert!(
             !captured
                 .iter()
                 .any(|e| matches!(e, SessionEvent::OneShotComplete)),
-            "should not emit OneShotComplete when merge fails"
+            "should not emit OneShotComplete when rebase fails"
         );
     }
 
