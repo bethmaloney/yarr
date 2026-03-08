@@ -200,9 +200,9 @@ Save works through the existing `saveSettings` flow.
 
 ## Dependency on Post-Loop Checks Design
 
-This feature depends on the `run_command` method on `RuntimeProvider` introduced by the post-loop checks design (Tasks 2-5). If implemented before post-loop checks, those Tasks (2-5) must be completed first, or `run_command` must be introduced as part of this feature.
+The post-loop checks feature has landed. `RuntimeProvider::run_command` is available on all runtimes (Local, WSL, SSH, Mock). The `run_checks` call sites are in place at `session.rs:443` (EachIteration) and `session.rs:453` (PostCompletion). Our `git_sync` calls go immediately after each of these.
 
-The two features touch the same files (`session.rs`, `RepoConfig`, `SessionEvent`, `RepoDetail.svelte`, `App.svelte`, `EventsList.svelte`) but with different fields, methods, and event variants. No conflicts expected -- only ordering of call sites matters (checks before sync).
+Note: `ClaudeInvocation` now requires an `env_vars: HashMap<String, String>` field. The conflict-resolution Claude spawn should pass an empty map (no special env vars needed).
 
 ## Decisions
 
@@ -224,7 +224,7 @@ Add the `GitSyncConfig` struct to the Rust backend.
 **Files to create/modify:**
 - `src-tauri/src/session.rs`
 
-**Pattern reference:** `SessionConfig` at `src-tauri/src/session.rs:11-23`
+**Pattern reference:** `SessionConfig` at `src-tauri/src/session.rs:36-50`, `Check` struct at `src-tauri/src/session.rs:21-32`
 
 **Details:**
 - Add `GitSyncConfig` struct with fields: `enabled` (bool), `conflict_prompt` (Option<String>), `model` (Option<String>), `max_push_retries` (u32)
@@ -248,7 +248,7 @@ Add event types so the frontend can display git sync progress.
 **Files to create/modify:**
 - `src-tauri/src/session.rs`
 
-**Pattern reference:** `SessionEvent` enum at `src-tauri/src/session.rs:53-78`
+**Pattern reference:** `SessionEvent` enum at `src-tauri/src/session.rs:84-117` (includes existing check event variants as examples)
 
 **Details:**
 - Add variants: `GitSyncStarted { iteration: u32 }`, `GitSyncPushSucceeded { iteration: u32 }`, `GitSyncConflict { iteration: u32, files: Vec<String> }`, `GitSyncConflictResolveStarted { iteration: u32, attempt: u32 }`, `GitSyncConflictResolveComplete { iteration: u32, attempt: u32, success: bool }`, `GitSyncFailed { iteration: u32, error: String }`
@@ -285,7 +285,7 @@ Core logic for the push-rebase-resolve flow.
 **Files to create/modify:**
 - `src-tauri/src/session.rs`
 
-**Pattern reference:** `SessionRunner::run_iteration` at `src-tauri/src/session.rs:321-409`, `push_with_rebase` in `../rust-sqlpackage/run_ralph.sh:14-87`
+**Pattern reference:** `SessionRunner::run_iteration` at `src-tauri/src/session.rs:560-610`, `SessionRunner::run_checks` at `src-tauri/src/session.rs:204-354`, `push_with_rebase` in `../rust-sqlpackage/run_ralph.sh:14-87`
 
 **Details:**
 - Add `async fn git_sync(&self, runtime: &dyn RuntimeProvider, iteration: u32)` method on `SessionRunner`
@@ -304,14 +304,15 @@ Core logic for the push-rebase-resolve flow.
     - Emit `GitSyncConflict`
     - Emit `GitSyncConflictResolveStarted`
     - Build conflict prompt via `prompt::build_conflict_prompt`
-    - Build `ClaudeInvocation` with conflict prompt, model (from git_sync config, default "sonnet"), `--dangerously-skip-permissions`
-    - Spawn Claude via `runtime.spawn_claude(...)`, consume events, wait for completion
+    - Build `ClaudeInvocation` with conflict prompt, model (from git_sync config, default "sonnet"), `--dangerously-skip-permissions`, and `env_vars: HashMap::new()`
+    - Spawn Claude via `runtime.spawn_claude(...)`, consume events (use same pattern as `run_checks` fix agent at session.rs:289-340), wait for completion
     - Check if rebase still in progress (`git status` contains "rebase in progress")
     - If still in progress: `git rebase --abort`, emit `GitSyncConflictResolveComplete { success: false }`
     - If resolved: emit `GitSyncConflictResolveComplete { success: true }`, retry push
   - If non-conflict rebase error: `git rebase --abort`, continue to next attempt
 - If all retries exhausted: emit `GitSyncFailed`, return (don't fail session)
 - Cancellation: check token before starting, respect it during Claude spawn (abort rebase if cancelled mid-fix)
+- Use `Duration::from_secs(120)` as timeout for git commands (generous for large repos)
 
 **Checklist:**
 - [ ] Add `git_sync` method
@@ -333,14 +334,13 @@ Wire `git_sync` into the three call sites in `SessionRunner::run`.
 **Files to create/modify:**
 - `src-tauri/src/session.rs`
 
-**Pattern reference:** `SessionRunner::run` loop at `src-tauri/src/session.rs:125-319`
+**Pattern reference:** `SessionRunner::run` loop at `src-tauri/src/session.rs:355-558`
 
 **Details:**
-- **After each successful iteration** (after the future `run_checks(EachIteration)` call site, before inter-iteration delay): call `self.git_sync(runtime, iteration).await`
-- **After completion signal** (after the future `run_checks(PostCompletion)` call site, before break): call `self.git_sync(runtime, iteration).await`
-- **On session exit** (after the main loop, for Failed/MaxIterations/Cancelled states, before trace finalization): call `self.git_sync(runtime, last_iteration).await`
+- **After each successful iteration** (after `run_checks(EachIteration)` at line 443, before the cancellation check at line 445): call `self.git_sync(runtime, iteration).await`
+- **After completion signal** (after `run_checks(PostCompletion)` at line 453, before `state = SessionState::Completed` at line 454): call `self.git_sync(runtime, iteration).await`
+- **On session exit** (after the main loop ends at line 520, for Failed/MaxIterations/Cancelled states, before trace finalization at line 532): call `self.git_sync(runtime, last_iteration).await`
 - Track `last_iteration` variable through the loop so it's available after the loop ends
-- If post-loop checks are not yet implemented, place the git_sync calls where checks would go (they'll be reordered when checks land)
 
 **Checklist:**
 - [ ] Add git_sync call after each successful iteration
@@ -358,7 +358,7 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 **Files to create/modify:**
 - `src-tauri/src/lib.rs`
 
-**Pattern reference:** `run_session` command at `src-tauri/src/lib.rs:87-215`
+**Pattern reference:** `run_session` command at `src-tauri/src/lib.rs:88-222` (note: `env_vars` parameter at line 97, `checks` at lines 138/182 show the pattern for adding optional config params)
 
 **Details:**
 - Add `git_sync: Option<session::GitSyncConfig>` parameter to `run_session` command
@@ -379,7 +379,7 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 - `src/types.ts`
 - `src/repos.ts`
 
-**Pattern reference:** `RepoConfig` types at `src/repos.ts:5-26`, `SessionEvent` at `src/types.ts:1-11`
+**Pattern reference:** `RepoConfig` types at `src/repos.ts:5-27` (note `envVars?: Record<string, string>` at lines 13/25 as pattern for optional config), `SessionEvent` at `src/types.ts:1-11`
 
 **Details:**
 - In `types.ts`: add `GitSyncConfig` type with fields: `enabled: boolean`, `conflictPrompt?: string`, `model?: string`, `maxPushRetries: number`
@@ -400,7 +400,7 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 **Files to create/modify:**
 - `src/RepoDetail.svelte`
 
-**Pattern reference:** Settings `<details>` block at `src/RepoDetail.svelte:113-159`
+**Pattern reference:** Settings `<details>` block at `src/RepoDetail.svelte:125-201` (note env vars `<fieldset>` at lines 159-188 as pattern for a sub-section with add/remove UI)
 
 **Details:**
 - Add a new `<details class="git-sync">` section after the existing settings details
@@ -426,12 +426,12 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 **Files to create/modify:**
 - `src/App.svelte`
 
-**Pattern reference:** `handleRunSession` at `src/App.svelte:157-198`
+**Pattern reference:** `handleRunSession` at `src/App.svelte:157-198` (note `envVars` passed at line 186 as pattern)
 
 **Details:**
 - Read `gitSync` from the repo config
-- Convert field names from frontend camelCase to Rust serde format if needed (verify serde naming on `GitSyncConfig` and align)
-- Pass `gitSync` as `git_sync` parameter to the `invoke("run_session", { ..., gitSync })` call (Tauri handles the rename)
+- Pass `gitSync` in the invoke parameters object alongside `envVars`: `invoke("run_session", { ..., envVars: repo.envVars ?? {}, gitSync: repo.gitSync })`
+- Tauri deserializes camelCase frontend fields to snake_case Rust fields via serde `rename_all`
 
 **Checklist:**
 - [ ] Add `gitSync` to the invoke parameters
@@ -445,7 +445,7 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 **Files to create/modify:**
 - `src/EventsList.svelte`
 
-**Pattern reference:** `eventEmoji` and `eventLabel` at `src/EventsList.svelte:69-125`
+**Pattern reference:** `eventEmoji` at `src/EventsList.svelte:69-86`, `eventLabel` at `src/EventsList.svelte:108-125`
 
 **Details:**
 - Add cases to `eventEmoji`: `git_sync_started` -> sync/arrows icon, `git_sync_push_succeeded` -> green check, `git_sync_conflict` -> orange warning, `git_sync_conflict_resolve_started` -> wrench, `git_sync_conflict_resolve_complete` -> green/red based on success, `git_sync_failed` -> red X
@@ -466,20 +466,23 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 **Files to create/modify:**
 - `src-tauri/src/session.rs` (add tests to existing `#[cfg(test)]` module)
 
-**Pattern reference:** `run_accumulates_events_to_disk` test at `src-tauri/src/session.rs:419-484`
+**Pattern reference:** existing check tests in `src-tauri/src/session.rs` (search for `#[cfg(test)]`), `MockRuntime` with configurable `command_results` at `src-tauri/src/runtime/mock.rs`
 
 **Details:**
 - Test `git_sync` with `git_sync: None` -- no events emitted, no commands run
 - Test `git_sync` with `enabled: false` -- no events emitted
 - Test `build_conflict_prompt` with default prompt (no custom)
 - Test `build_conflict_prompt` with custom prompt
-- Note: full integration testing of push/rebase/conflict flows requires mock runtime `run_command` from the post-loop checks design. If those aren't implemented yet, add placeholder tests with a TODO comment.
+- Test successful push flow using `MockRuntime` with `run_command` returning exit code 0 -- verify `GitSyncStarted` + `GitSyncPushSucceeded` events
+- Test push failure + successful rebase flow using `MockRuntime` with sequenced `command_results`
 
 **Checklist:**
 - [ ] Test git_sync skipped when None
 - [ ] Test git_sync skipped when disabled
 - [ ] Test build_conflict_prompt default
 - [ ] Test build_conflict_prompt custom
+- [ ] Test successful push emits correct events
+- [ ] Test push-fail + rebase flow
 - [ ] Verify: `cd src-tauri && cargo test`
 
 ---
