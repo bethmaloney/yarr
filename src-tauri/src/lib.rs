@@ -72,6 +72,7 @@ async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trac
         inter_iteration_delay_ms: 100,
         env_vars: HashMap::new(),
         checks: Vec::new(),
+        git_sync: None,
     };
 
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -149,6 +150,7 @@ async fn run_session(
                 inter_iteration_delay_ms: 1000,
                 env_vars: env_vars.unwrap_or_default(),
                 checks: checks.unwrap_or_default(),
+                git_sync: None,
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -196,6 +198,7 @@ async fn run_session(
                 inter_iteration_delay_ms: 1000,
                 env_vars: env_vars.unwrap_or_default(),
                 checks: checks.unwrap_or_default(),
+                git_sync: None,
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;

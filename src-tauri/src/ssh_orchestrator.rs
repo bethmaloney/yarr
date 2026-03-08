@@ -719,6 +719,7 @@ mod tests {
             inter_iteration_delay_ms: 0,
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(),
+            git_sync: None,
         }
     }
 

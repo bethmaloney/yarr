@@ -203,6 +203,32 @@ pub fn build_design_prompt(user_prompt: &str, title: &str) -> String {
     format!("{DESIGN_PROMPT}\n\n---\n\n**Title:** {title}\n\n**Task:** {user_prompt}")
 }
 
+/// Default prompt for resolving merge conflicts during git sync.
+pub const DEFAULT_CONFLICT_PROMPT: &str = r#"Resolve merge conflicts. We are rebasing our local commits onto the updated remote.
+
+IMPORTANT: In rebase conflicts, HEAD/ours = remote changes, incoming/theirs = our local work.
+
+Conflicting files:
+{conflict_files}
+
+For each file:
+1. Read the file to see the conflict markers
+2. Understand what BOTH sides are trying to do
+3. Merge intelligently - combine both changes so nothing is lost
+4. Remove all conflict markers
+5. Run `git add <file>`
+
+After all conflicts resolved: `git rebase --continue`"#;
+
+/// Build the conflict resolution prompt, using a custom prompt if provided.
+/// The conflict file list is always appended.
+pub fn build_conflict_prompt(custom_prompt: Option<&str>, conflict_files: &str) -> String {
+    match custom_prompt {
+        Some(prompt) => format!("{prompt}\n\nConflicting files:\n{conflict_files}"),
+        None => DEFAULT_CONFLICT_PROMPT.replace("{conflict_files}", conflict_files),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,8 +283,6 @@ mod tests {
     #[test]
     fn build_design_prompt_includes_design_prompt_content() {
         let result = build_design_prompt("Add a login page", "Login Feature");
-        // The result should contain content from DESIGN_PROMPT itself.
-        // We check for a phrase that must appear in the constant.
         assert!(
             result.contains("implementation plan"),
             "Result should include content from DESIGN_PROMPT"
@@ -271,6 +295,56 @@ mod tests {
         assert!(
             !result.is_empty(),
             "Result should be non-empty even with empty inputs"
+        );
+    }
+
+    #[test]
+    fn build_conflict_prompt_default_contains_conflict_files() {
+        let files = "src/main.rs\nCargo.toml";
+        let result = build_conflict_prompt(None, files);
+
+        assert!(
+            result.contains("src/main.rs"),
+            "default conflict prompt should contain the conflict file list, got: {result}"
+        );
+        assert!(
+            result.contains("Cargo.toml"),
+            "default conflict prompt should contain the conflict file list, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_conflict_prompt_custom_contains_custom_text_and_files() {
+        let custom = "Please carefully resolve all merge conflicts while preserving functionality.";
+        let files = "lib.rs\nmod.rs";
+        let result = build_conflict_prompt(Some(custom), files);
+
+        assert!(
+            result.contains(custom),
+            "custom conflict prompt should contain the custom text, got: {result}"
+        );
+        assert!(
+            result.contains("lib.rs"),
+            "custom conflict prompt should contain the conflict files, got: {result}"
+        );
+        assert!(
+            result.contains("mod.rs"),
+            "custom conflict prompt should contain the conflict files, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_conflict_prompt_default_replaces_placeholder() {
+        let files = "src/app.rs";
+        let result = build_conflict_prompt(None, files);
+
+        assert!(
+            !result.contains("{conflict_files}"),
+            "placeholder '{{conflict_files}}' should be replaced in the output, got: {result}"
+        );
+        assert!(
+            result.contains("src/app.rs"),
+            "the actual file list should appear in the output, got: {result}"
         );
     }
 }

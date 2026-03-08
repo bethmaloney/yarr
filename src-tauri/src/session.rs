@@ -32,6 +32,26 @@ pub struct Check {
     pub max_retries: u32,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct GitSyncConfig {
+    pub enabled: bool,
+    pub conflict_prompt: Option<String>,
+    pub model: Option<String>,
+    pub max_push_retries: u32,
+}
+
+impl Default for GitSyncConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            conflict_prompt: None,
+            model: None,
+            max_push_retries: 3,
+        }
+    }
+}
+
 /// Configuration for a Ralph loop session
 #[derive(Debug, Clone)]
 pub struct SessionConfig {
@@ -48,6 +68,7 @@ pub struct SessionConfig {
     /// Extra environment variables to set when spawning Claude
     pub env_vars: std::collections::HashMap<String, String>,
     pub checks: Vec<Check>,
+    pub git_sync: Option<GitSyncConfig>,
 }
 
 impl Default for SessionConfig {
@@ -63,6 +84,7 @@ impl Default for SessionConfig {
             inter_iteration_delay_ms: 1000,
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(),
+            git_sync: None,
         }
     }
 }
@@ -133,6 +155,18 @@ pub enum SessionEvent {
     OneShotComplete,
     /// 1-shot failed
     OneShotFailed { reason: String },
+    /// Git sync has started
+    GitSyncStarted { iteration: u32 },
+    /// Git push succeeded
+    GitSyncPushSucceeded { iteration: u32 },
+    /// Merge conflicts detected during rebase
+    GitSyncConflict { iteration: u32, files: Vec<String> },
+    /// Conflict resolution Claude spawn started
+    GitSyncConflictResolveStarted { iteration: u32, attempt: u32 },
+    /// Conflict resolution completed
+    GitSyncConflictResolveComplete { iteration: u32, attempt: u32, success: bool },
+    /// Git sync failed after all retries
+    GitSyncFailed { iteration: u32, error: String },
 }
 
 /// Callback for receiving session events (Tauri IPC hookpoint)
@@ -717,6 +751,7 @@ mod tests {
             inter_iteration_delay_ms: 0, // no delay for tests
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(),
+            git_sync: None,
         };
 
         let collector = TraceCollector::new(base_dir, "test-repo");
@@ -1042,6 +1077,7 @@ mod tests {
             inter_iteration_delay_ms: 0,
             env_vars: std::collections::HashMap::new(),
             checks,
+            git_sync: None,
         };
         let collector = TraceCollector::new(tmp.path(), "test-repo");
         let cancel_token = tokio_util::sync::CancellationToken::new();
@@ -1279,6 +1315,7 @@ mod tests {
             inter_iteration_delay_ms: 0,
             env_vars: std::collections::HashMap::new(),
             checks: vec![check],
+            git_sync: None,
         };
 
         let collector = TraceCollector::new(tmp.path(), "test-repo");
@@ -1344,6 +1381,7 @@ mod tests {
             inter_iteration_delay_ms: 0,
             env_vars: std::collections::HashMap::new(),
             checks: vec![check],
+            git_sync: None,
         };
 
         let collector = TraceCollector::new(tmp.path(), "test-repo");
@@ -1418,6 +1456,7 @@ mod tests {
             inter_iteration_delay_ms: 0,
             env_vars: std::collections::HashMap::new(),
             checks: vec![check],
+            git_sync: None,
         };
 
         let collector = TraceCollector::new(tmp.path(), "test-repo");
@@ -1515,6 +1554,174 @@ mod tests {
         assert_eq!(json["reason"], "Design phase timed out");
     }
 
+    // =========================================================================
+    // Git sync data model tests
+    // =========================================================================
+
+    #[test]
+    fn git_sync_config_default_values() {
+        let config = GitSyncConfig::default();
+        assert_eq!(config.enabled, false);
+        assert_eq!(config.conflict_prompt, None);
+        assert_eq!(config.model, None);
+        assert_eq!(config.max_push_retries, 3);
+    }
+
+    #[test]
+    fn git_sync_config_serializes_correctly() {
+        let config = GitSyncConfig {
+            enabled: true,
+            conflict_prompt: Some("Resolve these merge conflicts".to_string()),
+            model: Some("sonnet".to_string()),
+            max_push_retries: 5,
+        };
+
+        let json = serde_json::to_value(&config).expect("serialize GitSyncConfig");
+        assert_eq!(json["enabled"], true);
+        assert_eq!(json["conflict_prompt"], "Resolve these merge conflicts");
+        assert_eq!(json["model"], "sonnet");
+        assert_eq!(json["max_push_retries"], 5);
+    }
+
+    #[test]
+    fn git_sync_config_deserializes_from_json() {
+        let json = serde_json::json!({
+            "enabled": true,
+            "conflict_prompt": "Fix conflicts please",
+            "model": "opus",
+            "max_push_retries": 7
+        });
+
+        let config: GitSyncConfig = serde_json::from_value(json).expect("deserialize GitSyncConfig");
+        assert_eq!(config.enabled, true);
+        assert_eq!(config.conflict_prompt, Some("Fix conflicts please".to_string()));
+        assert_eq!(config.model, Some("opus".to_string()));
+        assert_eq!(config.max_push_retries, 7);
+    }
+
+    #[test]
+    fn git_sync_config_deserializes_with_optional_fields_absent() {
+        let json = serde_json::json!({
+            "enabled": false,
+            "max_push_retries": 2
+        });
+
+        let config: GitSyncConfig = serde_json::from_value(json).expect("deserialize GitSyncConfig with absent optionals");
+        assert_eq!(config.enabled, false);
+        assert_eq!(config.conflict_prompt, None);
+        assert_eq!(config.model, None);
+        assert_eq!(config.max_push_retries, 2);
+    }
+
+    #[test]
+    fn session_config_default_has_no_git_sync() {
+        let config = SessionConfig::default();
+        assert!(config.git_sync.is_none(), "default git_sync should be None");
+    }
+
+    #[test]
+    fn git_sync_started_event_serializes_correctly() {
+        let event = SessionEvent::GitSyncStarted { iteration: 1 };
+        let json = serde_json::to_value(&event).expect("serialize GitSyncStarted");
+        assert_eq!(json["kind"], "git_sync_started");
+        assert_eq!(json["iteration"], 1);
+    }
+
+    #[test]
+    fn git_sync_push_succeeded_event_serializes_correctly() {
+        let event = SessionEvent::GitSyncPushSucceeded { iteration: 2 };
+        let json = serde_json::to_value(&event).expect("serialize GitSyncPushSucceeded");
+        assert_eq!(json["kind"], "git_sync_push_succeeded");
+        assert_eq!(json["iteration"], 2);
+    }
+
+    #[test]
+    fn git_sync_conflict_event_serializes_correctly() {
+        let event = SessionEvent::GitSyncConflict {
+            iteration: 3,
+            files: vec!["src/main.rs".to_string(), "Cargo.toml".to_string()],
+        };
+        let json = serde_json::to_value(&event).expect("serialize GitSyncConflict");
+        assert_eq!(json["kind"], "git_sync_conflict");
+        assert_eq!(json["iteration"], 3);
+        assert_eq!(json["files"], serde_json::json!(["src/main.rs", "Cargo.toml"]));
+    }
+
+    #[test]
+    fn git_sync_conflict_resolve_started_event_serializes_correctly() {
+        let event = SessionEvent::GitSyncConflictResolveStarted {
+            iteration: 4,
+            attempt: 1,
+        };
+        let json = serde_json::to_value(&event).expect("serialize GitSyncConflictResolveStarted");
+        assert_eq!(json["kind"], "git_sync_conflict_resolve_started");
+        assert_eq!(json["iteration"], 4);
+        assert_eq!(json["attempt"], 1);
+    }
+
+    #[test]
+    fn git_sync_conflict_resolve_complete_event_serializes_correctly() {
+        let event_success = SessionEvent::GitSyncConflictResolveComplete {
+            iteration: 5,
+            attempt: 2,
+            success: true,
+        };
+        let json_success = serde_json::to_value(&event_success).expect("serialize GitSyncConflictResolveComplete success");
+        assert_eq!(json_success["kind"], "git_sync_conflict_resolve_complete");
+        assert_eq!(json_success["iteration"], 5);
+        assert_eq!(json_success["attempt"], 2);
+        assert_eq!(json_success["success"], true);
+
+        let event_failure = SessionEvent::GitSyncConflictResolveComplete {
+            iteration: 6,
+            attempt: 3,
+            success: false,
+        };
+        let json_failure = serde_json::to_value(&event_failure).expect("serialize GitSyncConflictResolveComplete failure");
+        assert_eq!(json_failure["kind"], "git_sync_conflict_resolve_complete");
+        assert_eq!(json_failure["iteration"], 6);
+        assert_eq!(json_failure["attempt"], 3);
+        assert_eq!(json_failure["success"], false);
+    }
+
+    #[test]
+    fn git_sync_failed_event_serializes_correctly() {
+        let event = SessionEvent::GitSyncFailed {
+            iteration: 7,
+            error: "push rejected after max retries".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize GitSyncFailed");
+        assert_eq!(json["kind"], "git_sync_failed");
+        assert_eq!(json["iteration"], 7);
+        assert_eq!(json["error"], "push rejected after max retries");
+    }
+
+    #[test]
+    fn all_git_sync_event_variants_roundtrip_through_json() {
+        let events = vec![
+            SessionEvent::GitSyncStarted { iteration: 1 },
+            SessionEvent::GitSyncPushSucceeded { iteration: 1 },
+            SessionEvent::GitSyncConflict {
+                iteration: 2,
+                files: vec!["src/lib.rs".to_string(), "README.md".to_string()],
+            },
+            SessionEvent::GitSyncConflictResolveStarted { iteration: 2, attempt: 1 },
+            SessionEvent::GitSyncConflictResolveComplete { iteration: 2, attempt: 1, success: true },
+            SessionEvent::GitSyncFailed {
+                iteration: 3,
+                error: "network error".to_string(),
+            },
+        ];
+
+        for event in &events {
+            let json_str = serde_json::to_string(event).expect("serialize event");
+            let deserialized: SessionEvent = serde_json::from_str(&json_str).expect("deserialize event");
+            let original_value = serde_json::to_value(event).expect("to_value original");
+            let roundtrip_value = serde_json::to_value(&deserialized).expect("to_value roundtrip");
+            assert_eq!(original_value, roundtrip_value, "roundtrip failed for {:?}", event);
+        }
+    }
+
     #[tokio::test]
     async fn no_checks_configured_produces_no_check_events() {
         let tmp = TempDir::new().expect("create temp dir");
@@ -1530,6 +1737,7 @@ mod tests {
             inter_iteration_delay_ms: 0,
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(), // No checks
+            git_sync: None,
         };
 
         let collector = TraceCollector::new(tmp.path(), "test-repo");

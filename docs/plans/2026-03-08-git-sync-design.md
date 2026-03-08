@@ -234,10 +234,10 @@ Add the `GitSyncConfig` struct to the Rust backend.
 - Update `SessionConfig::default()` to include `git_sync: None`
 
 **Checklist:**
-- [ ] Add `GitSyncConfig` struct with Default impl
-- [ ] Add `git_sync` field to `SessionConfig`
-- [ ] Update `SessionConfig::default()`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `GitSyncConfig` struct with Default impl
+- [x] Add `git_sync` field to `SessionConfig`
+- [x] Update `SessionConfig::default()`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -255,8 +255,8 @@ Add event types so the frontend can display git sync progress.
 - These serialize via the existing `rename_all = "snake_case"` serde config
 
 **Checklist:**
-- [ ] Add all six git sync event variants to `SessionEvent`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add all six git sync event variants to `SessionEvent`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -272,9 +272,9 @@ Add event types so the frontend can display git sync progress.
 - Add `pub fn build_conflict_prompt(custom_prompt: Option<&str>, conflict_files: &str) -> String` that uses the custom prompt if provided (appending conflict files), or the default template with the placeholder replaced
 
 **Checklist:**
-- [ ] Add `DEFAULT_CONFLICT_PROMPT` constant
-- [ ] Add `build_conflict_prompt` function
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `DEFAULT_CONFLICT_PROMPT` constant
+- [x] Add `build_conflict_prompt` function
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -531,9 +531,9 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | GitSyncConfig data model (Rust) | Not Started |
-| 2 | Git sync SessionEvent variants | Not Started |
-| 3 | Default conflict resolution prompt | Not Started |
+| 1 | GitSyncConfig data model (Rust) | Done |
+| 2 | Git sync SessionEvent variants | Done |
+| 3 | Default conflict resolution prompt | Done |
 | 4 | git_sync method on SessionRunner | Not Started |
 | 5 | Integrate git_sync into session loop | Not Started |
 | 6 | Pass GitSyncConfig through Tauri command | Not Started |
