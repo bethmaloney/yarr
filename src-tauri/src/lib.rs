@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
+use oneshot::OneShotRunner;
 use runtime::{default_runtime, MockRuntime, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use ssh_orchestrator::SshSessionOrchestrator;
@@ -237,6 +238,70 @@ async fn run_session(
 }
 
 #[tauri::command]
+async fn run_oneshot(
+    app: tauri::AppHandle,
+    repo_id: String,
+    repo: RepoType,
+    title: String,
+    prompt: String,
+    model: String,
+    merge_strategy: oneshot::MergeStrategy,
+    env_vars: Option<HashMap<String, String>>,
+) -> Result<trace::SessionTrace, String> {
+    let cancel_token = CancellationToken::new();
+    {
+        let active = app.state::<ActiveSessions>();
+        active.tokens.lock().await.insert(repo_id.clone(), cancel_token.clone());
+    }
+
+    match &repo {
+        RepoType::Local { path } => {
+            let repo_path_buf = PathBuf::from(path);
+            let runtime = default_runtime();
+
+            let config = oneshot::OneShotConfig {
+                repo_id: repo_id.clone(),
+                repo_path: repo_path_buf,
+                title,
+                prompt,
+                model,
+                merge_strategy,
+                env_vars: env_vars.unwrap_or_default(),
+            };
+
+            let base_dir = match app.path().app_data_dir() {
+                Ok(d) => d,
+                Err(e) => {
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                    return Err(e.to_string());
+                }
+            };
+            let collector = TraceCollector::new(base_dir, &repo_id);
+
+            let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
+            let app_handle = app.clone();
+            let repo_id_clone = repo_id.clone();
+            let runner = OneShotRunner::new(config, collector, cancel_token)
+                .abort_registry(abort_registry)
+                .on_event(Box::new(move |event| {
+                    let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                        repo_id: repo_id_clone.clone(),
+                        event: event.clone(),
+                    });
+                }));
+
+            let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
+            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+            result
+        }
+        RepoType::Ssh { .. } => {
+            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+            Err("1-shot is not supported for SSH repos".to_string())
+        }
+    }
+}
+
+#[tauri::command]
 fn list_traces(app: tauri::AppHandle, repo_id: Option<String>) -> Result<Vec<trace::SessionTrace>, String> {
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     TraceCollector::list_traces(&base_dir, repo_id.as_deref()).map_err(|e| e.to_string())
@@ -325,7 +390,7 @@ pub fn run() {
         .manage(GlobalAbortRegistry {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
-        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, stop_session, get_active_sessions, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview])
+        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {
@@ -606,5 +671,151 @@ mod tests {
     fn read_file_preview_nonexistent_file() {
         let result = read_file_preview("/tmp/nonexistent_file_that_does_not_exist_12345.txt".to_string(), None);
         assert!(result.is_err(), "should return Err for nonexistent file");
+    }
+
+    // --- 1-shot / OneShotConfig / MergeStrategy tests ---
+
+    #[test]
+    fn merge_strategy_deserializes_from_string() {
+        use oneshot::MergeStrategy;
+
+        let merge: MergeStrategy =
+            serde_json::from_str(r#""merge_to_main""#).expect("should deserialize merge_to_main");
+        assert_eq!(merge, MergeStrategy::MergeToMain);
+
+        let branch: MergeStrategy =
+            serde_json::from_str(r#""branch""#).expect("should deserialize branch");
+        assert_eq!(branch, MergeStrategy::Branch);
+    }
+
+    #[test]
+    fn merge_strategy_round_trips() {
+        use oneshot::MergeStrategy;
+
+        for strategy in [MergeStrategy::MergeToMain, MergeStrategy::Branch] {
+            let json = serde_json::to_string(&strategy).expect("serialization should succeed");
+            let deserialized: MergeStrategy =
+                serde_json::from_str(&json).expect("deserialization should succeed");
+            assert_eq!(strategy, deserialized);
+        }
+    }
+
+    #[test]
+    fn oneshot_config_can_be_constructed() {
+        use oneshot::{MergeStrategy, OneShotConfig};
+
+        let mut env = HashMap::new();
+        env.insert("FOO".to_string(), "bar".to_string());
+
+        let config = OneShotConfig {
+            repo_id: "repo-123".to_string(),
+            repo_path: PathBuf::from("/tmp/my-repo"),
+            title: "Add login feature".to_string(),
+            prompt: "Implement OAuth2 login flow".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
+            merge_strategy: MergeStrategy::MergeToMain,
+            env_vars: env,
+        };
+
+        assert_eq!(config.repo_id, "repo-123");
+        assert_eq!(config.repo_path, PathBuf::from("/tmp/my-repo"));
+        assert_eq!(config.title, "Add login feature");
+        assert_eq!(config.prompt, "Implement OAuth2 login flow");
+        assert_eq!(config.model, "claude-sonnet-4-20250514");
+        assert_eq!(config.merge_strategy, MergeStrategy::MergeToMain);
+        assert_eq!(config.env_vars.get("FOO").unwrap(), "bar");
+    }
+
+    #[test]
+    fn tagged_session_event_serializes_oneshot_events() {
+        // OneShotStarted
+        let event = TaggedSessionEvent {
+            repo_id: "repo-1".to_string(),
+            event: SessionEvent::OneShotStarted {
+                title: "Add feature X".to_string(),
+                merge_strategy: "merge_to_main".to_string(),
+            },
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["repo_id"], "repo-1");
+        assert_eq!(json["event"]["kind"], "one_shot_started");
+        assert_eq!(json["event"]["title"], "Add feature X");
+        assert_eq!(json["event"]["merge_strategy"], "merge_to_main");
+
+        // DesignPhaseStarted
+        let event = TaggedSessionEvent {
+            repo_id: "repo-2".to_string(),
+            event: SessionEvent::DesignPhaseStarted,
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["repo_id"], "repo-2");
+        assert_eq!(json["event"]["kind"], "design_phase_started");
+
+        // DesignPhaseComplete
+        let event = TaggedSessionEvent {
+            repo_id: "repo-2".to_string(),
+            event: SessionEvent::DesignPhaseComplete {
+                plan_file: "/tmp/plan.md".to_string(),
+            },
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["event"]["kind"], "design_phase_complete");
+        assert_eq!(json["event"]["plan_file"], "/tmp/plan.md");
+
+        // ImplementationPhaseStarted
+        let event = TaggedSessionEvent {
+            repo_id: "repo-2".to_string(),
+            event: SessionEvent::ImplementationPhaseStarted,
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["event"]["kind"], "implementation_phase_started");
+
+        // ImplementationPhaseComplete
+        let event = TaggedSessionEvent {
+            repo_id: "repo-2".to_string(),
+            event: SessionEvent::ImplementationPhaseComplete,
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["event"]["kind"], "implementation_phase_complete");
+
+        // GitFinalizeStarted
+        let event = TaggedSessionEvent {
+            repo_id: "repo-2".to_string(),
+            event: SessionEvent::GitFinalizeStarted {
+                strategy: "branch".to_string(),
+            },
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["event"]["kind"], "git_finalize_started");
+        assert_eq!(json["event"]["strategy"], "branch");
+
+        // GitFinalizeComplete
+        let event = TaggedSessionEvent {
+            repo_id: "repo-2".to_string(),
+            event: SessionEvent::GitFinalizeComplete,
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["event"]["kind"], "git_finalize_complete");
+
+        // OneShotComplete
+        let event = TaggedSessionEvent {
+            repo_id: "repo-3".to_string(),
+            event: SessionEvent::OneShotComplete,
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["repo_id"], "repo-3");
+        assert_eq!(json["event"]["kind"], "one_shot_complete");
+
+        // OneShotFailed
+        let event = TaggedSessionEvent {
+            repo_id: "repo-4".to_string(),
+            event: SessionEvent::OneShotFailed {
+                reason: "design phase timed out".to_string(),
+            },
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["repo_id"], "repo-4");
+        assert_eq!(json["event"]["kind"], "one_shot_failed");
+        assert_eq!(json["event"]["reason"], "design phase timed out");
     }
 }

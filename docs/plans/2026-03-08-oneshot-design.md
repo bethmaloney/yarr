@@ -272,12 +272,12 @@ Wire up the `run_oneshot` and `stop_oneshot` Tauri commands.
 - Register commands in tauri::Builder handler list
 
 **Checklist:**
-- [ ] Add `run_oneshot` Tauri command
-- [ ] Set up OneShotRunner with event callback and trace collector
-- [ ] Store cancellation token in ActiveSessions
-- [ ] Spawn tokio task for async execution
-- [ ] Register `run_oneshot` in tauri::Builder invoke_handler
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `run_oneshot` Tauri command
+- [x] Set up OneShotRunner with event callback and trace collector
+- [x] Store cancellation token in ActiveSessions
+- [x] Spawn tokio task for async execution
+- [x] Register `run_oneshot` in tauri::Builder invoke_handler
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -417,7 +417,7 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 | 2 | Add 1-shot SessionEvent variants | Done |
 | 3 | Add design phase prompt | Done |
 | 4 | Add OneShotRunner | Done |
-| 5 | Add Tauri commands for 1-shot | Not Started |
+| 5 | Add Tauri commands for 1-shot | Done |
 | 6 | Add OneShotView frontend component | Not Started |
 | 7 | Integrate OneShotView into App navigation | Not Started |
 | 8 | Add Type column to HistoryView | Not Started |
