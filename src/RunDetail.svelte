@@ -9,10 +9,12 @@
     repoId,
     sessionId,
     onBack,
+    onHome,
   }: {
     repoId: string;
     sessionId: string;
     onBack: () => void;
+    onHome: () => void;
   } = $props();
 
   let trace: SessionTrace | null = $state(null);
@@ -98,7 +100,7 @@
 <main>
   <Breadcrumbs
     crumbs={[
-      { label: "Home" },
+      { label: "Home", onclick: onHome },
       { label: "History", onclick: onBack },
       { label: "Run " + sessionId },
     ]}

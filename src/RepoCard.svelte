@@ -15,6 +15,11 @@
     onclick: () => void;
   } = $props();
 
+  const repoFullPath =
+    repo.type === "local"
+      ? repo.path
+      : `${repo.sshHost}:${repo.remotePath}`;
+
   const statusColors: Record<typeof status, string> = {
     idle: "#888",
     running: "#e8d44d",
@@ -39,11 +44,7 @@
 >
   <div class="repo-info">
     <span class="repo-name">{repo.name}</span>
-    <span class="repo-path"
-      >{repo.type === "local"
-        ? repo.path
-        : `${repo.sshHost}:${repo.remotePath}`}</span
-    >
+    <span class="repo-path">{repoFullPath}</span>
   </div>
   {#if lastTrace}
     <div class="last-run">
