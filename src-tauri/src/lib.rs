@@ -105,6 +105,7 @@ async fn run_session(
     max_iterations: u32,
     completion_signal: String,
     env_vars: Option<HashMap<String, String>>,
+    checks: Option<Vec<session::Check>>,
 ) -> Result<trace::SessionTrace, String> {
     let cancel_token = CancellationToken::new();
     {
@@ -145,7 +146,7 @@ async fn run_session(
                 plan_file: Some(plan_file),
                 inter_iteration_delay_ms: 1000,
                 env_vars: env_vars.unwrap_or_default(),
-                checks: Vec::new(),
+                checks: checks.unwrap_or_default(),
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -192,7 +193,7 @@ async fn run_session(
                 plan_file: Some(plan_file),
                 inter_iteration_delay_ms: 1000,
                 env_vars: env_vars.unwrap_or_default(),
-                checks: Vec::new(),
+                checks: checks.unwrap_or_default(),
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;

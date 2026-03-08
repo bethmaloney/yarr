@@ -394,9 +394,9 @@ Wire checks from the frontend IPC call through to `SessionConfig`.
 - `Check` needs to be deserializable from the frontend JSON (already handled by serde derives)
 
 **Checklist:**
-- [ ] Add `checks` parameter to `run_session`
-- [ ] Wire checks into `SessionConfig`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `checks` parameter to `run_session`
+- [x] Wire checks into `SessionConfig`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -582,7 +582,7 @@ Add visual treatment for check-related events.
 | 6 | Check SessionEvent variants | Done |
 | 7 | run_checks method on SessionRunner | Done |
 | 8 | Integrate run_checks into session loop | Done |
-| 9 | Pass checks through Tauri command | Not Started |
+| 9 | Pass checks through Tauri command | Done |
 | 10 | Frontend Check type + RepoConfig update | Not Started |
 | 11 | Checks settings UI in RepoDetail | Not Started |
 | 12 | Pass checks from App.svelte to invoke | Not Started |
