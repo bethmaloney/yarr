@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use std::path::PathBuf;
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 use crate::output::{ContentBlock, ResultEvent, StreamEvent};
@@ -10,7 +11,7 @@ use crate::trace::{self, SessionOutcome, SpanAttributes, TraceCollector};
 fn default_timeout() -> u32 { 1200 }
 fn default_max_retries() -> u32 { 3 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckWhen {
     EachIteration,
@@ -103,10 +104,60 @@ pub enum SessionEvent {
     Disconnected { iteration: u32 },
     /// Attempting to reconnect to remote session
     Reconnecting { iteration: u32 },
+    /// A post-loop check has started
+    CheckStarted { iteration: u32, check_name: String },
+    /// A post-loop check passed
+    CheckPassed { iteration: u32, check_name: String },
+    /// A post-loop check failed
+    CheckFailed { iteration: u32, check_name: String, output: String },
+    /// A fix agent has been spawned for a failed check
+    CheckFixStarted { iteration: u32, check_name: String, attempt: u32 },
+    /// A fix agent has completed
+    CheckFixComplete { iteration: u32, check_name: String, attempt: u32, success: bool },
 }
 
 /// Callback for receiving session events (Tauri IPC hookpoint)
 pub type OnSessionEvent = Box<dyn Fn(&SessionEvent) + Send + Sync>;
+
+fn combine_output(stdout: &str, stderr: &str) -> String {
+    match (stdout.is_empty(), stderr.is_empty()) {
+        (true, _) => stderr.to_string(),
+        (_, true) => stdout.to_string(),
+        _ => format!("{}\n{}", stdout, stderr),
+    }
+}
+
+fn build_fix_prompt(check: &Check, output: &str) -> String {
+    match &check.prompt {
+        None => {
+            format!(
+                "The following check failed after a loop iteration.\n\n\
+                 **Check:** {name}\n\
+                 **Command:** {command}\n\n\
+                 **Output:**\n\
+                 ```\n\
+                 {output}\n\
+                 ```\n\n\
+                 Fix the issues shown above. After fixing, run `{command}` to verify your fixes pass. \
+                 Commit any changes with an appropriate message.",
+                name = check.name,
+                command = check.command,
+                output = output,
+            )
+        }
+        Some(custom) => {
+            format!(
+                "{custom}\n\n\
+                 **Check output:**\n\
+                 ```\n\
+                 {output}\n\
+                 ```",
+                custom = custom,
+                output = output,
+            )
+        }
+    }
+}
 
 /// Runs a Ralph loop session end-to-end
 pub struct SessionRunner {
@@ -147,6 +198,156 @@ impl SessionRunner {
             model: self.config.model.clone(),
             extra_args: self.config.extra_args.clone(),
             env_vars: self.config.env_vars.clone(),
+        }
+    }
+
+    async fn run_checks(
+        &self,
+        runtime: &dyn RuntimeProvider,
+        iteration: u32,
+        when: &CheckWhen,
+        checks: &[Check],
+    ) {
+        let matching: Vec<&Check> = checks.iter().filter(|c| &c.when == when).collect();
+
+        for check in matching {
+            if self.cancel_token.is_cancelled() {
+                return;
+            }
+            let check_name = check.name.clone();
+
+            self.emit(SessionEvent::CheckStarted {
+                iteration,
+                check_name: check_name.clone(),
+            });
+
+            let cmd_result = runtime
+                .run_command(
+                    &check.command,
+                    &self.config.repo_path,
+                    Duration::from_secs(check.timeout_secs as u64),
+                )
+                .await;
+
+            let cmd_output = match cmd_result {
+                Ok(o) => o,
+                Err(e) => {
+                    let error_msg = format!("Command error: {}", e);
+                    tracing::warn!("Check '{}' command error: {}", check_name, e);
+                    self.emit(SessionEvent::CheckFailed {
+                        iteration,
+                        check_name: check_name.clone(),
+                        output: error_msg,
+                    });
+                    continue;
+                }
+            };
+
+            if cmd_output.exit_code == 0 {
+                self.emit(SessionEvent::CheckPassed {
+                    iteration,
+                    check_name: check_name.clone(),
+                });
+                continue;
+            }
+
+            // Check failed
+            let mut output = combine_output(&cmd_output.stdout, &cmd_output.stderr);
+
+            self.emit(SessionEvent::CheckFailed {
+                iteration,
+                check_name: check_name.clone(),
+                output: output.clone(),
+            });
+
+            let mut fixed = false;
+            for attempt in 1..=check.max_retries {
+                if self.cancel_token.is_cancelled() {
+                    break;
+                }
+                let fix_prompt = build_fix_prompt(check, &output);
+
+                self.emit(SessionEvent::CheckFixStarted {
+                    iteration,
+                    check_name: check_name.clone(),
+                    attempt,
+                });
+
+                let fix_invocation = ClaudeInvocation {
+                    prompt: fix_prompt,
+                    working_dir: self.config.repo_path.clone(),
+                    model: check.model.clone().or_else(|| self.config.model.clone()),
+                    extra_args: vec!["--dangerously-skip-permissions".to_string()],
+                    env_vars: self.config.env_vars.clone(),
+                };
+
+                match runtime.spawn_claude(&fix_invocation).await {
+                    Ok(mut process) => {
+                        // Drain events channel
+                        while process.events.recv().await.is_some() {}
+                        // Wait for completion
+                        let _ = process.completion.await;
+
+                        self.emit(SessionEvent::CheckFixComplete {
+                            iteration,
+                            check_name: check_name.clone(),
+                            attempt,
+                            success: true,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::warn!("Fix agent for '{}' failed to spawn: {}", check_name, e);
+                        self.emit(SessionEvent::CheckFixComplete {
+                            iteration,
+                            check_name: check_name.clone(),
+                            attempt,
+                            success: false,
+                        });
+                        continue;
+                    }
+                }
+
+                // Re-run the check
+                let recheck = runtime
+                    .run_command(
+                        &check.command,
+                        &self.config.repo_path,
+                        Duration::from_secs(check.timeout_secs as u64),
+                    )
+                    .await;
+
+                match recheck {
+                    Ok(recheck_output) => {
+                        if recheck_output.exit_code == 0 {
+                            self.emit(SessionEvent::CheckPassed {
+                                iteration,
+                                check_name: check_name.clone(),
+                            });
+                            fixed = true;
+                            break;
+                        } else {
+                            output = combine_output(&recheck_output.stdout, &recheck_output.stderr);
+                            self.emit(SessionEvent::CheckFailed {
+                                iteration,
+                                check_name: check_name.clone(),
+                                output: output.clone(),
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Re-check '{}' command error: {}", check_name, e);
+                        // Just log and continue retry loop — the re-check failed to execute
+                    }
+                }
+            }
+
+            if !fixed {
+                tracing::warn!(
+                    "Check '{}' still failing after {} retries, continuing",
+                    check_name,
+                    check.max_retries
+                );
+            }
         }
     }
 
@@ -239,8 +440,17 @@ impl SessionRunner {
 
                     state = SessionState::Evaluating { iteration };
 
+                    self.run_checks(runtime, iteration, &CheckWhen::EachIteration, &self.config.checks).await;
+
+                    if self.cancel_token.is_cancelled() {
+                        println!("[harness] Session cancelled after checks in iteration {iteration}.");
+                        state = SessionState::Cancelled { iteration };
+                        break;
+                    }
+
                     if has_signal {
                         println!("[harness] Completion signal detected! Stopping loop.");
+                        self.run_checks(runtime, iteration, &CheckWhen::PostCompletion, &self.config.checks).await;
                         state = SessionState::Completed {
                             iterations: iteration,
                         };
@@ -441,7 +651,7 @@ impl SessionRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::MockRuntime;
+    use crate::runtime::{CommandOutput, MockRuntime};
     use crate::trace::{SessionOutcome, TraceCollector};
     use tempfile::TempDir;
 
@@ -570,5 +780,675 @@ mod tests {
     fn session_config_default_has_empty_checks() {
         let config = SessionConfig::default();
         assert!(config.checks.is_empty(), "default checks should be an empty vec");
+    }
+
+    // =========================================================================
+    // Task 6: SessionEvent check variant serialization
+    // =========================================================================
+
+    #[test]
+    fn check_started_event_serializes_correctly() {
+        let event = SessionEvent::CheckStarted {
+            iteration: 1,
+            check_name: "lint".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize CheckStarted");
+        assert_eq!(json["kind"], "check_started");
+        assert_eq!(json["iteration"], 1);
+        assert_eq!(json["check_name"], "lint");
+    }
+
+    #[test]
+    fn check_passed_event_serializes_correctly() {
+        let event = SessionEvent::CheckPassed {
+            iteration: 2,
+            check_name: "tests".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize CheckPassed");
+        assert_eq!(json["kind"], "check_passed");
+        assert_eq!(json["iteration"], 2);
+        assert_eq!(json["check_name"], "tests");
+    }
+
+    #[test]
+    fn check_failed_event_serializes_correctly() {
+        let event = SessionEvent::CheckFailed {
+            iteration: 3,
+            check_name: "typecheck".to_string(),
+            output: "error TS2345: Argument of type...".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize CheckFailed");
+        assert_eq!(json["kind"], "check_failed");
+        assert_eq!(json["iteration"], 3);
+        assert_eq!(json["check_name"], "typecheck");
+        assert_eq!(json["output"], "error TS2345: Argument of type...");
+    }
+
+    #[test]
+    fn check_fix_started_event_serializes_correctly() {
+        let event = SessionEvent::CheckFixStarted {
+            iteration: 1,
+            check_name: "lint".to_string(),
+            attempt: 1,
+        };
+        let json = serde_json::to_value(&event).expect("serialize CheckFixStarted");
+        assert_eq!(json["kind"], "check_fix_started");
+        assert_eq!(json["iteration"], 1);
+        assert_eq!(json["check_name"], "lint");
+        assert_eq!(json["attempt"], 1);
+    }
+
+    #[test]
+    fn check_fix_complete_event_serializes_correctly() {
+        let event = SessionEvent::CheckFixComplete {
+            iteration: 1,
+            check_name: "lint".to_string(),
+            attempt: 2,
+            success: true,
+        };
+        let json = serde_json::to_value(&event).expect("serialize CheckFixComplete");
+        assert_eq!(json["kind"], "check_fix_complete");
+        assert_eq!(json["iteration"], 1);
+        assert_eq!(json["check_name"], "lint");
+        assert_eq!(json["attempt"], 2);
+        assert_eq!(json["success"], true);
+    }
+
+    #[test]
+    fn check_fix_complete_event_serializes_failure() {
+        let event = SessionEvent::CheckFixComplete {
+            iteration: 4,
+            check_name: "tests".to_string(),
+            attempt: 3,
+            success: false,
+        };
+        let json = serde_json::to_value(&event).expect("serialize CheckFixComplete with failure");
+        assert_eq!(json["kind"], "check_fix_complete");
+        assert_eq!(json["iteration"], 4);
+        assert_eq!(json["check_name"], "tests");
+        assert_eq!(json["attempt"], 3);
+        assert_eq!(json["success"], false);
+    }
+
+    #[test]
+    fn all_check_event_variants_roundtrip_through_json() {
+        let events = vec![
+            SessionEvent::CheckStarted { iteration: 1, check_name: "lint".to_string() },
+            SessionEvent::CheckPassed { iteration: 1, check_name: "lint".to_string() },
+            SessionEvent::CheckFailed { iteration: 2, check_name: "test".to_string(), output: "FAIL".to_string() },
+            SessionEvent::CheckFixStarted { iteration: 2, check_name: "test".to_string(), attempt: 1 },
+            SessionEvent::CheckFixComplete { iteration: 2, check_name: "test".to_string(), attempt: 1, success: true },
+        ];
+
+        for event in &events {
+            let json_str = serde_json::to_string(event).expect("serialize event");
+            let deserialized: SessionEvent = serde_json::from_str(&json_str).expect("deserialize event");
+            // Verify roundtrip by re-serializing and comparing JSON values
+            let original_value = serde_json::to_value(event).expect("to_value original");
+            let roundtrip_value = serde_json::to_value(&deserialized).expect("to_value roundtrip");
+            assert_eq!(original_value, roundtrip_value, "roundtrip failed for {:?}", event);
+        }
+    }
+
+    // =========================================================================
+    // Task 7: build_fix_prompt helper
+    // =========================================================================
+
+    #[test]
+    fn build_fix_prompt_default_contains_check_name_command_and_output() {
+        let check = Check {
+            name: "lint".to_string(),
+            command: "npm run lint".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: None,
+            model: None,
+            timeout_secs: 60,
+            max_retries: 3,
+        };
+        let output = "error: unused variable `x`\n  --> src/main.rs:5:9";
+
+        let prompt = build_fix_prompt(&check, output);
+
+        assert!(
+            prompt.contains("lint"),
+            "default fix prompt should contain the check name, got: {prompt}"
+        );
+        assert!(
+            prompt.contains("npm run lint"),
+            "default fix prompt should contain the command, got: {prompt}"
+        );
+        assert!(
+            prompt.contains(output),
+            "default fix prompt should contain the command output, got: {prompt}"
+        );
+    }
+
+    #[test]
+    fn build_fix_prompt_custom_uses_custom_text_and_output() {
+        let check = Check {
+            name: "typecheck".to_string(),
+            command: "npx tsc --noEmit".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: Some("Please fix all TypeScript type errors.".to_string()),
+            model: None,
+            timeout_secs: 120,
+            max_retries: 2,
+        };
+        let output = "error TS2345: Argument of type 'string' is not assignable";
+
+        let prompt = build_fix_prompt(&check, output);
+
+        assert!(
+            prompt.contains("Please fix all TypeScript type errors."),
+            "custom fix prompt should contain the custom prompt text, got: {prompt}"
+        );
+        assert!(
+            prompt.contains(output),
+            "custom fix prompt should contain the command output, got: {prompt}"
+        );
+    }
+
+    #[test]
+    fn build_fix_prompt_custom_prompt_empty_output() {
+        let check = Check {
+            name: "build".to_string(),
+            command: "cargo build".to_string(),
+            when: CheckWhen::PostCompletion,
+            prompt: Some("Fix compilation errors".to_string()),
+            model: None,
+            timeout_secs: 300,
+            max_retries: 1,
+        };
+        let output = "";
+
+        let prompt = build_fix_prompt(&check, output);
+
+        assert!(
+            prompt.contains("Fix compilation errors"),
+            "prompt should contain custom text even with empty output, got: {prompt}"
+        );
+    }
+
+    // =========================================================================
+    // Task 7: run_checks method
+    // =========================================================================
+
+    fn make_check(name: &str, command: &str, when: CheckWhen) -> Check {
+        Check {
+            name: name.to_string(),
+            command: command.to_string(),
+            when,
+            prompt: None,
+            model: None,
+            timeout_secs: 60,
+            max_retries: 3,
+        }
+    }
+
+    fn make_runner(tmp: &TempDir, checks: Vec<Check>) -> SessionRunner {
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks,
+        };
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        SessionRunner::new(config, collector, cancel_token)
+    }
+
+    fn get_events(runner: &SessionRunner) -> Vec<SessionEvent> {
+        runner.accumulated_events.lock().unwrap().clone()
+    }
+
+    #[tokio::test]
+    async fn run_checks_passing_check_emits_started_and_passed() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let check = make_check("lint", "npm run lint", CheckWhen::EachIteration);
+        let runner = make_runner(&tmp, vec![check.clone()]);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "All clear!".to_string(),
+            stderr: String::new(),
+        }];
+
+        runner
+            .run_checks(&runtime, 1, &CheckWhen::EachIteration, &[check])
+            .await;
+
+        let events = get_events(&runner);
+
+        // Should have CheckStarted then CheckPassed
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckStarted { iteration: 1, ref check_name } if check_name == "lint")),
+            "should emit CheckStarted for lint, events: {:?}", events
+        );
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckPassed { iteration: 1, ref check_name } if check_name == "lint")),
+            "should emit CheckPassed for lint, events: {:?}", events
+        );
+        // Should NOT have any failure or fix events
+        assert!(
+            !events.iter().any(|e| matches!(e, SessionEvent::CheckFailed { .. })),
+            "should not emit CheckFailed for passing check"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_checks_failing_check_with_successful_retry() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let check = make_check("test", "cargo test", CheckWhen::EachIteration);
+        let runner = make_runner(&tmp, vec![check.clone()]);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        // First call: check fails. Second call: re-run after fix succeeds.
+        runtime.command_results = vec![
+            CommandOutput {
+                exit_code: 1,
+                stdout: "test result: FAILED. 1 passed; 2 failed".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: "test result: ok. 3 passed; 0 failed".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        runner
+            .run_checks(&runtime, 1, &CheckWhen::EachIteration, &[check])
+            .await;
+
+        let events = get_events(&runner);
+
+        // Should have the full lifecycle: started -> failed -> fix_started -> fix_complete -> passed
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckStarted { iteration: 1, ref check_name } if check_name == "test")),
+            "should emit CheckStarted, events: {:?}", events
+        );
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckFailed { iteration: 1, ref check_name, .. } if check_name == "test")),
+            "should emit CheckFailed, events: {:?}", events
+        );
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckFixStarted { iteration: 1, ref check_name, attempt: 1 } if check_name == "test")),
+            "should emit CheckFixStarted with attempt=1, events: {:?}", events
+        );
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckFixComplete { iteration: 1, ref check_name, attempt: 1, success: true } if check_name == "test")),
+            "should emit CheckFixComplete with success=true, events: {:?}", events
+        );
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckPassed { iteration: 1, ref check_name } if check_name == "test")),
+            "should emit CheckPassed after successful fix, events: {:?}", events
+        );
+    }
+
+    #[tokio::test]
+    async fn run_checks_failing_check_exhausting_retries() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut check = make_check("lint", "npm run lint", CheckWhen::EachIteration);
+        check.max_retries = 2;
+        let runner = make_runner(&tmp, vec![check.clone()]);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        // All command runs fail (initial + re-runs after each fix attempt)
+        runtime.command_results = vec![
+            CommandOutput { exit_code: 1, stdout: "error 1".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 1, stdout: "error 2".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 1, stdout: "error 3".to_string(), stderr: String::new() },
+        ];
+
+        runner
+            .run_checks(&runtime, 1, &CheckWhen::EachIteration, &[check])
+            .await;
+
+        let events = get_events(&runner);
+
+        // Should have CheckStarted
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckStarted { .. })),
+            "should emit CheckStarted, events: {:?}", events
+        );
+
+        // Should have CheckFailed (at least the initial failure)
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckFailed { .. })),
+            "should emit CheckFailed, events: {:?}", events
+        );
+
+        // Should have fix attempts for each retry (max_retries = 2)
+        let fix_started_count = events.iter().filter(|e| matches!(e, SessionEvent::CheckFixStarted { .. })).count();
+        assert_eq!(
+            fix_started_count, 2,
+            "should have 2 CheckFixStarted events (max_retries=2), got {}", fix_started_count
+        );
+
+        let fix_complete_count = events.iter().filter(|e| matches!(e, SessionEvent::CheckFixComplete { .. })).count();
+        assert_eq!(
+            fix_complete_count, 2,
+            "should have 2 CheckFixComplete events, got {}", fix_complete_count
+        );
+
+        // Should NOT have CheckPassed since all retries failed
+        assert!(
+            !events.iter().any(|e| matches!(e, SessionEvent::CheckPassed { .. })),
+            "should not emit CheckPassed when all retries are exhausted, events: {:?}", events
+        );
+
+        // Session should continue (no panic) — the test completing is proof of this
+    }
+
+    #[tokio::test]
+    async fn run_checks_filters_by_check_when() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let each_iter_check = make_check("lint", "npm run lint", CheckWhen::EachIteration);
+        let post_completion_check = make_check("e2e", "npm run test:e2e", CheckWhen::PostCompletion);
+        let checks = vec![each_iter_check.clone(), post_completion_check.clone()];
+        let runner = make_runner(&tmp, checks.clone());
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "ok".to_string(),
+            stderr: String::new(),
+        }];
+
+        // Run with EachIteration filter — only the lint check should run
+        runner
+            .run_checks(&runtime, 1, &CheckWhen::EachIteration, &checks)
+            .await;
+
+        let events = get_events(&runner);
+
+        // Should have events for the EachIteration check ("lint")
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckStarted { ref check_name, .. } if check_name == "lint")),
+            "should run EachIteration check 'lint', events: {:?}", events
+        );
+
+        // Should NOT have events for the PostCompletion check ("e2e")
+        assert!(
+            !events.iter().any(|e| matches!(e, SessionEvent::CheckStarted { ref check_name, .. } if check_name == "e2e")),
+            "should not run PostCompletion check 'e2e' when filtering for EachIteration, events: {:?}", events
+        );
+    }
+
+    #[tokio::test]
+    async fn run_checks_post_completion_filter_runs_only_post_completion_checks() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let each_iter_check = make_check("lint", "npm run lint", CheckWhen::EachIteration);
+        let post_completion_check = make_check("e2e", "npm run test:e2e", CheckWhen::PostCompletion);
+        let checks = vec![each_iter_check.clone(), post_completion_check.clone()];
+        let runner = make_runner(&tmp, checks.clone());
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "ok".to_string(),
+            stderr: String::new(),
+        }];
+
+        // Run with PostCompletion filter — only the e2e check should run
+        runner
+            .run_checks(&runtime, 1, &CheckWhen::PostCompletion, &checks)
+            .await;
+
+        let events = get_events(&runner);
+
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckStarted { ref check_name, .. } if check_name == "e2e")),
+            "should run PostCompletion check 'e2e', events: {:?}", events
+        );
+        assert!(
+            !events.iter().any(|e| matches!(e, SessionEvent::CheckStarted { ref check_name, .. } if check_name == "lint")),
+            "should not run EachIteration check 'lint' when filtering for PostCompletion, events: {:?}", events
+        );
+    }
+
+    // =========================================================================
+    // Task 8: Integration into session loop
+    // =========================================================================
+
+    #[tokio::test]
+    async fn each_iteration_checks_run_after_each_iteration() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let check = make_check("lint", "npm run lint", CheckWhen::EachIteration);
+
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: vec![check],
+        };
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        // 2 working iterations + 1 completion = 3 total iterations
+        let mut runtime = MockRuntime::completing_after(2);
+        runtime.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "All good".to_string(),
+            stderr: String::new(),
+        }];
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let events = get_events(&runner);
+
+        // For each iteration, check events should appear after IterationComplete
+        // There should be 3 iterations, so at least 3 CheckStarted events
+        let check_started_count = events
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::CheckStarted { ref check_name, .. } if check_name == "lint"))
+            .count();
+        assert!(
+            check_started_count >= 3,
+            "should have at least 3 CheckStarted events (one per iteration), got {}",
+            check_started_count
+        );
+
+        // Verify ordering: each CheckStarted should come after its IterationComplete
+        let mut last_iteration_complete_idx: Option<usize> = None;
+        for (idx, event) in events.iter().enumerate() {
+            if let SessionEvent::IterationComplete { iteration: _, .. } = event {
+                last_iteration_complete_idx = Some(idx);
+            }
+            if let SessionEvent::CheckStarted { iteration, check_name } = event {
+                if check_name == "lint" {
+                    assert!(
+                        last_iteration_complete_idx.is_some(),
+                        "CheckStarted for iteration {} should come after an IterationComplete",
+                        iteration
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn post_completion_checks_run_after_completion_before_session_complete() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let check = make_check("e2e", "npm run test:e2e", CheckWhen::PostCompletion);
+
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: vec![check],
+        };
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        // Complete immediately after 1 iteration
+        let mut runtime = MockRuntime::completing_after(0);
+        runtime.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "All tests passed".to_string(),
+            stderr: String::new(),
+        }];
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let events = get_events(&runner);
+
+        // Should have a CheckStarted for the PostCompletion check
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::CheckStarted { ref check_name, .. } if check_name == "e2e")),
+            "should run PostCompletion check 'e2e' after completion, events: {:?}", events
+        );
+
+        // Find positions of key events
+        let check_started_idx = events
+            .iter()
+            .position(|e| matches!(e, SessionEvent::CheckStarted { ref check_name, .. } if check_name == "e2e"))
+            .expect("should have CheckStarted for e2e");
+
+        let session_complete_idx = events
+            .iter()
+            .position(|e| matches!(e, SessionEvent::SessionComplete { .. }))
+            .expect("should have SessionComplete");
+
+        // The last IterationComplete with the completion signal
+        let last_iteration_complete_idx = events
+            .iter()
+            .rposition(|e| matches!(e, SessionEvent::IterationComplete { .. }))
+            .expect("should have at least one IterationComplete");
+
+        // PostCompletion check should run after the completion iteration but before SessionComplete
+        assert!(
+            check_started_idx > last_iteration_complete_idx,
+            "CheckStarted (idx={}) should come after last IterationComplete (idx={})",
+            check_started_idx,
+            last_iteration_complete_idx
+        );
+        assert!(
+            check_started_idx < session_complete_idx,
+            "CheckStarted (idx={}) should come before SessionComplete (idx={})",
+            check_started_idx,
+            session_complete_idx
+        );
+    }
+
+    #[tokio::test]
+    async fn each_iteration_checks_do_not_run_post_completion_checks() {
+        let tmp = TempDir::new().expect("create temp dir");
+        // Only have a PostCompletion check, no EachIteration checks
+        let check = make_check("e2e", "npm run test:e2e", CheckWhen::PostCompletion);
+
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: vec![check],
+        };
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        // 2 working iterations + 1 completion = 3 iterations
+        let mut runtime = MockRuntime::completing_after(2);
+        runtime.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "ok".to_string(),
+            stderr: String::new(),
+        }];
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let events = get_events(&runner);
+
+        // The PostCompletion check should only appear once (after completion), not after each iteration
+        let check_started_count = events
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::CheckStarted { ref check_name, .. } if check_name == "e2e"))
+            .count();
+        assert_eq!(
+            check_started_count, 1,
+            "PostCompletion check should run exactly once (after completion), got {}",
+            check_started_count
+        );
+    }
+
+    #[tokio::test]
+    async fn no_checks_configured_produces_no_check_events() {
+        let tmp = TempDir::new().expect("create temp dir");
+
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(), // No checks
+        };
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let runtime = MockRuntime::completing_after(1);
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let events = get_events(&runner);
+
+        // Should have no check-related events at all
+        let check_event_count = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    SessionEvent::CheckStarted { .. }
+                        | SessionEvent::CheckPassed { .. }
+                        | SessionEvent::CheckFailed { .. }
+                        | SessionEvent::CheckFixStarted { .. }
+                        | SessionEvent::CheckFixComplete { .. }
+                )
+            })
+            .count();
+        assert_eq!(
+            check_event_count, 0,
+            "should have no check events when no checks configured, got {}",
+            check_event_count
+        );
     }
 }

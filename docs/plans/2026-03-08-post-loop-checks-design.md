@@ -316,8 +316,8 @@ Add event types so the frontend can display check progress.
 - These serialize as `check_started`, `check_passed`, etc. via the existing `rename_all = "snake_case"` serde config
 
 **Checklist:**
-- [ ] Add all five check event variants to `SessionEvent`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add all five check event variants to `SessionEvent`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -350,9 +350,9 @@ Core logic for executing checks and spawning fix agents.
 - Add a helper `fn build_fix_prompt(check: &Check, output: &str) -> String` that builds the prompt per the design doc template
 
 **Checklist:**
-- [ ] Add `build_fix_prompt` helper
-- [ ] Add `run_checks` method
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `build_fix_prompt` helper
+- [x] Add `run_checks` method
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -371,10 +371,10 @@ Wire `run_checks` into the two call sites in `SessionRunner::run`.
 - Checks should respect cancellation — if cancelled, skip remaining checks
 
 **Checklist:**
-- [ ] Add EachIteration check call after iteration success
-- [ ] Add PostCompletion check call after completion signal detected
-- [ ] Ensure cancellation is respected during checks
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add EachIteration check call after iteration success
+- [x] Add PostCompletion check call after completion signal detected
+- [x] Ensure cancellation is respected during checks
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -519,12 +519,12 @@ Add visual treatment for check-related events.
 
 **Checklist:**
 - [x] Test MockRuntime run_command
-- [ ] Test passing check flow
-- [ ] Test failing check with successful retry
-- [ ] Test failing check exhausting retries
-- [ ] Test CheckWhen filtering
-- [ ] Test build_fix_prompt
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Test passing check flow
+- [x] Test failing check with successful retry
+- [x] Test failing check exhausting retries
+- [x] Test CheckWhen filtering
+- [x] Test build_fix_prompt
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -579,14 +579,14 @@ Add visual treatment for check-related events.
 | 3 | LocalRuntime run_command | Done |
 | 4 | WslRuntime run_command | Done |
 | 5 | MockRuntime run_command | Done |
-| 6 | Check SessionEvent variants | Not Started |
-| 7 | run_checks method on SessionRunner | Not Started |
-| 8 | Integrate run_checks into session loop | Not Started |
+| 6 | Check SessionEvent variants | Done |
+| 7 | run_checks method on SessionRunner | Done |
+| 8 | Integrate run_checks into session loop | Done |
 | 9 | Pass checks through Tauri command | Not Started |
 | 10 | Frontend Check type + RepoConfig update | Not Started |
 | 11 | Checks settings UI in RepoDetail | Not Started |
 | 12 | Pass checks from App.svelte to invoke | Not Started |
 | 13 | Display check events in EventsList | Not Started |
-| 14 | Rust tests for run_command and run_checks | Partial (MockRuntime tests done) |
+| 14 | Rust tests for run_command and run_checks | Done |
 | 15 | Frontend unit tests for Check types | Not Started |
 | 16 | E2E tests for check configuration UI | Not Started |
