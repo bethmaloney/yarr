@@ -493,11 +493,11 @@ Add visual treatment for check-related events.
 - For `check_failed` events with `output`, show the output in an expandable detail (similar to `tool_input` expansion)
 
 **Checklist:**
-- [ ] Add emoji mappings for all 5 check event kinds
-- [ ] Add label formatting for all 5 check event kinds
-- [ ] Add CSS color classes for check events
-- [ ] Add expandable output detail for `check_failed` events
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add emoji mappings for all 5 check event kinds
+- [x] Add label formatting for all 5 check event kinds
+- [x] Add CSS color classes for check events
+- [x] Add expandable output detail for `check_failed` events
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -541,9 +541,9 @@ Add visual treatment for check-related events.
 - Test `loadRepos` migration — a repo without `checks` field gets `checks: []`
 
 **Checklist:**
-- [ ] Add Check type shape tests
-- [ ] Add migration fallback test
-- [ ] Verify: `npm test`
+- [x] Add Check type shape tests
+- [x] Add migration fallback test
+- [x] Verify: `npm test`
 
 ---
 
@@ -562,11 +562,11 @@ Add visual treatment for check-related events.
 - Test that check events appear in the EventsList during a mock run (may need to extend mock fixtures to emit check events)
 
 **Checklist:**
-- [ ] Test Checks section renders
-- [ ] Test add check interaction
-- [ ] Test remove check interaction
-- [ ] Test disabled state during run
-- [ ] Verify: `npm run test:e2e`
+- [x] Test Checks section renders
+- [x] Test add check interaction
+- [x] Test remove check interaction
+- [x] Test disabled state during run
+- [x] Verify: `npm run test:e2e`
 
 ---
 
@@ -586,7 +586,7 @@ Add visual treatment for check-related events.
 | 10 | Frontend Check type + RepoConfig update | Done |
 | 11 | Checks settings UI in RepoDetail | Done |
 | 12 | Pass checks from App.svelte to invoke | Done |
-| 13 | Display check events in EventsList | Not Started |
+| 13 | Display check events in EventsList | Done |
 | 14 | Rust tests for run_command and run_checks | Done |
-| 15 | Frontend unit tests for Check types | Not Started |
-| 16 | E2E tests for check configuration UI | Not Started |
+| 15 | Frontend unit tests for Check types | Done |
+| 16 | E2E tests for check configuration UI | Done |

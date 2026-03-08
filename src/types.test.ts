@@ -6,6 +6,7 @@ import type {
   SessionState,
   RepoStatus,
   TaggedSessionEvent,
+  GitSyncConfig,
 } from "./types";
 
 describe("SessionEvent", () => {
@@ -473,5 +474,101 @@ describe("SessionEvent check fields", () => {
       success: false,
     };
     expect(event.success).toBe(false);
+  });
+});
+
+describe("GitSyncConfig", () => {
+  it("can be constructed with all fields", () => {
+    const config: GitSyncConfig = {
+      enabled: true,
+      conflictPrompt: "Resolve the merge conflicts in the files listed above",
+      model: "sonnet",
+      maxPushRetries: 3,
+    };
+    expect(config.enabled).toBe(true);
+    expect(config.conflictPrompt).toBe(
+      "Resolve the merge conflicts in the files listed above",
+    );
+    expect(config.model).toBe("sonnet");
+    expect(config.maxPushRetries).toBe(3);
+  });
+
+  it("can be constructed with only required fields", () => {
+    const config: GitSyncConfig = {
+      enabled: false,
+      maxPushRetries: 5,
+    };
+    expect(config.enabled).toBe(false);
+    expect(config.maxPushRetries).toBe(5);
+    expect(config.conflictPrompt).toBeUndefined();
+    expect(config.model).toBeUndefined();
+  });
+});
+
+describe("SessionEvent git sync fields", () => {
+  it("accepts a git_sync_started event with just kind and iteration", () => {
+    const event: SessionEvent = {
+      kind: "git_sync_started",
+      iteration: 2,
+    };
+    expect(event.kind).toBe("git_sync_started");
+    expect(event.iteration).toBe(2);
+    expect(event.files).toBeUndefined();
+    expect(event.attempt).toBeUndefined();
+    expect(event.success).toBeUndefined();
+    expect(event.error).toBeUndefined();
+  });
+
+  it("accepts a git_sync_conflict event with files array", () => {
+    const event: SessionEvent = {
+      kind: "git_sync_conflict",
+      iteration: 3,
+      files: ["src/main.rs", "src/lib.rs"],
+      attempt: 1,
+    };
+    expect(event.kind).toBe("git_sync_conflict");
+    expect(event.files).toEqual(["src/main.rs", "src/lib.rs"]);
+    expect(event.attempt).toBe(1);
+  });
+
+  it("accepts a git_sync_failed event with error string", () => {
+    const event: SessionEvent = {
+      kind: "git_sync_failed",
+      iteration: 4,
+      error: "push rejected after 3 retries",
+      success: false,
+    };
+    expect(event.kind).toBe("git_sync_failed");
+    expect(event.error).toBe("push rejected after 3 retries");
+    expect(event.success).toBe(false);
+  });
+
+  it("accepts a git_sync_completed event with success", () => {
+    const event: SessionEvent = {
+      kind: "git_sync_completed",
+      iteration: 5,
+      success: true,
+      attempt: 2,
+    };
+    expect(event.kind).toBe("git_sync_completed");
+    expect(event.success).toBe(true);
+    expect(event.attempt).toBe(2);
+  });
+
+  it("does not break existing events without git sync fields", () => {
+    const event: SessionEvent = {
+      kind: "tool_use",
+      session_id: "sess-001",
+      iteration: 3,
+      tool_name: "Bash",
+      text: "running npm test",
+      result: { exit_code: 0, stdout: "ok" },
+      outcome: "success",
+      _ts: 1709827200000,
+    };
+    expect(event.files).toBeUndefined();
+    expect(event.attempt).toBeUndefined();
+    expect(event.success).toBeUndefined();
+    expect(event.error).toBeUndefined();
   });
 });

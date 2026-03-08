@@ -389,10 +389,10 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 - In `repos.ts`: no migration needed -- absent field means feature is disabled
 
 **Checklist:**
-- [ ] Add `GitSyncConfig` type to `types.ts`
-- [ ] Add git-sync-related fields to `SessionEvent`
-- [ ] Add `gitSync` field to both repo config types
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `GitSyncConfig` type to `types.ts`
+- [x] Add git-sync-related fields to `SessionEvent`
+- [x] Add `gitSync` field to both repo config types
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -538,7 +538,7 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 | 4 | git_sync method on SessionRunner | Done |
 | 5 | Integrate git_sync into session loop | Done |
 | 6 | Pass GitSyncConfig through Tauri command | Done |
-| 7 | Frontend GitSyncConfig type + RepoConfig update | Not Started |
+| 7 | Frontend GitSyncConfig type + RepoConfig update | Done |
 | 8 | Git Sync settings UI in RepoDetail | Not Started |
 | 9 | Pass gitSync from App.svelte to invoke | Not Started |
 | 10 | Display git sync events in EventsList | Not Started |

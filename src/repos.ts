@@ -1,5 +1,5 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
-import type { Check } from "./types";
+import type { Check, GitSyncConfig } from "./types";
 
 const store = new LazyStore("repos.json");
 
@@ -13,6 +13,7 @@ type LocalRepoConfig = {
   completionSignal: string;
   envVars?: Record<string, string>;
   checks?: Check[];
+  gitSync?: GitSyncConfig;
 };
 
 type SshRepoConfig = {
@@ -26,6 +27,7 @@ type SshRepoConfig = {
   completionSignal: string;
   envVars?: Record<string, string>;
   checks?: Check[];
+  gitSync?: GitSyncConfig;
 };
 
 export type RepoConfig = LocalRepoConfig | SshRepoConfig;

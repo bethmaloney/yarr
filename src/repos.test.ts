@@ -26,6 +26,7 @@ import {
   removeRepo,
   type RepoConfig,
 } from "./repos";
+import type { GitSyncConfig } from "./types";
 
 beforeEach(() => {
   mockData.clear();
@@ -477,5 +478,135 @@ describe("removeRepo", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].id).toBe("repo-2");
     expect(stored[0]).toEqual(existing[1]);
+  });
+});
+
+describe("gitSync on repo configs", () => {
+  it("local repo with gitSync round-trips through loadRepos", async () => {
+    const gitSync: GitSyncConfig = {
+      enabled: true,
+      conflictPrompt: "Fix the merge conflicts",
+      model: "sonnet",
+      maxPushRetries: 3,
+    };
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-gs-1",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        gitSync,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].gitSync).toEqual(gitSync);
+      expect(result[0].gitSync!.enabled).toBe(true);
+      expect(result[0].gitSync!.conflictPrompt).toBe(
+        "Fix the merge conflicts",
+      );
+      expect(result[0].gitSync!.model).toBe("sonnet");
+      expect(result[0].gitSync!.maxPushRetries).toBe(3);
+    }
+  });
+
+  it("local repo without gitSync loads fine", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-no-gs",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].gitSync).toBeUndefined();
+    }
+  });
+
+  it("ssh repo with gitSync round-trips through loadRepos", async () => {
+    const gitSync: GitSyncConfig = {
+      enabled: true,
+      maxPushRetries: 5,
+    };
+    const existing: RepoConfig[] = [
+      {
+        type: "ssh",
+        id: "repo-gs-ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        gitSync,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "ssh") {
+      expect(result[0].gitSync).toEqual(gitSync);
+      expect(result[0].gitSync!.enabled).toBe(true);
+      expect(result[0].gitSync!.maxPushRetries).toBe(5);
+      expect(result[0].gitSync!.conflictPrompt).toBeUndefined();
+      expect(result[0].gitSync!.model).toBeUndefined();
+    }
+  });
+
+  it("updateRepo preserves gitSync config", async () => {
+    const gitSync: GitSyncConfig = {
+      enabled: true,
+      conflictPrompt: "Resolve conflicts",
+      maxPushRetries: 2,
+    };
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-update-gs",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        gitSync,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const updated: RepoConfig = {
+      type: "local",
+      id: "repo-update-gs",
+      path: "/home/beth/repos/yarr",
+      name: "yarr",
+      model: "sonnet",
+      maxIterations: 20,
+      completionSignal: "DONE",
+      gitSync,
+    };
+    await updateRepo(updated);
+
+    const stored = mockData.get("repos") as RepoConfig[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].model).toBe("sonnet");
+    if (stored[0].type === "local") {
+      expect(stored[0].gitSync).toEqual(gitSync);
+      expect(stored[0].gitSync!.enabled).toBe(true);
+      expect(stored[0].gitSync!.maxPushRetries).toBe(2);
+    }
   });
 });

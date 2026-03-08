@@ -8,6 +8,13 @@ export type Check = {
   maxRetries: number;
 };
 
+export type GitSyncConfig = {
+  enabled: boolean;
+  conflictPrompt?: string;
+  model?: string;
+  maxPushRetries: number;
+};
+
 export type SessionEvent = {
   kind: string;
   session_id?: string;
@@ -26,6 +33,8 @@ export type SessionEvent = {
   plan_file?: string;
   strategy?: string;
   reason?: string;
+  files?: string[];
+  error?: string;
   _ts?: number;
 };
 
