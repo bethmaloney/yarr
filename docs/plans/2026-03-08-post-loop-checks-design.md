@@ -211,11 +211,11 @@ Add the `Check` struct and `CheckWhen` enum to the Rust backend.
 - Add `Default` impl for `Check` with sensible defaults for timeout and retries
 
 **Checklist:**
-- [ ] Add `CheckWhen` enum
-- [ ] Add `Check` struct
-- [ ] Add `checks: Vec<Check>` field to `SessionConfig`
-- [ ] Update `SessionConfig::default()` to include `checks: Vec::new()`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `CheckWhen` enum
+- [x] Add `Check` struct
+- [x] Add `checks: Vec<Check>` field to `SessionConfig`
+- [x] Update `SessionConfig::default()` to include `checks: Vec::new()`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -235,9 +235,9 @@ Extend the runtime abstraction with a method for running arbitrary shell command
 - Derive `Debug, Clone` on `CommandOutput`
 
 **Checklist:**
-- [ ] Add `CommandOutput` struct
-- [ ] Add `run_command` method to `RuntimeProvider` trait
-- [ ] Verify: `cd src-tauri && cargo check` (will fail until implementations added — that's expected, just confirm the trait compiles)
+- [x] Add `CommandOutput` struct
+- [x] Add `run_command` method to `RuntimeProvider` trait
+- [x] Verify: `cd src-tauri && cargo check` (will fail until implementations added — that's expected, just confirm the trait compiles)
 
 ---
 
@@ -255,9 +255,9 @@ Extend the runtime abstraction with a method for running arbitrary shell command
 - Return `CommandOutput` with exit code, stdout, stderr
 
 **Checklist:**
-- [ ] Implement `run_command` for `LocalRuntime`
-- [ ] Handle timeout with process kill
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Implement `run_command` for `LocalRuntime`
+- [x] Handle timeout with process kill
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -275,9 +275,9 @@ Extend the runtime abstraction with a method for running arbitrary shell command
 - Return `CommandOutput`
 
 **Checklist:**
-- [ ] Implement `run_command` for `WslRuntime`
-- [ ] Reuse existing `to_wsl_path` and `shell_escape` helpers
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Implement `run_command` for `WslRuntime`
+- [x] Reuse existing `to_wsl_path` and `shell_escape` helpers
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -295,10 +295,10 @@ Extend the runtime abstraction with a method for running arbitrary shell command
 - Use an `AtomicUsize` counter (like `call_count`) to cycle through results
 
 **Checklist:**
-- [ ] Add `command_results` field and counter to `MockRuntime`
-- [ ] Add builder method for configuring command results
-- [ ] Implement `run_command` for `MockRuntime`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `command_results` field and counter to `MockRuntime`
+- [x] Add builder method for configuring command results
+- [x] Implement `run_command` for `MockRuntime`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -518,7 +518,7 @@ Add visual treatment for check-related events.
 - Test `build_fix_prompt` with default and custom prompts
 
 **Checklist:**
-- [ ] Test MockRuntime run_command
+- [x] Test MockRuntime run_command
 - [ ] Test passing check flow
 - [ ] Test failing check with successful retry
 - [ ] Test failing check exhausting retries
@@ -574,11 +574,11 @@ Add visual treatment for check-related events.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Check data model (Rust) | Not Started |
-| 2 | CommandOutput + run_command trait method | Not Started |
-| 3 | LocalRuntime run_command | Not Started |
-| 4 | WslRuntime run_command | Not Started |
-| 5 | MockRuntime run_command | Not Started |
+| 1 | Check data model (Rust) | Done |
+| 2 | CommandOutput + run_command trait method | Done |
+| 3 | LocalRuntime run_command | Done |
+| 4 | WslRuntime run_command | Done |
+| 5 | MockRuntime run_command | Done |
 | 6 | Check SessionEvent variants | Not Started |
 | 7 | run_checks method on SessionRunner | Not Started |
 | 8 | Integrate run_checks into session loop | Not Started |
@@ -587,6 +587,6 @@ Add visual treatment for check-related events.
 | 11 | Checks settings UI in RepoDetail | Not Started |
 | 12 | Pass checks from App.svelte to invoke | Not Started |
 | 13 | Display check events in EventsList | Not Started |
-| 14 | Rust tests for run_command and run_checks | Not Started |
+| 14 | Rust tests for run_command and run_checks | Partial (MockRuntime tests done) |
 | 15 | Frontend unit tests for Check types | Not Started |
 | 16 | E2E tests for check configuration UI | Not Started |

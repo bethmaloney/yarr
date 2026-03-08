@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::{AbortHandle, ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
+use super::{AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
 use crate::output::StreamEvent;
 
 /// State of a remote SSH session, determined by checking tmux and log file.
@@ -408,6 +408,15 @@ impl RuntimeProvider for SshRuntime {
             );
         }
         Ok(())
+    }
+
+    async fn run_command(
+        &self,
+        _command: &str,
+        _working_dir: &std::path::Path,
+        _timeout: std::time::Duration,
+    ) -> Result<CommandOutput> {
+        anyhow::bail!("run_command is not yet supported for SSH runtime")
     }
 }
 

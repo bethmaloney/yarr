@@ -7,6 +7,29 @@ use crate::output::{ContentBlock, ResultEvent, StreamEvent};
 use crate::runtime::{ClaudeInvocation, RuntimeProvider};
 use crate::trace::{self, SessionOutcome, SpanAttributes, TraceCollector};
 
+fn default_timeout() -> u32 { 1200 }
+fn default_max_retries() -> u32 { 3 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckWhen {
+    EachIteration,
+    PostCompletion,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Check {
+    pub name: String,
+    pub command: String,
+    pub when: CheckWhen,
+    pub prompt: Option<String>,
+    pub model: Option<String>,
+    #[serde(default = "default_timeout")]
+    pub timeout_secs: u32,
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+}
+
 /// Configuration for a Ralph loop session
 #[derive(Debug, Clone)]
 pub struct SessionConfig {
@@ -22,6 +45,7 @@ pub struct SessionConfig {
     pub inter_iteration_delay_ms: u64,
     /// Extra environment variables to set when spawning Claude
     pub env_vars: std::collections::HashMap<String, String>,
+    pub checks: Vec<Check>,
 }
 
 impl Default for SessionConfig {
@@ -36,6 +60,7 @@ impl Default for SessionConfig {
             plan_file: None,
             inter_iteration_delay_ms: 1000,
             env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
         }
     }
 }
@@ -436,6 +461,7 @@ mod tests {
             plan_file: None,
             inter_iteration_delay_ms: 0, // no delay for tests
             env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
         };
 
         let collector = TraceCollector::new(base_dir, "test-repo");
@@ -485,5 +511,64 @@ mod tests {
         // Should have AssistantText events (1 per iteration)
         let text_count = events.iter().filter(|e| matches!(e, SessionEvent::AssistantText { .. })).count();
         assert_eq!(text_count, 3, "should have 3 AssistantText events (1 per iteration)");
+    }
+
+    #[test]
+    fn check_serializes_correctly() {
+        let check = Check {
+            name: "lint".to_string(),
+            command: "npm run lint".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: Some("Fix lint errors".to_string()),
+            model: Some("claude-sonnet".to_string()),
+            timeout_secs: 600,
+            max_retries: 5,
+        };
+
+        let json = serde_json::to_value(&check).expect("serialize Check");
+        assert_eq!(json["name"], "lint");
+        assert_eq!(json["command"], "npm run lint");
+        assert_eq!(json["when"], "each_iteration");
+        assert_eq!(json["prompt"], "Fix lint errors");
+        assert_eq!(json["model"], "claude-sonnet");
+        assert_eq!(json["timeout_secs"], 600);
+        assert_eq!(json["max_retries"], 5);
+    }
+
+    #[test]
+    fn check_deserializes_from_json() {
+        let json = serde_json::json!({
+            "name": "test",
+            "command": "cargo test",
+            "when": "post_completion",
+            "prompt": "Fix failing tests",
+            "model": "claude-opus",
+            "timeout_secs": 300,
+            "max_retries": 2
+        });
+
+        let check: Check = serde_json::from_value(json).expect("deserialize Check");
+        assert_eq!(check.name, "test");
+        assert_eq!(check.command, "cargo test");
+        assert!(matches!(check.when, CheckWhen::PostCompletion));
+        assert_eq!(check.prompt, Some("Fix failing tests".to_string()));
+        assert_eq!(check.model, Some("claude-opus".to_string()));
+        assert_eq!(check.timeout_secs, 300);
+        assert_eq!(check.max_retries, 2);
+    }
+
+    #[test]
+    fn check_when_serializes_as_snake_case() {
+        let each = serde_json::to_value(CheckWhen::EachIteration).expect("serialize EachIteration");
+        assert_eq!(each, serde_json::json!("each_iteration"));
+
+        let post = serde_json::to_value(CheckWhen::PostCompletion).expect("serialize PostCompletion");
+        assert_eq!(post, serde_json::json!("post_completion"));
+    }
+
+    #[test]
+    fn session_config_default_has_empty_checks() {
+        let config = SessionConfig::default();
+        assert!(config.checks.is_empty(), "default checks should be an empty vec");
     }
 }

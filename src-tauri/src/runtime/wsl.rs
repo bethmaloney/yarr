@@ -5,7 +5,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::{AbortHandle, ClaudeInvocation, ProcessExit, RunningProcess, RuntimeProvider};
+use super::{AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider};
 use crate::output::StreamEvent;
 
 /// Abort handle that kills the WSL child process tree before aborting the task.
@@ -193,6 +193,37 @@ impl RuntimeProvider for WslRuntime {
             );
         }
         Ok(())
+    }
+
+    async fn run_command(
+        &self,
+        command: &str,
+        working_dir: &std::path::Path,
+        timeout: std::time::Duration,
+    ) -> Result<CommandOutput> {
+        let wsl_dir = to_wsl_path(working_dir);
+        let cmd_str = format!("cd {} && {}", shell_escape(&wsl_dir), command);
+
+        let child = Command::new("wsl")
+            .args(["-e", "bash", "-lc", &cmd_str])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+
+        let result = tokio::time::timeout(timeout, child.wait_with_output()).await;
+        match result {
+            Ok(Ok(output)) => Ok(CommandOutput {
+                exit_code: output.status.code().unwrap_or(-1),
+                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            }),
+            Ok(Err(e)) => Err(e.into()),
+            Err(_) => {
+                // child is dropped here, kill_on_drop(true) ensures cleanup
+                anyhow::bail!("Command timed out after {:?}", timeout)
+            }
+        }
     }
 }
 

@@ -718,6 +718,7 @@ mod tests {
             plan_file: None,
             inter_iteration_delay_ms: 0,
             env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
         }
     }
 
