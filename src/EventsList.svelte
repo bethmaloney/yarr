@@ -3,8 +3,8 @@
   import { SvelteSet } from "svelte/reactivity";
   import type { SessionEvent } from "./types";
   import { groupEventsByIteration } from "./iteration-groups";
+  import { eventEmoji, eventLabel } from "./event-format";
   import IterationGroup from "./IterationGroup.svelte";
-  import { eventEmoji, eventLabel } from "./event-display";
 
   let { events, isLive = false }: { events: SessionEvent[]; isLive?: boolean } =
     $props();
@@ -127,6 +127,9 @@
               <span class="event-text">{eventLabel(standalone.event)}</span>
               <span class="event-time">{formatTime(standalone.event._ts)}</span>
             </button>
+            {#if expandedEvents.has(i) && standalone.event.kind === "git_sync_failed" && standalone.event.error}
+              <pre class="tool-input-detail">{standalone.event.error}</pre>
+            {/if}
           </li>
         {/each}
 
@@ -135,8 +138,6 @@
             group={iter}
             expanded={expandedIterations.has(iter.iteration)}
             onToggle={() => toggleIteration(iter.iteration)}
-            {eventEmoji}
-            {eventLabel}
             {formatTime}
             {expandedEvents}
             {toggleEvent}
@@ -158,6 +159,9 @@
               <span class="event-text">{eventLabel(standalone.event)}</span>
               <span class="event-time">{formatTime(standalone.event._ts)}</span>
             </button>
+            {#if expandedEvents.has(globalIndex) && standalone.event.kind === "git_sync_failed" && standalone.event.error}
+              <pre class="tool-input-detail">{standalone.event.error}</pre>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -341,6 +345,30 @@
 
   .event.check_fix_complete {
     color: #a78bfa;
+  }
+
+  .event.git_sync_started {
+    color: #888;
+  }
+
+  .event.git_sync_push_succeeded {
+    color: #34d399;
+  }
+
+  .event.git_sync_conflict {
+    color: #f59e0b;
+  }
+
+  .event.git_sync_conflict_resolve_started {
+    color: #a78bfa;
+  }
+
+  .event.git_sync_conflict_resolve_complete {
+    color: #34d399;
+  }
+
+  .event.git_sync_failed {
+    color: #ef4444;
   }
 
   .tool-input-detail {

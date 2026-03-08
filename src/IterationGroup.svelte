@@ -1,14 +1,12 @@
 <script lang="ts">
   import type { IterationGroup } from "./iteration-groups";
-  import type { SessionEvent } from "./types";
   import { formatTokenCount, contextBarColor } from "./context-bar";
+  import { eventEmoji, eventLabel } from "./event-format";
 
   let {
     group,
     expanded,
     onToggle,
-    eventEmoji,
-    eventLabel,
     formatTime,
     expandedEvents,
     toggleEvent,
@@ -17,8 +15,6 @@
     group: IterationGroup;
     expanded: boolean;
     onToggle: () => void;
-    eventEmoji: (kind: string) => string;
-    eventLabel: (ev: SessionEvent) => string;
     formatTime: (ts?: number) => string;
     expandedEvents: Set<number>;
     toggleEvent: (globalIndex: number) => void;
@@ -91,6 +87,9 @@
           {/if}
           {#if expandedEvents.has(globalIndex) && ev.kind === "check_failed" && ev.output}
             <pre class="tool-input-detail">{ev.output}</pre>
+          {/if}
+          {#if expandedEvents.has(globalIndex) && ev.kind === "git_sync_failed" && ev.error}
+            <pre class="tool-input-detail">{ev.error}</pre>
           {/if}
         </li>
       {/each}
@@ -248,6 +247,30 @@
 
   .event.check_fix_complete {
     color: #a78bfa;
+  }
+
+  .event.git_sync_started {
+    color: #888;
+  }
+
+  .event.git_sync_push_succeeded {
+    color: #34d399;
+  }
+
+  .event.git_sync_conflict {
+    color: #f59e0b;
+  }
+
+  .event.git_sync_conflict_resolve_started {
+    color: #a78bfa;
+  }
+
+  .event.git_sync_conflict_resolve_complete {
+    color: #34d399;
+  }
+
+  .event.git_sync_failed {
+    color: #ef4444;
   }
 
   .context-bar {

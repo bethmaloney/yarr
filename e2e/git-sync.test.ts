@@ -188,6 +188,90 @@ test.describe("Git Sync settings section", () => {
     await expect(textarea).toBeDisabled();
   });
 
+  test("gitSync config is included in run_session invoke parameters", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: { repos: [localRepoWithGitSync] },
+      invokeHandlers: {
+        run_session: (args: Record<string, unknown>) => {
+          // Store the args on the window so we can read them from the test
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).__capturedRunSessionArgs = args;
+          return new Promise(() => {}); // Never resolves — keeps session "running"
+        },
+      },
+    });
+    await page.goto("/");
+
+    // Navigate to the repo
+    await page.getByRole("button", { name: /my-app/ }).click();
+    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
+
+    // Fill in plan file and click Run
+    await page
+      .getByPlaceholder("docs/plans/my-feature-design.md")
+      .fill("/tmp/plan.md");
+    await page.getByRole("button", { name: "Run", exact: true }).click();
+
+    // Wait for the session to show as running
+    await expect(page.getByText("Running...")).toBeVisible();
+
+    // Read the captured args from the browser context
+    const capturedArgs = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (window as any).__capturedRunSessionArgs;
+    });
+
+    expect(capturedArgs).not.toBeNull();
+    expect(capturedArgs.gitSync).toBeDefined();
+    expect(capturedArgs.gitSync).toEqual({
+      enabled: true,
+      maxPushRetries: 3,
+    });
+  });
+
+  test("gitSync is not included in run_session invoke when not configured", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: { repos: [localRepo] },
+      invokeHandlers: {
+        run_session: (args: Record<string, unknown>) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).__capturedRunSessionArgs = args;
+          return new Promise(() => {});
+        },
+      },
+    });
+    await page.goto("/");
+
+    // Navigate to the repo
+    await page.getByRole("button", { name: /my-app/ }).click();
+    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
+
+    // Fill in plan file and click Run
+    await page
+      .getByPlaceholder("docs/plans/my-feature-design.md")
+      .fill("/tmp/plan.md");
+    await page.getByRole("button", { name: "Run", exact: true }).click();
+
+    // Wait for the session to show as running
+    await expect(page.getByText("Running...")).toBeVisible();
+
+    // Read the captured args from the browser context
+    const capturedArgs = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (window as any).__capturedRunSessionArgs;
+    });
+
+    expect(capturedArgs).not.toBeNull();
+    // gitSync should be undefined since the repo doesn't have it configured
+    expect(capturedArgs.gitSync).toBeUndefined();
+  });
+
   test("saving settings persists gitSync config", async ({
     page,
     mockTauri,

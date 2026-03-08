@@ -435,9 +435,9 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 - Tauri deserializes camelCase frontend fields to snake_case Rust fields via serde `rename_all`
 
 **Checklist:**
-- [ ] Add `gitSync` to the invoke parameters
-- [ ] Ensure field naming matches between frontend and Rust serde
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `gitSync` to the invoke parameters
+- [x] Ensure field naming matches between frontend and Rust serde
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -445,6 +445,8 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 
 **Files to create/modify:**
 - `src/EventsList.svelte`
+- `src/event-format.ts` (new — extracted eventEmoji, toolSummary, eventLabel)
+- `src/IterationGroup.svelte` (updated to import from event-format instead of props)
 
 **Pattern reference:** `eventEmoji` at `src/EventsList.svelte:69-86`, `eventLabel` at `src/EventsList.svelte:108-125`
 
@@ -455,10 +457,10 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 - For `git_sync_failed` events with `error`, support expansion (same pattern as tool_input)
 
 **Checklist:**
-- [ ] Add emoji mappings for all 6 git sync event kinds
-- [ ] Add label formatting for all 6 git sync event kinds
-- [ ] Add CSS color classes
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add emoji mappings for all 6 git sync event kinds
+- [x] Add label formatting for all 6 git sync event kinds
+- [x] Add CSS color classes
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -540,8 +542,8 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 | 6 | Pass GitSyncConfig through Tauri command | Done |
 | 7 | Frontend GitSyncConfig type + RepoConfig update | Done |
 | 8 | Git Sync settings UI in RepoDetail | Done |
-| 9 | Pass gitSync from App.svelte to invoke | Not Started |
-| 10 | Display git sync events in EventsList | Not Started |
+| 9 | Pass gitSync from App.svelte to invoke | Done |
+| 10 | Display git sync events in EventsList | Done |
 | 11 | Rust tests for git_sync | Not Started |
 | 12 | Frontend unit tests for GitSyncConfig | Not Started |
 | 13 | E2E tests for git sync settings UI | Not Started |
