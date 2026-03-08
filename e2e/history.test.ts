@@ -199,6 +199,7 @@ test.describe("History view — sortable columns (Task 11)", () => {
     const headerButtons = header.locator("button");
     const expectedColumns = [
       "Date",
+      "Type",
       "Plan",
       "Prompt",
       "Status",

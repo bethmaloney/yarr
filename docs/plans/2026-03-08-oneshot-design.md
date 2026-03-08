@@ -403,9 +403,9 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 - E2E tests: navigate to 1-shot view, fill form, mock run_oneshot response, verify progress events display
 
 **Checklist:**
-- [ ] Create unit tests for OneShotView form rendering and interaction
-- [ ] Create E2E test for 1-shot launch flow
-- [ ] Verify: `npm test` and `npm run test:e2e`
+- [x] Create unit tests for OneShotView form rendering and interaction
+- [x] Create E2E test for 1-shot launch flow
+- [x] Verify: `npm test` and `npm run test:e2e`
 
 ---
 
@@ -422,4 +422,4 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 | 7 | Integrate OneShotView into App navigation | Done |
 | 8 | Add Type column to HistoryView | Done |
 | 9 | Tests for OneShotRunner | Done |
-| 10 | Frontend tests for OneShotView | Not Started |
+| 10 | Frontend tests for OneShotView | Done |
