@@ -610,3 +610,143 @@ describe("gitSync on repo configs", () => {
     }
   });
 });
+
+describe("GitSyncConfig type shape", () => {
+  it("has the expected shape with all fields populated", () => {
+    const config: GitSyncConfig = {
+      enabled: true,
+      conflictPrompt: "resolve conflicts automatically",
+      model: "sonnet",
+      maxPushRetries: 3,
+    };
+
+    expect(config).toEqual({
+      enabled: true,
+      conflictPrompt: "resolve conflicts automatically",
+      model: "sonnet",
+      maxPushRetries: 3,
+    });
+    expect(typeof config.enabled).toBe("boolean");
+    expect(typeof config.conflictPrompt).toBe("string");
+    expect(typeof config.model).toBe("string");
+    expect(typeof config.maxPushRetries).toBe("number");
+  });
+
+  it("works with only required fields (optional fields omitted)", () => {
+    const config: GitSyncConfig = {
+      enabled: false,
+      maxPushRetries: 0,
+    };
+
+    expect(config.enabled).toBe(false);
+    expect(config.maxPushRetries).toBe(0);
+    expect(config.conflictPrompt).toBeUndefined();
+    expect(config.model).toBeUndefined();
+    expect(Object.keys(config)).toEqual(["enabled", "maxPushRetries"]);
+  });
+});
+
+describe("RepoConfig with gitSync field", () => {
+  it("local RepoConfig with gitSync is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-gs-1",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      gitSync: {
+        enabled: true,
+        conflictPrompt: "fix merge conflicts",
+        model: "sonnet",
+        maxPushRetries: 5,
+      } satisfies GitSyncConfig,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.gitSync).toBeDefined();
+    expect(repo.gitSync.enabled).toBe(true);
+    expect(repo.gitSync.conflictPrompt).toBe("fix merge conflicts");
+    expect(repo.gitSync.model).toBe("sonnet");
+    expect(repo.gitSync.maxPushRetries).toBe(5);
+  });
+
+  it("local RepoConfig without gitSync is valid (undefined)", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-no-gs",
+      path: "/home/beth/repos/other",
+      name: "other",
+      model: "opus",
+      maxIterations: 20,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect((repo as RepoConfig & { gitSync?: GitSyncConfig }).gitSync).toBeUndefined();
+  });
+
+  it("SSH RepoConfig with gitSync is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-gs-1",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      gitSync: {
+        enabled: false,
+        maxPushRetries: 2,
+      } satisfies GitSyncConfig,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(repo.gitSync).toBeDefined();
+    expect(repo.gitSync.enabled).toBe(false);
+    expect(repo.gitSync.maxPushRetries).toBe(2);
+    const gs = repo.gitSync as GitSyncConfig;
+    expect(gs.conflictPrompt).toBeUndefined();
+    expect(gs.model).toBeUndefined();
+  });
+});
+
+describe("GitSyncConfig JSON round-trip", () => {
+  it("serialize/deserialize preserves all fields", () => {
+    const original: GitSyncConfig = {
+      enabled: true,
+      conflictPrompt: "resolve conflicts using theirs strategy",
+      model: "sonnet",
+      maxPushRetries: 7,
+    };
+
+    const json = JSON.stringify(original);
+    const parsed: GitSyncConfig = JSON.parse(json);
+
+    expect(parsed).toEqual(original);
+    expect(parsed.enabled).toBe(true);
+    expect(parsed.conflictPrompt).toBe(
+      "resolve conflicts using theirs strategy",
+    );
+    expect(parsed.model).toBe("sonnet");
+    expect(parsed.maxPushRetries).toBe(7);
+  });
+
+  it("serialize/deserialize preserves minimal config (no optional fields)", () => {
+    const original: GitSyncConfig = {
+      enabled: false,
+      maxPushRetries: 0,
+    };
+
+    const json = JSON.stringify(original);
+    const parsed: GitSyncConfig = JSON.parse(json);
+
+    expect(parsed).toEqual(original);
+    expect(parsed.enabled).toBe(false);
+    expect(parsed.maxPushRetries).toBe(0);
+    expect("conflictPrompt" in parsed).toBe(false);
+    expect("model" in parsed).toBe(false);
+  });
+});

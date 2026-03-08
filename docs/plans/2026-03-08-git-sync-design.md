@@ -480,13 +480,13 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 - Test push failure + successful rebase flow using `MockRuntime` with sequenced `command_results`
 
 **Checklist:**
-- [ ] Test git_sync skipped when None
-- [ ] Test git_sync skipped when disabled
-- [ ] Test build_conflict_prompt default
-- [ ] Test build_conflict_prompt custom
-- [ ] Test successful push emits correct events
-- [ ] Test push-fail + rebase flow
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Test git_sync skipped when None
+- [x] Test git_sync skipped when disabled
+- [x] Test build_conflict_prompt default
+- [x] Test build_conflict_prompt custom
+- [x] Test successful push emits correct events
+- [x] Test push-fail + rebase flow
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -502,9 +502,9 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 - Test that `RepoConfig` without `gitSync` field loads fine (undefined is acceptable)
 
 **Checklist:**
-- [ ] Add GitSyncConfig shape tests
-- [ ] Add absent-field compatibility test
-- [ ] Verify: `npm test`
+- [x] Add GitSyncConfig shape tests
+- [x] Add absent-field compatibility test
+- [x] Verify: `npm test`
 
 ---
 
@@ -522,11 +522,11 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 - Test that fields are disabled while a session is running
 
 **Checklist:**
-- [ ] Test Git Sync section renders
-- [ ] Test toggle interaction
-- [ ] Test field dimming when disabled
-- [ ] Test disabled state during run
-- [ ] Verify: `npm run test:e2e`
+- [x] Test Git Sync section renders
+- [x] Test toggle interaction
+- [x] Test field dimming when disabled
+- [x] Test disabled state during run
+- [x] Verify: `npm run test:e2e`
 
 ---
 
@@ -544,6 +544,6 @@ Wire git sync config from the frontend IPC call through to `SessionConfig`.
 | 8 | Git Sync settings UI in RepoDetail | Done |
 | 9 | Pass gitSync from App.svelte to invoke | Done |
 | 10 | Display git sync events in EventsList | Done |
-| 11 | Rust tests for git_sync | Not Started |
-| 12 | Frontend unit tests for GitSyncConfig | Not Started |
-| 13 | E2E tests for git sync settings UI | Not Started |
+| 11 | Rust tests for git_sync | Done |
+| 12 | Frontend unit tests for GitSyncConfig | Done |
+| 13 | E2E tests for git sync settings UI | Done |
