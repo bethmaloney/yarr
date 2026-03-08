@@ -33,6 +33,8 @@ pub struct SessionTrace {
     pub plan_file: Option<String>,
     #[serde(default)]
     pub repo_id: Option<String>,
+    #[serde(default = "default_session_type")]
+    pub session_type: String,
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
     pub outcome: SessionOutcome,
@@ -84,6 +86,10 @@ pub struct TraceCollector {
     repo_id: String,
 }
 
+fn default_session_type() -> String {
+    "ralph_loop".to_string()
+}
+
 /// Validate that a path component does not contain traversal characters.
 fn validate_path_component(value: &str, name: &str) -> anyhow::Result<()> {
     if value.is_empty() || value.contains('/') || value.contains('\\') || value.contains("..") {
@@ -115,6 +121,7 @@ impl TraceCollector {
             prompt: prompt.to_string(),
             plan_file: plan_file.map(|s| s.to_string()),
             repo_id: Some(self.repo_id.clone()),
+            session_type: "ralph_loop".to_string(),
             start_time: Utc::now(),
             end_time: None,
             outcome: SessionOutcome::Running,
@@ -347,6 +354,7 @@ mod tests {
             prompt: "do the thing".to_string(),
             plan_file,
             repo_id: Some("test-repo".to_string()),
+            session_type: "ralph_loop".to_string(),
             start_time: Utc::now(),
             end_time: Some(Utc::now()),
             outcome: SessionOutcome::Completed,
@@ -973,6 +981,91 @@ mod tests {
         assert_eq!(latest.len(), 1, "should return only one trace for the single repo");
         assert_eq!(latest[0].session_id, newest_session_id, "should be the newest trace");
         assert_eq!(latest[0].prompt, "newest task");
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Tests for session_type field
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Test: session_trace round-trip preserves session_type ──
+
+    #[test]
+    fn session_trace_round_trip_with_session_type() {
+        let mut trace = make_test_trace(None);
+        trace.session_type = "oneshot".to_string();
+
+        let json = serde_json::to_string(&trace).expect("serialize SessionTrace");
+        let restored: SessionTrace =
+            serde_json::from_str(&json).expect("deserialize SessionTrace");
+
+        assert_eq!(restored.session_type, "oneshot");
+    }
+
+    // ── Test: missing session_type in JSON defaults to "ralph_loop" ──
+
+    #[test]
+    fn session_trace_default_session_type() {
+        let trace = make_test_trace(None);
+        let json = serde_json::to_string(&trace).expect("serialize SessionTrace");
+
+        // Parse into a generic Value, remove session_type, and re-serialize
+        let mut value: serde_json::Value =
+            serde_json::from_str(&json).expect("parse as Value");
+        let obj = value.as_object_mut().expect("top-level object");
+        assert!(
+            obj.remove("session_type").is_some(),
+            "session_type key should have been present"
+        );
+
+        let stripped_json =
+            serde_json::to_string(&value).expect("re-serialize without session_type");
+
+        let restored: SessionTrace =
+            serde_json::from_str(&stripped_json).expect("deserialize without session_type");
+
+        assert_eq!(restored.session_type, "ralph_loop");
+    }
+
+    // ── Test: start_session sets session_type to "ralph_loop" ──
+
+    #[test]
+    fn start_session_sets_session_type_ralph_loop() {
+        let collector = TraceCollector::new("/tmp", "traces");
+        let trace = collector.start_session("/tmp/repo", "do stuff", None);
+
+        assert_eq!(trace.session_type, "ralph_loop");
+    }
+
+    // ── Test: backward compat — old trace JSON without session_type key ──
+
+    #[test]
+    fn session_trace_backward_compat_without_session_type() {
+        let trace = make_test_trace(Some("plan.md".to_string()));
+        let json = serde_json::to_string(&trace).expect("serialize SessionTrace");
+
+        // Parse into a generic Value, remove session_type to simulate an old-format file
+        let mut value: serde_json::Value =
+            serde_json::from_str(&json).expect("parse as Value");
+        let obj = value.as_object_mut().expect("top-level object");
+        assert!(
+            obj.remove("session_type").is_some(),
+            "session_type key should have been present"
+        );
+
+        let old_format_json =
+            serde_json::to_string(&value).expect("re-serialize without session_type");
+
+        // Deserialize the old-format JSON — this would fail without the serde default
+        let restored: SessionTrace =
+            serde_json::from_str(&old_format_json).expect("deserialize old-format trace");
+
+        assert_eq!(restored.session_type, "ralph_loop");
+        assert_eq!(restored.trace_id, trace.trace_id);
+        assert_eq!(restored.session_id, trace.session_id);
+        assert_eq!(restored.repo_path, trace.repo_path);
+        assert_eq!(restored.prompt, trace.prompt);
+        assert_eq!(restored.plan_file, Some("plan.md".to_string()));
+        assert_eq!(restored.total_cost_usd, trace.total_cost_usd);
     }
 }
 

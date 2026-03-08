@@ -157,11 +157,11 @@ Add a `session_type` field to distinguish Ralph loops from 1-shot sessions in tr
 - Existing traces missing the field will deserialize as `"ralph_loop"` via serde default
 
 **Checklist:**
-- [ ] Add `session_type` field to `SessionTrace` in `trace.rs` with serde default
-- [ ] Add `default_session_type()` helper function returning `"ralph_loop"`
-- [ ] Set `session_type: "ralph_loop".to_string()` in `TraceCollector::new()` or wherever traces are initialized
-- [ ] Add `session_type` to `SessionTrace` in `src/types.ts`
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Add `session_type` field to `SessionTrace` in `trace.rs` with serde default
+- [x] Add `default_session_type()` helper function returning `"ralph_loop"`
+- [x] Set `session_type: "ralph_loop".to_string()` in `TraceCollector::new()` or wherever traces are initialized
+- [x] Add `session_type` to `SessionTrace` in `src/types.ts`
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -413,7 +413,7 @@ Add Vitest unit tests and Playwright E2E tests for the 1-shot UI.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add session_type to SessionTrace | Not Started |
+| 1 | Add session_type to SessionTrace | Done |
 | 2 | Add 1-shot SessionEvent variants | Not Started |
 | 3 | Add design phase prompt | Not Started |
 | 4 | Add OneShotRunner | Not Started |

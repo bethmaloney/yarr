@@ -30,6 +30,7 @@ export type SessionTrace = {
   prompt: string;
   plan_file: string | null;
   repo_id?: string | null;
+  session_type?: string;
   start_time: string;
   end_time: string | null;
   outcome: string;
