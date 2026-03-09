@@ -373,8 +373,10 @@ Convert the Breadcrumbs component using shadcn/ui `Breadcrumb`.
 - Clickable crumbs use `BreadcrumbLink` with `onClick`, terminal crumb uses `BreadcrumbPage`
 
 **Checklist:**
-- [ ] Create `src/components/Breadcrumbs.tsx`
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/components/Breadcrumbs.tsx`
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Uses shadcn/ui Breadcrumb primitives. Crumbs with `onClick` render as `BreadcrumbLink` (with `cursor-pointer`, `role="button"`, `tabIndex={0}`), crumbs without render as `BreadcrumbPage`. Uses `React.Fragment` for keyed iteration (not `<span>`) to maintain valid `<ol>` > `<li>` HTML nesting. 11 unit tests covering empty/single/multiple crumbs, click handlers, separator counts, and terminal crumb behavior.
 
 ---
 
@@ -693,7 +695,7 @@ Full build, lint, format, and manual smoke test.
 | 2 | Scaffold shadcn/ui primitives | Done |
 | 3 | Create Zustand store | Done |
 | 4 | Create App.tsx with router | Done |
-| 5 | Breadcrumbs component | Not Started |
+| 5 | Breadcrumbs component | Done |
 | 6 | RepoCard component | Not Started |
 | 7 | IterationGroup component | Not Started |
 | 8 | EventsList component | Not Started |
