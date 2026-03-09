@@ -155,6 +155,8 @@ pub enum SessionEvent {
     OneShotComplete,
     /// 1-shot failed
     OneShotFailed { reason: String },
+    /// Phase output from a 1-shot design or implementation phase
+    PhaseOutput { phase: String, output_type: String, summary: String },
     /// Git sync has started
     GitSyncStarted { iteration: u32 },
     /// Git push succeeded

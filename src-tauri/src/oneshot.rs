@@ -676,58 +676,12 @@ impl OneShotRunner {
                             return Err(anyhow::anyhow!("Rebase failed"));
                         }
 
-                        // 3. Checkout main in the worktree
-                        let checkout = runtime
-                            .run_command(
-                                "git checkout main",
-                                &wt_path,
-                                Duration::from_secs(60),
-                            )
-                            .await?;
-
-                        if checkout.exit_code != 0 {
-                            let checkout_err = if checkout.stderr.is_empty() { &checkout.stdout } else { &checkout.stderr };
-                            self.emit(SessionEvent::OneShotFailed {
-                                reason: format!(
-                                    "Failed to checkout main in worktree: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nOnce done, remove the worktree with:\ngit worktree remove {}",
-                                    checkout_err, branch, wt_path.display(), wt_path.display()
-                                ),
-                            });
-                            trace.outcome = SessionOutcome::Failed;
-                            trace.end_time = Some(Utc::now());
-                            let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                            let _ = self.collector.finalize(&mut trace, &events).await;
-                            return Err(anyhow::anyhow!("Failed to checkout main"));
-                        }
-
-                        // 4. Fast-forward merge the rebased branch
-                        let merge = runtime
-                            .run_command(
-                                &format!("git merge --ff-only {}", branch),
-                                &wt_path,
-                                Duration::from_secs(60),
-                            )
-                            .await?;
-
-                        if merge.exit_code != 0 {
-                            let merge_err = if merge.stderr.is_empty() { &merge.stdout } else { &merge.stderr };
-                            self.emit(SessionEvent::OneShotFailed {
-                                reason: format!(
-                                    "Fast-forward merge failed: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, merge manually then remove the worktree with:\ngit worktree remove {}",
-                                    merge_err, branch, wt_path.display(), wt_path.display()
-                                ),
-                            });
-                            trace.outcome = SessionOutcome::Failed;
-                            trace.end_time = Some(Utc::now());
-                            let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                            let _ = self.collector.finalize(&mut trace, &events).await;
-                            return Err(anyhow::anyhow!("Merge failed"));
-                        }
-
-                        // 5. Push main
+                        // 3. Push rebased branch directly to origin/main
+                        // We skip checkout + ff-merge because `main` may already be
+                        // checked out in the primary worktree, which git forbids.
                         let push = runtime
                             .run_command(
-                                "git push origin main",
+                                &format!("git push origin {}:main", branch),
                                 &wt_path,
                                 Duration::from_secs(120),
                             )
@@ -1218,11 +1172,9 @@ mod tests {
         // 2. git worktree add (success)
         // 3. git fetch origin main (success)
         // 4. git rebase origin/main (success)
-        // 5. git checkout main (success)
-        // 6. git merge --ff-only <branch> (success)
-        // 7. git push origin main (success)
-        // 8. git branch -d <branch> (success)
-        // 9. git worktree remove <path> (success)
+        // 5. git push origin <branch>:main (success)
+        // 6. git branch -d <branch> (success)
+        // 7. git worktree remove <path> (success)
         // MockRuntime returns success by default when command_results is
         // exhausted, so we only need to provide the first few explicitly.
         runtime.command_results = vec![
@@ -1244,16 +1196,6 @@ mod tests {
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
-                stderr: String::new(),
-            },
-            CommandOutput {
-                exit_code: 0,
-                stdout: "Switched to branch 'main'".to_string(),
-                stderr: String::new(),
-            },
-            CommandOutput {
-                exit_code: 0,
-                stdout: "Already up to date.".to_string(),
                 stderr: String::new(),
             },
             CommandOutput {
