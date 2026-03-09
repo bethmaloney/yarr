@@ -233,11 +233,11 @@ Wire the `createBranch` flag from frontend through `run_session` invocation, and
 - The timeout for the git command can be a reasonable default (e.g., 30 seconds)
 
 **Checklist:**
-- [ ] Add `createBranch` to frontend `invoke` call
-- [ ] Add `create_branch` param to `run_session` Tauri command
-- [ ] Implement branch creation logic in `Local` arm
-- [ ] `cd src-tauri && cargo check`
-- [ ] `npx tsc --noEmit`
+- [x] Add `createBranch` to frontend `invoke` call
+- [x] Add `create_branch` param to `run_session` Tauri command
+- [x] Implement branch creation logic in `Local` arm
+- [x] `cd src-tauri && cargo check`
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -367,7 +367,7 @@ Add tests for the branch-related UI logic and interactions.
 | 1 | Backend git branch Tauri commands | Complete |
 | 2 | Frontend `BranchInfo` type and `createBranch` config | Complete |
 | 3 | "Create branch on run" toggle in RepoDetail settings | Complete |
-| 4 | Pass `createBranch` to backend and create branch before session | Not Started |
+| 4 | Pass `createBranch` to backend and create branch before session | Complete |
 | 5 | Branch display chip with dropdown on RepoDetail | Not Started |
 | 6 | Branch label on RepoCard + fetch in App.svelte | Not Started |
 | 7 | Backend tests for git branch commands | Not Started |

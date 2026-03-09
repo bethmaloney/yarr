@@ -117,6 +117,7 @@ async fn run_session(
     env_vars: Option<HashMap<String, String>>,
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
+    create_branch: bool,
 ) -> Result<trace::SessionTrace, String> {
     let cancel_token = CancellationToken::new();
     {
@@ -143,6 +144,44 @@ async fn run_session(
             if !plan_path.exists() {
                 app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
                 return Err(format!("Plan file not found: {}", plan_path.display()));
+            }
+
+            if create_branch {
+                let branch_name = generate_branch_name(&plan_file);
+                let timeout = std::time::Duration::from_secs(30);
+                let output = runtime
+                    .run_command(
+                        &format!("git checkout -b {branch_name}"),
+                        &repo_path_buf,
+                        timeout,
+                    )
+                    .await;
+
+                match output {
+                    Ok(o) if o.exit_code != 0 => {
+                        app.state::<ActiveSessions>()
+                            .tokens
+                            .lock()
+                            .await
+                            .remove(&repo_id);
+                        return Err(format!(
+                            "Failed to create branch '{}': {}",
+                            branch_name, o.stderr
+                        ));
+                    }
+                    Err(e) => {
+                        app.state::<ActiveSessions>()
+                            .tokens
+                            .lock()
+                            .await
+                            .remove(&repo_id);
+                        return Err(format!(
+                            "Failed to create branch '{}': {}",
+                            branch_name, e
+                        ));
+                    }
+                    Ok(_) => {} // success, continue
+                }
             }
 
             let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
@@ -404,6 +443,16 @@ fn resolve_runtime(repo: &RepoType) -> (Box<dyn RuntimeProvider>, PathBuf) {
             (Box::new(SshRuntime::new(ssh_host, remote_path)), PathBuf::from(remote_path))
         }
     }
+}
+
+fn generate_branch_name(plan_file: &str) -> String {
+    let stem = Path::new(plan_file)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "session".to_string());
+    let slug = oneshot::slugify(&stem);
+    let short_id = oneshot::generate_short_id();
+    format!("yarr/{slug}-{short_id}")
 }
 
 #[tauri::command]
@@ -1083,5 +1132,101 @@ mod tests {
     fn parse_rev_list_output_malformed() {
         let result = parse_rev_list_output("not-a-number\n");
         assert_eq!(result, (None, None));
+    }
+
+    #[test]
+    fn parse_rev_list_output_single_value() {
+        let result = parse_rev_list_output("42\n");
+        assert_eq!(result, (None, None));
+    }
+
+    #[test]
+    fn parse_rev_list_output_three_fields() {
+        let result = parse_rev_list_output("1\t2\t3\n");
+        assert_eq!(result, (None, None));
+    }
+
+    #[test]
+    fn parse_rev_list_output_non_numeric_pair() {
+        let result = parse_rev_list_output("abc\tdef\n");
+        assert_eq!(result, (None, None));
+    }
+
+    // --- generate_branch_name tests ---
+
+    #[test]
+    fn generate_branch_name_simple_plan_file() {
+        let name = generate_branch_name("/home/user/docs/my-plan.md");
+        // Should start with "yarr/"
+        assert!(name.starts_with("yarr/"), "branch name should start with 'yarr/', got: {name}");
+        // Should contain the slugified stem
+        assert!(name.contains("my-plan"), "branch name should contain slug 'my-plan', got: {name}");
+        // Format: yarr/{slug}-{6-char-id}
+        let after_prefix = name.strip_prefix("yarr/").unwrap();
+        // The last 7 characters should be "-" + 6 hex chars
+        assert!(after_prefix.len() > 7, "branch name after prefix should be longer than 7 chars, got: {after_prefix}");
+        let short_id = &after_prefix[after_prefix.len() - 6..];
+        assert!(short_id.chars().all(|c: char| c.is_ascii_hexdigit()),
+            "short_id should be hex characters, got: {short_id}");
+        let separator = &after_prefix[after_prefix.len() - 7..after_prefix.len() - 6];
+        assert_eq!(separator, "-", "slug and short_id should be separated by '-'");
+    }
+
+    #[test]
+    fn generate_branch_name_nested_path_extracts_stem() {
+        let name = generate_branch_name("/a/deeply/nested/path/to/feature-spec.md");
+        assert!(name.starts_with("yarr/"), "branch name should start with 'yarr/', got: {name}");
+        // Should contain only the file stem, not the path
+        assert!(!name.contains("nested"), "branch name should not contain path components, got: {name}");
+        assert!(!name.contains("path"), "branch name should not contain path components, got: {name}");
+        assert!(name.contains("feature-spec"), "branch name should contain slugified file stem 'feature-spec', got: {name}");
+    }
+
+    #[test]
+    fn generate_branch_name_special_characters_slugified() {
+        let name = generate_branch_name("/home/user/My Cool Plan (v2)!.md");
+        assert!(name.starts_with("yarr/"), "branch name should start with 'yarr/', got: {name}");
+        // Slugified: special chars become hyphens, lowercased
+        let after_prefix = name.strip_prefix("yarr/").unwrap();
+        // The slug part (everything before the last 7 chars) should not contain uppercase or special chars
+        let slug_part = &after_prefix[..after_prefix.len() - 7];
+        assert!(slug_part.chars().all(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+            "slug should only contain lowercase alphanumeric and hyphens, got: {slug_part}");
+    }
+
+    #[test]
+    fn generate_branch_name_produces_different_ids_on_successive_calls() {
+        let name1 = generate_branch_name("/home/user/plan.md");
+        let name2 = generate_branch_name("/home/user/plan.md");
+        // The slugs should be the same but the short_ids should differ
+        // (statistically certain with 6 hex chars = 16^6 = 16M possibilities)
+        assert_ne!(name1, name2,
+            "two calls with the same plan file should produce different branch names due to random short_id");
+        // Both should have the same prefix up to the short_id
+        let prefix1 = &name1[..name1.len() - 6];
+        let prefix2 = &name2[..name2.len() - 6];
+        assert_eq!(prefix1, prefix2,
+            "the yarr/slug- prefix should be the same for both calls");
+    }
+
+    #[test]
+    fn generate_branch_name_short_id_is_six_chars() {
+        let name = generate_branch_name("/tmp/test.md");
+        let after_prefix = name.strip_prefix("yarr/").unwrap();
+        let short_id = &after_prefix[after_prefix.len() - 6..];
+        assert_eq!(short_id.len(), 6, "short_id should be exactly 6 characters");
+        assert!(short_id.chars().all(|c: char| c.is_ascii_hexdigit()),
+            "short_id should be valid hex, got: {short_id}");
+    }
+
+    #[test]
+    fn generate_branch_name_without_extension() {
+        // Plan file with no extension
+        let name = generate_branch_name("/home/user/plans/Makefile");
+        assert!(name.starts_with("yarr/"), "branch name should start with 'yarr/', got: {name}");
+        // The stem of "Makefile" is "Makefile", which slugifies to "makefile"
+        let after_prefix = name.strip_prefix("yarr/").unwrap();
+        let slug_part = &after_prefix[..after_prefix.len() - 7];
+        assert_eq!(slug_part, "makefile", "slug for 'Makefile' should be 'makefile', got: {slug_part}");
     }
 }

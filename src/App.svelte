@@ -214,6 +214,7 @@
         envVars: repo.envVars ?? {},
         checks: repo.checks ?? [],
         gitSync: repo.gitSync,
+        createBranch: repo.createBranch ?? true,
       });
       const session = sessions.get(repoId)!;
       sessions.set(repoId, { ...session, trace });
