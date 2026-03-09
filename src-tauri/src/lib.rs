@@ -543,6 +543,103 @@ async fn fast_forward_branch(repo: RepoType) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn list_plans(repo: RepoType, plans_dir: String) -> Result<Vec<String>, String> {
+    validate_plans_dir(&plans_dir)?;
+    let (rt, working_dir) = resolve_runtime(&repo);
+    let timeout = std::time::Duration::from_secs(30);
+    let cmd = build_list_plans_command(&working_dir, &plans_dir);
+
+    match rt.run_command(&cmd, &working_dir, timeout).await {
+        Ok(output) if output.exit_code == 0 => Ok(parse_plan_list(&output.stdout)),
+        _ => Ok(vec![]), // gracefully return empty on error or missing dir
+    }
+}
+
+#[tauri::command]
+async fn move_plan_to_completed(
+    repo: RepoType,
+    plans_dir: String,
+    filename: String,
+) -> Result<(), String> {
+    validate_plans_dir(&plans_dir)?;
+    validate_plan_filename(&filename)?;
+
+    let (rt, working_dir) = resolve_runtime(&repo);
+    let timeout = std::time::Duration::from_secs(30);
+    let cmd = build_move_plan_command(&working_dir, &plans_dir, &filename);
+
+    let output = rt
+        .run_command(&cmd, &working_dir, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if output.exit_code != 0 {
+        return Err(output.stderr);
+    }
+
+    Ok(())
+}
+
+// --- Plan management helpers ---
+
+fn parse_plan_list(stdout: &str) -> Vec<String> {
+    let mut files: Vec<String> = stdout
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    files.sort();
+    files
+}
+
+fn build_list_plans_command(working_dir: &Path, plans_dir: &str) -> String {
+    let escaped_working_dir = ssh_shell_escape(&working_dir.display().to_string());
+    let escaped_dir = ssh_shell_escape(plans_dir);
+    format!(
+        "find {}/{} -maxdepth 1 -name '*.md' -type f -printf '%f\\n'",
+        escaped_working_dir,
+        escaped_dir
+    )
+}
+
+fn build_move_plan_command(working_dir: &Path, plans_dir: &str, filename: &str) -> String {
+    let escaped_working_dir = ssh_shell_escape(&working_dir.display().to_string());
+    let escaped_dir = ssh_shell_escape(plans_dir);
+    let escaped_filename = ssh_shell_escape(filename);
+    let base = format!("{}/{}", escaped_working_dir, escaped_dir);
+    format!(
+        "mkdir -p {}/completed && mv {}/{} {}/completed/{}",
+        base, base, escaped_filename, base, escaped_filename
+    )
+}
+
+fn validate_plans_dir(plans_dir: &str) -> Result<(), String> {
+    if plans_dir.contains("..") {
+        return Err("plans_dir must not contain path traversal".to_string());
+    }
+    if plans_dir.starts_with('/') || plans_dir.starts_with('\\') {
+        return Err("plans_dir must be a relative path".to_string());
+    }
+    Ok(())
+}
+
+fn validate_plan_filename(filename: &str) -> Result<(), String> {
+    if filename.is_empty() {
+        return Err("filename must not be empty".to_string());
+    }
+    if filename.contains('\0') {
+        return Err("filename must not contain null bytes".to_string());
+    }
+    if filename.contains('/') || filename.contains('\\') {
+        return Err("filename must not contain path separators".to_string());
+    }
+    if filename.contains("..") {
+        return Err("filename must not contain path traversal".to_string());
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -557,7 +654,7 @@ pub fn run() {
         .manage(GlobalAbortRegistry {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
-        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {
@@ -1344,5 +1441,180 @@ mod tests {
             all_args.contains("/home/user/my project") || all_args.contains("'/home/user/my project'"),
             "remote path check command should include path with spaces (possibly shell-escaped), got: {all_args}"
         );
+    }
+
+    // --- parse_plan_list tests ---
+
+    #[test]
+    fn parse_plan_list_basic() {
+        let stdout = "foo.md\nbar.md\n";
+        let result = parse_plan_list(stdout);
+        assert_eq!(result, vec!["bar.md", "foo.md"]);
+    }
+
+    #[test]
+    fn parse_plan_list_empty() {
+        let result = parse_plan_list("");
+        assert!(result.is_empty(), "empty string should produce empty vec");
+    }
+
+    #[test]
+    fn parse_plan_list_with_whitespace() {
+        let stdout = "  foo.md  \n  bar.md  \n";
+        let result = parse_plan_list(stdout);
+        assert_eq!(result, vec!["bar.md", "foo.md"]);
+    }
+
+    #[test]
+    fn parse_plan_list_single_file() {
+        let stdout = "only-plan.md\n";
+        let result = parse_plan_list(stdout);
+        assert_eq!(result, vec!["only-plan.md"]);
+    }
+
+    // --- build_list_plans_command tests ---
+
+    #[test]
+    fn build_list_plans_command_basic() {
+        let working_dir = Path::new("/home/user/project");
+        let cmd = build_list_plans_command(working_dir, "plans");
+        assert_eq!(
+            cmd,
+            "find '/home/user/project'/'plans' -maxdepth 1 -name '*.md' -type f -printf '%f\\n'"
+        );
+    }
+
+    #[test]
+    fn build_list_plans_command_with_spaces() {
+        let working_dir = Path::new("/home/user/project");
+        let cmd = build_list_plans_command(working_dir, "my plans");
+        assert!(
+            cmd.contains("'my plans'"),
+            "plans_dir with spaces should be shell-escaped, got: {cmd}"
+        );
+        assert!(
+            cmd.starts_with("find '/home/user/project'/"),
+            "command should start with find and escaped working dir, got: {cmd}"
+        );
+    }
+
+    // --- build_move_plan_command tests ---
+
+    #[test]
+    fn build_move_plan_command_basic() {
+        let working_dir = Path::new("/home/user/project");
+        let cmd = build_move_plan_command(working_dir, "plans", "my-plan.md");
+        assert!(
+            cmd.contains("mkdir -p"),
+            "command should contain mkdir -p, got: {cmd}"
+        );
+        assert!(
+            cmd.contains("/completed"),
+            "command should reference completed subdirectory, got: {cmd}"
+        );
+        assert!(
+            cmd.contains("mv"),
+            "command should contain mv, got: {cmd}"
+        );
+        assert!(
+            cmd.contains("'my-plan.md'"),
+            "filename should be shell-escaped, got: {cmd}"
+        );
+        assert!(
+            cmd.contains("'/home/user/project'/"),
+            "working_dir should be shell-escaped, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn build_move_plan_command_escapes_filename() {
+        let working_dir = Path::new("/home/user/project");
+        let cmd = build_move_plan_command(working_dir, "plans", "file with spaces.md");
+        assert!(
+            cmd.contains("'file with spaces.md'"),
+            "filename with spaces should be shell-escaped, got: {cmd}"
+        );
+        assert!(
+            cmd.contains("'/home/user/project'/"),
+            "working_dir should be shell-escaped, got: {cmd}"
+        );
+    }
+
+    // --- validate_plan_filename tests ---
+
+    #[test]
+    fn validate_plan_filename_rejects_path_traversal() {
+        let result = validate_plan_filename("../etc/passwd");
+        assert!(
+            result.is_err(),
+            "filenames containing '..' should be rejected"
+        );
+    }
+
+    #[test]
+    fn validate_plan_filename_rejects_slash() {
+        let result = validate_plan_filename("subdir/plan.md");
+        assert!(
+            result.is_err(),
+            "filenames containing '/' should be rejected"
+        );
+    }
+
+    #[test]
+    fn validate_plan_filename_accepts_normal() {
+        let result = validate_plan_filename("my-plan.md");
+        assert!(
+            result.is_ok(),
+            "normal filenames should be accepted, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validate_plan_filename_accepts_spaces() {
+        let result = validate_plan_filename("my plan.md");
+        assert!(
+            result.is_ok(),
+            "filenames with spaces should be accepted, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validate_plan_filename_rejects_backslash() {
+        let result = validate_plan_filename("subdir\\plan.md");
+        assert!(result.is_err(), "filenames containing '\\' should be rejected");
+    }
+
+    #[test]
+    fn validate_plan_filename_rejects_empty() {
+        let result = validate_plan_filename("");
+        assert!(result.is_err(), "empty filename should be rejected");
+    }
+
+    // --- validate_plans_dir tests ---
+
+    #[test]
+    fn validate_plans_dir_rejects_path_traversal() {
+        let result = validate_plans_dir("../../etc");
+        assert!(result.is_err(), "plans_dir with '..' should be rejected");
+    }
+
+    #[test]
+    fn validate_plans_dir_rejects_absolute_path() {
+        let result = validate_plans_dir("/etc/plans");
+        assert!(result.is_err(), "absolute plans_dir should be rejected");
+    }
+
+    #[test]
+    fn validate_plans_dir_accepts_relative() {
+        let result = validate_plans_dir("docs/plans");
+        assert!(result.is_ok(), "relative plans_dir should be accepted, got: {:?}", result);
+    }
+
+    #[test]
+    fn validate_plans_dir_accepts_simple() {
+        let result = validate_plans_dir("plans");
+        assert!(result.is_ok(), "simple plans_dir should be accepted, got: {:?}", result);
     }
 }

@@ -108,10 +108,10 @@ Backend command to list plan files from the configured directory via the runtime
 - Register in `invoke_handler`
 
 **Checklist:**
-- [ ] Add `list_plans` command function
-- [ ] Handle missing directory gracefully (empty vec)
-- [ ] Register in `tauri::generate_handler![]`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `list_plans` command function
+- [x] Handle missing directory gracefully (empty vec)
+- [x] Register in `tauri::generate_handler![]`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -133,10 +133,10 @@ Backend command to move a plan file to the completed subdirectory via the runtim
 - Register in `invoke_handler`
 
 **Checklist:**
-- [ ] Add `move_plan_to_completed` command function
-- [ ] Shell-escape filename parameter
-- [ ] Register in `tauri::generate_handler![]`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `move_plan_to_completed` command function
+- [x] Shell-escape filename parameter
+- [x] Register in `tauri::generate_handler![]`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -245,11 +245,11 @@ Add Rust tests for `list_plans` and `move_plan_to_completed`.
 - These test the command logic directly, not through Tauri IPC
 
 **Checklist:**
-- [ ] Test list_plans returns only top-level .md files
-- [ ] Test list_plans excludes completed/ subdirectory
-- [ ] Test list_plans with missing directory
-- [ ] Test move_plan_to_completed moves file and creates dir
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Test list_plans returns only top-level .md files
+- [x] Test list_plans excludes completed/ subdirectory
+- [x] Test list_plans with missing directory
+- [x] Test move_plan_to_completed moves file and creates dir
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -284,10 +284,10 @@ Add Vitest tests for plan selector behavior.
 |------|-------------|--------|
 | 1 | Add `plansDir` to RepoConfig | Done |
 | 2 | Add `plansDir` setting to RepoDetail UI | Done |
-| 3 | Add `list_plans` Tauri command | Not Started |
-| 4 | Add `move_plan_to_completed` Tauri command | Not Started |
+| 3 | Add `list_plans` Tauri command | Done |
+| 4 | Add `move_plan_to_completed` Tauri command | Done |
 | 5 | Build plan selector dropdown component | Not Started |
 | 6 | Auto-move plan on successful completion | Not Started |
 | 7 | Clear plan selector after auto-move | Not Started |
-| 8 | Tests for new Tauri commands | Not Started |
+| 8 | Tests for new Tauri commands | Done |
 | 9 | Frontend tests for plan selector | Not Started |
