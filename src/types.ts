@@ -15,6 +15,12 @@ export type GitSyncConfig = {
   maxPushRetries: number;
 };
 
+export type BranchInfo = {
+  name: string;
+  ahead: number | null;
+  behind: number | null;
+};
+
 export type SessionEvent = {
   kind: string;
   session_id?: string;

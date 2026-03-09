@@ -14,6 +14,7 @@ type LocalRepoConfig = {
   envVars?: Record<string, string>;
   checks?: Check[];
   gitSync?: GitSyncConfig;
+  createBranch?: boolean;
 };
 
 type SshRepoConfig = {
@@ -28,6 +29,7 @@ type SshRepoConfig = {
   envVars?: Record<string, string>;
   checks?: Check[];
   gitSync?: GitSyncConfig;
+  createBranch?: boolean;
 };
 
 export type RepoConfig = LocalRepoConfig | SshRepoConfig;

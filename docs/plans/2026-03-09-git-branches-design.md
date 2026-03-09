@@ -177,10 +177,10 @@ Add the TypeScript types and update `RepoConfig` to include the `createBranch` s
 - Export `BranchInfo` from `types.ts`
 
 **Checklist:**
-- [ ] Add `BranchInfo` type to `types.ts`
-- [ ] Add `createBranch` field to `LocalRepoConfig`
-- [ ] Add `createBranch` field to `SshRepoConfig`
-- [ ] `npx tsc --noEmit`
+- [x] Add `BranchInfo` type to `types.ts`
+- [x] Add `createBranch` field to `LocalRepoConfig`
+- [x] Add `createBranch` field to `SshRepoConfig`
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -365,7 +365,7 @@ Add tests for the branch-related UI logic and interactions.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Backend git branch Tauri commands | Complete |
-| 2 | Frontend `BranchInfo` type and `createBranch` config | Not Started |
+| 2 | Frontend `BranchInfo` type and `createBranch` config | Complete |
 | 3 | "Create branch on run" toggle in RepoDetail settings | Not Started |
 | 4 | Pass `createBranch` to backend and create branch before session | Not Started |
 | 5 | Branch display chip with dropdown on RepoDetail | Not Started |

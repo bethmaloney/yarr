@@ -762,3 +762,176 @@ describe("GitSyncConfig JSON round-trip", () => {
     expect("model" in parsed).toBe(false);
   });
 });
+
+describe("RepoConfig with createBranch field", () => {
+  it("local RepoConfig with createBranch: true is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-cb-1",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      createBranch: true,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.createBranch).toBe(true);
+  });
+
+  it("local RepoConfig with createBranch: false is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-cb-2",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      createBranch: false,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.createBranch).toBe(false);
+  });
+
+  it("local RepoConfig without createBranch (undefined) is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-no-cb",
+      path: "/home/beth/repos/other",
+      name: "other",
+      model: "opus",
+      maxIterations: 20,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(
+      (repo as RepoConfig & { createBranch?: boolean }).createBranch,
+    ).toBeUndefined();
+  });
+
+  it("SSH RepoConfig with createBranch is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-cb-1",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      createBranch: true,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(repo.createBranch).toBe(true);
+  });
+});
+
+describe("createBranch round-trip through loadRepos", () => {
+  it("local repo with createBranch round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-cb-rt-1",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        createBranch: true,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].createBranch).toBe(true);
+    }
+  });
+
+  it("local repo without createBranch loads fine", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-no-cb",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].createBranch).toBeUndefined();
+    }
+  });
+
+  it("ssh repo with createBranch round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "ssh",
+        id: "repo-cb-ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        createBranch: false,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "ssh") {
+      expect(result[0].createBranch).toBe(false);
+    }
+  });
+});
+
+describe("updateRepo preserves createBranch", () => {
+  it("updateRepo preserves createBranch config", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-update-cb",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        createBranch: true,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const updated: RepoConfig = {
+      type: "local",
+      id: "repo-update-cb",
+      path: "/home/beth/repos/yarr",
+      name: "yarr",
+      model: "sonnet",
+      maxIterations: 20,
+      completionSignal: "DONE",
+      createBranch: true,
+    };
+    await updateRepo(updated);
+
+    const stored = mockData.get("repos") as RepoConfig[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].model).toBe("sonnet");
+    if (stored[0].type === "local") {
+      expect(stored[0].createBranch).toBe(true);
+    }
+  });
+});

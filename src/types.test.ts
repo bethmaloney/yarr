@@ -7,6 +7,7 @@ import type {
   RepoStatus,
   TaggedSessionEvent,
   GitSyncConfig,
+  BranchInfo,
 } from "./types";
 
 describe("SessionEvent", () => {
@@ -614,5 +615,51 @@ describe("SessionEvent git sync fields", () => {
     expect(event.attempt).toBeUndefined();
     expect(event.success).toBeUndefined();
     expect(event.error).toBeUndefined();
+  });
+});
+
+describe("BranchInfo", () => {
+  it("accepts a BranchInfo with all fields populated", () => {
+    const info: BranchInfo = {
+      name: "main",
+      ahead: 2,
+      behind: 3,
+    };
+    expect(info.name).toBe("main");
+    expect(info.ahead).toBe(2);
+    expect(info.behind).toBe(3);
+  });
+
+  it("accepts a BranchInfo with ahead and behind as null (no upstream)", () => {
+    const info: BranchInfo = {
+      name: "feature/no-tracking",
+      ahead: null,
+      behind: null,
+    };
+    expect(info.name).toBe("feature/no-tracking");
+    expect(info.ahead).toBeNull();
+    expect(info.behind).toBeNull();
+  });
+
+  it("accepts a BranchInfo with only ahead set and behind null", () => {
+    const info: BranchInfo = {
+      name: "feature/ahead-only",
+      ahead: 5,
+      behind: null,
+    };
+    expect(info.name).toBe("feature/ahead-only");
+    expect(info.ahead).toBe(5);
+    expect(info.behind).toBeNull();
+  });
+
+  it("accepts a BranchInfo with only behind set and ahead null", () => {
+    const info: BranchInfo = {
+      name: "feature/behind-only",
+      ahead: null,
+      behind: 7,
+    };
+    expect(info.name).toBe("feature/behind-only");
+    expect(info.ahead).toBeNull();
+    expect(info.behind).toBe(7);
   });
 });
