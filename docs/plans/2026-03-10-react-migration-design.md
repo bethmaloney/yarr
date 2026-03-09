@@ -423,8 +423,10 @@ Convert the IterationGroup component.
 - Uses `eventEmoji()` and `eventLabel()` from `event-format.ts`
 
 **Checklist:**
-- [ ] Create `src/components/IterationGroup.tsx`
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/components/IterationGroup.tsx`
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Exported as `IterationGroupComponent`. Event kind → color mapping via `eventKindColor` lookup object using Tailwind arbitrary value classes. Context bar uses standard React `style` prop for dynamic width/color. `formatDuration` helper is file-local. 36 unit tests covering header stats, toggle, context bar (color/percentage/cap at 100%), event list (emoji, label, time, click), expandable detail (tool_input JSON, check output, git sync error), and repoPath-relative paths.
 
 ---
 
@@ -699,7 +701,7 @@ Full build, lint, format, and manual smoke test.
 | 4 | Create App.tsx with router | Done |
 | 5 | Breadcrumbs component | Done |
 | 6 | RepoCard component | Done |
-| 7 | IterationGroup component | Not Started |
+| 7 | IterationGroup component | Done |
 | 8 | EventsList component | Not Started |
 | 9 | Home page | Not Started |
 | 10 | RepoDetail page | Not Started |
