@@ -154,12 +154,12 @@ Capture stderr/exit code from the tail process and include a human-readable reas
 - Update the second `ConsumeResult::Disconnected` match (line 351) similarly
 
 **Checklist:**
-- [ ] Add `reason: Option<String>` to `Disconnected` variant in `session.rs`
-- [ ] Change `ConsumeResult::Disconnected` to carry `ProcessExit`
-- [ ] Update `consume_events` to capture and return `ProcessExit`
-- [ ] Add `classify_disconnect` helper function
-- [ ] Update both match arms for `ConsumeResult::Disconnected` in `run()`
-- [ ] Verify with `cd src-tauri && cargo check`
+- [x] Add `reason: Option<String>` to `Disconnected` variant in `session.rs`
+- [x] Change `ConsumeResult::Disconnected` to carry `ProcessExit`
+- [x] Update `consume_events` to capture and return `ProcessExit`
+- [x] Add `classify_disconnect` helper function
+- [x] Update both match arms for `ConsumeResult::Disconnected` in `run()`
+- [x] Verify with `cd src-tauri && cargo check`
 
 ---
 
@@ -207,9 +207,9 @@ Add tests for the new `classify_disconnect` function and verify the `Disconnecte
 - Update any existing tests that match on `ConsumeResult::Disconnected` to handle the new shape
 
 **Checklist:**
-- [ ] Add unit tests for `classify_disconnect` (5+ cases)
-- [ ] Update existing tests that reference `ConsumeResult::Disconnected`
-- [ ] Verify with `cd src-tauri && cargo test`
+- [x] Add unit tests for `classify_disconnect` (5+ cases) — done in Task 3 TDD
+- [x] Update existing tests that reference `ConsumeResult::Disconnected` — done in Task 3 TDD
+- [x] Verify with `cd src-tauri && cargo test`
 
 ---
 
@@ -243,9 +243,9 @@ Add E2E tests for the Test Connection checklist flow.
 |------|-------------|--------|
 | 1 | Backend — `test_ssh_connection_steps` command | Done |
 | 2 | Frontend — Test Connection checklist UI | Done |
-| 3 | Backend — Add reason to Disconnected event | Not Started |
+| 3 | Backend — Add reason to Disconnected event | Done |
 | 4 | Frontend — Display disconnect reason in banner | Not Started |
-| 5 | Tests — Backend Rust tests | Not Started |
+| 5 | Tests — Backend Rust tests | Done |
 | 6 | Tests — E2E tests for connection checklist | Not Started |
 
 **Notes:**

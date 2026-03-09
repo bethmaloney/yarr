@@ -26,12 +26,31 @@ fn truncate_str(s: &str, max_bytes: usize) -> &str {
     &s[..end]
 }
 
+/// Map a process exit to a human-readable disconnect reason.
+fn classify_disconnect(exit: &crate::runtime::ProcessExit) -> String {
+    // Exit code 255 is SSH-specific
+    if exit.exit_code == 255 {
+        let stderr = exit.stderr.trim();
+        if stderr.contains("Connection refused") {
+            "SSH connection refused — is the host running?".to_string()
+        } else if stderr.contains("No route to host") {
+            "Network unreachable — check your connection".to_string()
+        } else if stderr.contains("Connection timed out") {
+            "SSH connection timed out".to_string()
+        } else {
+            format!("SSH disconnected: {}", truncate_str(stderr, 200))
+        }
+    } else {
+        format!("Remote process exited unexpectedly (code {})", exit.exit_code)
+    }
+}
+
 /// Result of consuming events from a running process.
 enum ConsumeResult {
     /// Got a Result event from Claude
     GotResult(crate::output::ResultEvent),
     /// Process exited without a Result event (disconnect)
-    Disconnected,
+    Disconnected(crate::runtime::ProcessExit),
     /// Cancelled via cancel token
     Cancelled,
 }
@@ -199,11 +218,11 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         }
 
         // Channel closed — wait for the process to finish.
-        let _exit = process.completion.await??;
+        let exit = process.completion.await??;
 
         match result_event {
             Some(r) => Ok(ConsumeResult::GotResult(r)),
-            None => Ok(ConsumeResult::Disconnected),
+            None => Ok(ConsumeResult::Disconnected(exit)),
         }
     }
 
@@ -321,9 +340,10 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                     break;
                 }
                 ConsumeResult::GotResult(result) => Some(result),
-                ConsumeResult::Disconnected => {
+                ConsumeResult::Disconnected(exit) => {
                     // No Result event -- disconnect detected
-                    self.emit(SessionEvent::Disconnected { iteration });
+                    let reason = classify_disconnect(&exit);
+                    self.emit(SessionEvent::Disconnected { iteration, reason: Some(reason) });
 
                     // Wait on reconnect_notify OR cancel_token
                     let reconnect_result: Option<crate::output::ResultEvent> = tokio::select! {
@@ -348,7 +368,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                             break;
                                         }
                                         ConsumeResult::GotResult(result) => Some(result),
-                                        ConsumeResult::Disconnected => {
+                                        ConsumeResult::Disconnected(_exit) => {
                                             state = SessionState::Failed {
                                                 iteration,
                                                 error: "No result after reconnect".to_string(),
@@ -1087,6 +1107,115 @@ mod tests {
             result.is_err(),
             "Expected error when health check fails, got: {:?}",
             result
+        );
+    }
+
+    // ── classify_disconnect tests ────────────────────────────────
+
+    #[test]
+    fn test_classify_disconnect_connection_refused() {
+        let exit = ProcessExit {
+            exit_code: 255,
+            wall_time_ms: 50,
+            stderr: "ssh: connect to host example.com port 22: Connection refused".to_string(),
+        };
+        let reason = classify_disconnect(&exit);
+        assert_eq!(
+            reason,
+            "SSH connection refused — is the host running?"
+        );
+    }
+
+    #[test]
+    fn test_classify_disconnect_no_route_to_host() {
+        let exit = ProcessExit {
+            exit_code: 255,
+            wall_time_ms: 3000,
+            stderr: "ssh: connect to host 10.0.0.5 port 22: No route to host".to_string(),
+        };
+        let reason = classify_disconnect(&exit);
+        assert_eq!(
+            reason,
+            "Network unreachable — check your connection"
+        );
+    }
+
+    #[test]
+    fn test_classify_disconnect_connection_timed_out() {
+        let exit = ProcessExit {
+            exit_code: 255,
+            wall_time_ms: 30000,
+            stderr: "ssh: connect to host example.com port 22: Connection timed out".to_string(),
+        };
+        let reason = classify_disconnect(&exit);
+        assert_eq!(reason, "SSH connection timed out");
+    }
+
+    #[test]
+    fn test_classify_disconnect_exit_255_other_stderr() {
+        let exit = ProcessExit {
+            exit_code: 255,
+            wall_time_ms: 100,
+            stderr: "Permission denied (publickey).".to_string(),
+        };
+        let reason = classify_disconnect(&exit);
+        assert_eq!(
+            reason,
+            "SSH disconnected: Permission denied (publickey)."
+        );
+    }
+
+    #[test]
+    fn test_classify_disconnect_non_255_exit_code() {
+        let exit = ProcessExit {
+            exit_code: 1,
+            wall_time_ms: 500,
+            stderr: "some error output".to_string(),
+        };
+        let reason = classify_disconnect(&exit);
+        assert_eq!(
+            reason,
+            "Remote process exited unexpectedly (code 1)"
+        );
+    }
+
+    #[test]
+    fn test_classify_disconnect_exit_255_empty_stderr() {
+        let exit = ProcessExit {
+            exit_code: 255,
+            wall_time_ms: 100,
+            stderr: String::new(),
+        };
+        let reason = classify_disconnect(&exit);
+        // With empty stderr it should fall through to the generic 255 branch
+        assert_eq!(reason, "SSH disconnected: ");
+    }
+
+    #[test]
+    fn test_classify_disconnect_exit_255_stderr_trimmed() {
+        let exit = ProcessExit {
+            exit_code: 255,
+            wall_time_ms: 100,
+            stderr: "  Host key verification failed.  \n".to_string(),
+        };
+        let reason = classify_disconnect(&exit);
+        assert_eq!(
+            reason,
+            "SSH disconnected: Host key verification failed."
+        );
+    }
+
+    #[test]
+    fn test_classify_disconnect_exit_code_137_sigkill() {
+        let exit = ProcessExit {
+            exit_code: 137,
+            wall_time_ms: 200,
+            stderr: String::new(),
+        };
+        let reason = classify_disconnect(&exit);
+        assert_eq!(
+            reason,
+            "Remote process exited unexpectedly (code 137)"
         );
     }
 }
