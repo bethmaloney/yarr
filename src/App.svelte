@@ -17,19 +17,23 @@
   import RunDetail from "./RunDetail.svelte";
   import OneShotView from "./OneShotView.svelte";
   import { SvelteMap } from "svelte/reactivity";
-  import type { SessionTrace, SessionState, TaggedSessionEvent, BranchInfo } from "./types";
+  import type {
+    SessionTrace,
+    SessionState,
+    TaggedSessionEvent,
+    BranchInfo,
+  } from "./types";
 
   let currentView:
     | { kind: "home" }
     | { kind: "repo"; repoId: string }
     | { kind: "history"; repoId?: string }
     | { kind: "run"; repoId: string; sessionId: string; fromRepoId?: string }
-    | { kind: "oneshot"; repoId: string } =
-    $state({ kind: "home" });
+    | { kind: "oneshot"; repoId: string } = $state({ kind: "home" });
   let repos: RepoConfig[] = $state([]);
-  let sessions: SvelteMap<string, SessionState> = $state(new SvelteMap());
+  let sessions: SvelteMap<string, SessionState> = new SvelteMap();
   let latestTraces: Map<string, SessionTrace> = $state(new Map());
-  let branchInfos: SvelteMap<string, BranchInfo> = $state(new SvelteMap());
+  let branchInfos: SvelteMap<string, BranchInfo> = new SvelteMap();
   let addMode: null | "choosing" | "ssh-form" = $state(null);
   let sshHost = $state("");
   let sshRemotePath = $state("");

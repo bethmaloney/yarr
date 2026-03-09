@@ -520,9 +520,7 @@ describe("gitSync on repo configs", () => {
     if (result[0].type === "local") {
       expect(result[0].gitSync).toEqual(gitSync);
       expect(result[0].gitSync!.enabled).toBe(true);
-      expect(result[0].gitSync!.conflictPrompt).toBe(
-        "Fix the merge conflicts",
-      );
+      expect(result[0].gitSync!.conflictPrompt).toBe("Fix the merge conflicts");
       expect(result[0].gitSync!.model).toBe("sonnet");
       expect(result[0].gitSync!.maxPushRetries).toBe(3);
     }
@@ -696,7 +694,9 @@ describe("RepoConfig with gitSync field", () => {
     } satisfies RepoConfig;
 
     expect(repo.type).toBe("local");
-    expect((repo as RepoConfig & { gitSync?: GitSyncConfig }).gitSync).toBeUndefined();
+    expect(
+      (repo as RepoConfig & { gitSync?: GitSyncConfig }).gitSync,
+    ).toBeUndefined();
   });
 
   it("SSH RepoConfig with gitSync is valid", () => {

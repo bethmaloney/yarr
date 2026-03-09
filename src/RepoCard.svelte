@@ -19,9 +19,7 @@
   } = $props();
 
   let repoFullPath = $derived(
-    repo.type === "local"
-      ? repo.path
-      : `${repo.sshHost}:${repo.remotePath}`
+    repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`,
   );
 
   const statusColors: Record<RepoStatus, string> = {
@@ -62,7 +60,10 @@
       {/if}
       <span>${(lastTrace.total_cost_usd ?? 0).toFixed(2)}</span>
       {#if lastTrace.context_window}
-        {@const ctxPct = Math.round(((lastTrace.final_context_tokens ?? 0) / lastTrace.context_window) * 100)}
+        {@const ctxPct = Math.round(
+          ((lastTrace.final_context_tokens ?? 0) / lastTrace.context_window) *
+            100,
+        )}
         <span class="separator"> · </span>
         <span style="color: {sessionContextColor(ctxPct)}">{ctxPct}%</span>
       {/if}

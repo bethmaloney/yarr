@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import type { RepoConfig } from "./repos";
-import type { GitSyncConfig } from "./types";
 
 /**
  * Mirrors the saveSettings() logic in RepoDetail.svelte.
@@ -105,7 +104,10 @@ describe("createBranch ?? true defaults", () => {
 describe("buildSettingsUpdate createBranch handling", () => {
   it("includes createBranch: true in result when settings has createBranch true", () => {
     const repo = makeRepo();
-    const result = buildSettingsUpdate(repo, makeSettings({ createBranch: true }));
+    const result = buildSettingsUpdate(
+      repo,
+      makeSettings({ createBranch: true }),
+    );
     expect(result.createBranch).toBe(true);
   });
 

@@ -226,7 +226,9 @@
           onclick={() => onSelectRun(traceRepoId(trace), trace.session_id)}
         >
           <span class="trace-date">{formatDate(trace.start_time)}</span>
-          <span class="trace-type">{trace.session_type === "one_shot" ? "1-Shot" : "Ralph Loop"}</span>
+          <span class="trace-type"
+            >{trace.session_type === "one_shot" ? "1-Shot" : "Ralph Loop"}</span
+          >
           {#if !repoId}
             <span class="trace-repo">{repoName(trace)}</span>
           {/if}

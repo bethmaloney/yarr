@@ -39,9 +39,7 @@ test.describe("1-Shot navigation", () => {
   }) => {
     await navigateToRepoDetail(page, mockTauri);
 
-    await expect(
-      page.getByRole("button", { name: "1-Shot" }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "1-Shot" })).toBeVisible();
   });
 
   test('clicking "1-Shot" navigates to the OneShotView', async ({
@@ -53,9 +51,7 @@ test.describe("1-Shot navigation", () => {
     await page.getByRole("button", { name: "1-Shot" }).click();
 
     // OneShotView should show the h1 with "1-Shot" text
-    await expect(
-      page.locator("h1", { hasText: "1-Shot" }),
-    ).toBeVisible();
+    await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // The form should have Title and Prompt inputs
     await expect(page.getByText("Title")).toBeVisible();
@@ -73,9 +69,7 @@ test.describe("1-Shot navigation", () => {
 
     // Navigate to 1-Shot view
     await page.getByRole("button", { name: "1-Shot" }).click();
-    await expect(
-      page.locator("h1", { hasText: "1-Shot" }),
-    ).toBeVisible();
+    await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // Click the "Home" breadcrumb link to go back
     await page.getByRole("button", { name: "Home" }).click();
@@ -90,14 +84,10 @@ test.describe("1-Shot navigation", () => {
     await page.getByRole("button", { name: "1-Shot" }).click();
 
     // The h1 should contain the repo name
-    await expect(
-      page.locator("h1", { hasText: "my-app" }),
-    ).toBeVisible();
+    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
 
     // The full heading should be "{repo.name} — 1-Shot"
-    await expect(
-      page.locator("h1"),
-    ).toContainText("my-app");
+    await expect(page.locator("h1")).toContainText("my-app");
   });
 });
 
@@ -137,7 +127,9 @@ test.describe("1-Shot form interaction", () => {
     await navigateToOneShotView(page, mockTauri);
 
     // The repo's model is "opus" — the Model input should have that value
-    const modelInput = page.locator('.form-section label:has-text("Model") input[type="text"]');
+    const modelInput = page.locator(
+      '.form-section label:has-text("Model") input[type="text"]',
+    );
     await expect(modelInput).toHaveValue("opus");
   });
 
@@ -148,7 +140,7 @@ test.describe("1-Shot form interaction", () => {
     await navigateToOneShotView(page, mockTauri);
 
     // Leave title empty, fill prompt
-    await page.locator('.form-section textarea').fill("Do something");
+    await page.locator(".form-section textarea").fill("Do something");
 
     const runButton = page.getByRole("button", { name: "Run" });
     await expect(runButton).toBeDisabled();
@@ -161,7 +153,9 @@ test.describe("1-Shot form interaction", () => {
     await navigateToOneShotView(page, mockTauri);
 
     // Fill title, leave prompt empty
-    await page.locator('.form-section label:has-text("Title") input[type="text"]').fill("My Task");
+    await page
+      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .fill("My Task");
 
     const runButton = page.getByRole("button", { name: "Run" });
     await expect(runButton).toBeDisabled();
@@ -173,8 +167,10 @@ test.describe("1-Shot form interaction", () => {
   }) => {
     await navigateToOneShotView(page, mockTauri);
 
-    await page.locator('.form-section label:has-text("Title") input[type="text"]').fill("My Task");
-    await page.locator('.form-section textarea').fill("Do something important");
+    await page
+      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .fill("My Task");
+    await page.locator(".form-section textarea").fill("Do something important");
 
     const runButton = page.getByRole("button", { name: "Run" });
     await expect(runButton).toBeEnabled();
@@ -187,7 +183,9 @@ test.describe("1-Shot form interaction", () => {
     await navigateToOneShotView(page, mockTauri);
 
     // The "Merge to main" radio should be checked by default
-    const mergeToMainRadio = page.locator('input[type="radio"][value="merge_to_main"]');
+    const mergeToMainRadio = page.locator(
+      'input[type="radio"][value="merge_to_main"]',
+    );
     await expect(mergeToMainRadio).toBeChecked();
 
     // The "Create branch" radio should not be checked
@@ -210,7 +208,8 @@ test.describe("1-Shot launch flow", () => {
         get_active_sessions: () => [],
         run_oneshot: (args: Record<string, unknown>) => {
           // Store the captured args on the window for later retrieval
-          (window as unknown as Record<string, unknown>).__capturedOneShotArgs = args;
+          (window as unknown as Record<string, unknown>).__capturedOneShotArgs =
+            args;
           return new Promise(() => {}); // never resolves to keep session running
         },
       },
@@ -222,11 +221,17 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // Fill the form
-    await page.locator('.form-section label:has-text("Title") input[type="text"]').fill("Add auth");
-    await page.locator('.form-section textarea').fill("Implement OAuth2");
+    await page
+      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .fill("Add auth");
+    await page.locator(".form-section textarea").fill("Implement OAuth2");
     // Change model
-    await page.locator('.form-section label:has-text("Model") input[type="text"]').fill("");
-    await page.locator('.form-section label:has-text("Model") input[type="text"]').fill("sonnet");
+    await page
+      .locator('.form-section label:has-text("Model") input[type="text"]')
+      .fill("");
+    await page
+      .locator('.form-section label:has-text("Model") input[type="text"]')
+      .fill("sonnet");
     // Select "Create branch" merge strategy
     await page.locator('input[type="radio"][value="branch"]').check();
 
@@ -235,7 +240,8 @@ test.describe("1-Shot launch flow", () => {
 
     // Retrieve the captured args from the window object
     const captured = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__capturedOneShotArgs,
+      () =>
+        (window as unknown as Record<string, unknown>).__capturedOneShotArgs,
     );
 
     expect(captured).toBeTruthy();
@@ -272,17 +278,24 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator(".form-section")).toBeVisible();
 
     // Fill and run
-    await page.locator('.form-section label:has-text("Title") input[type="text"]').fill("Task");
-    await page.locator('.form-section textarea').fill("Do work");
+    await page
+      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .fill("Task");
+    await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
 
     // Emit a session event to trigger the running state in App.svelte
     await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
       (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
         event: "session-event",
         payload: {
           repo_id: "repo-1",
-          event: { kind: "one_shot_started", title: "Task", merge_strategy: "merge_to_main" },
+          event: {
+            kind: "one_shot_started",
+            title: "Task",
+            merge_strategy: "merge_to_main",
+          },
         },
       });
     });
@@ -294,7 +307,9 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
 
     // The Run button should show "Running..." and be disabled
-    await expect(page.getByRole("button", { name: "Running..." })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Running..." }),
+    ).toBeDisabled();
   });
 
   test("phase indicator updates as events are emitted", async ({
@@ -315,8 +330,10 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // Fill and run
-    await page.locator('.form-section label:has-text("Title") input[type="text"]').fill("Task");
-    await page.locator('.form-section textarea').fill("Do work");
+    await page
+      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .fill("Task");
+    await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
 
     const phaseIndicator = page.locator(".phase-indicator");
@@ -324,6 +341,7 @@ test.describe("1-Shot launch flow", () => {
     // Helper to emit a session event
     async function emitEvent(eventData: Record<string, unknown>) {
       await page.evaluate((evt) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
         (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
           event: "session-event",
           payload: { repo_id: "repo-1", event: evt },
@@ -332,7 +350,11 @@ test.describe("1-Shot launch flow", () => {
     }
 
     // 1. one_shot_started -> "Starting..."
-    await emitEvent({ kind: "one_shot_started", title: "Task", merge_strategy: "merge_to_main" });
+    await emitEvent({
+      kind: "one_shot_started",
+      title: "Task",
+      merge_strategy: "merge_to_main",
+    });
     await expect(phaseIndicator).toBeVisible();
     await expect(phaseIndicator).toContainText("Starting...");
 
@@ -380,25 +402,33 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // Fill and run
-    await page.locator('.form-section label:has-text("Title") input[type="text"]').fill("Task");
-    await page.locator('.form-section textarea').fill("Do work");
+    await page
+      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .fill("Task");
+    await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
 
     const phaseIndicator = page.locator(".phase-indicator");
 
     // Emit start then failure
     await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
       (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
         event: "session-event",
         payload: {
           repo_id: "repo-1",
-          event: { kind: "one_shot_started", title: "Task", merge_strategy: "merge_to_main" },
+          event: {
+            kind: "one_shot_started",
+            title: "Task",
+            merge_strategy: "merge_to_main",
+          },
         },
       });
     });
     await expect(phaseIndicator).toBeVisible();
 
     await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
       (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
         event: "session-event",
         payload: {
@@ -409,6 +439,7 @@ test.describe("1-Shot launch flow", () => {
     });
 
     await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
       (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
         event: "session-event",
         payload: {
@@ -429,7 +460,8 @@ test.describe("1-Shot launch flow", () => {
         get_active_sessions: () => [],
         run_oneshot: () => new Promise(() => {}),
         stop_session: (args: Record<string, unknown>) => {
-          (window as unknown as Record<string, unknown>).__stopSessionArgs = args;
+          (window as unknown as Record<string, unknown>).__stopSessionArgs =
+            args;
         },
       },
     });
@@ -440,17 +472,24 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // Fill and run
-    await page.locator('.form-section label:has-text("Title") input[type="text"]').fill("Task");
-    await page.locator('.form-section textarea').fill("Do work");
+    await page
+      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .fill("Task");
+    await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
 
     // Emit event to set running state
     await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
       (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
         event: "session-event",
         payload: {
           repo_id: "repo-1",
-          event: { kind: "one_shot_started", title: "Task", merge_strategy: "merge_to_main" },
+          event: {
+            kind: "one_shot_started",
+            title: "Task",
+            merge_strategy: "merge_to_main",
+          },
         },
       });
     });

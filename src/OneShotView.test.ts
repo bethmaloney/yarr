@@ -168,7 +168,10 @@ describe("OneShotView buildOneShotArgs integration", () => {
     expect(args.prompt).toBe("Implement OAuth2 login");
     expect(args.model).toBe("opus");
     expect(args.mergeStrategy).toBe("merge_to_main");
-    expect(args.repo).toEqual({ type: "local", path: "/home/user/projects/my-app" });
+    expect(args.repo).toEqual({
+      type: "local",
+      path: "/home/user/projects/my-app",
+    });
   });
 
   it("builds correct args with branch merge strategy", () => {

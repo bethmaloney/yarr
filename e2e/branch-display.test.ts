@@ -154,10 +154,7 @@ test.describe("Branch display chip", () => {
     await expect(activeItem).toContainText("main");
   });
 
-  test("shows fast-forward button when behind", async ({
-    page,
-    mockTauri,
-  }) => {
+  test("shows fast-forward button when behind", async ({ page, mockTauri }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
       get_branch_info: () => ({ name: "main", ahead: 0, behind: 2 }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
@@ -352,10 +349,7 @@ test.describe("Branch display chip", () => {
     await expect(searchInput).toBeFocused();
   });
 
-  test("search filters branches by substring", async ({
-    page,
-    mockTauri,
-  }) => {
+  test("search filters branches by substring", async ({ page, mockTauri }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
       get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
       list_local_branches: () => [
@@ -434,10 +428,7 @@ test.describe("Branch display chip", () => {
     await expect(emptyState).toContainText("No matching branches");
   });
 
-  test("Enter selects first matching branch", async ({
-    page,
-    mockTauri,
-  }) => {
+  test("Enter selects first matching branch", async ({ page, mockTauri }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
       get_branch_info: () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
