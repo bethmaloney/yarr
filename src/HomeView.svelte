@@ -1,6 +1,11 @@
 <script lang="ts">
   import type { RepoConfig } from "./repos";
-  import type { SessionState, SessionTrace, RepoStatus, BranchInfo } from "./types";
+  import type {
+    SessionState,
+    SessionTrace,
+    RepoStatus,
+    BranchInfo,
+  } from "./types";
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import RepoCard from "./RepoCard.svelte";
 

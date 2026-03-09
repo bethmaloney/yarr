@@ -24,12 +24,8 @@
 
   let title = $state("");
   let prompt = $state("");
-  let model = $state("");
+  let model = $derived.writable(repo.model);
   let mergeStrategy = $state("merge_to_main");
-
-  $effect(() => {
-    model = repo.model;
-  });
 
   let phase = $derived(getPhaseFromEvents(session.events));
 

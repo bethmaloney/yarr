@@ -89,11 +89,15 @@ test.describe("Git Sync settings section", () => {
     await page.locator("details.git-sync summary").click();
 
     // Enable checkbox
-    const enableCheckbox = page.locator("details.git-sync").getByRole("checkbox");
+    const enableCheckbox = page
+      .locator("details.git-sync")
+      .getByRole("checkbox");
     await expect(enableCheckbox).toBeVisible();
 
     // Model text input with placeholder "sonnet"
-    const modelInput = page.locator("details.git-sync").getByPlaceholder("sonnet");
+    const modelInput = page
+      .locator("details.git-sync")
+      .getByPlaceholder("sonnet");
     await expect(modelInput).toBeVisible();
 
     // Max push retries number input (default value 3)
@@ -104,7 +108,9 @@ test.describe("Git Sync settings section", () => {
     await expect(retriesInput).toHaveValue("3");
 
     // Conflict resolution prompt textarea
-    const textarea = page.locator("details.git-sync").getByRole("textbox", { name: /prompt|conflict/i });
+    const textarea = page
+      .locator("details.git-sync")
+      .getByRole("textbox", { name: /prompt|conflict/i });
     await expect(textarea).toBeVisible();
   });
 
@@ -144,7 +150,9 @@ test.describe("Git Sync settings section", () => {
     // Model input, retries input, and textarea should have reduced opacity
     const modelInput = gitSyncSection.getByPlaceholder("sonnet");
     const retriesInput = gitSyncSection.getByRole("spinbutton");
-    const textarea = gitSyncSection.getByRole("textbox", { name: /prompt|conflict/i });
+    const textarea = gitSyncSection.getByRole("textbox", {
+      name: /prompt|conflict/i,
+    });
 
     // Check that the fields or their containers have reduced opacity when disabled
     for (const field of [modelInput, retriesInput, textarea]) {
@@ -184,7 +192,9 @@ test.describe("Git Sync settings section", () => {
     const retriesInput = gitSyncSection.getByRole("spinbutton");
     await expect(retriesInput).toBeDisabled();
 
-    const textarea = gitSyncSection.getByRole("textbox", { name: /prompt|conflict/i });
+    const textarea = gitSyncSection.getByRole("textbox", {
+      name: /prompt|conflict/i,
+    });
     await expect(textarea).toBeDisabled();
   });
 
@@ -295,7 +305,9 @@ test.describe("Git Sync settings section", () => {
     await retriesInput.fill("5");
 
     // Fill in conflict prompt
-    const textarea = gitSyncSection.getByRole("textbox", { name: /prompt|conflict/i });
+    const textarea = gitSyncSection.getByRole("textbox", {
+      name: /prompt|conflict/i,
+    });
     await textarea.fill("Custom prompt");
 
     // Expand the settings section and click Save
@@ -306,7 +318,10 @@ test.describe("Git Sync settings section", () => {
       .click();
 
     // Navigate away by clicking the "Home" breadcrumb
-    await page.locator(".breadcrumbs").getByRole("button", { name: "Home" }).click();
+    await page
+      .locator(".breadcrumbs")
+      .getByRole("button", { name: "Home" })
+      .click();
 
     // Navigate back to the repo
     await page.getByRole("button", { name: /my-app/ }).click();

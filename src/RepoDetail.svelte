@@ -251,7 +251,7 @@
 
   // Fetch branch info on mount and when repo changes
   $effect(() => {
-    const _id = repo.id;
+    void repo.id;
     fetchBranchInfo();
   });
 
@@ -336,7 +336,7 @@
               Fast-forward
             </button>
           {/if}
-          {#each filteredBranches as branch}
+          {#each filteredBranches as branch (branch)}
             <button
               class="branch-item"
               class:active={branch === branchInfo.name}
@@ -397,7 +397,7 @@
       </label>
       <fieldset class="env-vars" disabled={session.running}>
         <legend>Environment Variables</legend>
-        {#each envVars as envVar, i}
+        {#each envVars as envVar, i (i)}
           <div class="env-var-row">
             <input
               type="text"
@@ -447,7 +447,7 @@
     <summary>Checks — {checks.length} configured</summary>
     {#if checksOpen}
       <div class="checks-form">
-        {#each checks as check, i}
+        {#each checks as check, i (i)}
           <details class="check-entry">
             <summary>
               <span class="check-summary-text">{check.name || "New Check"}</span
