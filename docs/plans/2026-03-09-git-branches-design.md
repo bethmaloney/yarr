@@ -269,15 +269,15 @@ Show the current branch name with ahead/behind indicators below the repo name in
 - Add styles: chip styling, dropdown positioning, warning color, disabled state
 
 **Checklist:**
-- [ ] Add branch state variables
-- [ ] Implement `fetchBranchInfo()` and `fetchBranches()`
-- [ ] Add fetch on mount
-- [ ] Add fetch after session completes
-- [ ] Add branch chip markup
-- [ ] Add dropdown with fast-forward and branch list
-- [ ] Add click-outside-to-close behavior
-- [ ] Add CSS styles
-- [ ] `npx tsc --noEmit`
+- [x] Add branch state variables
+- [x] Implement `fetchBranchInfo()` and `fetchBranches()`
+- [x] Add fetch on mount
+- [x] Add fetch after session completes
+- [x] Add branch chip markup
+- [x] Add dropdown with fast-forward and branch list
+- [x] Add click-outside-to-close behavior
+- [x] Add CSS styles
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -368,7 +368,7 @@ Add tests for the branch-related UI logic and interactions.
 | 2 | Frontend `BranchInfo` type and `createBranch` config | Complete |
 | 3 | "Create branch on run" toggle in RepoDetail settings | Complete |
 | 4 | Pass `createBranch` to backend and create branch before session | Complete |
-| 5 | Branch display chip with dropdown on RepoDetail | Not Started |
+| 5 | Branch display chip with dropdown on RepoDetail | Complete |
 | 6 | Branch label on RepoCard + fetch in App.svelte | Not Started |
 | 7 | Backend tests for git branch commands | Not Started |
 | 8 | Frontend tests for branch display | Not Started |

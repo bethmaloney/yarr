@@ -1,8 +1,9 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { onMount, onDestroy } from "svelte";
   import type { RepoConfig } from "./repos";
-  import type { Check, SessionState } from "./types";
+  import type { BranchInfo, Check, SessionState } from "./types";
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import EventsList from "./EventsList.svelte";
   import { sessionContextColor } from "./context-bar";
@@ -153,6 +154,91 @@
       console.error("Failed to stop session:", e);
     }
   }
+
+  // Branch display state
+  let branchInfo: BranchInfo | null = $state(null);
+  let branches: string[] = $state([]);
+  let branchDropdownOpen = $state(false);
+
+  function buildRepoPayload() {
+    return repo.type === "local"
+      ? { type: "local" as const, path: repo.path }
+      : { type: "ssh" as const, sshHost: repo.sshHost, remotePath: repo.remotePath };
+  }
+
+  async function fetchBranchInfo() {
+    try {
+      branchInfo = await invoke<BranchInfo>("get_branch_info", { repo: buildRepoPayload() });
+    } catch {
+      branchInfo = null;
+    }
+  }
+
+  async function fetchBranches() {
+    try {
+      branches = await invoke<string[]>("list_local_branches", { repo: buildRepoPayload() });
+    } catch {
+      branches = [];
+    }
+  }
+
+  async function handleSwitchBranch(branchName: string) {
+    try {
+      await invoke("switch_branch", { repo: buildRepoPayload(), branch: branchName });
+      branchDropdownOpen = false;
+      await fetchBranchInfo();
+    } catch (e) {
+      console.error("Failed to switch branch:", e);
+    }
+  }
+
+  async function handleFastForward() {
+    try {
+      await invoke("fast_forward_branch", { repo: buildRepoPayload() });
+      branchDropdownOpen = false;
+      await fetchBranchInfo();
+    } catch (e) {
+      console.error("Failed to fast-forward:", e);
+    }
+  }
+
+  function handleChipClick() {
+    if (session.running) return;
+    branchDropdownOpen = !branchDropdownOpen;
+    if (branchDropdownOpen) {
+      fetchBranches();
+    }
+  }
+
+  function handleClickOutside(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.branch-selector')) {
+      branchDropdownOpen = false;
+    }
+  }
+
+  // Fetch branch info on mount and when repo changes
+  $effect(() => {
+    const _id = repo.id;
+    fetchBranchInfo();
+  });
+
+  // Refresh after session completes
+  let wasRunning = $state(false);
+  $effect(() => {
+    if (wasRunning && !session.running) {
+      fetchBranchInfo();
+    }
+    wasRunning = session.running;
+  });
+
+  // Click outside listener
+  onMount(() => {
+    document.addEventListener("click", handleClickOutside);
+  });
+  onDestroy(() => {
+    document.removeEventListener("click", handleClickOutside);
+  });
 </script>
 
 <main>
@@ -181,6 +267,43 @@
       {repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`}
     </p>
   </header>
+
+  {#if branchInfo}
+    <div class="branch-selector">
+      <button
+        class="branch-chip"
+        class:warning={branchInfo.behind != null && branchInfo.behind > 0}
+        class:disabled={session.running}
+        onclick={handleChipClick}
+      >
+        {branchInfo.name}
+        {#if branchInfo.ahead != null && branchInfo.ahead > 0}
+          <span class="ahead">&uarr;{branchInfo.ahead}</span>
+        {/if}
+        {#if branchInfo.behind != null && branchInfo.behind > 0}
+          <span class="behind">&darr;{branchInfo.behind}</span>
+        {/if}
+      </button>
+      {#if branchDropdownOpen}
+        <div class="branch-dropdown">
+          {#if branchInfo.behind != null && branchInfo.behind > 0}
+            <button class="fast-forward-btn" onclick={handleFastForward}>
+              Fast-forward
+            </button>
+          {/if}
+          {#each branches as branch}
+            <button
+              class="branch-item"
+              class:active={branch === branchInfo.name}
+              onclick={() => handleSwitchBranch(branch)}
+            >
+              {branch}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <details class="settings">
     <summary>Settings — {model}, {maxIterations} iters</summary>
@@ -930,5 +1053,104 @@
     max-height: 8rem;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  .branch-selector {
+    position: relative;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .branch-chip {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    background: #1e2a45;
+    color: #aaa;
+    border: 1px solid #333;
+    border-radius: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .branch-chip:hover:not(.disabled) {
+    border-color: #555;
+    color: #ccc;
+  }
+
+  .branch-chip.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .branch-chip.warning {
+    border-color: #f59e0b;
+    color: #f59e0b;
+  }
+
+  .ahead {
+    color: #4ade80;
+    font-size: 0.75rem;
+  }
+
+  .behind {
+    color: #f59e0b;
+    font-size: 0.75rem;
+  }
+
+  .branch-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 0.25rem;
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    min-width: 200px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    padding: 0.25rem 0;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .fast-forward-btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    background: transparent;
+    color: #f59e0b;
+    border: none;
+    border-bottom: 1px solid #333;
+    cursor: pointer;
+    text-align: left;
+    font-weight: 600;
+  }
+
+  .fast-forward-btn:hover {
+    background: #2a2a3e;
+  }
+
+  .branch-item {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    background: transparent;
+    color: #aaa;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .branch-item:hover {
+    background: #2a2a3e;
+    color: #ccc;
+  }
+
+  .branch-item.active {
+    color: #e8d44d;
+    font-weight: 600;
   }
 </style>
