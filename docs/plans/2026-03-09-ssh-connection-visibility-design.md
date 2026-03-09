@@ -121,12 +121,12 @@ Add connection test state, event listeners, and checklist display to RepoDetail.
 - Clean up listener on component destroy if test is still running
 
 **Checklist:**
-- [ ] Add `connectionTest` state variable
-- [ ] Add `testConnection()` async function with event listeners
-- [ ] Wire onclick to Test Connection button
-- [ ] Add checklist HTML below settings-actions
-- [ ] Add CSS for checklist (pass=green, fail=red, pending=gray, spinner animation)
-- [ ] Verify with `npx tsc --noEmit`
+- [x] Add `connectionTest` state variable
+- [x] Add `testConnection()` async function with event listeners
+- [x] Wire onclick to Test Connection button
+- [x] Add checklist HTML below settings-actions
+- [x] Add CSS for checklist (pass=green, fail=red, pending=gray, spinner animation)
+- [x] Verify with `npx tsc --noEmit`
 
 ---
 
@@ -242,7 +242,7 @@ Add E2E tests for the Test Connection checklist flow.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Backend — `test_ssh_connection_steps` command | Done |
-| 2 | Frontend — Test Connection checklist UI | Not Started |
+| 2 | Frontend — Test Connection checklist UI | Done |
 | 3 | Backend — Add reason to Disconnected event | Not Started |
 | 4 | Frontend — Display disconnect reason in banner | Not Started |
 | 5 | Tests — Backend Rust tests | Not Started |

@@ -297,3 +297,174 @@ test.describe("Disconnected and Reconnecting states", () => {
     expect(calls[0]).toEqual(expect.objectContaining({ repoId: "ssh-repo-1" }));
   });
 });
+
+test.describe("Connection test checklist", () => {
+  const sshRepo = {
+    type: "ssh" as const,
+    id: "ssh-repo-1",
+    sshHost: "dev-server",
+    remotePath: "/home/user/projects/remote-app",
+    name: "remote-app",
+    model: "opus",
+    maxIterations: 40,
+    completionSignal: "ALL TODO ITEMS COMPLETE",
+  };
+
+  const stepNames = [
+    "SSH reachable",
+    "tmux available",
+    "claude available",
+    "Remote path exists",
+  ];
+
+  async function emitSshTestStep(
+    page: import("@playwright/test").Page,
+    step: string,
+    status: "pass" | "fail",
+    error?: string,
+  ) {
+    await page.evaluate(
+      ({ step, status, error }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+          event: "ssh-test-step",
+          payload: { step, status, error: error ?? null },
+        });
+      },
+      { step, status, error },
+    );
+  }
+
+  async function emitSshTestComplete(page: import("@playwright/test").Page) {
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+        event: "ssh-test-complete",
+        payload: {},
+      });
+    });
+  }
+
+  async function navigateAndOpenSettings(
+    page: import("@playwright/test").Page,
+    mockTauri: (opts?: import("./fixtures").TauriMockOptions) => Promise<void>,
+  ) {
+    await mockTauri({
+      storeData: { repos: [sshRepo] },
+      invokeHandlers: {
+        test_ssh_connection_steps: () => Promise.resolve(),
+      },
+    });
+    await page.goto("/");
+
+    await page.getByRole("button", { name: /remote-app/ }).click();
+    await page.locator("details.settings summary").click();
+  }
+
+  test("clicking Test Connection shows checklist with step names", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateAndOpenSettings(page, mockTauri);
+
+    await page.getByRole("button", { name: "Test Connection" }).click();
+
+    // All 4 step names should be visible in the checklist
+    for (const name of stepNames) {
+      await expect(page.getByText(name)).toBeVisible();
+    }
+  });
+
+  test("all steps pass shows checkmarks", async ({ page, mockTauri }) => {
+    await navigateAndOpenSettings(page, mockTauri);
+
+    await page.getByRole("button", { name: "Test Connection" }).click();
+
+    // Emit all 4 steps as passing
+    for (const name of stepNames) {
+      await emitSshTestStep(page, name, "pass");
+    }
+    await emitSshTestComplete(page);
+
+    // All steps should show pass status
+    const checklist = page.getByTestId("connection-checklist");
+    for (const name of stepNames) {
+      const stepItem = checklist.locator(`:has-text("${name}")`).first();
+      await expect(stepItem).toHaveClass(/step-pass/);
+    }
+  });
+
+  test("failed step shows error and subsequent steps stay pending", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateAndOpenSettings(page, mockTauri);
+
+    await page.getByRole("button", { name: "Test Connection" }).click();
+
+    // First step passes
+    await emitSshTestStep(page, "SSH reachable", "pass");
+    // Second step fails with an error
+    await emitSshTestStep(
+      page,
+      "tmux available",
+      "fail",
+      "tmux: command not found",
+    );
+    await emitSshTestComplete(page);
+
+    const checklist = page.getByTestId("connection-checklist");
+
+    // First step should show pass
+    const firstStep = checklist
+      .locator(`:has-text("SSH reachable")`)
+      .first();
+    await expect(firstStep).toHaveClass(/step-pass/);
+
+    // Second step should show fail
+    const secondStep = checklist
+      .locator(`:has-text("tmux available")`)
+      .first();
+    await expect(secondStep).toHaveClass(/step-fail/);
+
+    // The error message should be visible
+    await expect(page.getByText("tmux: command not found")).toBeVisible();
+
+    // Third and fourth steps should remain pending
+    const thirdStep = checklist
+      .locator(`:has-text("claude available")`)
+      .first();
+    await expect(thirdStep).toHaveClass(/step-pending/);
+
+    const fourthStep = checklist
+      .locator(`:has-text("Remote path exists")`)
+      .first();
+    await expect(fourthStep).toHaveClass(/step-pending/);
+  });
+
+  test("Test Connection button is disabled while running", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateAndOpenSettings(page, mockTauri);
+
+    const testButton = page.getByRole("button", { name: "Test Connection" });
+
+    // Button should be enabled before clicking
+    await expect(testButton).toBeEnabled();
+
+    await testButton.click();
+
+    // Button should be disabled while test is running
+    await expect(testButton).toBeDisabled();
+
+    // Emit all steps and complete
+    for (const name of stepNames) {
+      await emitSshTestStep(page, name, "pass");
+    }
+    await emitSshTestComplete(page);
+
+    // Button should be re-enabled after test completes
+    await expect(testButton).toBeEnabled();
+  });
+});
