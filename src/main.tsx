@@ -1,9 +1,6 @@
 import "./browser-mock";
 import "./globals.css";
 import { createRoot } from "react-dom/client";
+import App from "./App";
 
-function Placeholder() {
-  return <div>React works</div>;
-}
-
-createRoot(document.getElementById("app")!).render(<Placeholder />);
+createRoot(document.getElementById("app")!).render(<App />);

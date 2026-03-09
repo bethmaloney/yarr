@@ -347,12 +347,14 @@ Set up react-router with all routes and call `store.initialize()` on mount.
 - Import `globals.css` here
 
 **Checklist:**
-- [ ] Create `src/App.tsx` with router and layout
-- [ ] Store initializes on mount (event listener active)
-- [ ] All 6 routes render placeholder pages
-- [ ] Update `src/main.tsx` to render `App`
-- [ ] Verify `npm run dev` — navigating routes works
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/App.tsx` with router and layout
+- [x] Store initializes on mount (event listener active)
+- [x] All 6 routes render placeholder pages
+- [x] Update `src/main.tsx` to render `App`
+- [x] Verify `npm run dev` — navigating routes works
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** `AppRoutes` exported as named export (router-free) for testability — tests use `MemoryRouter` wrapper. Default export `App` wraps in `BrowserRouter`. `globals.css` imported only in `main.tsx` (not duplicated in App.tsx). Layout uses `Outlet` from react-router. 9 unit tests covering all routes, store init, and cleanup.
 
 ---
 
@@ -690,7 +692,7 @@ Full build, lint, format, and manual smoke test.
 | 1 | Swap dependencies and build config | Done |
 | 2 | Scaffold shadcn/ui primitives | Done |
 | 3 | Create Zustand store | Done |
-| 4 | Create App.tsx with router | Not Started |
+| 4 | Create App.tsx with router | Done |
 | 5 | Breadcrumbs component | Not Started |
 | 6 | RepoCard component | Not Started |
 | 7 | IterationGroup component | Not Started |
