@@ -321,11 +321,13 @@ Implement the `AppStore` with repos and sessions state, Tauri event listener, an
 - Repo actions (`loadRepos`, `addLocalRepo`, `addSshRepo`, `updateRepo`) delegate to `repos.ts` functions and update `state.repos`
 
 **Checklist:**
-- [ ] Create `src/store.ts` with full `AppStore` interface
-- [ ] Implement `initialize()` with event listener + sync interval
-- [ ] Implement session actions (run, stop, reconnect)
-- [ ] Implement repo actions (load, addLocal, addSsh, update)
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/store.ts` with full `AppStore` interface
+- [x] Implement `initialize()` with event listener + sync interval
+- [x] Implement session actions (run, stop, reconnect)
+- [x] Implement repo actions (load, addLocal, addSsh, update)
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Zustand store with `create<AppStore>()`. `initialize()` loads repos, fetches latest traces, subscribes to `session-event` via `listen()`, starts 5-second sync interval, returns cleanup function. Session events handled with immutable Map updates (new Map on every mutation). Error strings extracted with `e instanceof Error ? e.message : String(e)`. Listen cleanup uses promise-based pattern to avoid race conditions on fast unmount. Added `.catch(() => {})` on startup promises for parity with original Svelte code.
 
 ---
 
@@ -687,7 +689,7 @@ Full build, lint, format, and manual smoke test.
 |------|-------------|--------|
 | 1 | Swap dependencies and build config | Done |
 | 2 | Scaffold shadcn/ui primitives | Done |
-| 3 | Create Zustand store | Not Started |
+| 3 | Create Zustand store | Done |
 | 4 | Create App.tsx with router | Not Started |
 | 5 | Breadcrumbs component | Not Started |
 | 6 | RepoCard component | Not Started |
