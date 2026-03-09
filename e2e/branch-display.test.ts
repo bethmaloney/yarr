@@ -331,4 +331,220 @@ test.describe("Branch display chip", () => {
     // After session completes, the chip should refresh and show the ahead indicator
     await expect(chip).toContainText("\u21913");
   });
+
+  test("search input appears and auto-focuses when dropdown opens", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      list_local_branches: () => ["main", "feature/foo", "develop"],
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await chip.click();
+
+    const dropdown = page.locator("div.branch-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const searchInput = page.locator("input.branch-search");
+    await expect(searchInput).toBeVisible();
+    await expect(searchInput).toBeFocused();
+  });
+
+  test("search filters branches by substring", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      list_local_branches: () => [
+        "main",
+        "feature/login",
+        "feature/signup",
+        "develop",
+        "fix/bug-123",
+      ],
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await chip.click();
+
+    const dropdown = page.locator("div.branch-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const searchInput = page.locator("input.branch-search");
+    const branchItems = dropdown.locator("button.branch-item");
+
+    // Type "feature" to filter
+    await searchInput.fill("feature");
+    await expect(branchItems).toHaveCount(2);
+    await expect(branchItems.nth(0)).toContainText("feature/login");
+    await expect(branchItems.nth(1)).toContainText("feature/signup");
+
+    // Clear and type "main"
+    await searchInput.fill("main");
+    await expect(branchItems).toHaveCount(1);
+    await expect(branchItems.nth(0)).toContainText("main");
+  });
+
+  test("search is case-insensitive", async ({ page, mockTauri }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      list_local_branches: () => ["main", "Feature/Login"],
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await chip.click();
+
+    const dropdown = page.locator("div.branch-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const searchInput = page.locator("input.branch-search");
+    await searchInput.fill("feature");
+
+    const branchItems = dropdown.locator("button.branch-item");
+    await expect(branchItems).toHaveCount(1);
+    await expect(branchItems.nth(0)).toContainText("Feature/Login");
+  });
+
+  test("shows empty state when no branches match", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      list_local_branches: () => ["main", "feature/foo", "develop"],
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await chip.click();
+
+    const dropdown = page.locator("div.branch-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const searchInput = page.locator("input.branch-search");
+    await searchInput.fill("nonexistent");
+
+    const branchItems = dropdown.locator("button.branch-item");
+    await expect(branchItems).toHaveCount(0);
+
+    const emptyState = page.locator(".branch-empty");
+    await expect(emptyState).toBeVisible();
+    await expect(emptyState).toContainText("No matching branches");
+  });
+
+  test("Enter selects first matching branch", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_branch_info: () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any;
+        w.__branchInfoCallCount = (w.__branchInfoCallCount ?? 0) + 1;
+        if (w.__branchInfoCallCount <= 1) {
+          return { name: "main", ahead: 0, behind: 0 };
+        }
+        return { name: "feature/login", ahead: 0, behind: 0 };
+      },
+      list_local_branches: () => [
+        "main",
+        "feature/login",
+        "feature/signup",
+        "develop",
+      ],
+      switch_branch: (args: Record<string, unknown>) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).__switchBranchArgs = args;
+        return null;
+      },
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await chip.click();
+
+    const dropdown = page.locator("div.branch-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const searchInput = page.locator("input.branch-search");
+    await searchInput.fill("feat");
+    await searchInput.press("Enter");
+
+    // Verify switch_branch was called with the first matching branch
+    const capturedArgs = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (window as any).__switchBranchArgs;
+    });
+    expect(capturedArgs).toBeTruthy();
+    expect(capturedArgs.branch).toBe("feature/login");
+
+    // Dropdown should close after selection
+    await expect(dropdown).not.toBeVisible();
+  });
+
+  test("Escape closes dropdown and clears search", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      list_local_branches: () => ["main", "feature/foo", "develop"],
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await chip.click();
+
+    const dropdown = page.locator("div.branch-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const searchInput = page.locator("input.branch-search");
+    await searchInput.fill("feat");
+
+    // Press Escape to close dropdown
+    await searchInput.press("Escape");
+    await expect(dropdown).not.toBeVisible();
+
+    // Re-open dropdown
+    await chip.click();
+    await expect(dropdown).toBeVisible();
+
+    // Search input should be empty after re-opening
+    await expect(page.locator("input.branch-search")).toHaveValue("");
+  });
+
+  test("search resets when branch is selected by click", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      list_local_branches: () => ["main", "feature/foo", "develop"],
+      switch_branch: () => null,
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await chip.click();
+
+    const dropdown = page.locator("div.branch-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const searchInput = page.locator("input.branch-search");
+    await searchInput.fill("dev");
+
+    // Click the matching branch item
+    await dropdown
+      .locator("button.branch-item", { hasText: "develop" })
+      .click();
+
+    // Dropdown should close
+    await expect(dropdown).not.toBeVisible();
+
+    // Re-open dropdown
+    await chip.click();
+    await expect(dropdown).toBeVisible();
+
+    // Search input should be empty
+    await expect(page.locator("input.branch-search")).toHaveValue("");
+  });
 });

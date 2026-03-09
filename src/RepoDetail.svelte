@@ -157,6 +157,13 @@
   let branchInfo: BranchInfo | null = $state(null);
   let branches: string[] = $state([]);
   let branchDropdownOpen = $state(false);
+  let branchSearch = $state("");
+
+  let filteredBranches = $derived(
+    branchSearch
+      ? branches.filter(b => b.toLowerCase().includes(branchSearch.toLowerCase()))
+      : branches
+  );
 
   function buildRepoPayload() {
     return repo.type === "local"
@@ -184,6 +191,7 @@
     try {
       await invoke("switch_branch", { repo: buildRepoPayload(), branch: branchName });
       branchDropdownOpen = false;
+      branchSearch = "";
       await fetchBranchInfo();
     } catch (e) {
       console.error("Failed to switch branch:", e);
@@ -194,10 +202,24 @@
     try {
       await invoke("fast_forward_branch", { repo: buildRepoPayload() });
       branchDropdownOpen = false;
+      branchSearch = "";
       await fetchBranchInfo();
     } catch (e) {
       console.error("Failed to fast-forward:", e);
     }
+  }
+
+  function handleSearchKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      branchDropdownOpen = false;
+      branchSearch = "";
+    } else if (event.key === "Enter" && filteredBranches.length > 0) {
+      handleSwitchBranch(filteredBranches[0]);
+    }
+  }
+
+  function autofocus(node: HTMLElement) {
+    node.focus();
   }
 
   function handleChipClick() {
@@ -212,6 +234,7 @@
     const target = event.target as HTMLElement;
     if (!target.closest('.branch-selector')) {
       branchDropdownOpen = false;
+      branchSearch = "";
     }
   }
 
@@ -284,12 +307,20 @@
       </button>
       {#if branchDropdownOpen}
         <div class="branch-dropdown">
+          <input
+            class="branch-search"
+            type="text"
+            placeholder="Search branches..."
+            bind:value={branchSearch}
+            onkeydown={handleSearchKeydown}
+            use:autofocus
+          />
           {#if branchInfo.behind != null && branchInfo.behind > 0}
             <button class="fast-forward-btn" onclick={handleFastForward}>
               Fast-forward
             </button>
           {/if}
-          {#each branches as branch}
+          {#each filteredBranches as branch}
             <button
               class="branch-item"
               class:active={branch === branchInfo.name}
@@ -298,6 +329,9 @@
               {branch}
             </button>
           {/each}
+          {#if filteredBranches.length === 0}
+            <div class="branch-empty">No matching branches</div>
+          {/if}
         </div>
       {/if}
     </div>
@@ -1141,5 +1175,27 @@
   .branch-item.active {
     color: #e8d44d;
     font-weight: 600;
+  }
+
+  .branch-search {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    background: #12121e;
+    color: #ccc;
+    border: none;
+    border-bottom: 1px solid #333;
+    outline: none;
+  }
+
+  .branch-search::placeholder {
+    color: #666;
+  }
+
+  .branch-empty {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    color: #666;
+    font-style: italic;
   }
 </style>
