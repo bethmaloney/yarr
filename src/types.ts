@@ -72,6 +72,7 @@ export type SessionState = {
   running: boolean;
   disconnected?: boolean;
   reconnecting?: boolean;
+  disconnectReason?: string;
   events: SessionEvent[];
   trace: SessionTrace | null;
   error: string | null;

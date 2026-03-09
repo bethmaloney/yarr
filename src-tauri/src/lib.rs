@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use oneshot::OneShotRunner;
-use runtime::{default_runtime, RuntimeProvider, SshRuntime};
+use runtime::{default_runtime, ssh_command, ssh_shell_escape, RuntimeProvider, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use ssh_orchestrator::SshSessionOrchestrator;
 use tauri::{Emitter, Manager, RunEvent};
@@ -32,6 +32,13 @@ pub(crate) struct BranchInfo {
     name: String,
     ahead: Option<u32>,
     behind: Option<u32>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct SshTestStep {
+    step: String,
+    status: String,
+    error: Option<String>,
 }
 
 /// Shared state tracking cancellation tokens for all active sessions, keyed by repo_id
@@ -355,11 +362,39 @@ async fn stop_session(app: tauri::AppHandle, repo_id: String) -> Result<(), Stri
     }
 }
 
+fn connection_test_steps(ssh_host: &str, remote_path: &str) -> Vec<(String, tokio::process::Command)> {
+    vec![
+        ("SSH reachable".to_string(), ssh_command(ssh_host, "echo OK")),
+        ("tmux available".to_string(), ssh_command(ssh_host, "command -v tmux")),
+        ("claude available".to_string(), ssh_command(ssh_host, "command -v claude")),
+        ("Remote path exists".to_string(), ssh_command(ssh_host, &format!("test -d {} && echo OK", ssh_shell_escape(remote_path)))),
+    ]
+}
+
 #[tauri::command]
-async fn test_ssh_connection(ssh_host: String) -> Result<String, String> {
-    let rt = SshRuntime::new(&ssh_host, "");
-    rt.health_check().await.map_err(|e| e.to_string())?;
-    Ok("Connection successful: tmux and claude are available".to_string())
+async fn test_ssh_connection_steps(app: tauri::AppHandle, ssh_host: String, remote_path: String) -> Result<(), String> {
+    let steps = connection_test_steps(&ssh_host, &remote_path);
+    for (step_name, mut cmd) in steps {
+        let output = cmd.output().await.map_err(|e| e.to_string())?;
+        if output.status.success() {
+            let _ = app.emit("ssh-test-step", SshTestStep {
+                step: step_name,
+                status: "pass".to_string(),
+                error: None,
+            });
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let _ = app.emit("ssh-test-step", SshTestStep {
+                step: step_name,
+                status: "fail".to_string(),
+                error: Some(if stderr.is_empty() { "Check failed".to_string() } else { stderr }),
+            });
+            let _ = app.emit("ssh-test-complete", ());
+            return Ok(());
+        }
+    }
+    let _ = app.emit("ssh-test-complete", ());
+    Ok(())
 }
 
 #[tauri::command]
@@ -522,7 +557,7 @@ pub fn run() {
         .manage(GlobalAbortRegistry {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
-        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {
@@ -1181,5 +1216,133 @@ mod tests {
         let after_prefix = name.strip_prefix("yarr/").unwrap();
         let slug_part = &after_prefix[..after_prefix.len() - 7];
         assert_eq!(slug_part, "makefile", "slug for 'Makefile' should be 'makefile', got: {slug_part}");
+    }
+
+    // --- SshTestStep / connection_test_steps tests ---
+
+    #[test]
+    fn ssh_test_step_serializes_with_pass_status() {
+        let step = SshTestStep {
+            step: "SSH reachable".to_string(),
+            status: "pass".to_string(),
+            error: None,
+        };
+
+        let json = serde_json::to_value(&step).expect("serialization should succeed");
+
+        assert_eq!(json["step"], "SSH reachable");
+        assert_eq!(json["status"], "pass");
+        assert!(json["error"].is_null(), "error should serialize as null when None");
+    }
+
+    #[test]
+    fn ssh_test_step_serializes_with_fail_status_and_error() {
+        let step = SshTestStep {
+            step: "tmux available".to_string(),
+            status: "fail".to_string(),
+            error: Some("tmux not found on remote host".to_string()),
+        };
+
+        let json = serde_json::to_value(&step).expect("serialization should succeed");
+
+        assert_eq!(json["step"], "tmux available");
+        assert_eq!(json["status"], "fail");
+        assert_eq!(json["error"], "tmux not found on remote host");
+    }
+
+    #[test]
+    fn connection_test_steps_returns_four_steps() {
+        let steps = connection_test_steps("myhost", "/home/user/project");
+        assert_eq!(steps.len(), 4, "should return exactly 4 test steps");
+    }
+
+    #[test]
+    fn connection_test_steps_first_step_is_ssh_reachable() {
+        let steps = connection_test_steps("myhost", "/home/user/project");
+        let (name, cmd) = &steps[0];
+
+        assert_eq!(name, "SSH reachable", "first step should be 'SSH reachable'");
+
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("echo OK"),
+            "SSH reachable command should contain 'echo OK', got: {all_args}"
+        );
+    }
+
+    #[test]
+    fn connection_test_steps_second_step_is_tmux_available() {
+        let steps = connection_test_steps("myhost", "/home/user/project");
+        let (name, cmd) = &steps[1];
+
+        assert_eq!(name, "tmux available", "second step should be 'tmux available'");
+
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("command -v tmux"),
+            "tmux check command should contain 'command -v tmux', got: {all_args}"
+        );
+    }
+
+    #[test]
+    fn connection_test_steps_third_step_is_claude_available() {
+        let steps = connection_test_steps("myhost", "/home/user/project");
+        let (name, cmd) = &steps[2];
+
+        assert_eq!(name, "claude available", "third step should be 'claude available'");
+
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("command -v claude"),
+            "claude check command should contain 'command -v claude', got: {all_args}"
+        );
+    }
+
+    #[test]
+    fn connection_test_steps_fourth_step_checks_remote_path() {
+        let steps = connection_test_steps("myhost", "/home/user/project");
+        let (name, cmd) = &steps[3];
+
+        assert_eq!(name, "Remote path exists", "fourth step should be 'Remote path exists'");
+
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("test -d"),
+            "remote path check command should contain 'test -d', got: {all_args}"
+        );
+        assert!(
+            all_args.contains("/home/user/project"),
+            "remote path check command should contain the provided path, got: {all_args}"
+        );
+    }
+
+    #[test]
+    fn connection_test_steps_escapes_remote_path_with_spaces() {
+        let steps = connection_test_steps("myhost", "/home/user/my project");
+        let (name, cmd) = &steps[3];
+
+        assert_eq!(name, "Remote path exists");
+
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        // The path with spaces should be present in the command args (shell-escaped)
+        assert!(
+            all_args.contains("/home/user/my project") || all_args.contains("'/home/user/my project'"),
+            "remote path check command should include path with spaces (possibly shell-escaped), got: {all_args}"
+        );
     }
 }

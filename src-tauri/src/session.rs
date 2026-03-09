@@ -99,7 +99,7 @@ pub enum SessionState {
     MaxIterations { iterations: u32 },
     Failed { iteration: u32, error: String },
     Cancelled { iteration: u32 },
-    Disconnected { iteration: u32 },
+    Disconnected { iteration: u32, reason: Option<String> },
     Reconnecting { iteration: u32 },
 }
 
@@ -124,7 +124,7 @@ pub enum SessionEvent {
     /// The entire session finished
     SessionComplete { outcome: SessionOutcome },
     /// SSH connection lost, session may still be running remotely
-    Disconnected { iteration: u32 },
+    Disconnected { iteration: u32, reason: Option<String> },
     /// Attempting to reconnect to remote session
     Reconnecting { iteration: u32 },
     /// A post-loop check has started

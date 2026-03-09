@@ -94,10 +94,10 @@ Replace `test_ssh_connection` with a new command that runs each check step seque
 - The command should return `Result<(), String>` (results are communicated via events)
 
 **Checklist:**
-- [ ] Add `test_ssh_connection_steps` command to `lib.rs`
-- [ ] Remove old `test_ssh_connection` command
-- [ ] Update `generate_handler!` registration
-- [ ] Verify with `cd src-tauri && cargo check`
+- [x] Add `test_ssh_connection_steps` command to `lib.rs`
+- [x] Remove old `test_ssh_connection` command
+- [x] Update `generate_handler!` registration
+- [x] Verify with `cd src-tauri && cargo check`
 
 ---
 
@@ -121,12 +121,12 @@ Add connection test state, event listeners, and checklist display to RepoDetail.
 - Clean up listener on component destroy if test is still running
 
 **Checklist:**
-- [ ] Add `connectionTest` state variable
-- [ ] Add `testConnection()` async function with event listeners
-- [ ] Wire onclick to Test Connection button
-- [ ] Add checklist HTML below settings-actions
-- [ ] Add CSS for checklist (pass=green, fail=red, pending=gray, spinner animation)
-- [ ] Verify with `npx tsc --noEmit`
+- [x] Add `connectionTest` state variable
+- [x] Add `testConnection()` async function with event listeners
+- [x] Wire onclick to Test Connection button
+- [x] Add checklist HTML below settings-actions
+- [x] Add CSS for checklist (pass=green, fail=red, pending=gray, spinner animation)
+- [x] Verify with `npx tsc --noEmit`
 
 ---
 
@@ -154,12 +154,12 @@ Capture stderr/exit code from the tail process and include a human-readable reas
 - Update the second `ConsumeResult::Disconnected` match (line 351) similarly
 
 **Checklist:**
-- [ ] Add `reason: Option<String>` to `Disconnected` variant in `session.rs`
-- [ ] Change `ConsumeResult::Disconnected` to carry `ProcessExit`
-- [ ] Update `consume_events` to capture and return `ProcessExit`
-- [ ] Add `classify_disconnect` helper function
-- [ ] Update both match arms for `ConsumeResult::Disconnected` in `run()`
-- [ ] Verify with `cd src-tauri && cargo check`
+- [x] Add `reason: Option<String>` to `Disconnected` variant in `session.rs`
+- [x] Change `ConsumeResult::Disconnected` to carry `ProcessExit`
+- [x] Update `consume_events` to capture and return `ProcessExit`
+- [x] Add `classify_disconnect` helper function
+- [x] Update both match arms for `ConsumeResult::Disconnected` in `run()`
+- [x] Verify with `cd src-tauri && cargo check`
 
 ---
 
@@ -184,11 +184,11 @@ Show the disconnect reason in the banner and event state.
 - The `reason` field already exists on `SessionEvent` type (line 41 of types.ts), so no change needed there
 
 **Checklist:**
-- [ ] Add `disconnectReason` to `SessionState` in `types.ts`
-- [ ] Update disconnect handling in `App.svelte` to capture reason
-- [ ] Clear `disconnectReason` on reconnect/complete
-- [ ] Update disconnect banner in `RepoDetail.svelte` to display reason
-- [ ] Verify with `npx tsc --noEmit`
+- [x] Add `disconnectReason` to `SessionState` in `types.ts`
+- [x] Update disconnect handling in `App.svelte` to capture reason
+- [x] Clear `disconnectReason` on reconnect/complete
+- [x] Update disconnect banner in `RepoDetail.svelte` to display reason
+- [x] Verify with `npx tsc --noEmit`
 
 ---
 
@@ -207,9 +207,9 @@ Add tests for the new `classify_disconnect` function and verify the `Disconnecte
 - Update any existing tests that match on `ConsumeResult::Disconnected` to handle the new shape
 
 **Checklist:**
-- [ ] Add unit tests for `classify_disconnect` (5+ cases)
-- [ ] Update existing tests that reference `ConsumeResult::Disconnected`
-- [ ] Verify with `cd src-tauri && cargo test`
+- [x] Add unit tests for `classify_disconnect` (5+ cases) — done in Task 3 TDD
+- [x] Update existing tests that reference `ConsumeResult::Disconnected` — done in Task 3 TDD
+- [x] Verify with `cd src-tauri && cargo test`
 
 ---
 
@@ -230,10 +230,10 @@ Add E2E tests for the Test Connection checklist flow.
 - Test that disconnect banner now shows reason text
 
 **Checklist:**
-- [ ] Add test for successful connection test flow
-- [ ] Add test for failed connection test flow with error message
-- [ ] Add test for disconnect banner showing reason
-- [ ] Verify with `npm run test:e2e`
+- [x] Add test for successful connection test flow — done in Task 2 TDD
+- [x] Add test for failed connection test flow with error message — done in Task 2 TDD
+- [x] Add test for disconnect banner showing reason — done in Task 4 TDD
+- [x] Verify with `npm run test:e2e` — all 113 E2E tests pass
 
 ---
 
@@ -241,9 +241,12 @@ Add E2E tests for the Test Connection checklist flow.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Backend — `test_ssh_connection_steps` command | Not Started |
-| 2 | Frontend — Test Connection checklist UI | Not Started |
-| 3 | Backend — Add reason to Disconnected event | Not Started |
-| 4 | Frontend — Display disconnect reason in banner | Not Started |
-| 5 | Tests — Backend Rust tests | Not Started |
-| 6 | Tests — E2E tests for connection checklist | Not Started |
+| 1 | Backend — `test_ssh_connection_steps` command | Done |
+| 2 | Frontend — Test Connection checklist UI | Done |
+| 3 | Backend — Add reason to Disconnected event | Done |
+| 4 | Frontend — Display disconnect reason in banner | Done |
+| 5 | Tests — Backend Rust tests | Done |
+| 6 | Tests — E2E tests for connection checklist | Done |
+
+**Notes:**
+- SSH commands in `ssh_command()` have no `ConnectTimeout` — if a host silently drops packets, the test step will hang indefinitely. Consider adding `-o ConnectTimeout=10` as a follow-up improvement.

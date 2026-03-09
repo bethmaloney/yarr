@@ -143,7 +143,7 @@ test.describe("Repo detail page", () => {
   }) => {
     await navigateToRepoDetail(page, mockTauri);
 
-    const details = page.locator("details");
+    const details = page.locator("details.settings");
     await expect(details).toBeVisible();
     // Should be closed by default (no open attribute)
     await expect(details).not.toHaveAttribute("open", "");
@@ -160,7 +160,7 @@ test.describe("Repo detail page", () => {
   }) => {
     await navigateToRepoDetail(page, mockTauri);
 
-    const details = page.locator("details");
+    const details = page.locator("details.settings");
     const summary = details.locator("summary");
     await summary.click();
 

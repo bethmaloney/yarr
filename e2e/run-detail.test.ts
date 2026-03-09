@@ -58,9 +58,9 @@ async function navigateToRunDetail(
       repos: [REPO_FIXTURE],
     },
     invokeHandlers: {
-      list_traces: () => [SAMPLE_TRACE],
-      get_trace: () => SAMPLE_TRACE,
-      get_trace_events: () => SAMPLE_EVENTS,
+      list_traces: [SAMPLE_TRACE],
+      get_trace: SAMPLE_TRACE,
+      get_trace_events: SAMPLE_EVENTS,
     },
   });
   await page.goto("/");
@@ -171,11 +171,15 @@ const ENRICHED_EVENTS = [
     iteration: 1,
     result: {
       total_cost_usd: 0.1523,
-      input_tokens: 30000,
-      output_tokens: 3200,
-      cache_read_input_tokens: 5000,
-      cache_creation_input_tokens: 2000,
-      context_window: 200000,
+      usage: {
+        input_tokens: 30000,
+        output_tokens: 3200,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+      model_usage: {
+        "claude-opus-4-20250514": { contextWindow: 200000 },
+      },
     },
     _ts: 1741336230000,
   },
@@ -192,11 +196,15 @@ const ENRICHED_EVENTS = [
     iteration: 2,
     result: {
       total_cost_usd: 0.1612,
-      input_tokens: 62000,
-      output_tokens: 4500,
-      cache_read_input_tokens: 18000,
-      cache_creation_input_tokens: 3000,
-      context_window: 200000,
+      usage: {
+        input_tokens: 62000,
+        output_tokens: 4500,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+      model_usage: {
+        "claude-opus-4-20250514": { contextWindow: 200000 },
+      },
     },
     _ts: 1741336260000,
   },
@@ -230,9 +238,9 @@ async function navigateToRunDetailWithEnrichedEvents(
       repos: [REPO_FIXTURE],
     },
     invokeHandlers: {
-      list_traces: () => [ENRICHED_TRACE],
-      get_trace: () => ENRICHED_TRACE,
-      get_trace_events: () => ENRICHED_EVENTS,
+      list_traces: [ENRICHED_TRACE],
+      get_trace: ENRICHED_TRACE,
+      get_trace_events: ENRICHED_EVENTS,
     },
   });
   await page.goto("/");

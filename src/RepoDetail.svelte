@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount, onDestroy } from "svelte";
   import type { RepoConfig } from "./repos";
@@ -59,6 +60,52 @@
     gitSyncMaxRetries = repo.gitSync?.maxPushRetries ?? 3;
     gitSyncPrompt = repo.gitSync?.conflictPrompt ?? "";
   });
+
+  // Connection test state
+  type ConnectionTestStep = { name: string; status: "pending" | "running" | "pass" | "fail"; error?: string };
+  type ConnectionTest = { running: boolean; steps: ConnectionTestStep[] };
+  let connectionTest: ConnectionTest | null = $state(null);
+  let connectionTestCleanup: (() => void) | null = null;
+
+  async function testConnection() {
+    const stepNames = ["SSH reachable", "tmux available", "claude available", "Remote path exists"];
+    connectionTest = {
+      running: true,
+      steps: stepNames.map((name, i) => ({ name, status: i === 0 ? "running" as const : "pending" as const })),
+    };
+
+    const unlistenStep = await listen<{ step: string; status: string; error?: string }>("ssh-test-step", (e) => {
+      if (!connectionTest) return;
+      const payload = e.payload;
+      const newSteps = connectionTest.steps.map((s) => {
+        if (s.name === payload.step) {
+          return { ...s, status: payload.status as "pass" | "fail", error: payload.error ?? undefined };
+        }
+        return s;
+      });
+      if (payload.status === "pass") {
+        const nextPending = newSteps.findIndex((s) => s.status === "pending");
+        if (nextPending !== -1) {
+          newSteps[nextPending] = { ...newSteps[nextPending], status: "running" };
+        }
+      }
+      connectionTest = { ...connectionTest, steps: newSteps };
+    });
+
+    const unlistenComplete = await listen("ssh-test-complete", () => {
+      connectionTest = connectionTest ? { ...connectionTest, running: false } : null;
+      unlistenStep();
+      unlistenComplete();
+    });
+
+    connectionTestCleanup = () => { unlistenStep(); unlistenComplete(); };
+
+    invoke("test_ssh_connection_steps", { sshHost: repo.sshHost, remotePath: repo.remotePath }).catch(() => {
+      connectionTest = connectionTest ? { ...connectionTest, running: false } : null;
+      unlistenStep();
+      unlistenComplete();
+    });
+  }
 
   let planFile = $state("");
   let previewContent = $state("");
@@ -270,6 +317,7 @@
   });
   onDestroy(() => {
     document.removeEventListener("click", handleClickOutside);
+    if (connectionTestCleanup) connectionTestCleanup();
   });
 </script>
 
@@ -437,9 +485,32 @@
           disabled={session.running}>Save</button
         >
         {#if repo.type === "ssh"}
-          <button type="button" class="secondary">Test Connection</button>
+          <button type="button" class="secondary" onclick={testConnection} disabled={connectionTest?.running}>Test Connection</button>
         {/if}
       </div>
+      {#if connectionTest}
+        <div class="connection-checklist" data-testid="connection-checklist">
+          {#each connectionTest.steps as step}
+            <div class="checklist-step step-{step.status}">
+              <span class="step-icon">
+                {#if step.status === "running"}
+                  <span class="spinner"></span>
+                {:else if step.status === "pass"}
+                  ✓
+                {:else if step.status === "fail"}
+                  ✗
+                {:else}
+                  ·
+                {/if}
+              </span>
+              <span class="step-name">{step.name}</span>
+              {#if step.error}
+                <span class="step-error">{step.error}</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   </details>
 
@@ -632,7 +703,8 @@
 
   {#if session.disconnected}
     <section class="disconnected-banner">
-      <p>Connection lost — the remote session may still be running.</p>
+      <p>{session.disconnectReason ? `Connection lost: ${session.disconnectReason}` : "Connection lost"}</p>
+      <p class="disconnected-sub">The remote session may still be running.</p>
     </section>
   {/if}
 
@@ -1095,6 +1167,12 @@
     font-size: 0.9rem;
   }
 
+  .disconnected-sub {
+    margin-top: 0.25rem !important;
+    font-size: 0.85rem !important;
+    opacity: 0.8;
+  }
+
   .error pre {
     background: #2d1b1b;
     color: #f87171;
@@ -1261,5 +1339,71 @@
     font-size: 0.8rem;
     color: #666;
     font-style: italic;
+  }
+
+  .connection-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+  }
+
+  .checklist-step {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+  }
+
+  .step-icon {
+    width: 1rem;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .step-pass .step-icon {
+    color: #4ade80;
+  }
+
+  .step-fail .step-icon {
+    color: #f87171;
+  }
+
+  .step-pending .step-name {
+    color: #555;
+  }
+
+  .step-pass .step-name {
+    color: #ccc;
+  }
+
+  .step-fail .step-name {
+    color: #f87171;
+  }
+
+  .step-running .step-name {
+    color: #e0e0e0;
+  }
+
+  .step-error {
+    width: 100%;
+    margin-left: 1.5rem;
+    color: #f87171;
+    font-size: 0.8rem;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 2px solid #555;
+    border-top-color: #e8d44d;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>

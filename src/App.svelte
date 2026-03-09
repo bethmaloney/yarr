@@ -130,18 +130,22 @@
       if (event.kind === "disconnected") {
         updates.disconnected = true;
         updates.reconnecting = false;
+        updates.disconnectReason = event.reason;
       } else if (event.kind === "reconnecting") {
         updates.reconnecting = true;
         updates.disconnected = false;
+        updates.disconnectReason = undefined;
       } else if (event.kind === "session_complete") {
         // Authoritatively mark session as not running when backend says it's done.
         // This covers the case where the invoke promise was lost (e.g. webview reload).
         updates.running = false;
         updates.disconnected = false;
         updates.reconnecting = false;
+        updates.disconnectReason = undefined;
       } else if (session.disconnected || session.reconnecting) {
         updates.disconnected = false;
         updates.reconnecting = false;
+        updates.disconnectReason = undefined;
       }
       sessions.set(repo_id, { ...session, ...updates });
     });
@@ -274,6 +278,7 @@
         ...session,
         reconnecting: true,
         disconnected: false,
+        disconnectReason: undefined,
       });
     }
     try {
