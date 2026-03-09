@@ -398,8 +398,10 @@ Convert the RepoCard using shadcn `Card` and `Badge`.
 - Branch label rendered below repo path
 
 **Checklist:**
-- [ ] Create `src/components/RepoCard.tsx`
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/components/RepoCard.tsx`
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Renders as a `<button>` with Tailwind card styles (not shadcn Card `<div>`, which would break button role semantics). Status uses inline-styled dot + uppercase label. Custom `animate-blink` keyframe added to `globals.css` for disconnected status (distinct from `animate-pulse` used for running). 27 unit tests covering rendering, paths (local/SSH), branch display, all 5 statuses, aria-label, click handler, and last trace info (plan filename, cost, context %, time ago).
 
 ---
 
@@ -696,7 +698,7 @@ Full build, lint, format, and manual smoke test.
 | 3 | Create Zustand store | Done |
 | 4 | Create App.tsx with router | Done |
 | 5 | Breadcrumbs component | Done |
-| 6 | RepoCard component | Not Started |
+| 6 | RepoCard component | Done |
 | 7 | IterationGroup component | Not Started |
 | 8 | EventsList component | Not Started |
 | 9 | Home page | Not Started |

@@ -2,6 +2,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --animate-blink: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
 :root {
   --background: oklch(0.22 0.02 270);
   --foreground: oklch(0.9 0 0);
