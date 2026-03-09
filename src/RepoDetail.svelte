@@ -37,6 +37,7 @@
     Object.entries(repo.envVars ?? {}).map(([key, value]) => ({ key, value })),
   );
   let checks: Check[] = $state(repo.checks ?? []);
+  let createBranch = $state(repo.createBranch ?? true);
   let checksOpen = $state(false);
   let gitSyncEnabled = $state(false);
   let gitSyncModel = $state("");
@@ -55,6 +56,7 @@
       value,
     }));
     checks = repo.checks ?? [];
+    createBranch = repo.createBranch ?? true;
     gitSyncEnabled = repo.gitSync?.enabled ?? false;
     gitSyncModel = repo.gitSync?.model ?? "";
     gitSyncMaxRetries = repo.gitSync?.maxPushRetries ?? 3;
@@ -117,6 +119,7 @@
       completionSignal,
       envVars: envVarsRecord,
       checks,
+      createBranch,
       gitSync: {
         enabled: gitSyncEnabled,
         model: gitSyncModel || undefined,
@@ -212,6 +215,14 @@
           bind:value={completionSignal}
           disabled={session.running}
         />
+      </label>
+      <label class="create-branch-toggle">
+        <input
+          type="checkbox"
+          bind:checked={createBranch}
+          disabled={session.running}
+        />
+        Create branch on run
       </label>
       <fieldset class="env-vars" disabled={session.running}>
         <legend>Environment Variables</legend>
@@ -550,6 +561,16 @@
   }
 
   .git-sync-toggle input[type="checkbox"] {
+    width: auto;
+  }
+
+  .create-branch-toggle {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 0.5rem !important;
+  }
+
+  .create-branch-toggle input[type="checkbox"] {
     width: auto;
   }
 

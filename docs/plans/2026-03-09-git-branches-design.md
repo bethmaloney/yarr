@@ -200,11 +200,11 @@ Add the toggle to the settings section and wire it into the save function.
 - Update `saveSettings()` to include `createBranch` in the spread to `onUpdateRepo`
 
 **Checklist:**
-- [ ] Add `createBranch` state variable
-- [ ] Add re-sync in `$effect`
-- [ ] Add toggle UI in settings section
-- [ ] Wire into `saveSettings()`
-- [ ] `npx tsc --noEmit`
+- [x] Add `createBranch` state variable
+- [x] Add re-sync in `$effect`
+- [x] Add toggle UI in settings section
+- [x] Wire into `saveSettings()`
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -366,7 +366,7 @@ Add tests for the branch-related UI logic and interactions.
 |------|-------------|--------|
 | 1 | Backend git branch Tauri commands | Complete |
 | 2 | Frontend `BranchInfo` type and `createBranch` config | Complete |
-| 3 | "Create branch on run" toggle in RepoDetail settings | Not Started |
+| 3 | "Create branch on run" toggle in RepoDetail settings | Complete |
 | 4 | Pass `createBranch` to backend and create branch before session | Not Started |
 | 5 | Branch display chip with dropdown on RepoDetail | Not Started |
 | 6 | Branch label on RepoCard + fetch in App.svelte | Not Started |
