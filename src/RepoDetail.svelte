@@ -159,19 +159,27 @@
 
   let filteredBranches = $derived(
     branchSearch
-      ? branches.filter(b => b.toLowerCase().includes(branchSearch.toLowerCase()))
-      : branches
+      ? branches.filter((b) =>
+          b.toLowerCase().includes(branchSearch.toLowerCase()),
+        )
+      : branches,
   );
 
   function buildRepoPayload() {
     return repo.type === "local"
       ? { type: "local" as const, path: repo.path }
-      : { type: "ssh" as const, sshHost: repo.sshHost, remotePath: repo.remotePath };
+      : {
+          type: "ssh" as const,
+          sshHost: repo.sshHost,
+          remotePath: repo.remotePath,
+        };
   }
 
   async function fetchBranchInfo() {
     try {
-      branchInfo = await invoke<BranchInfo>("get_branch_info", { repo: buildRepoPayload() });
+      branchInfo = await invoke<BranchInfo>("get_branch_info", {
+        repo: buildRepoPayload(),
+      });
     } catch {
       branchInfo = null;
     }
@@ -179,7 +187,9 @@
 
   async function fetchBranches() {
     try {
-      branches = await invoke<string[]>("list_local_branches", { repo: buildRepoPayload() });
+      branches = await invoke<string[]>("list_local_branches", {
+        repo: buildRepoPayload(),
+      });
     } catch {
       branches = [];
     }
@@ -187,7 +197,10 @@
 
   async function handleSwitchBranch(branchName: string) {
     try {
-      await invoke("switch_branch", { repo: buildRepoPayload(), branch: branchName });
+      await invoke("switch_branch", {
+        repo: buildRepoPayload(),
+        branch: branchName,
+      });
       branchDropdownOpen = false;
       branchSearch = "";
       await fetchBranchInfo();
@@ -230,7 +243,7 @@
 
   function handleClickOutside(event: MouseEvent) {
     const target = event.target as HTMLElement;
-    if (!target.closest('.branch-selector')) {
+    if (!target.closest(".branch-selector")) {
       branchDropdownOpen = false;
       branchSearch = "";
     }
@@ -277,7 +290,12 @@
       />
     {:else}
       <h1>
-        <button class="name-edit" onclick={() => { editingName = true; }}>
+        <button
+          class="name-edit"
+          onclick={() => {
+            editingName = true;
+          }}
+        >
           {repo.name}
         </button>
       </h1>
@@ -397,15 +415,19 @@
             <button
               type="button"
               class="env-remove"
-              onclick={() => { envVars = envVars.filter((_, j) => j !== i); }}
-            >&times;</button>
+              onclick={() => {
+                envVars = envVars.filter((_, j) => j !== i);
+              }}>&times;</button
+            >
           </div>
         {/each}
         <button
           type="button"
           class="secondary env-add"
-          onclick={() => { envVars = [...envVars, { key: "", value: "" }]; }}
-        >+ Add Variable</button>
+          onclick={() => {
+            envVars = [...envVars, { key: "", value: "" }];
+          }}>+ Add Variable</button
+        >
       </fieldset>
       <div class="settings-actions">
         <button
@@ -428,22 +450,34 @@
         {#each checks as check, i}
           <details class="check-entry">
             <summary>
-              <span class="check-summary-text">{check.name || "New Check"}</span>
+              <span class="check-summary-text">{check.name || "New Check"}</span
+              >
               <button
                 type="button"
                 class="check-remove"
                 disabled={session.running}
-                onclick={(e) => { e.preventDefault(); checks = checks.filter((_, j) => j !== i); }}
-              >&times;</button>
+                onclick={(e) => {
+                  e.preventDefault();
+                  checks = checks.filter((_, j) => j !== i);
+                }}>&times;</button
+              >
             </summary>
             <div class="check-fields">
               <label>
                 Name
-                <input type="text" bind:value={check.name} disabled={session.running} />
+                <input
+                  type="text"
+                  bind:value={check.name}
+                  disabled={session.running}
+                />
               </label>
               <label>
                 Command
-                <input type="text" bind:value={check.command} disabled={session.running} />
+                <input
+                  type="text"
+                  bind:value={check.command}
+                  disabled={session.running}
+                />
               </label>
               <label>
                 When
@@ -454,11 +488,21 @@
               </label>
               <label>
                 Timeout
-                <input type="number" bind:value={check.timeoutSecs} min="1" disabled={session.running} />
+                <input
+                  type="number"
+                  bind:value={check.timeoutSecs}
+                  min="1"
+                  disabled={session.running}
+                />
               </label>
               <label>
                 Retries
-                <input type="number" bind:value={check.maxRetries} min="0" disabled={session.running} />
+                <input
+                  type="number"
+                  bind:value={check.maxRetries}
+                  min="0"
+                  disabled={session.running}
+                />
               </label>
             </div>
           </details>
@@ -467,8 +511,19 @@
           type="button"
           class="secondary check-add"
           disabled={session.running}
-          onclick={() => { checks = [...checks, { name: "", command: "", when: "each_iteration", timeoutSecs: 300, maxRetries: 1 }]; }}
-        >Add Check</button>
+          onclick={() => {
+            checks = [
+              ...checks,
+              {
+                name: "",
+                command: "",
+                when: "each_iteration",
+                timeoutSecs: 300,
+                maxRetries: 1,
+              },
+            ];
+          }}>Add Check</button
+        >
       </div>
     {/if}
   </details>
@@ -581,7 +636,11 @@
     </section>
   {/if}
 
-  <EventsList events={session.events} isLive={session.running} />
+  <EventsList
+    events={session.events}
+    isLive={session.running}
+    repoPath={repo.type === "local" ? repo.path : repo.remotePath}
+  />
 
   {#if session.error}
     <section class="error">
@@ -605,10 +664,17 @@
         <dt>Total Cost</dt>
         <dd>${session.trace.total_cost_usd.toFixed(4)}</dd>
         {#if session.trace.context_window}
-          {@const ctxPercent = Math.round((session.trace.final_context_tokens! / session.trace.context_window) * 100)}
+          {@const ctxPercent = Math.round(
+            (session.trace.final_context_tokens! /
+              session.trace.context_window) *
+              100,
+          )}
           <dt>Context</dt>
           <dd>
-            <span style="color: {sessionContextColor(ctxPercent)}" title="{session.trace.final_context_tokens!.toLocaleString()} tokens">
+            <span
+              style="color: {sessionContextColor(ctxPercent)}"
+              title="{session.trace.final_context_tokens!.toLocaleString()} tokens"
+            >
               {ctxPercent}%
             </span>
           </dd>

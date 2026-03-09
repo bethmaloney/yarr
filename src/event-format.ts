@@ -1,5 +1,29 @@
 import type { SessionEvent } from "./types";
 
+/**
+ * Convert an absolute file path to a relative path by stripping the repo root prefix.
+ * Handles both Unix paths (/home/user/repo/src/file.ts) and Windows-style paths
+ * (C:\Users\user\repo\src\file.ts), as well as mixed separators that can appear
+ * in SSH/WSL contexts.
+ */
+export function relativePath(
+  filePath: string,
+  repoPath: string | undefined,
+): string {
+  if (!repoPath) return filePath;
+
+  // Normalise separators to forward slashes for comparison
+  const normFile = filePath.replace(/\\/g, "/");
+  const normRepo = repoPath.replace(/\\/g, "/").replace(/\/+$/, "");
+
+  if (normFile.startsWith(normRepo + "/")) {
+    return normFile.slice(normRepo.length + 1);
+  }
+
+  // No match — return the original path unchanged
+  return filePath;
+}
+
 export function eventEmoji(kind: string): string {
   switch (kind) {
     case "session_started":
@@ -61,7 +85,7 @@ export function eventEmoji(kind: string): string {
   }
 }
 
-export function toolSummary(ev: SessionEvent): string {
+export function toolSummary(ev: SessionEvent, repoPath?: string): string {
   const name = ev.tool_name ?? "unknown";
   const input = ev.tool_input;
   if (!input) return name;
@@ -72,7 +96,9 @@ export function toolSummary(ev: SessionEvent): string {
     case "Write":
     case "Edit":
     case "MultiEdit":
-      return input.file_path ? `${name}: ${input.file_path}` : name;
+      return input.file_path
+        ? `${name}: ${relativePath(String(input.file_path), repoPath)}`
+        : name;
     case "Grep":
     case "Glob":
       return input.pattern ? `${name}: ${input.pattern}` : name;
@@ -81,14 +107,14 @@ export function toolSummary(ev: SessionEvent): string {
   }
 }
 
-export function eventLabel(ev: SessionEvent): string {
+export function eventLabel(ev: SessionEvent, repoPath?: string): string {
   switch (ev.kind) {
     case "session_started":
       return `Session started: ${ev.session_id}`;
     case "iteration_started":
       return `Iteration ${ev.iteration} started`;
     case "tool_use":
-      return `[${ev.iteration}] ${toolSummary(ev)}`;
+      return `[${ev.iteration}] ${toolSummary(ev, repoPath)}`;
     case "assistant_text":
       return `[${ev.iteration}] ${ev.text}`;
     case "iteration_complete":

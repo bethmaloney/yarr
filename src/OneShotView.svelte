@@ -63,9 +63,7 @@
   <header>
     <h1>{repo.name} — 1-Shot</h1>
     <p class="repo-path">
-      {repo.type === "local"
-        ? repo.path
-        : `${repo.sshHost}:${repo.remotePath}`}
+      {repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`}
     </p>
   </header>
 
@@ -126,7 +124,11 @@
     </div>
   {/if}
 
-  <EventsList events={session.events} isLive={session.running} />
+  <EventsList
+    events={session.events}
+    isLive={session.running}
+    repoPath={repo.type === "local" ? repo.path : repo.remotePath}
+  />
 
   {#if session.error}
     <section class="error">

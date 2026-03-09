@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { eventEmoji, eventLabel } from "./event-format";
+import {
+  eventEmoji,
+  eventLabel,
+  toolSummary,
+  relativePath,
+} from "./event-format";
 import type { SessionEvent } from "./types";
 
 function makeEvent(overrides: Partial<SessionEvent>): SessionEvent {
@@ -25,7 +30,9 @@ describe("eventEmoji", () => {
     });
 
     it("returns appropriate emoji for git_sync_conflict_resolve_complete", () => {
-      expect(eventEmoji("git_sync_conflict_resolve_complete")).toBe("\u{1F3C1}");
+      expect(eventEmoji("git_sync_conflict_resolve_complete")).toBe(
+        "\u{1F3C1}",
+      );
     });
 
     it("returns error emoji for git_sync_failed", () => {
@@ -213,5 +220,111 @@ describe("eventLabel", () => {
       const label = eventLabel(ev);
       expect(label).toBe("Session complete: completed");
     });
+  });
+
+  describe("tool_use with repoPath shows relative paths", () => {
+    it("shows relative path for Read tool", () => {
+      const ev = makeEvent({
+        kind: "tool_use",
+        iteration: 1,
+        tool_name: "Read",
+        tool_input: { file_path: "/home/user/myrepo/src/main.ts" },
+      });
+      const label = eventLabel(ev, "/home/user/myrepo");
+      expect(label).toBe("[1] Read: src/main.ts");
+    });
+
+    it("shows absolute path when repoPath is undefined", () => {
+      const ev = makeEvent({
+        kind: "tool_use",
+        iteration: 1,
+        tool_name: "Edit",
+        tool_input: { file_path: "/home/user/myrepo/src/main.ts" },
+      });
+      const label = eventLabel(ev);
+      expect(label).toBe("[1] Edit: /home/user/myrepo/src/main.ts");
+    });
+
+    it("shows absolute path when it does not match repoPath", () => {
+      const ev = makeEvent({
+        kind: "tool_use",
+        iteration: 1,
+        tool_name: "Write",
+        tool_input: { file_path: "/tmp/scratch.ts" },
+      });
+      const label = eventLabel(ev, "/home/user/myrepo");
+      expect(label).toBe("[1] Write: /tmp/scratch.ts");
+    });
+  });
+});
+
+describe("relativePath", () => {
+  it("strips Unix repo prefix", () => {
+    expect(relativePath("/home/user/repo/src/file.ts", "/home/user/repo")).toBe(
+      "src/file.ts",
+    );
+  });
+
+  it("strips repo prefix with trailing slash", () => {
+    expect(
+      relativePath("/home/user/repo/src/file.ts", "/home/user/repo/"),
+    ).toBe("src/file.ts");
+  });
+
+  it("returns original when no match", () => {
+    expect(relativePath("/other/path/file.ts", "/home/user/repo")).toBe(
+      "/other/path/file.ts",
+    );
+  });
+
+  it("returns original when repoPath is undefined", () => {
+    expect(relativePath("/home/user/repo/file.ts", undefined)).toBe(
+      "/home/user/repo/file.ts",
+    );
+  });
+
+  it("handles Windows-style backslash paths", () => {
+    expect(
+      relativePath(
+        "C:\\Users\\beth\\repo\\src\\file.ts",
+        "C:\\Users\\beth\\repo",
+      ),
+    ).toBe("src/file.ts");
+  });
+
+  it("handles mixed separators (SSH/WSL)", () => {
+    expect(
+      relativePath(
+        "/mnt/c/Users/beth/repo/src/file.ts",
+        "/mnt/c/Users/beth/repo",
+      ),
+    ).toBe("src/file.ts");
+  });
+
+  it("does not strip partial directory matches", () => {
+    // /home/user/repo-extra should NOT match /home/user/repo
+    expect(
+      relativePath("/home/user/repo-extra/file.ts", "/home/user/repo"),
+    ).toBe("/home/user/repo-extra/file.ts");
+  });
+});
+
+describe("toolSummary with repoPath", () => {
+  it("shows relative path for file tools", () => {
+    const ev = makeEvent({
+      kind: "tool_use",
+      tool_name: "Read",
+      tool_input: { file_path: "/home/user/repo/src/main.ts" },
+    });
+    expect(toolSummary(ev, "/home/user/repo")).toBe("Read: src/main.ts");
+  });
+
+  it("does not affect non-file tools", () => {
+    const ev = makeEvent({
+      kind: "tool_use",
+      tool_name: "Bash",
+      tool_input: { command: "npm test" },
+    });
+    expect(toolSummary(ev, "/home/user/repo")).toBe("Bash: npm test");
   });
 });
