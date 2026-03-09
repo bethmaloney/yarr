@@ -55,25 +55,22 @@
         return { id: repo.id, info };
       }),
     );
-    const m = new SvelteMap<string, BranchInfo>();
+    branchInfos.clear();
     for (const r of results) {
       if (r.status === "fulfilled") {
-        m.set(r.value.id, r.value.info);
+        branchInfos.set(r.value.id, r.value.info);
       }
     }
-    branchInfos = m;
   }
 
   async function syncActiveSession() {
     const activeRepoIds = await invoke<string[]>("get_active_sessions");
     const activeSet = new Set(activeRepoIds);
-    let changed = false;
 
     // Mark sessions that completed during sleep as no longer running
     for (const [repoId, session] of sessions) {
       if (session.running && !activeSet.has(repoId)) {
         sessions.set(repoId, { ...session, running: false });
-        changed = true;
       }
     }
 
@@ -87,12 +84,7 @@
           trace: null,
           error: null,
         });
-        changed = true;
       }
-    }
-
-    if (changed) {
-      sessions = new SvelteMap(sessions);
     }
   }
 
