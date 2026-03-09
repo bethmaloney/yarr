@@ -139,7 +139,11 @@
         <dd>{formatDuration(trace.start_time, trace.end_time)}</dd>
         <dt>Tokens (in / out)</dt>
         <dd>
-          {(trace.total_input_tokens + trace.total_cache_read_tokens + trace.total_cache_creation_tokens).toLocaleString()} / {trace.total_output_tokens.toLocaleString()}
+          {(
+            trace.total_input_tokens +
+            trace.total_cache_read_tokens +
+            trace.total_cache_creation_tokens
+          ).toLocaleString()} / {trace.total_output_tokens.toLocaleString()}
         </dd>
         <dt>Session ID</dt>
         <dd class="mono">
@@ -152,7 +156,7 @@
     </section>
 
     <section class="events-section">
-      <EventsList {events} />
+      <EventsList {events} repoPath={trace?.repo_path} />
     </section>
   {/if}
 </main>

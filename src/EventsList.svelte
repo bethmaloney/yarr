@@ -6,8 +6,11 @@
   import { eventEmoji, eventLabel } from "./event-format";
   import IterationGroup from "./IterationGroup.svelte";
 
-  let { events, isLive = false }: { events: SessionEvent[]; isLive?: boolean } =
-    $props();
+  let {
+    events,
+    isLive = false,
+    repoPath,
+  }: { events: SessionEvent[]; isLive?: boolean; repoPath?: string } = $props();
 
   let eventsContainer: HTMLElement | undefined = $state();
   let autoScroll = $state(true);
@@ -124,7 +127,9 @@
               <span class="event-emoji"
                 >{eventEmoji(standalone.event.kind)}</span
               >
-              <span class="event-text">{eventLabel(standalone.event)}</span>
+              <span class="event-text"
+                >{eventLabel(standalone.event, repoPath)}</span
+              >
               <span class="event-time">{formatTime(standalone.event._ts)}</span>
             </button>
             {#if expandedEvents.has(i) && standalone.event.kind === "git_sync_failed" && standalone.event.error}
@@ -141,6 +146,7 @@
             {formatTime}
             {expandedEvents}
             {toggleEvent}
+            {repoPath}
             globalStartIndex={iterationGlobalStartIndices.get(iter.iteration) ??
               0}
           />
@@ -156,7 +162,9 @@
               <span class="event-emoji"
                 >{eventEmoji(standalone.event.kind)}</span
               >
-              <span class="event-text">{eventLabel(standalone.event)}</span>
+              <span class="event-text"
+                >{eventLabel(standalone.event, repoPath)}</span
+              >
               <span class="event-time">{formatTime(standalone.event._ts)}</span>
             </button>
             {#if expandedEvents.has(globalIndex) && standalone.event.kind === "git_sync_failed" && standalone.event.error}

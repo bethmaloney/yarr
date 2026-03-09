@@ -11,6 +11,7 @@
     expandedEvents,
     toggleEvent,
     globalStartIndex,
+    repoPath,
   }: {
     group: IterationGroup;
     expanded: boolean;
@@ -19,6 +20,7 @@
     expandedEvents: Set<number>;
     toggleEvent: (globalIndex: number) => void;
     globalStartIndex: number;
+    repoPath?: string;
   } = $props();
 
   function formatDuration(ms: number): string {
@@ -75,7 +77,7 @@
         >
           <button class="event-btn" onclick={() => toggleEvent(globalIndex)}>
             <span class="event-emoji">{eventEmoji(ev.kind)}</span>
-            <span class="event-text">{eventLabel(ev)}</span>
+            <span class="event-text">{eventLabel(ev, repoPath)}</span>
             <span class="event-time">{formatTime(ev._ts)}</span>
           </button>
           {#if expandedEvents.has(globalIndex) && ev.kind === "tool_use" && ev.tool_input}
