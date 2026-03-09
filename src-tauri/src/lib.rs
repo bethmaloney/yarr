@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use oneshot::OneShotRunner;
-use runtime::{default_runtime, MockRuntime, RuntimeProvider, SshRuntime};
+use runtime::{default_runtime, RuntimeProvider, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use ssh_orchestrator::SshSessionOrchestrator;
 use tauri::{Emitter, Manager, RunEvent};
@@ -56,53 +56,6 @@ pub(crate) enum RepoType {
     Local { path: String },
     #[serde(rename_all = "camelCase")]
     Ssh { ssh_host: String, remote_path: String },
-}
-
-#[tauri::command]
-async fn run_mock_session(app: tauri::AppHandle, repo_id: String) -> Result<trace::SessionTrace, String> {
-    let cancel_token = CancellationToken::new();
-    {
-        let active = app.state::<ActiveSessions>();
-        active.tokens.lock().await.insert(repo_id.clone(), cancel_token.clone());
-    }
-
-    let runtime = MockRuntime::completing_after(3);
-
-    let config = SessionConfig {
-        repo_path: PathBuf::from("/mock/project"),
-        prompt: "Mock prompt: implement tasks and signal completion.".to_string(),
-        max_iterations: 10,
-        completion_signal: "<promise>COMPLETE</promise>".to_string(),
-        model: None,
-        extra_args: vec![],
-        plan_file: None,
-        inter_iteration_delay_ms: 100,
-        env_vars: HashMap::new(),
-        checks: Vec::new(),
-        git_sync: None,
-    };
-
-    let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let collector = TraceCollector::new(base_dir, &repo_id);
-
-    let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
-    let app_handle = app.clone();
-    let repo_id_clone = repo_id.clone();
-    let runner = SessionRunner::new(config, collector, cancel_token)
-        .abort_registry(abort_registry)
-        .on_event(Box::new(move |event| {
-            let _ = app_handle.emit("session-event", TaggedSessionEvent {
-                repo_id: repo_id_clone.clone(),
-                event: event.clone(),
-            });
-        }));
-
-    let result = runner.run(&runtime).await.map_err(|e| e.to_string());
-    {
-        let active = app.state::<ActiveSessions>();
-        active.tokens.lock().await.remove(&repo_id);
-    }
-    result
 }
 
 #[tauri::command]
@@ -569,7 +522,7 @@ pub fn run() {
         .manage(GlobalAbortRegistry {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
-        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {

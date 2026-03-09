@@ -24,7 +24,7 @@ yarr/
 ```
 ┌────────────────────────────────────────────────┐
 │  Svelte UI                                     │
-│  Button → invoke("run_mock_session")           │
+│  Button → invoke("run_session")                │
 │  listen("session-event") → live event log      │
 └──────────┬─────────────────────────────────────┘
            │ Tauri IPC
@@ -51,11 +51,11 @@ yarr/
 # Install frontend deps
 cd ui && npm install && cd ..
 
-# Run the app (mock session, no Claude CLI needed)
+# Run the app
 cd ui && npx tauri dev
 ```
 
-Click "Run Mock Session" — you'll see streaming events from 4 mock iterations (3 working + 1 completion), with a trace file written to `./traces/`.
+Add a repo, select a prompt file, and click "Run" to start a session. Traces are written to `./traces/`.
 
 ## Key design decisions
 

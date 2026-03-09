@@ -176,18 +176,6 @@ test.describe("Repo detail page", () => {
     await expect(page.locator("select")).toHaveCount(0);
   });
 
-  test("'Test Run' button visible instead of 'Mock'", async ({
-    page,
-    mockTauri,
-  }) => {
-    await navigateToRepoDetail(page, mockTauri);
-
-    // "Test Run" should be present
-    await expect(page.getByRole("button", { name: "Test Run" })).toBeVisible();
-    // "Mock" should not be present
-    await expect(page.getByRole("button", { name: "Mock" })).not.toBeVisible();
-  });
-
   test("hint text shown when no plan file is selected", async ({
     page,
     mockTauri,

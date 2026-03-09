@@ -258,30 +258,6 @@
     }
   }
 
-  async function handleMockRun(repoId: string) {
-    sessions.set(repoId, {
-      running: true,
-      disconnected: false,
-      reconnecting: false,
-      events: [],
-      trace: null,
-      error: null,
-    });
-
-    try {
-      const trace = await invoke<SessionTrace>("run_mock_session", { repoId });
-      const session = sessions.get(repoId)!;
-      sessions.set(repoId, { ...session, trace });
-      latestTraces = new SvelteMap(latestTraces).set(repoId, trace);
-    } catch (e) {
-      const session = sessions.get(repoId)!;
-      sessions.set(repoId, { ...session, error: String(e) });
-    } finally {
-      const session = sessions.get(repoId)!;
-      sessions.set(repoId, { ...session, running: false });
-    }
-  }
-
   async function handleUpdateRepo(repo: RepoConfig) {
     await updateRepo(repo);
     repos = await loadRepos();
@@ -389,7 +365,6 @@
       session={sessionState}
       onBack={goHome}
       onRun={(planFile) => handleRunSession(repoId, planFile)}
-      onMockRun={() => handleMockRun(repoId)}
       onUpdateRepo={handleUpdateRepo}
       onReconnect={() => handleReconnect(repoId)}
       onOneShot={() => goOneShot(repoId)}

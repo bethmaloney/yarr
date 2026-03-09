@@ -13,7 +13,6 @@
     session,
     onBack,
     onRun,
-    onMockRun,
     onUpdateRepo,
     onReconnect,
     onOneShot,
@@ -22,7 +21,6 @@
     session: SessionState;
     onBack: () => void;
     onRun: (planFile: string) => void;
-    onMockRun: () => void;
     onUpdateRepo: (repo: RepoConfig) => Promise<void>;
     onReconnect: () => void;
     onOneShot: () => void;
@@ -528,15 +526,6 @@
       {#if session.running}
         <button type="button" onclick={stopSession} class="danger">
           Stop
-        </button>
-      {:else}
-        <button
-          type="button"
-          onclick={onMockRun}
-          disabled={session.running}
-          class="secondary"
-        >
-          Test Run
         </button>
       {/if}
       <button
