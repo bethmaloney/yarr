@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use oneshot::OneShotRunner;
-use runtime::{default_runtime, MockRuntime, SshRuntime};
+use runtime::{default_runtime, MockRuntime, RuntimeProvider, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use ssh_orchestrator::SshSessionOrchestrator;
 use tauri::{Emitter, Manager, RunEvent};
@@ -25,6 +25,13 @@ use trace::TraceCollector;
 pub(crate) struct TaggedSessionEvent {
     repo_id: String,
     event: SessionEvent,
+}
+
+#[derive(Debug, serde::Serialize, Clone)]
+pub(crate) struct BranchInfo {
+    name: String,
+    ahead: Option<u32>,
+    behind: Option<u32>,
 }
 
 /// Shared state tracking cancellation tokens for all active sessions, keyed by repo_id
@@ -359,7 +366,6 @@ async fn stop_session(app: tauri::AppHandle, repo_id: String) -> Result<(), Stri
 #[tauri::command]
 async fn test_ssh_connection(ssh_host: String) -> Result<String, String> {
     let rt = SshRuntime::new(&ssh_host, "");
-    use runtime::RuntimeProvider;
     rt.health_check().await.map_err(|e| e.to_string())?;
     Ok("Connection successful: tmux and claude are available".to_string())
 }
@@ -380,6 +386,126 @@ async fn reconnect_session(app: tauri::AppHandle, repo_id: String) -> Result<(),
     }
 }
 
+fn parse_rev_list_output(output: &str) -> (Option<u32>, Option<u32>) {
+    let trimmed = output.trim();
+    let parts: Vec<&str> = trimmed.split('\t').collect();
+    if parts.len() == 2 {
+        if let (Ok(ahead), Ok(behind)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+            return (Some(ahead), Some(behind));
+        }
+    }
+    (None, None)
+}
+
+fn resolve_runtime(repo: &RepoType) -> (Box<dyn RuntimeProvider>, PathBuf) {
+    match repo {
+        RepoType::Local { path } => (default_runtime(), PathBuf::from(path)),
+        RepoType::Ssh { ssh_host, remote_path } => {
+            (Box::new(SshRuntime::new(ssh_host, remote_path)), PathBuf::from(remote_path))
+        }
+    }
+}
+
+#[tauri::command]
+async fn get_branch_info(repo: RepoType) -> Result<BranchInfo, String> {
+    let (rt, working_dir) = resolve_runtime(&repo);
+    let timeout = std::time::Duration::from_secs(30);
+
+    let branch_output = rt
+        .run_command("git branch --show-current", &working_dir, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if branch_output.exit_code != 0 {
+        return Err(branch_output.stderr);
+    }
+
+    let name = branch_output.stdout.trim().to_string();
+
+    let rev_list_result = rt
+        .run_command("git rev-list --left-right --count HEAD...@{upstream}", &working_dir, timeout)
+        .await;
+
+    let (ahead, behind) = match rev_list_result {
+        Ok(output) if output.exit_code == 0 => parse_rev_list_output(&output.stdout),
+        _ => (None, None),
+    };
+
+    Ok(BranchInfo { name, ahead, behind })
+}
+
+#[tauri::command]
+async fn list_local_branches(repo: RepoType) -> Result<Vec<String>, String> {
+    let (rt, working_dir) = resolve_runtime(&repo);
+    let timeout = std::time::Duration::from_secs(30);
+
+    let output = rt
+        .run_command("git branch --format='%(refname:short)'", &working_dir, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if output.exit_code != 0 {
+        return Err(output.stderr);
+    }
+
+    let branches: Vec<String> = output
+        .stdout
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+
+    Ok(branches)
+}
+
+#[tauri::command]
+async fn switch_branch(repo: RepoType, branch: String) -> Result<(), String> {
+    if !branch.chars().all(|c| c.is_alphanumeric() || "-_./".contains(c)) {
+        return Err("Invalid branch name".to_string());
+    }
+
+    let (rt, working_dir) = resolve_runtime(&repo);
+    let timeout = std::time::Duration::from_secs(30);
+
+    let output = rt
+        .run_command(&format!("git checkout {branch}"), &working_dir, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if output.exit_code != 0 {
+        return Err(output.stderr);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn fast_forward_branch(repo: RepoType) -> Result<(), String> {
+    let (rt, working_dir) = resolve_runtime(&repo);
+    let fetch_timeout = std::time::Duration::from_secs(60);
+
+    let fetch_output = rt
+        .run_command("git fetch origin", &working_dir, fetch_timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if fetch_output.exit_code != 0 {
+        return Err(fetch_output.stderr);
+    }
+
+    let timeout = std::time::Duration::from_secs(30);
+    let merge_output = rt
+        .run_command("git merge --ff-only @{upstream}", &working_dir, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if merge_output.exit_code != 0 {
+        return Err(merge_output.stderr);
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -394,7 +520,7 @@ pub fn run() {
         .manage(GlobalAbortRegistry {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
-        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview])
+        .invoke_handler(tauri::generate_handler![run_mock_session, run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {
@@ -887,5 +1013,75 @@ mod tests {
         assert_eq!(deserialized.conflict_prompt, original.conflict_prompt);
         assert_eq!(deserialized.model, original.model);
         assert_eq!(deserialized.max_push_retries, original.max_push_retries);
+    }
+
+    // --- BranchInfo serialization tests ---
+
+    #[test]
+    fn branch_info_serializes_with_all_fields() {
+        let info = BranchInfo {
+            name: "feature/login".to_string(),
+            ahead: Some(3),
+            behind: Some(5),
+        };
+
+        let json = serde_json::to_value(&info).expect("serialization should succeed");
+
+        assert_eq!(json["name"], "feature/login");
+        assert_eq!(json["ahead"], 3);
+        assert_eq!(json["behind"], 5);
+    }
+
+    #[test]
+    fn branch_info_serializes_with_none_ahead_behind() {
+        let info = BranchInfo {
+            name: "main".to_string(),
+            ahead: None,
+            behind: None,
+        };
+
+        let json = serde_json::to_value(&info).expect("serialization should succeed");
+
+        assert_eq!(json["name"], "main");
+        assert!(json["ahead"].is_null(), "ahead should serialize as null");
+        assert!(json["behind"].is_null(), "behind should serialize as null");
+    }
+
+    // --- parse_rev_list_output tests ---
+
+    #[test]
+    fn parse_rev_list_output_normal() {
+        let result = parse_rev_list_output("3\t5\n");
+        assert_eq!(result, (Some(3), Some(5)));
+    }
+
+    #[test]
+    fn parse_rev_list_output_zero_values() {
+        let result = parse_rev_list_output("0\t0\n");
+        assert_eq!(result, (Some(0), Some(0)));
+    }
+
+    #[test]
+    fn parse_rev_list_output_only_ahead() {
+        let result = parse_rev_list_output("2\t0\n");
+        assert_eq!(result, (Some(2), Some(0)));
+    }
+
+    #[test]
+    fn parse_rev_list_output_only_behind() {
+        let result = parse_rev_list_output("0\t7\n");
+        assert_eq!(result, (Some(0), Some(7)));
+    }
+
+    #[test]
+    fn parse_rev_list_output_empty_string() {
+        let result = parse_rev_list_output("");
+        assert_eq!(result, (None, None));
+    }
+
+    #[test]
+    fn parse_rev_list_output_malformed() {
+        let result = parse_rev_list_output("not-a-number\n");
+        assert_eq!(result, (None, None));
     }
 }

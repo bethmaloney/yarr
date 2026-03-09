@@ -151,13 +151,13 @@ Add the backend infrastructure for querying and manipulating git branches, route
 - Resolve repo path from `RepoType` for `run_command`'s `working_dir` parameter
 
 **Checklist:**
-- [ ] Define `BranchInfo` struct
-- [ ] Implement `get_branch_info` command
-- [ ] Implement `list_local_branches` command
-- [ ] Implement `switch_branch` command
-- [ ] Implement `fast_forward_branch` command
-- [ ] Register commands in `invoke_handler`
-- [ ] `cd src-tauri && cargo check`
+- [x] Define `BranchInfo` struct
+- [x] Implement `get_branch_info` command
+- [x] Implement `list_local_branches` command
+- [x] Implement `switch_branch` command
+- [x] Implement `fast_forward_branch` command
+- [x] Register commands in `invoke_handler`
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -364,7 +364,7 @@ Add tests for the branch-related UI logic and interactions.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Backend git branch Tauri commands | Not Started |
+| 1 | Backend git branch Tauri commands | Complete |
 | 2 | Frontend `BranchInfo` type and `createBranch` config | Not Started |
 | 3 | "Create branch on run" toggle in RepoDetail settings | Not Started |
 | 4 | Pass `createBranch` to backend and create branch before session | Not Started |
