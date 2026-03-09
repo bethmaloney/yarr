@@ -648,7 +648,8 @@
 
   {#if session.disconnected}
     <section class="disconnected-banner">
-      <p>Connection lost — the remote session may still be running.</p>
+      <p>{session.disconnectReason ? `Connection lost: ${session.disconnectReason}` : "Connection lost"}</p>
+      <p class="disconnected-sub">The remote session may still be running.</p>
     </section>
   {/if}
 
@@ -1098,6 +1099,12 @@
     margin: 0;
     color: #f59e0b;
     font-size: 0.9rem;
+  }
+
+  .disconnected-sub {
+    margin-top: 0.25rem !important;
+    font-size: 0.85rem !important;
+    opacity: 0.8;
   }
 
   .error pre {

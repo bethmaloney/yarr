@@ -296,6 +296,73 @@ test.describe("Disconnected and Reconnecting states", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual(expect.objectContaining({ repoId: "ssh-repo-1" }));
   });
+
+  test("disconnect banner shows reason when provided", async ({
+    page,
+    mockTauri,
+  }) => {
+    await startRunningSession(page, mockTauri);
+
+    // Emit a disconnected event with a reason
+    await emitSessionEvent(page, {
+      kind: "disconnected",
+      reason: "SSH connection timed out",
+    });
+
+    // Banner should show the reason
+    await expect(
+      page.getByText("Connection lost: SSH connection timed out"),
+    ).toBeVisible();
+
+    // Should still show the "remote session may still be running" text
+    await expect(
+      page.getByText("the remote session may still be running"),
+    ).toBeVisible();
+  });
+
+  test("disconnect banner shows fallback when no reason", async ({
+    page,
+    mockTauri,
+  }) => {
+    await startRunningSession(page, mockTauri);
+
+    // Emit a disconnected event without a reason
+    await emitSessionEvent(page, { kind: "disconnected" });
+
+    // Banner should show the fallback text without a colon
+    await expect(page.getByText("Connection lost", { exact: true })).toBeVisible();
+
+    // Should still show the "remote session may still be running" text
+    await expect(
+      page.getByText("the remote session may still be running"),
+    ).toBeVisible();
+  });
+
+  test("disconnect reason is cleared on reconnect", async ({
+    page,
+    mockTauri,
+  }) => {
+    await startRunningSession(page, mockTauri);
+
+    // Emit a disconnected event with a reason
+    await emitSessionEvent(page, {
+      kind: "disconnected",
+      reason: "SSH connection timed out",
+    });
+
+    // Verify the reason is shown
+    await expect(
+      page.getByText("Connection lost: SSH connection timed out"),
+    ).toBeVisible();
+
+    // Emit a reconnecting event
+    await emitSessionEvent(page, { kind: "reconnecting" });
+
+    // The disconnect banner with the reason should no longer be visible
+    await expect(
+      page.getByText("Connection lost: SSH connection timed out"),
+    ).not.toBeVisible();
+  });
 });
 
 test.describe("Connection test checklist", () => {

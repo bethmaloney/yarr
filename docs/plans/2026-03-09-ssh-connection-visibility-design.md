@@ -184,11 +184,11 @@ Show the disconnect reason in the banner and event state.
 - The `reason` field already exists on `SessionEvent` type (line 41 of types.ts), so no change needed there
 
 **Checklist:**
-- [ ] Add `disconnectReason` to `SessionState` in `types.ts`
-- [ ] Update disconnect handling in `App.svelte` to capture reason
-- [ ] Clear `disconnectReason` on reconnect/complete
-- [ ] Update disconnect banner in `RepoDetail.svelte` to display reason
-- [ ] Verify with `npx tsc --noEmit`
+- [x] Add `disconnectReason` to `SessionState` in `types.ts`
+- [x] Update disconnect handling in `App.svelte` to capture reason
+- [x] Clear `disconnectReason` on reconnect/complete
+- [x] Update disconnect banner in `RepoDetail.svelte` to display reason
+- [x] Verify with `npx tsc --noEmit`
 
 ---
 
@@ -232,7 +232,7 @@ Add E2E tests for the Test Connection checklist flow.
 **Checklist:**
 - [ ] Add test for successful connection test flow
 - [ ] Add test for failed connection test flow with error message
-- [ ] Add test for disconnect banner showing reason
+- [x] Add test for disconnect banner showing reason — done in Task 4 TDD
 - [ ] Verify with `npm run test:e2e`
 
 ---
@@ -244,7 +244,7 @@ Add E2E tests for the Test Connection checklist flow.
 | 1 | Backend — `test_ssh_connection_steps` command | Done |
 | 2 | Frontend — Test Connection checklist UI | Done |
 | 3 | Backend — Add reason to Disconnected event | Done |
-| 4 | Frontend — Display disconnect reason in banner | Not Started |
+| 4 | Frontend — Display disconnect reason in banner | Done |
 | 5 | Tests — Backend Rust tests | Done |
 | 6 | Tests — E2E tests for connection checklist | Not Started |
 
