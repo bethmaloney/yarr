@@ -449,8 +449,10 @@ Convert the EventsList component.
 - Renders standalone before-events, IterationGroup components, standalone after-events
 
 **Checklist:**
-- [ ] Create `src/components/EventsList.tsx`
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/components/EventsList.tsx`
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Named export `EventsList`. Internal state: `expandedEvents`, `expandedIterations` (Set<number>), `autoScroll` (boolean), `lastExpandedIterRef` (ref). Groups events via `useMemo(groupEventsByIteration)`. Computes `iterationGlobalStartIndices` and `afterStartIndex` via `useMemo`. Auto-expands latest iteration when `isLive` via `useEffect`. Auto-scrolls on new events. "Jump to bottom" button when `!autoScroll`. Standalone before/after events rendered with `eventKindColor` Tailwind classes. `formatTime` uses `toLocaleTimeString` with 2-digit h/m/s options. Imports from `event-format.ts` (not `event-display.ts`) for `repoPath` support. 28 unit tests with mocked `IterationGroupComponent`.
 
 ---
 
@@ -702,7 +704,7 @@ Full build, lint, format, and manual smoke test.
 | 5 | Breadcrumbs component | Done |
 | 6 | RepoCard component | Done |
 | 7 | IterationGroup component | Done |
-| 8 | EventsList component | Not Started |
+| 8 | EventsList component | Done |
 | 9 | Home page | Not Started |
 | 10 | RepoDetail page | Not Started |
 | 11 | History page | Not Started |
