@@ -25,21 +25,26 @@ pub fn shell_escape(s: &str) -> String {
 
 /// Builds an SSH command for executing a remote command on the given host.
 ///
-/// - On Linux/macOS: `ssh <options> <host> <remote_cmd>`
-/// - On Windows: `wsl -e bash -lc "ssh <options> <host> <remote_cmd>"`
+/// - On Linux/macOS: `ssh <options> <host> $SHELL -lc '<remote_cmd>'`
+/// - On Windows: `wsl -e bash -lc "ssh <options> <host> \$SHELL -lc '<remote_cmd>'"`
 ///
 /// SSH options include `-o BatchMode=yes -o StrictHostKeyChecking=accept-new`
 /// for non-interactive use.
 ///
-/// `remote_cmd` is passed directly to SSH which forwards it to the remote shell.
+/// Remote commands are wrapped in `$SHELL -lc` to ensure the remote user's
+/// login shell sources its startup files (`.zshrc`, `.bash_profile`, etc.).
+/// This is necessary because non-interactive SSH commands don't source login
+/// profiles, so binaries installed in user-specific PATH directories (like
+/// `~/.local/bin`) wouldn't be found otherwise.
+///
 /// The caller is responsible for properly escaping `remote_cmd` contents
 /// (e.g. using `shell_escape()` for individual arguments within the command).
 pub fn ssh_command(host: &str, remote_cmd: &str) -> Command {
     if cfg!(target_os = "windows") {
         let ssh_str = format!(
-            "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} {}",
+            "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} \\$SHELL -lc {}",
             shell_escape(host),
-            remote_cmd
+            shell_escape(remote_cmd)
         );
         let mut cmd = Command::new("wsl");
         cmd.arg("-e").arg("bash").arg("-lc").arg(ssh_str);
@@ -51,7 +56,7 @@ pub fn ssh_command(host: &str, remote_cmd: &str) -> Command {
             .arg("-o")
             .arg("StrictHostKeyChecking=accept-new")
             .arg(host)
-            .arg(remote_cmd);
+            .arg(format!("$SHELL -lc {}", shell_escape(remote_cmd)));
         cmd
     }
 }
@@ -74,9 +79,9 @@ impl AbortHandle for SshAbortHandle {
         tracing::info!("Killing remote tmux session yarr-{}", self.session_id);
         if cfg!(target_os = "windows") {
             let ssh_str = format!(
-                "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} {}",
+                "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} \\$SHELL -lc {}",
                 shell_escape(&self.ssh_host),
-                &kill_cmd
+                shell_escape(&kill_cmd)
             );
             let _ = std::process::Command::new("wsl")
                 .args(["-e", "bash", "-lc", &ssh_str])
@@ -88,7 +93,7 @@ impl AbortHandle for SshAbortHandle {
                 .arg("-o")
                 .arg("StrictHostKeyChecking=accept-new")
                 .arg(&self.ssh_host)
-                .arg(&kill_cmd)
+                .arg(format!("$SHELL -lc {}", shell_escape(&kill_cmd)))
                 .output();
         }
         self.task_handle.abort();
@@ -598,6 +603,64 @@ mod tests {
             !args_str.iter().any(|a| *a == "wsl"),
             "on Unix, 'wsl' should not appear in args: {:?}",
             args_str
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn ssh_command_wraps_in_login_shell() {
+        let cmd = ssh_command("myhost", "ls -la");
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let last_arg = args_str.last().expect("should have args");
+
+        assert!(
+            last_arg.starts_with("$SHELL -lc "),
+            "expected last arg to start with '$SHELL -lc ', got: {}",
+            last_arg
+        );
+        assert!(
+            last_arg.contains("ls -la"),
+            "expected original command in login shell wrapper, got: {}",
+            last_arg
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn ssh_command_login_shell_escapes_single_quotes() {
+        let cmd = ssh_command("myhost", "echo 'hello'");
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let last_arg = args_str.last().expect("should have args");
+
+        // The remote_cmd contains single quotes, which shell_escape wraps
+        // in the pattern: 'echo '\''hello'\'''
+        assert!(
+            last_arg.starts_with("$SHELL -lc "),
+            "expected login shell wrapper, got: {}",
+            last_arg
+        );
+        assert!(
+            last_arg.contains("'\\''"),
+            "expected escaped single quotes in login shell wrapper, got: {}",
+            last_arg
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn ssh_command_login_shell_preserves_dollar_sign() {
+        let cmd = ssh_command("myhost", "echo test");
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let last_arg = args_str.last().expect("should have args");
+
+        // On Unix, $SHELL should appear literally in the arg (not expanded)
+        assert!(
+            last_arg.contains("$SHELL"),
+            "expected literal '$SHELL' in arg (not expanded), got: {}",
+            last_arg
         );
     }
 
