@@ -251,18 +251,20 @@ Remove Svelte packages, install React + Tailwind + shadcn/ui + Zustand + react-r
 - Do NOT delete the `.svelte` files yet — they serve as reference
 
 **Checklist:**
-- [ ] Uninstall Svelte packages
-- [ ] Install React + Tailwind + shadcn/ui deps + Zustand + react-router
-- [ ] Update `vite.config.ts`
-- [ ] Update `tsconfig.json` (add jsx, update include)
-- [ ] Update `eslint.config.js`
-- [ ] Create `src/globals.css` with Tailwind directives and theme variables
-- [ ] Create `src/lib/utils.ts` with `cn()` helper
-- [ ] Create `components.json` for shadcn/ui
-- [ ] Create `src/main.tsx` with minimal React render
-- [ ] Update `index.html` to point to `main.tsx`
-- [ ] Run `npm run dev` — page loads with placeholder text
-- [ ] Run `npx tsc --noEmit` — no type errors on new files
+- [x] Uninstall Svelte packages
+- [x] Install React + Tailwind + shadcn/ui deps + Zustand + react-router
+- [x] Update `vite.config.ts`
+- [x] Update `tsconfig.json` (add jsx, update include)
+- [x] Update `eslint.config.js`
+- [x] Create `src/globals.css` with Tailwind directives and theme variables
+- [x] Create `src/lib/utils.ts` with `cn()` helper
+- [x] Create `components.json` for shadcn/ui
+- [x] Create `src/main.tsx` with minimal React render
+- [x] Update `index.html` to point to `main.tsx`
+- [x] Run `npm run dev` — page loads with placeholder text
+- [x] Run `npx tsc --noEmit` — no type errors on new files
+
+**Notes:** Deleted `src/main.ts` (replaced by `main.tsx`, was causing tsc errors from Svelte imports). Fixed `src/vite-env.d.ts` to remove `/// <reference types="svelte" />`. `svelte.config.js` and `.svelte` files kept for reference per plan; they don't affect the build. `npx` must be run via nvm login shell on this WSL setup.
 
 ---
 
@@ -681,7 +683,7 @@ Full build, lint, format, and manual smoke test.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Swap dependencies and build config | Not Started |
+| 1 | Swap dependencies and build config | Done |
 | 2 | Scaffold shadcn/ui primitives | Not Started |
 | 3 | Create Zustand store | Not Started |
 | 4 | Create App.tsx with router | Not Started |

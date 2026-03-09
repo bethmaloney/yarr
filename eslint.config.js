@@ -1,20 +1,23 @@
 import js from "@eslint/js";
-import svelte from "eslint-plugin-svelte";
-import svelteParser from "svelte-eslint-parser";
 import tseslint from "typescript-eslint";
 import globals from "globals";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
 
 export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  ...svelte.configs["flat/recommended"],
   {
-    files: ["**/*.svelte", "**/*.svelte.ts"],
-    languageOptions: {
-      parser: svelteParser,
-      parserOptions: {
-        parser: tseslint.parser,
-      },
+    plugins: {
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true },
+      ],
     },
   },
   {
