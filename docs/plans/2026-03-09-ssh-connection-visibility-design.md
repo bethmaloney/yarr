@@ -94,10 +94,10 @@ Replace `test_ssh_connection` with a new command that runs each check step seque
 - The command should return `Result<(), String>` (results are communicated via events)
 
 **Checklist:**
-- [ ] Add `test_ssh_connection_steps` command to `lib.rs`
-- [ ] Remove old `test_ssh_connection` command
-- [ ] Update `generate_handler!` registration
-- [ ] Verify with `cd src-tauri && cargo check`
+- [x] Add `test_ssh_connection_steps` command to `lib.rs`
+- [x] Remove old `test_ssh_connection` command
+- [x] Update `generate_handler!` registration
+- [x] Verify with `cd src-tauri && cargo check`
 
 ---
 
@@ -241,9 +241,12 @@ Add E2E tests for the Test Connection checklist flow.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Backend — `test_ssh_connection_steps` command | Not Started |
+| 1 | Backend — `test_ssh_connection_steps` command | Done |
 | 2 | Frontend — Test Connection checklist UI | Not Started |
 | 3 | Backend — Add reason to Disconnected event | Not Started |
 | 4 | Frontend — Display disconnect reason in banner | Not Started |
 | 5 | Tests — Backend Rust tests | Not Started |
 | 6 | Tests — E2E tests for connection checklist | Not Started |
+
+**Notes:**
+- SSH commands in `ssh_command()` have no `ConnectTimeout` — if a host silently drops packets, the test step will hang indefinitely. Consider adding `-o ConnectTimeout=10` as a follow-up improvement.
