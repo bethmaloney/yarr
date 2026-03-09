@@ -205,7 +205,7 @@ test.describe("Branch display chip", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const w = window as any;
         w.__branchInfoCallCount = (w.__branchInfoCallCount ?? 0) + 1;
-        if (w.__branchInfoCallCount <= 1) {
+        if (w.__branchInfoCallCount <= 2) {
           return { name: "main", ahead: 0, behind: 0 };
         }
         return { name: "feature/foo", ahead: 1, behind: 0 };

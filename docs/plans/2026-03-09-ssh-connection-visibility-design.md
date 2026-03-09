@@ -230,10 +230,10 @@ Add E2E tests for the Test Connection checklist flow.
 - Test that disconnect banner now shows reason text
 
 **Checklist:**
-- [ ] Add test for successful connection test flow
-- [ ] Add test for failed connection test flow with error message
+- [x] Add test for successful connection test flow — done in Task 2 TDD
+- [x] Add test for failed connection test flow with error message — done in Task 2 TDD
 - [x] Add test for disconnect banner showing reason — done in Task 4 TDD
-- [ ] Verify with `npm run test:e2e`
+- [x] Verify with `npm run test:e2e` — all 113 E2E tests pass
 
 ---
 
@@ -246,7 +246,7 @@ Add E2E tests for the Test Connection checklist flow.
 | 3 | Backend — Add reason to Disconnected event | Done |
 | 4 | Frontend — Display disconnect reason in banner | Done |
 | 5 | Tests — Backend Rust tests | Done |
-| 6 | Tests — E2E tests for connection checklist | Not Started |
+| 6 | Tests — E2E tests for connection checklist | Done |
 
 **Notes:**
 - SSH commands in `ssh_command()` have no `ConnectTimeout` — if a host silently drops packets, the test step will hang indefinitely. Consider adding `-o ConnectTimeout=10` as a follow-up improvement.
