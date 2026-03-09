@@ -294,10 +294,12 @@ Use the shadcn CLI to add the component primitives. Verify they import without e
 - Customize Button to ensure the `destructive` variant matches current `button.danger` style
 
 **Checklist:**
-- [ ] Run shadcn init
-- [ ] Add all 13 components
-- [ ] Customize Badge variants
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Run shadcn init
+- [x] Add all 13 components
+- [x] Customize Badge variants
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Used `shadcn@4.0.2`. Required `.npmrc` with `legacy-peer-deps=true` due to eslint@10 / eslint-plugin-react-hooks peer conflict. Installed `radix-ui` and `cmdk` as dependencies. 14 component files generated (13 requested + dialog as dependency of command). Fixed missing `import * as React` in `collapsible.tsx`. Added 6 custom Badge variants: warning, success, completed, failed, maxiters, cancelled.
 
 ---
 
@@ -684,7 +686,7 @@ Full build, lint, format, and manual smoke test.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Swap dependencies and build config | Done |
-| 2 | Scaffold shadcn/ui primitives | Not Started |
+| 2 | Scaffold shadcn/ui primitives | Done |
 | 3 | Create Zustand store | Not Started |
 | 4 | Create App.tsx with router | Not Started |
 | 5 | Breadcrumbs component | Not Started |
