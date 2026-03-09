@@ -28,15 +28,13 @@
 
   // Local settings state, initialized from repo prop
   let editingName = $state(false);
-  let nameInput = $state(repo.name);
-  let model = $state(repo.model);
-  let maxIterations = $state(repo.maxIterations);
-  let completionSignal = $state(repo.completionSignal);
-  let envVars: { key: string; value: string }[] = $state(
-    Object.entries(repo.envVars ?? {}).map(([key, value]) => ({ key, value })),
-  );
-  let checks: Check[] = $state(repo.checks ?? []);
-  let createBranch = $state(repo.createBranch ?? true);
+  let nameInput = $state("");
+  let model = $state("");
+  let maxIterations = $state(0);
+  let completionSignal = $state("");
+  let envVars: { key: string; value: string }[] = $state([]);
+  let checks: Check[] = $state([]);
+  let createBranch = $state(true);
   let checksOpen = $state(false);
   let gitSyncEnabled = $state(false);
   let gitSyncModel = $state("");
@@ -275,7 +273,7 @@
         bind:value={nameInput}
         onblur={saveName}
         onkeydown={handleNameKeydown}
-        autofocus
+        use:autofocus
       />
     {:else}
       <h1>

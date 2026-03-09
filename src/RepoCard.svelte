@@ -18,10 +18,11 @@
     onclick: () => void;
   } = $props();
 
-  const repoFullPath =
+  let repoFullPath = $derived(
     repo.type === "local"
       ? repo.path
-      : `${repo.sshHost}:${repo.remotePath}`;
+      : `${repo.sshHost}:${repo.remotePath}`
+  );
 
   const statusColors: Record<RepoStatus, string> = {
     idle: "#888",
