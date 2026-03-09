@@ -89,8 +89,12 @@ impl RuntimeProvider for WslRuntime {
         let prompt = invocation.prompt.clone();
         let start = std::time::Instant::now();
 
+        // Use $SHELL -lc to invoke the user's login shell (like SSH does),
+        // so that shell startup files (.zshrc, .bashrc, .profile, etc.) are
+        // sourced and tools like nvm are available.
+        let wrapped = format!("$SHELL -lc {}", shell_escape(&cmd_str));
         let mut child = Command::new("wsl")
-            .args(["-e", "bash", "-lc", &cmd_str])
+            .args(["-e", "sh", "-c", &wrapped])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -181,8 +185,10 @@ impl RuntimeProvider for WslRuntime {
     }
 
     async fn health_check(&self) -> Result<()> {
+        let check_cmd = format!("which {}", shell_escape(&self.claude_bin));
+        let wrapped = format!("$SHELL -lc {}", shell_escape(&check_cmd));
         let output = Command::new("wsl")
-            .args(["-e", "bash", "-lc", &format!("which {}", shell_escape(&self.claude_bin))])
+            .args(["-e", "sh", "-c", &wrapped])
             .output()
             .await?;
 
@@ -204,8 +210,9 @@ impl RuntimeProvider for WslRuntime {
         let wsl_dir = to_wsl_path(working_dir);
         let cmd_str = format!("cd {} && {}", shell_escape(&wsl_dir), command);
 
+        let wrapped = format!("$SHELL -lc {}", shell_escape(&cmd_str));
         let child = Command::new("wsl")
-            .args(["-e", "bash", "-lc", &cmd_str])
+            .args(["-e", "sh", "-c", &wrapped])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
