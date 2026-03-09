@@ -140,6 +140,9 @@
     font-size: 0.75rem;
     color: #6b7280;
     font-family: "SF Mono", "Fira Code", monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .last-run {

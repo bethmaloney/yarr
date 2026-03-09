@@ -195,6 +195,7 @@
 
   async function goHome() {
     repos = await loadRepos();
+    fetchAllBranchInfo(repos);
     currentView = { kind: "home" };
   }
 
