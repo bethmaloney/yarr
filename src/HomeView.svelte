@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { RepoConfig } from "./repos";
-  import type { SessionState, SessionTrace, RepoStatus } from "./types";
+  import type { SessionState, SessionTrace, RepoStatus, BranchInfo } from "./types";
   import Breadcrumbs from "./Breadcrumbs.svelte";
   import RepoCard from "./RepoCard.svelte";
 
@@ -8,6 +8,7 @@
     repos,
     sessions,
     latestTraces,
+    branchInfos,
     addMode,
     sshHost,
     sshRemotePath,
@@ -24,6 +25,7 @@
     repos: RepoConfig[];
     sessions: Map<string, SessionState>;
     latestTraces: Map<string, SessionTrace>;
+    branchInfos: Map<string, BranchInfo>;
     addMode: null | "choosing" | "ssh-form";
     sshHost: string;
     sshRemotePath: string;
@@ -107,6 +109,7 @@
           {repo}
           status={deriveStatus(repo.id)}
           lastTrace={latestTraces.get(repo.id)}
+          branchName={branchInfos.get(repo.id)?.name}
           onclick={() => onSelectRepo(repo.id)}
         />
       {/each}

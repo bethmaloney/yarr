@@ -17,7 +17,7 @@
   import RunDetail from "./RunDetail.svelte";
   import OneShotView from "./OneShotView.svelte";
   import { SvelteMap } from "svelte/reactivity";
-  import type { SessionTrace, SessionState, TaggedSessionEvent } from "./types";
+  import type { SessionTrace, SessionState, TaggedSessionEvent, BranchInfo } from "./types";
 
   let currentView:
     | { kind: "home" }
@@ -29,9 +29,36 @@
   let repos: RepoConfig[] = $state([]);
   let sessions: SvelteMap<string, SessionState> = $state(new SvelteMap());
   let latestTraces: Map<string, SessionTrace> = $state(new Map());
+  let branchInfos: SvelteMap<string, BranchInfo> = $state(new SvelteMap());
   let addMode: null | "choosing" | "ssh-form" = $state(null);
   let sshHost = $state("");
   let sshRemotePath = $state("");
+
+  async function fetchAllBranchInfo(repoList: RepoConfig[]) {
+    const results = await Promise.allSettled(
+      repoList.map(async (repo) => {
+        const payload =
+          repo.type === "local"
+            ? { type: "local" as const, path: repo.path }
+            : {
+                type: "ssh" as const,
+                sshHost: repo.sshHost,
+                remotePath: repo.remotePath,
+              };
+        const info = await invoke<BranchInfo>("get_branch_info", {
+          repo: payload,
+        });
+        return { id: repo.id, info };
+      }),
+    );
+    const m = new SvelteMap<string, BranchInfo>();
+    for (const r of results) {
+      if (r.status === "fulfilled") {
+        m.set(r.value.id, r.value.info);
+      }
+    }
+    branchInfos = m;
+  }
 
   async function syncActiveSession() {
     const activeRepoIds = await invoke<string[]>("get_active_sessions");
@@ -68,6 +95,7 @@
   onMount(() => {
     loadRepos().then((r) => {
       repos = r;
+      fetchAllBranchInfo(r);
     });
 
     invoke<SessionTrace[]>("list_latest_traces")
@@ -288,6 +316,7 @@
     {repos}
     {sessions}
     {latestTraces}
+    {branchInfos}
     {addMode}
     {sshHost}
     {sshRemotePath}

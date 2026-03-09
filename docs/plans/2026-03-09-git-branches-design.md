@@ -304,12 +304,12 @@ Show the current branch name as a small label on the repo card in the home view.
 - In `App.svelte` template: pass `branchName={branchInfos.get(repo.id)?.name}` to `RepoCard`
 
 **Checklist:**
-- [ ] Add `branchInfos` state to `App.svelte`
-- [ ] Fetch branch info for all repos on mount
-- [ ] Add `branchName` prop to `RepoCard`
-- [ ] Add branch label markup and styles to `RepoCard`
-- [ ] Pass `branchName` from `App.svelte` to `RepoCard`
-- [ ] `npx tsc --noEmit`
+- [x] Add `branchInfos` state to `App.svelte`
+- [x] Fetch branch info for all repos on mount
+- [x] Add `branchName` prop to `RepoCard`
+- [x] Add branch label markup and styles to `RepoCard`
+- [x] Pass `branchName` from `App.svelte` to `RepoCard`
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -330,10 +330,10 @@ Add unit tests for the new Tauri commands — primarily testing `BranchInfo` ser
 - Extract the rev-list parsing logic into a helper function to make it testable
 
 **Checklist:**
-- [ ] Add `BranchInfo` serialization tests
-- [ ] Add branch name generation tests
-- [ ] Add rev-list output parsing tests
-- [ ] `cd src-tauri && cargo test`
+- [x] Add `BranchInfo` serialization tests
+- [x] Add branch name generation tests
+- [x] Add rev-list output parsing tests
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -354,9 +354,9 @@ Add tests for the branch-related UI logic and interactions.
 - Verify type correctness of `BranchInfo` interface
 
 **Checklist:**
-- [ ] Add RepoCard branch label tests
-- [ ] Add createBranch default behavior tests
-- [ ] `npm test`
+- [x] Add RepoCard branch label tests
+- [x] Add createBranch default behavior tests
+- [x] `npm test`
 
 ---
 
@@ -369,6 +369,6 @@ Add tests for the branch-related UI logic and interactions.
 | 3 | "Create branch on run" toggle in RepoDetail settings | Complete |
 | 4 | Pass `createBranch` to backend and create branch before session | Complete |
 | 5 | Branch display chip with dropdown on RepoDetail | Complete |
-| 6 | Branch label on RepoCard + fetch in App.svelte | Not Started |
-| 7 | Backend tests for git branch commands | Not Started |
-| 8 | Frontend tests for branch display | Not Started |
+| 6 | Branch label on RepoCard + fetch in App.svelte | Complete |
+| 7 | Backend tests for git branch commands | Complete |
+| 8 | Frontend tests for branch display | Complete |

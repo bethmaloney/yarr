@@ -8,11 +8,13 @@
     repo,
     status,
     lastTrace,
+    branchName,
     onclick,
   }: {
     repo: RepoConfig;
     status: RepoStatus;
     lastTrace?: SessionTrace;
+    branchName?: string;
     onclick: () => void;
   } = $props();
 
@@ -46,6 +48,9 @@
   <div class="repo-info">
     <span class="repo-name">{repo.name}</span>
     <span class="repo-path">{repoFullPath}</span>
+    {#if branchName}
+      <span class="branch-label">{branchName}</span>
+    {/if}
   </div>
   {#if lastTrace}
     <div class="last-run">
@@ -129,6 +134,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .branch-label {
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-family: "SF Mono", "Fira Code", monospace;
   }
 
   .last-run {

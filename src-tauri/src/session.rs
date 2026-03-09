@@ -169,8 +169,6 @@ pub enum SessionEvent {
     GitSyncConflictResolveComplete { iteration: u32, attempt: u32, success: bool },
     /// Git sync failed after all retries
     GitSyncFailed { iteration: u32, error: String },
-    /// Phase output (design/implementation text or tool use)
-    PhaseOutput { phase: String, output_type: String, summary: String },
 }
 
 /// Callback for receiving session events (Tauri IPC hookpoint)
