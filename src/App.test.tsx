@@ -20,14 +20,24 @@ vi.mock("./store", () => ({
     if (typeof selector === "function") {
       return (selector as (s: Record<string, unknown>) => unknown)({
         initialize: mockInitialize,
+        repos: [],
+        sessions: new Map(),
+        latestTraces: new Map(),
+        addLocalRepo: vi.fn(),
+        addSshRepo: vi.fn(),
       });
     }
     return { initialize: mockInitialize };
   }),
 }));
 
+vi.mock("./hooks/useBranchInfo", () => ({
+  useBranchInfo: () => new Map(),
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 vi.mock("@tauri-apps/plugin-store", () => ({
   LazyStore: class {
     async get() {
@@ -85,9 +95,9 @@ describe("App", () => {
   // =========================================================================
 
   describe("route /", () => {
-    it("renders Home placeholder text", () => {
+    it("renders Home page", () => {
       renderWithRouter(["/"]);
-      expect(screen.getByText(/home/i)).toBeInTheDocument();
+      expect(screen.getByText("Yarr")).toBeInTheDocument();
     });
   });
 

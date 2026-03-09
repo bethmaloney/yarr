@@ -475,10 +475,12 @@ Convert HomeView to the Home page component.
 - Repo grid via Tailwind grid classes: `grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4`
 
 **Checklist:**
-- [ ] Create `src/pages/Home.tsx`
-- [ ] Create `src/hooks/useBranchInfo.ts`
-- [ ] Verify `npm run dev` — home page renders with repo cards
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/pages/Home.tsx`
+- [x] Create `src/hooks/useBranchInfo.ts`
+- [x] Verify `npm run dev` — home page renders with repo cards
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** `Home` is the default export from `src/pages/Home.tsx`. Uses `useBranchInfo(repos)` hook for branch display. Local state for `addMode`, `sshHost`, `sshRemotePath`. `deriveStatus()` matches Svelte logic. Uses shadcn `Button`, `Input`, `Label` plus custom `Breadcrumbs` and `RepoCard`. Race condition protection in `useBranchInfo` via cancelled flag in useEffect cleanup. Error handling on `addLocalRepo`/`addSshRepo` via try/catch. Updated `App.test.tsx` mock to include store fields needed by real Home component. 36 new tests (8 hook + 28 page).
 
 ---
 
@@ -705,7 +707,7 @@ Full build, lint, format, and manual smoke test.
 | 6 | RepoCard component | Done |
 | 7 | IterationGroup component | Done |
 | 8 | EventsList component | Done |
-| 9 | Home page | Not Started |
+| 9 | Home page | Done |
 | 10 | RepoDetail page | Not Started |
 | 11 | History page | Not Started |
 | 12 | RunDetail page | Not Started |
