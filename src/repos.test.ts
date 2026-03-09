@@ -935,3 +935,221 @@ describe("updateRepo preserves createBranch", () => {
     }
   });
 });
+
+describe("RepoConfig with plansDir field", () => {
+  it("local RepoConfig with plansDir is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-pd-1",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      plansDir: "docs/plans/",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.plansDir).toBe("docs/plans/");
+  });
+
+  it("local RepoConfig with custom plansDir is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-pd-2",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      plansDir: ".yarr/plans/",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.plansDir).toBe(".yarr/plans/");
+  });
+
+  it("local RepoConfig without plansDir (undefined) is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-no-pd",
+      path: "/home/beth/repos/other",
+      name: "other",
+      model: "opus",
+      maxIterations: 20,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect((repo as RepoConfig).plansDir).toBeUndefined();
+  });
+
+  it("SSH RepoConfig with plansDir is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-pd-1",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      plansDir: "plans/",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(repo.plansDir).toBe("plans/");
+  });
+});
+
+describe("plansDir round-trip through loadRepos", () => {
+  it("local repo with plansDir round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-pd-rt-1",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        plansDir: "docs/plans/",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    expect(result[0].plansDir).toBe("docs/plans/");
+  });
+
+  it("local repo without plansDir loads fine (undefined)", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-no-pd",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    expect(result[0].plansDir).toBeUndefined();
+  });
+
+  it("ssh repo with plansDir round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "ssh",
+        id: "repo-pd-ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        plansDir: ".yarr/plans/",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    expect(result[0].plansDir).toBe(".yarr/plans/");
+  });
+
+  it("ssh repo without plansDir loads fine (undefined)", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "ssh",
+        id: "repo-no-pd-ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    expect(result[0].plansDir).toBeUndefined();
+  });
+});
+
+describe("updateRepo preserves plansDir", () => {
+  it("updateRepo preserves plansDir config on local repo", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-update-pd",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        plansDir: "docs/plans/",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const updated: RepoConfig = {
+      type: "local",
+      id: "repo-update-pd",
+      path: "/home/beth/repos/yarr",
+      name: "yarr",
+      model: "sonnet",
+      maxIterations: 20,
+      completionSignal: "DONE",
+      plansDir: "docs/plans/",
+    };
+    await updateRepo(updated);
+
+    const stored = mockData.get("repos") as RepoConfig[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].model).toBe("sonnet");
+    expect(stored[0].plansDir).toBe("docs/plans/");
+  });
+
+  it("updateRepo preserves plansDir config on ssh repo", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "ssh",
+        id: "repo-update-pd-ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        plansDir: "plans/",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const updated: RepoConfig = {
+      type: "ssh",
+      id: "repo-update-pd-ssh",
+      sshHost: "dev-server",
+      remotePath: "/home/beth/repos/project",
+      name: "project",
+      model: "sonnet",
+      maxIterations: 20,
+      completionSignal: "DONE",
+      plansDir: "plans/",
+    };
+    await updateRepo(updated);
+
+    const stored = mockData.get("repos") as RepoConfig[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].model).toBe("sonnet");
+    expect(stored[0].plansDir).toBe("plans/");
+  });
+});

@@ -60,9 +60,9 @@ Add the optional `plansDir` field to the repo configuration types.
 - No migration needed — field is optional, defaults handled at usage site
 
 **Checklist:**
-- [ ] Add `plansDir?: string` to `LocalRepoConfig`
-- [ ] Add `plansDir?: string` to `SshRepoConfig`
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `plansDir?: string` to `LocalRepoConfig`
+- [x] Add `plansDir?: string` to `SshRepoConfig`
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -82,11 +82,11 @@ Expose the plans directory configuration in the repo settings section.
 - Include in `handleSave` — only set on repo if non-empty
 
 **Checklist:**
-- [ ] Add `plansDir` state variable
-- [ ] Sync from repo prop in existing `$effect`
-- [ ] Add labeled input in settings section
-- [ ] Include in `handleSave` logic
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `plansDir` state variable
+- [x] Sync from repo prop in existing `$effect`
+- [x] Add labeled input in settings section
+- [x] Include in `handleSave` logic
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -282,8 +282,8 @@ Add Vitest tests for plan selector behavior.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add `plansDir` to RepoConfig | Not Started |
-| 2 | Add `plansDir` setting to RepoDetail UI | Not Started |
+| 1 | Add `plansDir` to RepoConfig | Done |
+| 2 | Add `plansDir` setting to RepoDetail UI | Done |
 | 3 | Add `list_plans` Tauri command | Not Started |
 | 4 | Add `move_plan_to_completed` Tauri command | Not Started |
 | 5 | Build plan selector dropdown component | Not Started |

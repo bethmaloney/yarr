@@ -36,6 +36,7 @@
   let envVars: { key: string; value: string }[] = $state([]);
   let checks: Check[] = $state([]);
   let createBranch = $state(true);
+  let plansDir = $state("");
   let checksOpen = $state(false);
   let gitSyncEnabled = $state(false);
   let gitSyncModel = $state("");
@@ -55,6 +56,7 @@
     }));
     checks = repo.checks ?? [];
     createBranch = repo.createBranch ?? true;
+    plansDir = repo.plansDir ?? "";
     gitSyncEnabled = repo.gitSync?.enabled ?? false;
     gitSyncModel = repo.gitSync?.model ?? "";
     gitSyncMaxRetries = repo.gitSync?.maxPushRetries ?? 3;
@@ -164,6 +166,7 @@
       envVars: envVarsRecord,
       checks,
       createBranch,
+      plansDir: plansDir.trim() || undefined,
       gitSync: {
         enabled: gitSyncEnabled,
         model: gitSyncModel || undefined,
@@ -442,6 +445,10 @@
           disabled={session.running}
         />
         Create branch on run
+      </label>
+      <label>
+        Plans Directory
+        <input type="text" bind:value={plansDir} placeholder="docs/plans/" disabled={session.running} />
       </label>
       <fieldset class="env-vars" disabled={session.running}>
         <legend>Environment Variables</legend>

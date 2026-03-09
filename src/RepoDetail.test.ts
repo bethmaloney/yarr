@@ -20,6 +20,7 @@ function buildSettingsUpdate(
       maxRetries: number;
     }[];
     createBranch: boolean;
+    plansDir: string;
     gitSyncEnabled: boolean;
     gitSyncModel: string;
     gitSyncMaxRetries: number;
@@ -38,13 +39,14 @@ function buildSettingsUpdate(
     envVars: envVarsRecord,
     checks: settings.checks,
     createBranch: settings.createBranch,
+    plansDir: settings.plansDir || undefined,
     gitSync: {
       enabled: settings.gitSyncEnabled,
       model: settings.gitSyncModel || undefined,
       maxPushRetries: settings.gitSyncMaxRetries,
       conflictPrompt: settings.gitSyncPrompt || undefined,
     },
-  };
+  } as RepoConfig;
 }
 
 /** Helper to create a minimal RepoConfig for testing. */
@@ -73,6 +75,7 @@ function makeSettings(
     envVars: [],
     checks: [],
     createBranch: true,
+    plansDir: "",
     gitSyncEnabled: false,
     gitSyncModel: "",
     gitSyncMaxRetries: 3,
@@ -182,6 +185,67 @@ describe("buildSettingsUpdate createBranch handling", () => {
       model: "sonnet",
       maxPushRetries: 5,
       conflictPrompt: "resolve conflicts",
+    });
+  });
+});
+
+describe("buildSettingsUpdate plansDir handling", () => {
+  it("includes plansDir in result when non-empty", () => {
+    const repo = makeRepo();
+    const result = buildSettingsUpdate(
+      repo,
+      makeSettings({ plansDir: "docs/plans/" }),
+    );
+    expect(result.plansDir).toBe("docs/plans/");
+  });
+
+  it("sets plansDir to undefined when empty string", () => {
+    const repo = makeRepo();
+    const result = buildSettingsUpdate(repo, makeSettings({ plansDir: "" }));
+    expect(result.plansDir).toBeUndefined();
+  });
+
+  it("includes custom plansDir path", () => {
+    const repo = makeRepo();
+    const result = buildSettingsUpdate(
+      repo,
+      makeSettings({ plansDir: ".yarr/plans/" }),
+    );
+    expect(result.plansDir).toBe(".yarr/plans/");
+  });
+
+  it("preserves all other fields when plansDir is set", () => {
+    const repo = makeRepo({
+      id: "repo-pd-all",
+      name: "pd-project",
+    });
+    const result = buildSettingsUpdate(
+      repo,
+      makeSettings({
+        model: "sonnet",
+        maxIterations: 15,
+        completionSignal: "FINISHED",
+        createBranch: false,
+        plansDir: "plans/",
+        gitSyncEnabled: true,
+        gitSyncModel: "haiku",
+        gitSyncMaxRetries: 2,
+        gitSyncPrompt: "fix conflicts",
+      }),
+    );
+
+    expect(result.id).toBe("repo-pd-all");
+    expect(result.name).toBe("pd-project");
+    expect(result.model).toBe("sonnet");
+    expect(result.maxIterations).toBe(15);
+    expect(result.completionSignal).toBe("FINISHED");
+    expect(result.createBranch).toBe(false);
+    expect(result.plansDir).toBe("plans/");
+    expect(result.gitSync).toEqual({
+      enabled: true,
+      model: "haiku",
+      maxPushRetries: 2,
+      conflictPrompt: "fix conflicts",
     });
   });
 });
