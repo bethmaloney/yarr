@@ -481,7 +481,7 @@ impl SessionRunner {
         }
 
         // Track the last error for reporting
-        let mut last_error = String::new();
+        let mut last_error;
 
         // Step 2: Try git push origin {branch}
         match runtime

@@ -581,8 +581,7 @@ pub(crate) async fn list_plans_impl(
     working_dir: &Path,
     plans_dir: &str,
 ) -> Result<Vec<String>, String> {
-    let full_path = working_dir.join(plans_dir);
-    let escaped_path = ssh_shell_escape(&full_path.display().to_string());
+    let escaped_path = ssh_shell_escape(plans_dir);
     let cmd = format!(
         "find {} -maxdepth 1 -name '*.md' -type f -printf '%f\\n' | sort",
         escaped_path
@@ -624,9 +623,8 @@ pub(crate) async fn move_plan_to_completed_impl(
 ) -> Result<(), String> {
     let escaped_plans_dir = ssh_shell_escape(plans_dir);
     let escaped_filename = ssh_shell_escape(filename);
-    let base = ssh_shell_escape(&working_dir.display().to_string());
     let cmd = format!(
-        "mkdir -p {base}/{escaped_plans_dir}/completed && mv {base}/{escaped_plans_dir}/{escaped_filename} {base}/{escaped_plans_dir}/completed/{escaped_filename}"
+        "mkdir -p {escaped_plans_dir}/completed && mv {escaped_plans_dir}/{escaped_filename} {escaped_plans_dir}/completed/{escaped_filename}"
     );
     let timeout = std::time::Duration::from_secs(30);
     let output = rt
