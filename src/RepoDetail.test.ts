@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { RepoConfig } from "./repos";
 
 /**
- * Mirrors the saveSettings() logic in RepoDetail.svelte.
+ * Mirrors the saveSettings() logic in RepoDetail.tsx.
  * Takes the current repo config and local settings state, returns the updated config.
  */
 function buildSettingsUpdate(

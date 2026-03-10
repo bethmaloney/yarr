@@ -622,11 +622,13 @@ Remove all `.svelte` files and Svelte-specific config now that React versions ar
 - `svelte.config.js` (if it exists)
 
 **Checklist:**
-- [ ] Delete all `.svelte` files
-- [ ] Delete `src/global.css` and `src/main.ts`
-- [ ] Verify `npm run dev` still works
-- [ ] Verify `npx tsc --noEmit` passes
-- [ ] Verify `npx eslint .` passes
+- [x] Delete all `.svelte` files
+- [x] Delete `src/global.css` and `src/main.ts`
+- [x] Verify `npm run dev` still works
+- [x] Verify `npx tsc --noEmit` passes
+- [x] Verify `npx eslint .` passes
+
+**Notes:** Deleted 10 `.svelte` files, `src/global.css`, and `svelte.config.js`. `src/main.ts` was already deleted in Task 1. `src/vite-env.d.ts` kept (still provides `vite/client` types). Updated stale `.svelte` comment references in `src/RepoDetail.test.ts` and `e2e/oneshot.test.ts`. Updated `CLAUDE.md` to reflect React tech stack.
 
 ---
 
@@ -720,7 +722,7 @@ Full build, lint, format, and manual smoke test.
 | 11 | History page | Done |
 | 12 | RunDetail page | Done |
 | 13 | OneShot page | Done |
-| 14 | Delete Svelte files | Not Started |
+| 14 | Delete Svelte files | Done |
 | 15 | Update unit tests | Not Started |
 | 16 | Update E2E tests | Not Started |
 | 17 | Final verification and cleanup | Not Started |

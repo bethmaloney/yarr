@@ -5,12 +5,12 @@ Desktop app that orchestrates Claude Code sessions (Ralph loops). Layer on top o
 ## Tech Stack
 
 - **Backend**: Rust, Tauri v2, Tokio
-- **Frontend**: Svelte 5, TypeScript, Vite
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui, Zustand
 - **Plugins**: tauri-plugin-dialog, tauri-plugin-store
 
 ## Project Layout
 
-- `src/` — Svelte frontend (App.svelte, main.ts)
+- `src/` — React frontend (App.tsx, main.tsx)
 - `src-tauri/src/` — Rust backend (session runner, runtimes, prompt, tracing)
 
 ## Commands

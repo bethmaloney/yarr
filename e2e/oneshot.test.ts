@@ -284,7 +284,7 @@ test.describe("1-Shot launch flow", () => {
     await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
 
-    // Emit a session event to trigger the running state in App.svelte
+    // Emit a session event to trigger the running state in App.tsx
     await page.evaluate(() => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
       (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
