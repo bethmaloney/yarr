@@ -41,9 +41,6 @@ export type SessionEvent = {
   reason?: string;
   files?: string[];
   error?: string;
-  phase?: string;
-  output_type?: string;
-  summary?: string;
   _ts?: number;
 };
 

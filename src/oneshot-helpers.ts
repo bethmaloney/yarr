@@ -1,5 +1,4 @@
 import type { SessionEvent } from "./types";
-import type { RepoConfig } from "./repos";
 
 const ONE_SHOT_EVENTS = new Set([
   "one_shot_started",
@@ -50,35 +49,3 @@ export function phaseLabel(phase: string): string {
   return PHASE_LABELS[phase] ?? phase;
 }
 
-export function buildOneShotArgs(
-  repo: RepoConfig,
-  title: string,
-  prompt: string,
-  model: string,
-  mergeStrategy: string,
-) {
-  const base = {
-    repoId: repo.id,
-    title,
-    prompt,
-    model,
-    mergeStrategy,
-    envVars: repo.envVars ?? {},
-  };
-
-  if (repo.type === "ssh") {
-    return {
-      ...base,
-      repo: {
-        type: "ssh" as const,
-        sshHost: repo.sshHost,
-        remotePath: repo.remotePath,
-      },
-    };
-  }
-
-  return {
-    ...base,
-    repo: { type: "local" as const, path: repo.path },
-  };
-}

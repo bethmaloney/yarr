@@ -362,13 +362,13 @@ Remove `PhaseOutput` handling from frontend helpers. This is done early because 
 - `event-format.ts`: remove `phase_output` case from `eventEmoji()` and `eventLabel()`
 
 **Checklist:**
-- [ ] `phase_output` references removed
-- [ ] `buildOneShotArgs` removed
-- [ ] `getPhaseFromEvents` works with lifecycle events only
-- [ ] Update `oneshot-helpers.test.ts`: remove `PhaseOutput` test cases, remove `buildOneShotArgs` tests, add tests for lifecycle-only phase derivation
-- [ ] Update `event-format.test.ts`: remove `phase_output` test cases
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm test` passes
+- [x] `phase_output` references removed
+- [x] `buildOneShotArgs` removed
+- [x] `getPhaseFromEvents` works with lifecycle events only
+- [x] Update `oneshot-helpers.test.ts`: remove `PhaseOutput` test cases, remove `buildOneShotArgs` tests, add tests for lifecycle-only phase derivation
+- [x] Update `event-format.test.ts`: remove `phase_output` test cases
+- [x] `npx tsc --noEmit` passes
+- [x] `npm test` passes
 
 ---
 
@@ -578,7 +578,7 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | 2 | Decouple SessionRunner trace lifecycle | Done |
 | 3 | Refactor OneShotRunner to use SessionRunner | Done |
 | 4 | Update run_oneshot Tauri command | Done |
-| 5 | Clean up oneshot-helpers and event-format | Not Started |
+| 5 | Clean up oneshot-helpers and event-format | Done |
 | 6 | Add OneShotEntry type and store state | Not Started |
 | 7 | OneShotCard component | Not Started |
 | 8 | OneShotDetail page with active/read-only modes | Not Started |

@@ -66,8 +66,6 @@ export function eventEmoji(kind: string): string {
       return "\u{1F3C1}";
     case "one_shot_failed":
       return "\u274C";
-    case "phase_output":
-      return "\u{1F4DD}";
     case "git_sync_started":
       return "\u{1F504}";
     case "git_sync_push_succeeded":
@@ -149,8 +147,6 @@ export function eventLabel(ev: SessionEvent, repoPath?: string): string {
       return "1-Shot complete";
     case "one_shot_failed":
       return `1-Shot failed: ${ev.reason}`;
-    case "phase_output":
-      return `[${ev.phase}] ${ev.summary}`;
     case "git_sync_started":
       return `[${ev.iteration}] Git sync`;
     case "git_sync_push_succeeded":

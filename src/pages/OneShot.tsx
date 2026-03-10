@@ -8,11 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { EventsList } from "@/components/EventsList";
-import {
-  getPhaseFromEvents,
-  phaseLabel,
-  buildOneShotArgs,
-} from "../oneshot-helpers";
+import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
 import type { SessionState } from "../types";
 
 const defaultSession: SessionState = {
@@ -57,10 +53,20 @@ export default function OneShot() {
   }
 
   function runOneShot() {
-    invoke(
-      "run_oneshot",
-      buildOneShotArgs(repo!, title, prompt, model, mergeStrategy),
-    ).catch((e) => {
+    const envVars = repo!.envVars ?? {};
+    const repoArg =
+      repo!.type === "ssh"
+        ? { type: "ssh" as const, sshHost: repo!.sshHost, remotePath: repo!.remotePath }
+        : { type: "local" as const, path: repo!.path };
+    invoke("run_oneshot", {
+      repoId: repo!.id,
+      repo: repoArg,
+      title,
+      prompt,
+      model,
+      mergeStrategy,
+      envVars,
+    }).catch((e) => {
       console.error("Failed to start 1-shot:", e);
     });
   }
