@@ -104,57 +104,57 @@ describe("App", () => {
   });
 
   // =========================================================================
-  // 3. Route: /repo/:repoId renders RepoDetail placeholder
+  // 3. Route: /repo/:repoId renders RepoDetail page
   // =========================================================================
 
   describe("route /repo/:repoId", () => {
-    it("renders RepoDetail placeholder text", () => {
+    it("renders RepoDetail page for unknown repo", () => {
       renderWithRouter(["/repo/test-id"]);
-      expect(screen.getByText(/repo/i)).toBeInTheDocument();
+      expect(screen.getByText("Repo not found")).toBeInTheDocument();
     });
   });
 
   // =========================================================================
-  // 4. Route: /repo/:repoId/oneshot renders OneShot placeholder
+  // 4. Route: /repo/:repoId/oneshot renders OneShot page
   // =========================================================================
 
   describe("route /repo/:repoId/oneshot", () => {
-    it("renders OneShot placeholder text", () => {
+    it("renders OneShot page for unknown repo", () => {
       renderWithRouter(["/repo/test-id/oneshot"]);
-      expect(screen.getByText(/oneshot/i)).toBeInTheDocument();
+      expect(screen.getByText("Repo not found")).toBeInTheDocument();
     });
   });
 
   // =========================================================================
-  // 5. Route: /history renders History placeholder
+  // 5. Route: /history renders History page
   // =========================================================================
 
   describe("route /history", () => {
-    it("renders History placeholder text", () => {
+    it("renders History page", () => {
       renderWithRouter(["/history"]);
       expect(screen.getByText(/history/i)).toBeInTheDocument();
     });
   });
 
   // =========================================================================
-  // 6. Route: /history/:repoId renders History placeholder
+  // 6. Route: /history/:repoId renders History page
   // =========================================================================
 
   describe("route /history/:repoId", () => {
-    it("renders History placeholder text", () => {
+    it("renders History page", () => {
       renderWithRouter(["/history/test-id"]);
       expect(screen.getByText(/history/i)).toBeInTheDocument();
     });
   });
 
   // =========================================================================
-  // 7. Route: /run/:repoId/:sessionId renders RunDetail placeholder
+  // 7. Route: /run/:repoId/:sessionId renders RunDetail page
   // =========================================================================
 
   describe("route /run/:repoId/:sessionId", () => {
-    it("renders RunDetail placeholder text", () => {
+    it("renders RunDetail page with loading state", () => {
       renderWithRouter(["/run/test-id/sess-123"]);
-      expect(screen.getByText(/run/i)).toBeInTheDocument();
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
     });
   });
 

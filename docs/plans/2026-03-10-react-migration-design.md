@@ -650,10 +650,12 @@ Rewrite component-level unit tests for React. Pure TS module tests need no chang
 - Vitest config may need `environment: 'jsdom'` for React component tests
 
 **Checklist:**
-- [ ] Verify all pure TS tests pass: `npm test`
-- [ ] Update or rewrite component tests that import Svelte
-- [ ] Configure vitest for jsdom if needed
-- [ ] All unit tests pass: `npm test`
+- [x] Verify all pure TS tests pass: `npm test`
+- [x] Update or rewrite component tests that import Svelte
+- [x] Configure vitest for jsdom if needed
+- [x] All unit tests pass: `npm test`
+
+**Notes:** jsdom and `@testing-library/react` were already configured from earlier tasks. No Svelte imports remained in any test files. Fixed 3 fragile route tests in `App.test.tsx` that used placeholder-era regex assertions — updated to match real component output (`"Repo not found"`, `"Loading..."`). Deleted `src/RepoDetail.test.ts` and `src/OneShotView.test.ts` (inline utility tests superseded by `src/pages/RepoDetail.test.tsx` with 48 tests, `src/pages/OneShot.test.tsx` with 53 tests, and `src/oneshot-helpers.test.ts`). Kept `src/RepoCard.test.ts` (standalone utility function tests for `buildRepoPayload`, `shouldShowBranch`). Final: 24 test files, 668 tests passing.
 
 ---
 
@@ -723,6 +725,6 @@ Full build, lint, format, and manual smoke test.
 | 12 | RunDetail page | Done |
 | 13 | OneShot page | Done |
 | 14 | Delete Svelte files | Done |
-| 15 | Update unit tests | Not Started |
+| 15 | Update unit tests | Done |
 | 16 | Update E2E tests | Not Started |
 | 17 | Final verification and cleanup | Not Started |
