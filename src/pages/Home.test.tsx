@@ -9,7 +9,12 @@ import {
 import { MemoryRouter } from "react-router";
 
 import type { RepoConfig } from "../repos";
-import type { SessionState, SessionTrace, BranchInfo } from "../types";
+import type {
+  OneShotEntry,
+  SessionState,
+  SessionTrace,
+  BranchInfo,
+} from "../types";
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -121,12 +126,31 @@ function makeSessionState(overrides: Partial<SessionState> = {}): SessionState {
   };
 }
 
+function makeOneShotEntry(
+  overrides: Partial<OneShotEntry> = {},
+): OneShotEntry {
+  return {
+    id: "oneshot-abc",
+    parentRepoId: "r1",
+    parentRepoName: "my-project",
+    title: "Fix login bug",
+    prompt: "Fix the login validation issue",
+    model: "opus",
+    mergeStrategy: "branch",
+    status: "running",
+    startedAt: Date.now(),
+    ...overrides,
+  };
+}
+
 interface MockState {
   repos: RepoConfig[];
   sessions: Map<string, SessionState>;
   latestTraces: Map<string, SessionTrace>;
   addLocalRepo: ReturnType<typeof vi.fn>;
   addSshRepo: ReturnType<typeof vi.fn>;
+  oneShotEntries: Map<string, OneShotEntry>;
+  dismissOneShot: ReturnType<typeof vi.fn>;
 }
 
 function setupMockState(overrides: Partial<MockState> = {}): MockState {
@@ -136,6 +160,8 @@ function setupMockState(overrides: Partial<MockState> = {}): MockState {
     latestTraces: new Map(),
     addLocalRepo: vi.fn(),
     addSshRepo: vi.fn(),
+    oneShotEntries: new Map(),
+    dismissOneShot: vi.fn(),
     ...overrides,
   };
 
@@ -629,5 +655,406 @@ describe("Home", () => {
     renderHome();
 
     expect(screen.getByText("$2.50")).toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 16. 1-Shot cards
+  // =========================================================================
+
+  describe("1-Shot cards", () => {
+    it("renders a 1-shot card alongside repo cards in the grid", () => {
+      const repo = makeLocalRepo({ id: "r1", name: "my-project" } as Partial<RepoConfig>);
+      const entry = makeOneShotEntry({
+        id: "oneshot-1",
+        title: "Add dark mode",
+        parentRepoName: "my-project",
+      });
+
+      setupMockState({
+        repos: [repo],
+        oneShotEntries: new Map([["oneshot-1", entry]]),
+        sessions: new Map([
+          [
+            "oneshot-1",
+            makeSessionState({
+              running: true,
+              events: [{ kind: "one_shot_started" }],
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      // Repo card is present
+      expect(screen.getByText("my-project")).toBeInTheDocument();
+      // 1-shot card is present (identified by its aria-label)
+      expect(
+        screen.getByRole("button", { name: /Add dark mode — 1-Shot/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("renders multiple 1-shot cards alongside multiple repo cards", () => {
+      const repos = [
+        makeLocalRepo({ id: "r1", name: "project-one" } as Partial<RepoConfig>),
+        makeSshRepo({ id: "r2", name: "project-two" }),
+      ];
+      const entry1 = makeOneShotEntry({
+        id: "oneshot-1",
+        title: "Fix bug A",
+      });
+      const entry2 = makeOneShotEntry({
+        id: "oneshot-2",
+        title: "Add feature B",
+        status: "completed",
+      });
+
+      setupMockState({
+        repos,
+        oneShotEntries: new Map([
+          ["oneshot-1", entry1],
+          ["oneshot-2", entry2],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-1",
+            makeSessionState({
+              running: true,
+              events: [{ kind: "one_shot_started" }],
+            }),
+          ],
+          [
+            "oneshot-2",
+            makeSessionState({
+              events: [
+                { kind: "one_shot_started" },
+                { kind: "one_shot_complete" },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      expect(screen.getByText("project-one")).toBeInTheDocument();
+      expect(screen.getByText("project-two")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Fix bug A — 1-Shot/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Add feature B — 1-Shot/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("sorts running items first, then by timestamp newest first", () => {
+      const now = Date.now();
+      // Repo with a running session — should appear first
+      const runningRepo = makeLocalRepo({
+        id: "r-running",
+        name: "running-repo",
+      } as Partial<RepoConfig>);
+      // Repo with older trace — should appear last
+      const olderRepo = makeLocalRepo({
+        id: "r-older",
+        name: "older-repo",
+      } as Partial<RepoConfig>);
+      // 1-shot that is running with newer timestamp — should also be near top
+      const runningOneShot = makeOneShotEntry({
+        id: "oneshot-running",
+        title: "Running 1-Shot",
+        status: "running",
+        startedAt: now - 1000,
+      });
+      // 1-shot that is completed with most recent timestamp
+      const newerOneShot = makeOneShotEntry({
+        id: "oneshot-newer",
+        title: "Newer 1-Shot",
+        status: "completed",
+        startedAt: now - 2000,
+      });
+      // 1-shot that is completed with oldest timestamp
+      const olderOneShot = makeOneShotEntry({
+        id: "oneshot-older",
+        title: "Older 1-Shot",
+        status: "completed",
+        startedAt: now - 100000,
+      });
+
+      setupMockState({
+        repos: [runningRepo, olderRepo],
+        oneShotEntries: new Map([
+          ["oneshot-running", runningOneShot],
+          ["oneshot-newer", newerOneShot],
+          ["oneshot-older", olderOneShot],
+        ]),
+        sessions: new Map([
+          ["r-running", makeSessionState({ running: true })],
+          ["r-older", makeSessionState({ running: false })],
+          [
+            "oneshot-running",
+            makeSessionState({
+              running: true,
+              events: [{ kind: "one_shot_started" }],
+            }),
+          ],
+          [
+            "oneshot-newer",
+            makeSessionState({
+              events: [
+                { kind: "one_shot_started" },
+                { kind: "one_shot_complete" },
+              ],
+            }),
+          ],
+          [
+            "oneshot-older",
+            makeSessionState({
+              events: [
+                { kind: "one_shot_started" },
+                { kind: "one_shot_complete" },
+              ],
+            }),
+          ],
+        ]),
+        latestTraces: new Map([
+          [
+            "r-running",
+            makeTrace({ start_time: new Date(now).toISOString() }),
+          ],
+          [
+            "r-older",
+            makeTrace({
+              start_time: new Date(now - 50000).toISOString(),
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      // Collect all card buttons in DOM order
+      const allCards = screen.getAllByRole("button").filter(
+        (btn) =>
+          btn.getAttribute("aria-label")?.includes("1-Shot") ||
+          btn.closest("[class*='grid']"),
+      );
+
+      // Running items should appear before non-running ones.
+      // We check that the running repo and running 1-shot precede the older items.
+      const runningRepoCard = screen.getByText("running-repo");
+      const running1ShotCard = screen.getByRole("button", {
+        name: /Running 1-Shot — 1-Shot/i,
+      });
+      const older1ShotCard = screen.getByRole("button", {
+        name: /Older 1-Shot — 1-Shot/i,
+      });
+
+      // Running items should come before the oldest non-running card in DOM order
+      const body = document.body.innerHTML;
+      const runningRepoIdx = body.indexOf("running-repo");
+      const running1ShotIdx = body.indexOf("Running 1-Shot");
+      const older1ShotIdx = body.indexOf("Older 1-Shot");
+
+      // Both running items should appear before the oldest non-running item
+      expect(runningRepoIdx).toBeLessThan(older1ShotIdx);
+      expect(running1ShotIdx).toBeLessThan(older1ShotIdx);
+    });
+
+    it("calls dismissOneShot when dismiss button is clicked on a failed 1-shot", () => {
+      const entry = makeOneShotEntry({
+        id: "oneshot-fail",
+        title: "Failed task",
+        status: "failed",
+      });
+
+      const mockState = setupMockState({
+        oneShotEntries: new Map([["oneshot-fail", entry]]),
+        sessions: new Map([
+          [
+            "oneshot-fail",
+            makeSessionState({
+              events: [
+                { kind: "one_shot_started" },
+                { kind: "one_shot_failed" },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      // The dismiss button should be present for failed entries
+      const dismissButton = screen.getByRole("button", { name: /dismiss/i });
+      fireEvent.click(dismissButton);
+
+      expect(mockState.dismissOneShot).toHaveBeenCalledWith("oneshot-fail");
+    });
+
+    it("does not show dismiss button for running 1-shot entries", () => {
+      const entry = makeOneShotEntry({
+        id: "oneshot-run",
+        title: "Running task",
+        status: "running",
+      });
+
+      setupMockState({
+        oneShotEntries: new Map([["oneshot-run", entry]]),
+        sessions: new Map([
+          [
+            "oneshot-run",
+            makeSessionState({
+              running: true,
+              events: [{ kind: "one_shot_started" }],
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      expect(
+        screen.queryByRole("button", { name: /dismiss/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows empty state when there are no repos AND no 1-shot entries', () => {
+      setupMockState({
+        repos: [],
+        oneShotEntries: new Map(),
+      });
+      renderHome();
+
+      expect(screen.getByText(/no repos configured yet/i)).toBeInTheDocument();
+    });
+
+    it("does not show empty state when there are 1-shot entries but no repos", () => {
+      const entry = makeOneShotEntry({
+        id: "oneshot-only",
+        title: "Solo 1-shot task",
+        status: "running",
+      });
+
+      setupMockState({
+        repos: [],
+        oneShotEntries: new Map([["oneshot-only", entry]]),
+        sessions: new Map([
+          [
+            "oneshot-only",
+            makeSessionState({
+              running: true,
+              events: [{ kind: "one_shot_started" }],
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      expect(
+        screen.queryByText(/no repos configured yet/i),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Solo 1-shot task — 1-Shot/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("navigates to /oneshot/:oneshotId when a 1-shot card is clicked", () => {
+      const entry = makeOneShotEntry({
+        id: "oneshot-nav",
+        title: "Clickable task",
+      });
+
+      setupMockState({
+        oneShotEntries: new Map([["oneshot-nav", entry]]),
+        sessions: new Map([
+          [
+            "oneshot-nav",
+            makeSessionState({
+              running: true,
+              events: [{ kind: "one_shot_started" }],
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      const card = screen.getByRole("button", {
+        name: /Clickable task — 1-Shot/i,
+      });
+      fireEvent.click(card);
+
+      expect(mockNavigate).toHaveBeenCalledWith("/oneshot/oneshot-nav");
+    });
+
+    it("displays the 1-Shot badge on oneshot cards", () => {
+      const entry = makeOneShotEntry({
+        id: "oneshot-badge",
+        title: "Badge test",
+      });
+
+      setupMockState({
+        oneShotEntries: new Map([["oneshot-badge", entry]]),
+        sessions: new Map([
+          [
+            "oneshot-badge",
+            makeSessionState({
+              running: true,
+              events: [{ kind: "one_shot_started" }],
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      expect(screen.getByText("1-Shot")).toBeInTheDocument();
+    });
+
+    it("shows parent repo name on 1-shot card", () => {
+      const entry = makeOneShotEntry({
+        id: "oneshot-parent",
+        title: "Parent test",
+        parentRepoName: "cool-repo",
+      });
+
+      setupMockState({
+        oneShotEntries: new Map([["oneshot-parent", entry]]),
+        sessions: new Map([
+          [
+            "oneshot-parent",
+            makeSessionState({
+              running: true,
+              events: [{ kind: "one_shot_started" }],
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      expect(screen.getByText(/from cool-repo/)).toBeInTheDocument();
+    });
+
+    it("shows phase label derived from session events", () => {
+      const entry = makeOneShotEntry({
+        id: "oneshot-phase",
+        title: "Phase test",
+        status: "running",
+      });
+
+      setupMockState({
+        oneShotEntries: new Map([["oneshot-phase", entry]]),
+        sessions: new Map([
+          [
+            "oneshot-phase",
+            makeSessionState({
+              running: true,
+              events: [
+                { kind: "one_shot_started" },
+                { kind: "design_phase_started" },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderHome();
+
+      // "design" phase maps to "Design Phase" label
+      expect(screen.getByText("Design Phase")).toBeInTheDocument();
+    });
   });
 });

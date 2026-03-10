@@ -493,13 +493,13 @@ Mix `OneShotCard`s with `RepoCard`s on the Home view.
 - Dismiss handler calls `store.dismissOneShot(id)`
 
 **Checklist:**
-- [ ] 1-shot cards rendered in grid
-- [ ] Sorting works across both card types
-- [ ] Dismiss functionality works
-- [ ] Add tests: 1-shot cards appear alongside repo cards
-- [ ] Add tests: dismiss removes card
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm test` passes
+- [x] 1-shot cards rendered in grid
+- [x] Sorting works across both card types
+- [x] Dismiss functionality works
+- [x] Add tests: 1-shot cards appear alongside repo cards
+- [x] Add tests: dismiss removes card
+- [x] `npx tsc --noEmit` passes
+- [x] `npm test` passes
 
 ---
 
@@ -582,7 +582,7 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | 6 | Add OneShotEntry type and store state | Done |
 | 7 | OneShotCard component | Done |
 | 8 | OneShotDetail page with active/read-only modes | Done |
-| 9 | Home page mixed cards | Not Started |
+| 9 | Home page mixed cards | Done |
 | 10 | RepoDetail 1-shot launch form | Not Started |
 | 11 | Delete old OneShot page | Not Started |
 | 12 | Update E2E tests | Not Started |

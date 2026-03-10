@@ -3,7 +3,9 @@ import { useNavigate } from "react-router";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../store";
 import { useBranchInfo } from "../hooks/useBranchInfo";
+import { getPhaseFromEvents } from "../oneshot-helpers";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { OneShotCard } from "@/components/OneShotCard";
 import { RepoCard } from "@/components/RepoCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +18,8 @@ export default function Home() {
   const latestTraces = useAppStore((s) => s.latestTraces);
   const addLocalRepo = useAppStore((s) => s.addLocalRepo);
   const addSshRepo = useAppStore((s) => s.addSshRepo);
+  const oneShotEntries = useAppStore((s) => s.oneShotEntries);
+  const dismissOneShot = useAppStore((s) => s.dismissOneShot);
 
   const [addMode, setAddMode] = useState<null | "choosing" | "ssh-form">(null);
   const [sshHost, setSshHost] = useState("");
@@ -34,6 +38,45 @@ export default function Home() {
     if (session.trace) return "completed";
     return "idle";
   }
+
+  // Build unified sorted list of all cards
+  type CardItem =
+    | { type: "repo"; key: string; isRunning: boolean; timestamp: number; repo: (typeof repos)[number]; status: RepoStatus }
+    | { type: "oneshot"; key: string; isRunning: boolean; timestamp: number; entry: NonNullable<ReturnType<typeof oneShotEntries.get>>; phase: string };
+
+  const cardItems: CardItem[] = [];
+
+  for (const repo of repos) {
+    const status = deriveStatus(repo.id);
+    const trace = latestTraces.get(repo.id);
+    const timestamp = trace?.start_time ? Date.parse(trace.start_time) : 0;
+    cardItems.push({
+      type: "repo",
+      key: repo.id,
+      isRunning: status === "running",
+      timestamp,
+      repo,
+      status,
+    });
+  }
+
+  for (const [, entry] of oneShotEntries) {
+    const events = sessions.get(entry.id)?.events ?? [];
+    const phase = getPhaseFromEvents(events);
+    cardItems.push({
+      type: "oneshot",
+      key: entry.id,
+      isRunning: entry.status === "running",
+      timestamp: entry.startedAt,
+      entry,
+      phase,
+    });
+  }
+
+  cardItems.sort((a, b) => {
+    if (a.isRunning !== b.isRunning) return a.isRunning ? -1 : 1;
+    return b.timestamp - a.timestamp;
+  });
 
   function handleAddRepo() {
     setAddMode("choosing");
@@ -130,23 +173,37 @@ export default function Home() {
         </div>
       )}
 
-      {repos.length === 0 ? (
+      {repos.length === 0 && oneShotEntries.size === 0 ? (
         <div className="text-center text-muted-foreground py-16">
           <p>No repos configured yet.</p>
           <p>Click &quot;Add repo&quot; to get started.</p>
         </div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
-          {repos.map((repo) => (
-            <RepoCard
-              key={repo.id}
-              repo={repo}
-              status={deriveStatus(repo.id)}
-              lastTrace={latestTraces.get(repo.id)}
-              branchName={branchInfos.get(repo.id)?.name}
-              onClick={() => navigate(`/repo/${repo.id}`)}
-            />
-          ))}
+          {cardItems.map((item) =>
+            item.type === "repo" ? (
+              <RepoCard
+                key={item.key}
+                repo={item.repo}
+                status={item.status}
+                lastTrace={latestTraces.get(item.repo.id)}
+                branchName={branchInfos.get(item.repo.id)?.name}
+                onClick={() => navigate(`/repo/${item.repo.id}`)}
+              />
+            ) : (
+              <OneShotCard
+                key={item.key}
+                entry={item.entry}
+                phase={item.phase}
+                onClick={() => navigate(`/oneshot/${item.entry.id}`)}
+                onDismiss={
+                  item.entry.status === "failed"
+                    ? () => dismissOneShot(item.entry.id)
+                    : undefined
+                }
+              />
+            ),
+          )}
         </div>
       )}
     </main>
