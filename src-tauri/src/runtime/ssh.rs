@@ -61,6 +61,34 @@ pub fn ssh_command(host: &str, remote_cmd: &str) -> Command {
     }
 }
 
+/// Builds an SSH command for executing a remote command **without** the
+/// `$SHELL -lc` login shell wrapper.
+///
+/// Use this for commands that only need builtins or standard `/usr/bin`
+/// utilities (e.g. `test -d`, `echo`, `stat`) and don't depend on the
+/// remote user's custom PATH from their login shell startup files.
+pub fn ssh_command_raw(host: &str, remote_cmd: &str) -> Command {
+    if cfg!(target_os = "windows") {
+        let ssh_str = format!(
+            "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} {}",
+            shell_escape(host),
+            shell_escape(remote_cmd)
+        );
+        let mut cmd = Command::new("wsl");
+        cmd.arg("-e").arg("bash").arg("-lc").arg(ssh_str);
+        cmd
+    } else {
+        let mut cmd = Command::new("ssh");
+        cmd.arg("-o")
+            .arg("BatchMode=yes")
+            .arg("-o")
+            .arg("StrictHostKeyChecking=accept-new")
+            .arg(host)
+            .arg(remote_cmd);
+        cmd
+    }
+}
+
 pub struct SshRuntime {
     pub ssh_host: String,
     pub remote_path: String,
@@ -661,6 +689,77 @@ mod tests {
             last_arg.contains("$SHELL"),
             "expected literal '$SHELL' in arg (not expanded), got: {}",
             last_arg
+        );
+    }
+
+    // ── ssh_command_raw tests ────────────────────────────────────
+
+    #[test]
+    fn ssh_command_raw_creates_command_with_ssh_program() {
+        let cmd = ssh_command_raw("myhost", "echo hello");
+        let std_cmd = cmd.as_std();
+
+        if cfg!(target_os = "windows") {
+            assert_eq!(
+                std_cmd.get_program(),
+                "wsl",
+                "on Windows the outer program should be wsl"
+            );
+        } else {
+            assert_eq!(
+                std_cmd.get_program(),
+                "ssh",
+                "on Linux/macOS the program should be ssh"
+            );
+        }
+    }
+
+    #[test]
+    fn ssh_command_raw_includes_host_in_args() {
+        let cmd = ssh_command_raw("myhost", "echo hello");
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        assert!(
+            args_str.iter().any(|a| a.contains("myhost")),
+            "expected 'myhost' somewhere in args, got: {:?}",
+            args_str
+        );
+    }
+
+    #[test]
+    fn ssh_command_raw_includes_remote_command_in_args() {
+        let cmd = ssh_command_raw("myhost", "test -d /tmp");
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        assert!(
+            args_str.iter().any(|a| a.contains("test -d /tmp")),
+            "expected 'test -d /tmp' somewhere in args, got: {:?}",
+            args_str
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn ssh_command_raw_does_not_wrap_in_login_shell() {
+        let cmd = ssh_command_raw("myhost", "echo hello");
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        assert!(
+            !args_str.iter().any(|a| a.contains("$SHELL -lc")),
+            "expected no '$SHELL -lc' in args for ssh_command_raw, got: {:?}",
+            args_str
+        );
+    }
+
+    #[test]
+    fn ssh_command_raw_includes_batch_mode() {
+        let cmd = ssh_command_raw("myhost", "echo hello");
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        assert!(
+            args_str.iter().any(|a| a == &"BatchMode=yes"),
+            "expected 'BatchMode=yes' in args, got: {:?}",
+            args_str
         );
     }
 

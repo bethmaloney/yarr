@@ -5,7 +5,7 @@ mod wsl;
 
 pub use local::LocalRuntime;
 pub use mock::MockRuntime;
-pub use ssh::{shell_escape as ssh_shell_escape, ssh_command, SshRuntime};
+pub use ssh::{shell_escape as ssh_shell_escape, ssh_command, ssh_command_raw, SshRuntime};
 pub use wsl::WslRuntime;
 
 use anyhow::Result;

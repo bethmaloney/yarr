@@ -31,11 +31,11 @@ A secondary contributing factor may be **missing error diagnostics**: when `test
 
 ### Checklist
 
-- [ ] Add a new `ssh_command_raw(host: &str, remote_cmd: &str) -> Command` function adjacent to `ssh_command()` (after line 62)
+- [x] Add a new `ssh_command_raw(host: &str, remote_cmd: &str) -> Command` function adjacent to `ssh_command()` (after line 62)
   - Unix branch: same as `ssh_command` but passes `remote_cmd` directly via `cmd.arg(remote_cmd)` — no `$SHELL -lc` wrapping
   - Windows branch: same but the `ssh_str` format uses `remote_cmd` directly (no `\\$SHELL -lc` wrapping, no `shell_escape(remote_cmd)`)
   - Add a doc comment explaining this variant is for commands that don't need the user's login shell PATH (builtins, standard `/usr/bin` commands)
-- [ ] Export `ssh_command_raw` from `src-tauri/src/runtime/mod.rs` (add to the `pub use ssh::` line at line 8)
+- [x] Export `ssh_command_raw` from `src-tauri/src/runtime/mod.rs` (add to the `pub use ssh::` line at line 8)
 
 ### Implementation detail
 
@@ -195,11 +195,11 @@ Modify the main loop in `test_ssh_connection_steps` to call this diagnostic when
 
 ### Checklist
 
-- [ ] Add `ssh_command_raw_creates_command_with_ssh_program` — verify program is `ssh` on Unix
-- [ ] Add `ssh_command_raw_includes_host_in_args` — verify host appears in args
-- [ ] Add `ssh_command_raw_includes_remote_command_in_args` — verify remote command appears
-- [ ] Add `ssh_command_raw_does_not_wrap_in_login_shell` — verify args do NOT contain `$SHELL -lc`
-- [ ] Add `ssh_command_raw_includes_batch_mode` — verify `-o BatchMode=yes` is present
+- [x] Add `ssh_command_raw_creates_command_with_ssh_program` — verify program is `ssh` on Unix
+- [x] Add `ssh_command_raw_includes_host_in_args` — verify host appears in args
+- [x] Add `ssh_command_raw_includes_remote_command_in_args` — verify remote command appears
+- [x] Add `ssh_command_raw_does_not_wrap_in_login_shell` — verify args do NOT contain `$SHELL -lc`
+- [x] Add `ssh_command_raw_includes_batch_mode` — verify `-o BatchMode=yes` is present
 
 ---
 
@@ -258,10 +258,10 @@ No. `ssh_command()` remains unchanged. Only `connection_test_steps()` is modifie
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Task 1: Add `ssh_command_raw()` | Not started | New function without login shell wrapper |
+| Task 1: Add `ssh_command_raw()` | Done | New function without login shell wrapper |
 | Task 2: Use `ssh_command_raw` in connection test | Not started | Steps 1 and 4 only |
 | Task 3: Improve path check error diagnostics | Not started | Diagnostic follow-up command |
 | Task 4: Add path trimming | Not started | Defensive whitespace handling |
-| Task 5: Unit tests for `ssh_command_raw` | Not started | 5 new tests |
+| Task 5: Unit tests for `ssh_command_raw` | Done | 5 new tests |
 | Task 6: Update connection test step tests | Not started | 4 updated/new tests |
 | Task 7: Verify with cargo test/check | Not started | Final verification |
