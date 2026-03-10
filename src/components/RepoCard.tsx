@@ -47,11 +47,11 @@ export function RepoCard({
 
   return (
     <button
-      className="flex flex-col gap-3 p-4 px-5 bg-card border border-border rounded-md cursor-pointer text-left w-full transition-colors hover:border-primary hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+      className="flex flex-col gap-1.5 p-4 px-5 bg-card border border-border rounded-md cursor-pointer text-left w-full h-full transition-colors hover:border-primary hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
       onClick={onClick}
       aria-label={`${repo.name} \u2014 ${statusLabels[status]}`}
     >
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 min-w-0">
         <span className="text-lg font-semibold text-foreground truncate">
           {repo.name}
         </span>
@@ -65,43 +65,15 @@ export function RepoCard({
         )}
       </div>
 
-      {lastTrace && (
-        <div className="text-xs text-muted-foreground flex items-center gap-0">
-          {lastTrace.plan_file && (
-            <>
-              <span className="font-mono">
-                {lastTrace.plan_file.split(/[\\/]/).pop()}
-              </span>
-              <span className="separator"> &middot; </span>
-            </>
-          )}
-          <span>${(lastTrace.total_cost_usd ?? 0).toFixed(2)}</span>
-          {lastTrace.context_window &&
-            (() => {
-              const ctxPct = Math.round(
-                ((lastTrace.final_context_tokens ?? 0) /
-                  lastTrace.context_window) *
-                  100,
-              );
-              return (
-                <>
-                  <span className="separator"> &middot; </span>
-                  <span
-                    style={{
-                      color: sessionContextColor(ctxPct),
-                    }}
-                  >
-                    {ctxPct}%
-                  </span>
-                </>
-              );
-            })()}
-          <span className="separator"> &middot; </span>
-          <span>{timeAgo(lastTrace.start_time)}</span>
-        </div>
+      {lastTrace?.plan_file && (
+        <span className="text-xs text-muted-foreground font-mono truncate min-w-0">
+          {lastTrace.plan_file.split(/[\\/]/).pop()}
+        </span>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex-1" />
+
+      <div className="flex items-center gap-2 min-w-0">
         <span
           className={dotClassName}
           style={{ background: statusColors[status] }}
@@ -112,6 +84,33 @@ export function RepoCard({
         >
           {statusLabels[status]}
         </span>
+        {lastTrace && (
+          <div className="flex items-center gap-1 ml-auto text-xs text-muted-foreground shrink-0">
+            <span>${(lastTrace.total_cost_usd ?? 0).toFixed(2)}</span>
+            {lastTrace.context_window &&
+              (() => {
+                const ctxPct = Math.round(
+                  ((lastTrace.final_context_tokens ?? 0) /
+                    lastTrace.context_window) *
+                    100,
+                );
+                return (
+                  <>
+                    <span className="separator"> &middot; </span>
+                    <span
+                      style={{
+                        color: sessionContextColor(ctxPct),
+                      }}
+                    >
+                      {ctxPct}%
+                    </span>
+                  </>
+                );
+              })()}
+            <span className="separator"> &middot; </span>
+            <span>{timeAgo(lastTrace.start_time)}</span>
+          </div>
+        )}
       </div>
     </button>
   );
