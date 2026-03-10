@@ -139,4 +139,4 @@ There are two problems to fix:
 | 1. Install sonner and set up Toaster | Done | Visual verification still needed |
 | 2. Add toast feedback to branch operations | Done | Visual verification still needed |
 | 3. Add tests for branch switch feedback | Done | 4 tests added, all passing |
-| 4. Type-check, lint, and format | Not started | Final validation |
+| 4. Type-check, lint, and format | Done | Final validation |

@@ -143,4 +143,4 @@ The `$effect` runs synchronously before the first paint, so the empty defaults a
 | 1. Fix `state_referenced_locally` in RepoCard | Done | `const` → `$derived` |
 | 2. Fix `state_referenced_locally` in RepoDetail | Done | `$state(repo.x)` → `$state(default)` |
 | 3. Fix `a11y_autofocus` in RepoDetail | Done | `autofocus` → `use:autofocus` |
-| 4. Verify all warnings resolved | Not started | Dev server + tsc + tests |
+| 4. Verify all warnings resolved | Done | Obsolete — Svelte replaced by React migration |
