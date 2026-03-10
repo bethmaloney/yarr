@@ -57,12 +57,12 @@ export function IterationGroupComponent({
 
   return (
     <div className={`iteration-group${expanded ? " expanded" : ""}`}>
-      <button className="iteration-header" onClick={onToggle}>
-        <span className="iteration-toggle">
+      <button className="iteration-header flex items-baseline gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-[#1e1e38]" onClick={onToggle}>
+        <span className="iteration-toggle shrink-0">
           {expanded ? "\u25BC" : "\u25B6"}
         </span>
         <span className="iteration-title">Iteration {group.iteration}</span>
-        <span className="iteration-stats">
+        <span className="iteration-stats text-muted-foreground">
           — {group.events.length} events · ${group.cost.toFixed(4)}
           {group.inputTokens || group.outputTokens ? (
             <>
@@ -78,17 +78,17 @@ export function IterationGroupComponent({
       </button>
 
       {group.contextWindow > 0 && (
-        <div className="context-bar">
-          <div className="context-bar-track">
+        <div className="context-bar flex items-center gap-2 px-3 py-1">
+          <div className="context-bar-track flex-1 h-1.5 bg-[#1e1e38] rounded-full overflow-hidden">
             <div
-              className="context-bar-fill"
+              className="context-bar-fill h-full rounded-full transition-all"
               style={{
                 width: `${Math.min(percentage, 100)}%`,
                 background: contextBarColor(percentage),
               }}
             />
           </div>
-          <span className="context-bar-label">
+          <span className="context-bar-label text-xs text-muted-foreground font-mono whitespace-nowrap">
             {formatTokenCount(group.inputTokens)} /{" "}
             {formatTokenCount(group.contextWindow)} ({percentage}%)
           </span>
@@ -96,7 +96,7 @@ export function IterationGroupComponent({
       )}
 
       {expanded && (
-        <ul className="iteration-events">
+        <ul className="iteration-events list-none p-0 m-0">
           {group.events.map((ev, i) => {
             const globalIndex = globalStartIndex + i;
             const isExpanded = expandedEvents.has(globalIndex);
@@ -105,29 +105,29 @@ export function IterationGroupComponent({
             return (
               <li
                 key={i}
-                className={`event ${ev.kind}${isExpanded ? " expanded" : ""} ${colorClass}`}
+                className={`event ${ev.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}
               >
                 <button
-                  className="event-btn"
+                  className="event-btn flex items-baseline gap-2 w-full px-3 py-1 pl-8 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left"
                   onClick={() => toggleEvent(globalIndex)}
                 >
-                  <span className="event-emoji">{eventEmoji(ev.kind)}</span>
-                  <span className="event-text">{eventLabel(ev, repoPath)}</span>
-                  <span className="event-time">{formatTime(ev._ts)}</span>
+                  <span className="event-emoji shrink-0">{eventEmoji(ev.kind)}</span>
+                  <span className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}>{eventLabel(ev, repoPath)}</span>
+                  <span className="event-time shrink-0 text-[#555] text-xs">{formatTime(ev._ts)}</span>
                 </button>
 
                 {isExpanded && ev.kind === "tool_use" && ev.tool_input && (
-                  <pre className="tool-input-detail">
+                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
                     {JSON.stringify(ev.tool_input, null, 2)}
                   </pre>
                 )}
 
                 {isExpanded && ev.kind === "check_failed" && ev.output && (
-                  <pre className="tool-input-detail">{ev.output}</pre>
+                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">{ev.output}</pre>
                 )}
 
                 {isExpanded && ev.kind === "git_sync_failed" && ev.error && (
-                  <pre className="tool-input-detail">{ev.error}</pre>
+                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">{ev.error}</pre>
                 )}
               </li>
             );
