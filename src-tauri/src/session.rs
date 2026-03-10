@@ -480,8 +480,11 @@ impl SessionRunner {
             return;
         }
 
+        // Track the last error for reporting
+        let mut last_error = String::new();
+
         // Step 2: Try git push origin {branch}
-        if let Ok(output) = runtime
+        match runtime
             .run_command(
                 &format!("git push origin {branch}"),
                 &self.config.repo_path,
@@ -489,14 +492,22 @@ impl SessionRunner {
             )
             .await
         {
-            if output.exit_code == 0 {
+            Ok(output) if output.exit_code == 0 => {
                 self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
                 return;
             }
+            Ok(output) => {
+                last_error = combine_output(&output.stdout, &output.stderr);
+                tracing::info!("git push failed: {}", last_error);
+            }
+            Err(e) => {
+                last_error = format!("git push command error: {}", e);
+                tracing::warn!("{}", last_error);
+            }
         }
 
-        // Step 3: Try git push -u origin {branch}
-        if let Ok(output) = runtime
+        // Step 3: Try git push -u origin {branch} (in case upstream isn't set)
+        match runtime
             .run_command(
                 &format!("git push -u origin {branch}"),
                 &self.config.repo_path,
@@ -504,30 +515,56 @@ impl SessionRunner {
             )
             .await
         {
-            if output.exit_code == 0 {
+            Ok(output) if output.exit_code == 0 => {
                 self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
                 return;
             }
+            Ok(output) => {
+                last_error = combine_output(&output.stdout, &output.stderr);
+                tracing::info!("git push -u failed: {}", last_error);
+            }
+            Err(e) => {
+                last_error = format!("git push -u command error: {}", e);
+                tracing::warn!("{}", last_error);
+            }
         }
 
-        // Step 4: Retry loop
+        // Step 4: Retry loop — fetch, rebase, push
         for attempt in 1..=git_sync_config.max_push_retries {
             if self.cancel_token.is_cancelled() {
                 return;
             }
 
             // Fetch
-            let fetch_result = runtime
+            match runtime
                 .run_command(
                     &format!("git fetch origin {branch}"),
                     &self.config.repo_path,
                     timeout,
                 )
-                .await;
-
-            if fetch_result.is_err() || fetch_result.as_ref().unwrap().exit_code != 0 {
-                // Count as failed attempt, continue
-                continue;
+                .await
+            {
+                Ok(output) if output.exit_code != 0 => {
+                    last_error = combine_output(&output.stdout, &output.stderr);
+                    tracing::warn!(
+                        "git fetch failed (attempt {}/{}): {}",
+                        attempt,
+                        git_sync_config.max_push_retries,
+                        last_error
+                    );
+                    continue;
+                }
+                Err(e) => {
+                    last_error = format!("git fetch command error: {}", e);
+                    tracing::warn!(
+                        "git fetch error (attempt {}/{}): {}",
+                        attempt,
+                        git_sync_config.max_push_retries,
+                        last_error
+                    );
+                    continue;
+                }
+                _ => {} // success
             }
 
             // Pull --rebase
@@ -542,7 +579,7 @@ impl SessionRunner {
             match rebase_result {
                 Ok(output) if output.exit_code == 0 => {
                     // Rebase succeeded, retry push
-                    if let Ok(push_output) = runtime
+                    match runtime
                         .run_command(
                             &format!("git push origin {branch}"),
                             &self.config.repo_path,
@@ -550,14 +587,39 @@ impl SessionRunner {
                         )
                         .await
                     {
-                        if push_output.exit_code == 0 {
+                        Ok(push_output) if push_output.exit_code == 0 => {
                             self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
                             return;
                         }
+                        Ok(push_output) => {
+                            last_error = combine_output(&push_output.stdout, &push_output.stderr);
+                            tracing::warn!(
+                                "push after rebase failed (attempt {}/{}): {}",
+                                attempt,
+                                git_sync_config.max_push_retries,
+                                last_error
+                            );
+                        }
+                        Err(e) => {
+                            last_error = format!("push after rebase command error: {}", e);
+                            tracing::warn!(
+                                "push after rebase error (attempt {}/{}): {}",
+                                attempt,
+                                git_sync_config.max_push_retries,
+                                last_error
+                            );
+                        }
                     }
-                    // Push failed after successful rebase, continue retry loop
                 }
-                Ok(_rebase_output) => {
+                Ok(rebase_output) => {
+                    let rebase_error = combine_output(&rebase_output.stdout, &rebase_output.stderr);
+                    tracing::warn!(
+                        "rebase failed (attempt {}/{}): {}",
+                        attempt,
+                        git_sync_config.max_push_retries,
+                        rebase_error
+                    );
+
                     // Rebase failed — check for conflicts
                     let status_result = runtime
                         .run_command("git status", &self.config.repo_path, timeout)
@@ -642,6 +704,12 @@ impl SessionRunner {
                             }
                             Err(e) => {
                                 tracing::warn!("Conflict resolution agent failed to spawn: {}", e);
+                                // Abort the rebase since we can't resolve conflicts
+                                let _ = runtime
+                                    .run_command("git rebase --abort", &self.config.repo_path, timeout)
+                                    .await;
+                                last_error = format!("conflict resolution failed to start: {}", e);
+                                continue;
                             }
                         }
 
@@ -671,6 +739,7 @@ impl SessionRunner {
                                 attempt,
                                 success: false,
                             });
+                            last_error = "conflict resolution did not complete rebase".to_string();
                         } else {
                             self.emit(SessionEvent::GitSyncConflictResolveComplete {
                                 iteration,
@@ -679,7 +748,7 @@ impl SessionRunner {
                             });
 
                             // Retry push after successful conflict resolution
-                            if let Ok(push_output) = runtime
+                            match runtime
                                 .run_command(
                                     &format!("git push origin {branch}"),
                                     &self.config.repo_path,
@@ -687,30 +756,65 @@ impl SessionRunner {
                                 )
                                 .await
                             {
-                                if push_output.exit_code == 0 {
+                                Ok(push_output) if push_output.exit_code == 0 => {
                                     self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
                                     return;
+                                }
+                                Ok(push_output) => {
+                                    last_error = combine_output(
+                                        &push_output.stdout,
+                                        &push_output.stderr,
+                                    );
+                                    tracing::warn!(
+                                        "push after conflict resolution failed (attempt {}/{}): {}",
+                                        attempt,
+                                        git_sync_config.max_push_retries,
+                                        last_error
+                                    );
+                                }
+                                Err(e) => {
+                                    last_error = format!(
+                                        "push after conflict resolution command error: {}",
+                                        e
+                                    );
+                                    tracing::warn!(
+                                        "push after conflict resolution error (attempt {}/{}): {}",
+                                        attempt,
+                                        git_sync_config.max_push_retries,
+                                        last_error
+                                    );
                                 }
                             }
                         }
                     } else {
                         // Rebase failed for non-conflict reasons
+                        last_error = rebase_error;
                         let _ = runtime
                             .run_command("git rebase --abort", &self.config.repo_path, timeout)
                             .await;
-                        // Count as failed attempt
                     }
                 }
-                Err(_) => {
-                    // Command error, count as failed attempt
+                Err(e) => {
+                    last_error = format!("rebase command error: {}", e);
+                    tracing::warn!(
+                        "rebase error (attempt {}/{}): {}",
+                        attempt,
+                        git_sync_config.max_push_retries,
+                        last_error
+                    );
                 }
             }
         }
 
-        // All retries exhausted
+        // All retries exhausted — include the last error for debugging
+        let error_msg = if last_error.is_empty() {
+            "push failed after all retries".to_string()
+        } else {
+            format!("push failed after all retries: {}", last_error)
+        };
         self.emit(SessionEvent::GitSyncFailed {
             iteration,
-            error: "push failed after all retries".to_string(),
+            error: error_msg,
         });
     }
 
