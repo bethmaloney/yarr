@@ -196,11 +196,11 @@ After a session completes successfully, move the plan file to completed and clea
 - Need to track which plan file is associated with which repo's session — the `plan_file` field is on the `session_complete` event or can be found from the session's events (the `session_started` event carries it)
 
 **Checklist:**
-- [ ] Add auto-move logic in `session_complete` handler
-- [ ] Extract filename and plansDir from repo config
-- [ ] Invoke `move_plan_to_completed` fire-and-forget
-- [ ] Log warning on failure
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add auto-move logic in `session_complete` handler
+- [x] Extract filename and plansDir from repo config
+- [x] Invoke `move_plan_to_completed` fire-and-forget
+- [x] Log warning on failure
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -219,9 +219,9 @@ Reset the plan selection in RepoDetail after a plan is moved to completed.
 - Reset `setPlanFile("")` to clear the dropdown
 
 **Checklist:**
-- [ ] Add effect to clear `planFile` after successful completion
-- [ ] Only clear when outcome is "completed" and plan_file was set
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add effect to clear `planFile` after successful completion
+- [x] Only clear when outcome is "completed" and plan_file was set
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -268,11 +268,11 @@ Add Vitest tests for plan selector behavior.
 - Mock `invoke("list_plans", ...)` to return test data
 
 **Checklist:**
-- [ ] Test dropdown toggle and plan listing
-- [ ] Test search filtering
-- [ ] Test plan selection
-- [ ] Test auto-clear after completion
-- [ ] Verify: `npm test`
+- [x] Test dropdown toggle and plan listing
+- [x] Test search filtering
+- [x] Test plan selection
+- [x] Test auto-clear after completion
+- [x] Verify: `npm test`
 
 ---
 
@@ -285,7 +285,7 @@ Add Vitest tests for plan selector behavior.
 | 3 | Add `list_plans` Tauri command | Done |
 | 4 | Add `move_plan_to_completed` Tauri command | Done |
 | 5 | Build plan selector dropdown component | Done |
-| 6 | Auto-move plan on successful completion | Not Started |
-| 7 | Clear plan selector after auto-move | Not Started |
+| 6 | Auto-move plan on successful completion | Done |
+| 7 | Clear plan selector after auto-move | Done |
 | 8 | Tests for new Tauri commands | Done |
-| 9 | Frontend tests for plan selector | Not Started |
+| 9 | Frontend tests for plan selector | Done |
