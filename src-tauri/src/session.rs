@@ -864,6 +864,37 @@ impl SessionRunner {
             session_id: trace.session_id.clone(),
         });
 
+        self.run_with_trace(runtime, &mut trace).await?;
+
+        let outcome = trace.outcome.clone();
+        self.emit(SessionEvent::SessionComplete { outcome });
+
+        let events: Vec<SessionEvent> = {
+            let guard = self.accumulated_events.lock().unwrap();
+            guard.clone()
+        };
+        let trace_path = self.collector.finalize(&mut trace, &events).await?;
+        println!("\n[harness] Trace saved to: {}", trace_path.display());
+
+        trace::print_trace_summary(&trace);
+
+        Ok(trace)
+    }
+
+    /// Execute the iteration loop, recording results to a caller-provided trace.
+    ///
+    /// Unlike [`run()`], this method does **not**:
+    /// - call `self.collector.start_session()` (caller provides the trace)
+    /// - call `self.collector.finalize()` (caller handles persistence)
+    /// - emit `SessionStarted` or `SessionComplete` events
+    ///
+    /// It **does** run checks, git_sync, record iterations, emit iteration-level
+    /// events, and set `trace.outcome` / `trace.failure_reason`.
+    pub async fn run_with_trace(
+        &self,
+        runtime: &dyn RuntimeProvider,
+        trace: &mut trace::SessionTrace,
+    ) -> Result<()> {
         let mut state = SessionState::Idle;
         let invocation = self.build_invocation();
 
@@ -894,7 +925,7 @@ impl SessionRunner {
                     let result_text = result.result_text();
 
                     self.collector.record_iteration(
-                        &mut trace,
+                        trace,
                         iter_start,
                         iter_end,
                         SpanAttributes {
@@ -980,7 +1011,7 @@ impl SessionRunner {
                     eprintln!("[harness] Process error on iteration {iteration}: {e}");
 
                     self.collector.record_iteration(
-                        &mut trace,
+                        trace,
                         iter_start,
                         iter_end,
                         SpanAttributes {
@@ -1045,19 +1076,7 @@ impl SessionRunner {
             _ => None,
         };
 
-        let outcome = trace.outcome.clone();
-        self.emit(SessionEvent::SessionComplete { outcome });
-
-        let events: Vec<SessionEvent> = {
-            let guard = self.accumulated_events.lock().unwrap();
-            guard.clone()
-        };
-        let trace_path = self.collector.finalize(&mut trace, &events).await?;
-        println!("\n[harness] Trace saved to: {}", trace_path.display());
-
-        trace::print_trace_summary(&trace);
-
-        Ok(trace)
+        Ok(())
     }
 
     /// Run a single iteration: spawn Claude, consume streaming events, return the final result.
@@ -2841,6 +2860,212 @@ mod tests {
             config.effective_working_dir(),
             std::path::Path::new("/custom/working/dir"),
             "effective_working_dir should return working_dir when it is Some"
+        );
+    }
+
+    // =========================================================================
+    // run_with_trace: decoupled trace lifecycle
+    // =========================================================================
+
+    /// Helper: create a SessionRunner and a pre-started trace for run_with_trace tests.
+    /// Returns (runner, trace) where the trace was created from a separate collector
+    /// using the same base_dir/repo_id.
+    fn make_runner_and_trace(
+        tmp: &TempDir,
+        checks: Vec<Check>,
+    ) -> (SessionRunner, trace::SessionTrace) {
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let trace = collector.start_session("/mock/project", "Test prompt", None);
+        let runner = make_runner(tmp, checks);
+        (runner, trace)
+    }
+
+    #[tokio::test]
+    async fn run_with_trace_does_not_emit_session_lifecycle_events() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, mut trace) = make_runner_and_trace(&tmp, vec![]);
+
+        let runtime = MockRuntime::completing_after(1);
+
+        runner
+            .run_with_trace(&runtime, &mut trace)
+            .await
+            .expect("run_with_trace should succeed");
+
+        let events = get_events(&runner);
+
+        // Should NOT have SessionStarted or SessionComplete events
+        assert!(
+            !events.iter().any(|e| matches!(e, SessionEvent::SessionStarted { .. })),
+            "run_with_trace should not emit SessionStarted, events: {:?}",
+            events
+        );
+        assert!(
+            !events.iter().any(|e| matches!(e, SessionEvent::SessionComplete { .. })),
+            "run_with_trace should not emit SessionComplete, events: {:?}",
+            events
+        );
+
+        // SHOULD have iteration-level events
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::IterationStarted { .. })),
+            "run_with_trace should emit IterationStarted, events: {:?}",
+            events
+        );
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::ToolUse { .. })),
+            "run_with_trace should emit ToolUse, events: {:?}",
+            events
+        );
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::AssistantText { .. })),
+            "run_with_trace should emit AssistantText, events: {:?}",
+            events
+        );
+        assert!(
+            events.iter().any(|e| matches!(e, SessionEvent::IterationComplete { .. })),
+            "run_with_trace should emit IterationComplete, events: {:?}",
+            events
+        );
+    }
+
+    #[tokio::test]
+    async fn run_with_trace_records_iterations_to_provided_trace() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, mut trace) = make_runner_and_trace(&tmp, vec![]);
+
+        // 2 working iterations + 1 completion = 3 total iterations
+        let runtime = MockRuntime::completing_after(2);
+
+        runner
+            .run_with_trace(&runtime, &mut trace)
+            .await
+            .expect("run_with_trace should succeed");
+
+        assert_eq!(
+            trace.total_iterations, 3,
+            "trace should have 3 total iterations (2 working + 1 completion)"
+        );
+        assert_eq!(
+            trace.outcome,
+            SessionOutcome::Completed,
+            "trace outcome should be Completed"
+        );
+        assert_eq!(
+            trace.iterations.len(),
+            3,
+            "trace.iterations should have 3 entries"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_with_trace_does_not_finalize_trace() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, mut trace) = make_runner_and_trace(&tmp, vec![]);
+
+        let runtime = MockRuntime::completing_after(1);
+
+        runner
+            .run_with_trace(&runtime, &mut trace)
+            .await
+            .expect("run_with_trace should succeed");
+
+        // end_time should still be None because finalize was not called
+        assert!(
+            trace.end_time.is_none(),
+            "trace.end_time should be None (finalize not called), got: {:?}",
+            trace.end_time
+        );
+
+        // No trace files should be written to disk
+        let traces_dir = tmp.path().join("traces").join("test-repo");
+        if traces_dir.exists() {
+            let entries: Vec<_> = std::fs::read_dir(&traces_dir)
+                .expect("read traces dir")
+                .filter_map(|e| e.ok())
+                .collect();
+            assert!(
+                entries.is_empty(),
+                "no trace files should be written to disk by run_with_trace, found: {:?}",
+                entries.iter().map(|e| e.file_name()).collect::<Vec<_>>()
+            );
+        }
+        // If the traces dir doesn't exist at all, that's also correct
+    }
+
+    #[tokio::test]
+    async fn run_still_works_unchanged() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(2); // 2 working + 1 completion = 3 iters
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        // run() should still produce a complete trace
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+        assert_eq!(trace.total_iterations, 3);
+        assert_eq!(trace.iterations.len(), 3);
+
+        // run() should set end_time via finalize
+        assert!(
+            trace.end_time.is_some(),
+            "run() should set end_time via finalize"
+        );
+
+        let events = get_events(&runner);
+
+        // run() should emit SessionStarted as first event
+        match &events[0] {
+            SessionEvent::SessionStarted { .. } => {}
+            other => panic!("expected SessionStarted as first event, got {:?}", other),
+        }
+
+        // run() should emit SessionComplete as last event
+        match events.last().unwrap() {
+            SessionEvent::SessionComplete { outcome } => {
+                assert_eq!(*outcome, SessionOutcome::Completed);
+            }
+            other => panic!("expected SessionComplete as last event, got {:?}", other),
+        }
+
+        // run() should write trace files to disk
+        let trace_file = base_dir
+            .join("traces")
+            .join("test-repo")
+            .join(format!("trace_{}.json", trace.session_id));
+        assert!(
+            trace_file.exists(),
+            "run() should write trace file to disk at {:?}",
+            trace_file
+        );
+
+        let events_file = base_dir
+            .join("traces")
+            .join("test-repo")
+            .join(format!("events_{}.json", trace.session_id));
+        assert!(
+            events_file.exists(),
+            "run() should write events file to disk at {:?}",
+            events_file
         );
     }
 }

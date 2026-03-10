@@ -275,11 +275,11 @@ Allow callers to manage `TraceCollector` externally so `OneShotRunner` can wrap 
 - The `OneShotRunner` will create one `TraceCollector`, call `start()`, run design runner, run implementation runner, then call `finalize()` with aggregated stats
 
 **Checklist:**
-- [ ] Add mechanism to skip internal trace start/finalize
-- [ ] Ensure iteration events and cost tracking still work
-- [ ] Add unit test: runner with external trace does not call start/finalize internally
-- [ ] `cargo check` passes
-- [ ] `cargo test` passes
+- [x] Add mechanism to skip internal trace start/finalize
+- [x] Ensure iteration events and cost tracking still work
+- [x] Add unit test: runner with external trace does not call start/finalize internally
+- [x] `cargo check` passes
+- [x] `cargo test` passes
 
 ---
 
@@ -575,7 +575,7 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | SessionRunner working directory override | Done |
-| 2 | Decouple SessionRunner trace lifecycle | Not Started |
+| 2 | Decouple SessionRunner trace lifecycle | Done |
 | 3 | Refactor OneShotRunner to use SessionRunner | Not Started |
 | 4 | Update run_oneshot Tauri command | Not Started |
 | 5 | Clean up oneshot-helpers and event-format | Not Started |
