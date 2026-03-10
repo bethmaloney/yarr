@@ -4,6 +4,7 @@ import { useAppStore } from "./store";
 import Home from "./pages/Home";
 import RepoDetail from "./pages/RepoDetail";
 import History from "./pages/History";
+import RunDetail from "./pages/RunDetail";
 
 function Layout() {
   const initialize = useAppStore((s) => s.initialize);
@@ -18,10 +19,6 @@ function Layout() {
 
 function OneShot() {
   return <div>OneShot</div>;
-}
-
-function RunDetail() {
-  return <div>Run Detail</div>;
 }
 
 export function AppRoutes() {

@@ -566,10 +566,12 @@ Convert RunDetail.
 - Breadcrumbs: Home → History → Run {sessionId}
 
 **Checklist:**
-- [ ] Create `src/pages/RunDetail.tsx`
-- [ ] Verify data loads and displays
-- [ ] Verify copy-to-clipboard works
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/pages/RunDetail.tsx`
+- [x] Verify data loads and displays
+- [x] Verify copy-to-clipboard works
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Default export `RunDetail`. Uses `useParams` for repoId and sessionId. Fetches trace + events via `Promise.all(invoke("get_trace"), invoke("get_trace_events"))` with cancelled-flag cleanup. Loading/error/data states. Breadcrumbs: Home (→"/") > History (→"/history") > Run {sessionId} (terminal). Summary dl/dt/dd grid: Outcome (Badge), Failure Reason (conditional), Plan (filename), Iterations, Cost ($X.XXXX), Duration (Xm Xs), Tokens (in/out with toLocaleString), Session ID + Copy button with 1.5s "Copied!" feedback and timer cleanup. EventsList with events and repoPath props (not live). Wired into App.tsx router replacing placeholder. Added `navigator.clipboard` polyfill to test-setup.ts for jsdom. 28 unit tests.
 
 ---
 
@@ -714,7 +716,7 @@ Full build, lint, format, and manual smoke test.
 | 9 | Home page | Done |
 | 10 | RepoDetail page | Done |
 | 11 | History page | Done |
-| 12 | RunDetail page | Not Started |
+| 12 | RunDetail page | Done |
 | 13 | OneShot page | Not Started |
 | 14 | Delete Svelte files | Not Started |
 | 15 | Update unit tests | Not Started |
