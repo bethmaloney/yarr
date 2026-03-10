@@ -134,7 +134,7 @@ test.describe("Branch display chip", () => {
     await expect(chip).toBeVisible();
 
     // Dropdown should not be visible initially
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).not.toBeVisible();
 
     // Click the chip to open the dropdown
@@ -142,14 +142,14 @@ test.describe("Branch display chip", () => {
     await expect(dropdown).toBeVisible();
 
     // Verify all branch names appear in the dropdown
-    const branchItems = dropdown.locator("button.branch-item");
+    const branchItems = dropdown.locator(".branch-item");
     await expect(branchItems).toHaveCount(3);
     await expect(branchItems.nth(0)).toContainText("main");
     await expect(branchItems.nth(1)).toContainText("feature/foo");
     await expect(branchItems.nth(2)).toContainText("develop");
 
     // Current branch should have the active class
-    const activeItem = dropdown.locator("button.branch-item.active");
+    const activeItem = dropdown.locator(".branch-item.active");
     await expect(activeItem).toHaveCount(1);
     await expect(activeItem).toContainText("main");
   });
@@ -163,7 +163,7 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     // Fast-forward button should be present when behind > 0
@@ -184,7 +184,7 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     // Fast-forward button should NOT be present when behind === 0
@@ -220,12 +220,12 @@ test.describe("Branch display chip", () => {
 
     // Open the dropdown
     await chip.click();
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     // Click "feature/foo" branch
     await dropdown
-      .locator("button.branch-item", { hasText: "feature/foo" })
+      .locator(".branch-item", { hasText: "feature/foo" })
       .click();
 
     // Verify switch_branch was called with correct args
@@ -252,10 +252,13 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await expect(chip).toBeVisible();
 
-    // Click the chip — dropdown should NOT open while session is running
-    await chip.click();
+    // The chip should be disabled while running
+    await expect(chip).toBeDisabled();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    // Click the chip — dropdown should NOT open while session is running
+    await chip.click({ force: true });
+
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).not.toBeVisible();
   });
 
@@ -268,7 +271,7 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     // Click outside the dropdown (on the page heading)
@@ -341,7 +344,7 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     const searchInput = page.locator("input.branch-search");
@@ -364,11 +367,11 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     const searchInput = page.locator("input.branch-search");
-    const branchItems = dropdown.locator("button.branch-item");
+    const branchItems = dropdown.locator(".branch-item");
 
     // Type "feature" to filter
     await searchInput.fill("feature");
@@ -391,13 +394,13 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     const searchInput = page.locator("input.branch-search");
     await searchInput.fill("feature");
 
-    const branchItems = dropdown.locator("button.branch-item");
+    const branchItems = dropdown.locator(".branch-item");
     await expect(branchItems).toHaveCount(1);
     await expect(branchItems.nth(0)).toContainText("Feature/Login");
   });
@@ -414,13 +417,13 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     const searchInput = page.locator("input.branch-search");
     await searchInput.fill("nonexistent");
 
-    const branchItems = dropdown.locator("button.branch-item");
+    const branchItems = dropdown.locator(".branch-item");
     await expect(branchItems).toHaveCount(0);
 
     const emptyState = page.locator(".branch-empty");
@@ -455,7 +458,7 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     const searchInput = page.locator("input.branch-search");
@@ -486,7 +489,7 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     const searchInput = page.locator("input.branch-search");
@@ -517,7 +520,7 @@ test.describe("Branch display chip", () => {
     const chip = page.locator("button.branch-chip");
     await chip.click();
 
-    const dropdown = page.locator("div.branch-dropdown");
+    const dropdown = page.locator(".branch-dropdown");
     await expect(dropdown).toBeVisible();
 
     const searchInput = page.locator("input.branch-search");
@@ -525,7 +528,7 @@ test.describe("Branch display chip", () => {
 
     // Click the matching branch item
     await dropdown
-      .locator("button.branch-item", { hasText: "develop" })
+      .locator(".branch-item", { hasText: "develop" })
       .click();
 
     // Dropdown should close

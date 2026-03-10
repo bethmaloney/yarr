@@ -197,7 +197,9 @@ describe("History", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Home")).toBeInTheDocument();
-        expect(screen.getByText("History")).toBeInTheDocument();
+        expect(
+          screen.getByRole("heading", { name: "History" }),
+        ).toBeInTheDocument();
       });
     });
 
@@ -209,7 +211,9 @@ describe("History", () => {
       await waitFor(() => {
         expect(screen.getByText("Home")).toBeInTheDocument();
         expect(screen.getByText("my-project")).toBeInTheDocument();
-        expect(screen.getByText("History")).toBeInTheDocument();
+        expect(
+          screen.getByRole("heading", { name: "History" }),
+        ).toBeInTheDocument();
       });
     });
   });

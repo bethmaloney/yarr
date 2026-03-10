@@ -132,7 +132,9 @@ describe("App", () => {
   describe("route /history", () => {
     it("renders History page", () => {
       renderWithRouter(["/history"]);
-      expect(screen.getByText(/history/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /history/i }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -143,7 +145,9 @@ describe("App", () => {
   describe("route /history/:repoId", () => {
     it("renders History page", () => {
       renderWithRouter(["/history/test-id"]);
-      expect(screen.getByText(/history/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /history/i }),
+      ).toBeInTheDocument();
     });
   });
 

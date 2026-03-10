@@ -439,14 +439,26 @@ export default function RepoDetail() {
       {/* Branch selector */}
       {branchInfo && (
         <div>
+          {session.running ? (
+            <button
+              className={`branch-chip${branchInfo.behind && branchInfo.behind > 0 ? " warning" : ""}`}
+              disabled
+            >
+              {branchInfo.name}
+              {branchInfo.ahead != null && branchInfo.ahead > 0 && (
+                <span>{"\u2191"}{branchInfo.ahead}</span>
+              )}
+              {branchInfo.behind != null && branchInfo.behind > 0 && (
+                <span>{"\u2193"}{branchInfo.behind}</span>
+              )}
+            </button>
+          ) : (
           <Popover open={branchDropdownOpen} onOpenChange={setBranchDropdownOpen}>
             <PopoverTrigger asChild>
               <button
-                disabled={session.running}
+                className={`branch-chip${branchInfo.behind && branchInfo.behind > 0 ? " warning" : ""}`}
                 onClick={() => {
-                  if (!session.running) {
-                    if (!branchDropdownOpen) fetchBranches();
-                  }
+                  if (!branchDropdownOpen) fetchBranches();
                 }}
               >
                 {branchInfo.name}
@@ -458,7 +470,12 @@ export default function RepoDetail() {
                 )}
               </button>
             </PopoverTrigger>
-            <PopoverContent>
+            <PopoverContent
+              className="branch-dropdown"
+              onEscapeKeyDown={() => {
+                setBranchSearch("");
+              }}
+            >
               {branchInfo.behind != null && branchInfo.behind > 0 && (
                 <Button
                   type="button"
@@ -468,17 +485,19 @@ export default function RepoDetail() {
                   Fast-forward
                 </Button>
               )}
-              <Command>
+              <Command shouldFilter={false}>
                 <CommandInput
+                  className="branch-search"
                   placeholder="Search branches..."
                   value={branchSearch}
                   onValueChange={setBranchSearch}
                 />
                 <CommandList>
-                  <CommandEmpty>No matching branches</CommandEmpty>
+                  <CommandEmpty className="branch-empty">No matching branches</CommandEmpty>
                   {filteredBranches.map((branch) => (
                     <CommandItem
                       key={branch}
+                      className={`branch-item${branch === branchInfo?.name ? " active" : ""}`}
                       onSelect={() => handleSwitchBranch(branch)}
                     >
                       {branch}
@@ -488,11 +507,12 @@ export default function RepoDetail() {
               </Command>
             </PopoverContent>
           </Popover>
+          )}
         </div>
       )}
 
       {/* Settings section */}
-      <Collapsible>
+      <Collapsible className="settings">
         <CollapsibleTrigger asChild>
           <button>Settings — {model}, {maxIterations} iters</button>
         </CollapsibleTrigger>
@@ -629,7 +649,7 @@ export default function RepoDetail() {
             {connectionTest && (
               <div data-testid="connection-checklist">
                 {connectionTest.steps.map((step) => (
-                  <div key={step.name}>
+                  <div key={step.name} className={`step-${step.status}`}>
                     <span>
                       {step.status === "running"
                         ? "..."
@@ -650,7 +670,7 @@ export default function RepoDetail() {
       </Collapsible>
 
       {/* Checks section */}
-      <Collapsible>
+      <Collapsible className="checks">
         <CollapsibleTrigger asChild>
           <button>Checks — {checks.length} configured</button>
         </CollapsibleTrigger>
@@ -658,22 +678,23 @@ export default function RepoDetail() {
           <div>
             <Accordion type="multiple">
               {checks.map((check, i) => (
-                <AccordionItem key={i} value={`check-${i}`}>
-                  <AccordionTrigger>
-                    {check.name || "New Check"}
+                <AccordionItem key={i} value={`check-${i}`} className="check-entry">
+                  <div className="flex items-center">
+                    <AccordionTrigger className="flex-1">
+                      {check.name || "New Check"}
+                    </AccordionTrigger>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       disabled={session.running}
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={() => {
                         setChecks(checks.filter((_, j) => j !== i));
                       }}
                     >
                       &times;
                     </Button>
-                  </AccordionTrigger>
+                  </div>
                   <AccordionContent>
                     <Label>
                       Name
@@ -784,7 +805,7 @@ export default function RepoDetail() {
       </Collapsible>
 
       {/* Git Sync section */}
-      <Collapsible>
+      <Collapsible className="git-sync">
         <CollapsibleTrigger asChild>
           <button>
             Git Sync — {gitSyncEnabled ? "enabled" : "disabled"}
@@ -840,7 +861,7 @@ export default function RepoDetail() {
       </Collapsible>
 
       {/* Plan section */}
-      <section>
+      <section className="plan-section">
         <h2>Plan</h2>
         <Label>
           Prompt file

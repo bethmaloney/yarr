@@ -127,9 +127,7 @@ test.describe("1-Shot form interaction", () => {
     await navigateToOneShotView(page, mockTauri);
 
     // The repo's model is "opus" — the Model input should have that value
-    const modelInput = page.locator(
-      '.form-section label:has-text("Model") input[type="text"]',
-    );
+    const modelInput = page.locator(".form-section #oneshot-model");
     await expect(modelInput).toHaveValue("opus");
   });
 
@@ -154,7 +152,7 @@ test.describe("1-Shot form interaction", () => {
 
     // Fill title, leave prompt empty
     await page
-      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .locator(".form-section #oneshot-title")
       .fill("My Task");
 
     const runButton = page.getByRole("button", { name: "Run" });
@@ -168,7 +166,7 @@ test.describe("1-Shot form interaction", () => {
     await navigateToOneShotView(page, mockTauri);
 
     await page
-      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .locator(".form-section #oneshot-title")
       .fill("My Task");
     await page.locator(".form-section textarea").fill("Do something important");
 
@@ -222,15 +220,15 @@ test.describe("1-Shot launch flow", () => {
 
     // Fill the form
     await page
-      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .locator(".form-section #oneshot-title")
       .fill("Add auth");
     await page.locator(".form-section textarea").fill("Implement OAuth2");
     // Change model
     await page
-      .locator('.form-section label:has-text("Model") input[type="text"]')
+      .locator(".form-section #oneshot-model")
       .fill("");
     await page
-      .locator('.form-section label:has-text("Model") input[type="text"]')
+      .locator(".form-section #oneshot-model")
       .fill("sonnet");
     // Select "Create branch" merge strategy
     await page.locator('input[type="radio"][value="branch"]').check();
@@ -279,7 +277,7 @@ test.describe("1-Shot launch flow", () => {
 
     // Fill and run
     await page
-      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .locator(".form-section #oneshot-title")
       .fill("Task");
     await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
@@ -331,7 +329,7 @@ test.describe("1-Shot launch flow", () => {
 
     // Fill and run
     await page
-      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .locator(".form-section #oneshot-title")
       .fill("Task");
     await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
@@ -403,7 +401,7 @@ test.describe("1-Shot launch flow", () => {
 
     // Fill and run
     await page
-      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .locator(".form-section #oneshot-title")
       .fill("Task");
     await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
@@ -473,7 +471,7 @@ test.describe("1-Shot launch flow", () => {
 
     // Fill and run
     await page
-      .locator('.form-section label:has-text("Title") input[type="text"]')
+      .locator(".form-section #oneshot-title")
       .fill("Task");
     await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();

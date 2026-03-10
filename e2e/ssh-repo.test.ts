@@ -102,7 +102,7 @@ test.describe("RepoDetail for SSH repos", () => {
     await page.getByRole("button", { name: /remote-app/ }).click();
 
     // Expand the settings section
-    await page.locator("details.settings summary").click();
+    await page.locator(".settings").locator('[data-slot="collapsible-trigger"]').click();
 
     // Settings section should display SSH host and remote path
     await expect(page.getByText("SSH Host")).toBeVisible();
@@ -123,7 +123,7 @@ test.describe("RepoDetail for SSH repos", () => {
     await page.getByRole("button", { name: /remote-app/ }).click();
 
     // Expand the settings section
-    await page.locator("details.settings summary").click();
+    await page.locator(".settings").locator('[data-slot="collapsible-trigger"]').click();
 
     await expect(
       page.getByRole("button", { name: "Test Connection" }),
@@ -152,7 +152,7 @@ test.describe("RepoDetail for Local repos", () => {
     await page.getByRole("button", { name: /my-app/ }).click();
 
     // Expand settings to verify Test Connection is truly absent, not just hidden
-    await page.locator("details.settings summary").click();
+    await page.locator(".settings").locator('[data-slot="collapsible-trigger"]').click();
 
     // Local repos should not have the Test Connection button
     await expect(
@@ -425,7 +425,7 @@ test.describe("Connection test checklist", () => {
     await page.goto("/");
 
     await page.getByRole("button", { name: /remote-app/ }).click();
-    await page.locator("details.settings summary").click();
+    await page.locator(".settings").locator('[data-slot="collapsible-trigger"]').click();
   }
 
   test("clicking Test Connection shows checklist with step names", async ({

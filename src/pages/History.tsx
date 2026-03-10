@@ -152,8 +152,9 @@ export default function History() {
 
   if (loading) {
     return (
-      <main className="max-w-[900px] mx-auto p-8">
+      <main className="max-w-[1100px] mx-auto p-8">
         <Breadcrumbs crumbs={breadcrumbs} />
+        <h1 className="text-3xl text-primary mb-4">History</h1>
         <div className="text-center text-muted-foreground py-12">
           <p>Loading...</p>
         </div>
@@ -163,8 +164,9 @@ export default function History() {
 
   if (error) {
     return (
-      <main className="max-w-[900px] mx-auto p-8">
+      <main className="max-w-[1100px] mx-auto p-8">
         <Breadcrumbs crumbs={breadcrumbs} />
+        <h1 className="text-3xl text-primary mb-4">History</h1>
         <div>
           <pre className="bg-[#2d1b1b] text-red-400 p-3 rounded overflow-x-auto">
             {error}
@@ -176,8 +178,9 @@ export default function History() {
 
   if (traces.length === 0) {
     return (
-      <main className="max-w-[900px] mx-auto p-8">
+      <main className="max-w-[1100px] mx-auto p-8">
         <Breadcrumbs crumbs={breadcrumbs} />
+        <h1 className="text-3xl text-primary mb-4">History</h1>
         <div className="text-center text-muted-foreground py-12">
           <p>No runs recorded yet.</p>
         </div>
@@ -186,12 +189,13 @@ export default function History() {
   }
 
   return (
-    <main className="max-w-[900px] mx-auto p-8">
+    <main className="max-w-[1100px] mx-auto p-8">
       <Breadcrumbs crumbs={breadcrumbs} />
+      <h1 className="text-3xl text-primary mb-4">History</h1>
 
-      <div className="flex flex-col gap-1">
+      <div className="trace-list flex flex-col gap-1">
         {/* Column headers */}
-        <div className="flex items-center gap-4 px-3 py-1.5 text-muted-foreground font-mono text-xs font-semibold uppercase tracking-wide">
+        <div className="trace-header flex items-center gap-4 px-3 py-1.5 text-muted-foreground font-mono text-xs font-semibold uppercase tracking-wide">
           {renderSortButton("Date", "start_time", "text-left flex-shrink-0 min-w-28")}
           {renderSortButton("Type", "session_type", "text-left flex-shrink-0 min-w-22")}
           {!repoId && (
@@ -200,7 +204,7 @@ export default function History() {
             </span>
           )}
           {renderSortButton("Plan", "plan_file", "text-left flex-shrink-0 w-32 overflow-hidden text-ellipsis whitespace-nowrap")}
-          {renderSortButton("Prompt", "prompt", "text-left flex-1 min-w-0")}
+          {renderSortButton("Prompt", "prompt", "text-left flex-1 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap")}
           {renderSortButton("Status", "outcome", "text-center flex-shrink-0 min-w-22")}
           {renderSortButton("Iters", "total_iterations", "text-right flex-shrink-0 min-w-16")}
           {renderSortButton("Cost", "total_cost_usd", "text-right flex-shrink-0 min-w-16")}
@@ -213,7 +217,7 @@ export default function History() {
           return (
             <button
               key={trace.session_id}
-              className="flex items-center gap-4 px-3 py-2.5 bg-card border border-border rounded-md cursor-pointer text-foreground font-mono text-sm text-left w-full hover:bg-accent hover:border-accent"
+              className="trace-row flex items-center gap-4 px-3 py-2.5 bg-card border border-border rounded-md cursor-pointer text-foreground font-mono text-sm text-left w-full hover:bg-accent hover:border-accent"
               onClick={() =>
                 navigate(
                   `/run/${traceRepoId(trace, repoId)}/${trace.session_id}`,
@@ -231,13 +235,13 @@ export default function History() {
                   {repoNameFromTrace(trace, repoId, repos)}
                 </span>
               )}
-              <span className="flex-shrink-0 w-32 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground">
+              <span className="trace-plan flex-shrink-0 w-32 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground">
                 {planFilename(trace.plan_file)}
               </span>
-              <span className="flex-1 min-w-0 max-w-80 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground">
+              <span className="trace-prompt flex-1 min-w-24 max-w-80 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground">
                 {trace.prompt}
               </span>
-              <span className="flex-shrink-0 min-w-22 text-center">
+              <span className="trace-badge flex-shrink-0 min-w-22 text-center">
                 <Badge variant={badge.variant}>{badge.label}</Badge>
               </span>
               <span className="flex-shrink-0 min-w-16 text-right text-muted-foreground">

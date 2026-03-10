@@ -685,9 +685,11 @@ Update Playwright E2E tests for React DOM structure and routing.
 - Add route-based navigation where it simplifies test setup (e.g., `page.goto('/repo/abc')`)
 
 **Checklist:**
-- [ ] Verify `e2e/fixtures.ts` still works
-- [ ] Update selectors in each E2E test file
-- [ ] Run `npm run test:e2e` — all tests pass
+- [x] Verify `e2e/fixtures.ts` still works
+- [x] Update selectors in each E2E test file
+- [x] Run `npm run test:e2e` — all tests pass
+
+**Notes:** Added CSS classes to React components as stable E2E test hooks: `.breadcrumbs`, `.toolbar-header`, `.subtitle`, `.settings`, `.checks`, `.git-sync`, `.check-entry`, `.plan-section`, `.branch-chip`/`.warning`, `.branch-dropdown`, `.branch-item`/`.active`, `.branch-search`, `.branch-empty`, `.trace-list`, `.trace-header`, `.trace-row`, `.trace-prompt`, `.trace-plan`, `.trace-badge`, `.summary`, `.form-section`, `.phase-indicator`/`.complete`/`.failed`. Updated all 9 E2E test files: replaced `details.settings`/`details.checks`/`details.git-sync` selectors with `.settings`/`.checks`/`.git-sync`; replaced `summary` element selectors with `[data-slot="collapsible-trigger"]` and `[data-slot="accordion-trigger"]`; replaced `toHaveAttribute("open")` with `toHaveAttribute("data-state", "open")`; replaced `.current` breadcrumb selector with `[aria-current="page"]`; replaced breadcrumb separator `/` text check with `[data-slot="breadcrumb-separator"]`; updated OneShot form selectors for sibling Label+Input pattern; changed `button.branch-item` to `.branch-item` (CommandItem renders as div). Added `<h1>History</h1>` to History page (was missing). Updated 2 unit test files (`App.test.tsx`, `History.test.tsx`) to use `getByRole("heading")` for the new h1. Added `shouldFilter={false}` to branch Command component to prevent double-filtering with external `filteredBranches`. Fixtures unchanged. 113 E2E tests, 668 unit tests all passing.
 
 ---
 
@@ -726,5 +728,5 @@ Full build, lint, format, and manual smoke test.
 | 13 | OneShot page | Done |
 | 14 | Delete Svelte files | Done |
 | 15 | Update unit tests | Done |
-| 16 | Update E2E tests | Not Started |
+| 16 | Update E2E tests | Done |
 | 17 | Final verification and cleanup | Not Started |

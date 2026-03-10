@@ -32,10 +32,10 @@ test.describe("Breadcrumb navigation", () => {
     await expect(nav).toBeVisible();
 
     // "Home" should be the current (last) crumb, rendered as a span
-    await expect(nav.locator(".current")).toHaveText("Home");
+    await expect(nav.locator('[aria-current="page"]')).toHaveText("Home");
 
-    // No clickable breadcrumb buttons should exist on the home view
-    await expect(nav.locator("button")).toHaveCount(0);
+    // No clickable breadcrumb links should exist on the home view
+    await expect(nav.locator('[data-slot="breadcrumb-link"]')).toHaveCount(0);
   });
 
   test("RepoDetail shows 'Home / my-app' breadcrumbs", async ({
@@ -60,10 +60,10 @@ test.describe("Breadcrumb navigation", () => {
     await expect(nav.getByRole("button", { name: "Home" })).toBeVisible();
 
     // "my-app" should be the current (last) crumb, not clickable
-    await expect(nav.locator(".current")).toHaveText("my-app");
+    await expect(nav.locator('[aria-current="page"]')).toHaveText("my-app");
 
-    // Separator "/" should be present
-    await expect(nav.getByText("/")).toBeVisible();
+    // Separator should be present (ChevronRight icon via BreadcrumbSeparator)
+    await expect(nav.locator('[data-slot="breadcrumb-separator"]')).toBeVisible();
   });
 
   test("Clicking 'Home' breadcrumb in RepoDetail navigates back to home", async ({
@@ -111,7 +111,7 @@ test.describe("Breadcrumb navigation", () => {
     await expect(nav.getByRole("button", { name: "Home" })).toBeVisible();
 
     // "History" should be the current (last) crumb
-    await expect(nav.locator(".current")).toHaveText("History");
+    await expect(nav.locator('[aria-current="page"]')).toHaveText("History");
   });
 
   test("No .back-btn elements exist on RepoDetail", async ({

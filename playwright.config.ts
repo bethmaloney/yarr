@@ -8,6 +8,7 @@ export default defineConfig({
   timeout: 15_000,
   use: {
     baseURL,
+    viewport: { width: 1400, height: 900 },
   },
   webServer: {
     command: `YARR_PORT=${port} npm run dev`,

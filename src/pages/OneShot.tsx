@@ -95,7 +95,7 @@ export default function OneShot() {
       </header>
 
       {!session.running && (
-        <section className="flex flex-col gap-3 mt-6">
+        <section className="form-section flex flex-col gap-3 mt-6">
           <div>
             <Label htmlFor="oneshot-title" className="text-sm text-muted-foreground">
               Title
@@ -175,11 +175,11 @@ export default function OneShot() {
 
       {phase !== "idle" && (
         <div
-          className={`mt-4 p-3 bg-card border border-border rounded font-mono text-sm text-primary ${
+          className={`phase-indicator mt-4 p-3 bg-card border border-border rounded font-mono text-sm text-primary ${
             phase === "failed"
-              ? "text-red-400 border-red-400"
+              ? "failed text-red-400 border-red-400"
               : phase === "complete"
-                ? "text-emerald-400 border-emerald-400"
+                ? "complete text-emerald-400 border-emerald-400"
                 : ""
           }`}
         >

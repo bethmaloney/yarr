@@ -161,6 +161,7 @@ export default function RunDetail() {
         {formatDate(trace.start_time)}
       </p>
 
+      <div className="summary">
       <h2 className="text-sm text-muted-foreground uppercase tracking-wide border-b border-border pb-1 mb-0">
         Summary
       </h2>
@@ -200,7 +201,7 @@ export default function RunDetail() {
 
         <dt className="text-muted-foreground text-sm">Session ID</dt>
         <dd className="m-0 text-sm">
-          {trace.session_id}
+          <span>{trace.session_id}</span>
           <button
             className="text-xs px-1.5 py-0.5 bg-secondary text-muted-foreground border border-border rounded cursor-pointer ml-2 align-middle"
             onClick={handleCopy}
@@ -209,6 +210,7 @@ export default function RunDetail() {
           </button>
         </dd>
       </dl>
+      </div>
 
       <EventsList events={events} repoPath={trace.repo_path} />
     </main>

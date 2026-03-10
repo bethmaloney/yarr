@@ -95,10 +95,10 @@ test.describe("Checks settings section", () => {
   test("checks section renders with summary", async ({ page, mockTauri }) => {
     await navigateToRepoDetail(page, mockTauri);
 
-    const checksDetails = page.locator("details.checks");
+    const checksDetails = page.locator(".checks");
     await expect(checksDetails).toBeVisible();
 
-    const summary = checksDetails.locator("summary");
+    const summary = checksDetails.locator('[data-slot="collapsible-trigger"]');
     await expect(summary).toContainText("Checks");
   });
 
@@ -110,8 +110,8 @@ test.describe("Checks settings section", () => {
       repos: [repoWithoutChecks],
     });
 
-    const checksDetails = page.locator("details.checks");
-    const summary = checksDetails.locator("summary");
+    const checksDetails = page.locator(".checks");
+    const summary = checksDetails.locator('[data-slot="collapsible-trigger"]');
     await expect(summary).toContainText("Checks");
     await expect(summary).toContainText("0 configured");
   });
@@ -124,8 +124,8 @@ test.describe("Checks settings section", () => {
       repos: [repoWithOneCheck],
     });
 
-    const checksDetails = page.locator("details.checks");
-    const summary = checksDetails.locator("summary");
+    const checksDetails = page.locator(".checks");
+    const summary = checksDetails.locator('[data-slot="collapsible-trigger"]');
     await expect(summary).toContainText("Checks");
     await expect(summary).toContainText("1 configured");
   });
@@ -138,8 +138,8 @@ test.describe("Checks settings section", () => {
       repos: [repoWithTwoChecks],
     });
 
-    const checksDetails = page.locator("details.checks");
-    const summary = checksDetails.locator("summary");
+    const checksDetails = page.locator(".checks");
+    const summary = checksDetails.locator('[data-slot="collapsible-trigger"]');
     await expect(summary).toContainText("2 configured");
   });
 
@@ -152,20 +152,20 @@ test.describe("Checks settings section", () => {
     });
 
     // Expand checks section
-    const checksDetails = page.locator("details.checks");
-    await checksDetails.locator("summary").click();
+    const checksDetails = page.locator(".checks");
+    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // Initially no check entries
-    await expect(checksDetails.locator("details.check-entry")).toHaveCount(0);
+    await expect(checksDetails.locator(".check-entry")).toHaveCount(0);
 
     // Click "Add Check" button
     await page.getByRole("button", { name: "Add Check" }).click();
 
     // A new check entry should appear
-    await expect(checksDetails.locator("details.check-entry")).toHaveCount(1);
+    await expect(checksDetails.locator(".check-entry")).toHaveCount(1);
 
     // Summary should update to show 1 configured
-    await expect(checksDetails.locator("summary").first()).toContainText(
+    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]').first()).toContainText(
       "1 configured",
     );
   });
@@ -176,13 +176,13 @@ test.describe("Checks settings section", () => {
     });
 
     // Expand checks section and add a check
-    const checksDetails = page.locator("details.checks");
-    await checksDetails.locator("summary").click();
+    const checksDetails = page.locator(".checks");
+    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
     await page.getByRole("button", { name: "Add Check" }).click();
 
     // Expand the new check entry
-    const checkEntry = checksDetails.locator("details.check-entry").first();
-    await checkEntry.locator("summary").click();
+    const checkEntry = checksDetails.locator(".check-entry").first();
+    await checkEntry.locator('[data-slot="accordion-trigger"]').click();
 
     // Verify default field values
     const nameInput = checkEntry.getByRole("textbox", { name: /name/i });
@@ -213,13 +213,15 @@ test.describe("Checks settings section", () => {
       repos: [repoWithOneCheck],
     });
 
-    // Expand checks section
-    const checksDetails = page.locator("details.checks");
-    await checksDetails.locator("summary").click();
+    // Wait for checks to load, then expand checks section
+    const checksDetails = page.locator(".checks");
+    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("1 configured");
+    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
-    // Expand the check entry
-    const checkEntry = checksDetails.locator("details.check-entry").first();
-    await checkEntry.locator("summary").click();
+    // Wait for check entry to appear, then expand it
+    const checkEntry = checksDetails.locator(".check-entry").first();
+    await expect(checkEntry).toBeVisible();
+    await checkEntry.locator('[data-slot="accordion-trigger"]').click();
 
     // Verify the fields are populated with the pre-existing check data
     const nameInput = checkEntry.getByRole("textbox", { name: /name/i });
@@ -249,22 +251,23 @@ test.describe("Checks settings section", () => {
       repos: [repoWithOneCheck],
     });
 
-    // Expand checks section
-    const checksDetails = page.locator("details.checks");
-    await checksDetails.locator("summary").click();
+    // Wait for checks to load, then expand checks section
+    const checksDetails = page.locator(".checks");
+    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("1 configured");
+    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // Verify one check entry exists
-    await expect(checksDetails.locator("details.check-entry")).toHaveCount(1);
+    await expect(checksDetails.locator(".check-entry")).toHaveCount(1);
 
     // Click the remove button on the check
-    const checkEntry = checksDetails.locator("details.check-entry").first();
-    await checkEntry.getByRole("button", { name: "\u00d7" }).click();
+    const checkEntry = checksDetails.locator(".check-entry").first();
+    await checkEntry.getByRole("button", { name: "\u00d7", exact: true }).click();
 
     // Check entry should be removed
-    await expect(checksDetails.locator("details.check-entry")).toHaveCount(0);
+    await expect(checksDetails.locator(".check-entry")).toHaveCount(0);
 
     // Summary should update to show 0 configured
-    await expect(checksDetails.locator("summary").first()).toContainText(
+    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]').first()).toContainText(
       "0 configured",
     );
   });
@@ -277,30 +280,31 @@ test.describe("Checks settings section", () => {
       repos: [repoWithTwoChecks],
     });
 
-    // Expand checks section
-    const checksDetails = page.locator("details.checks");
-    await checksDetails.locator("summary").click();
+    // Wait for checks to load, then expand checks section
+    const checksDetails = page.locator(".checks");
+    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("2 configured");
+    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // Verify two check entries exist
-    await expect(checksDetails.locator("details.check-entry")).toHaveCount(2);
+    await expect(checksDetails.locator(".check-entry")).toHaveCount(2);
 
     // Remove the first check (clippy)
     const firstCheckEntry = checksDetails
-      .locator("details.check-entry")
+      .locator(".check-entry")
       .first();
-    await firstCheckEntry.getByRole("button", { name: "\u00d7" }).click();
+    await firstCheckEntry.getByRole("button", { name: "\u00d7", exact: true }).click();
 
     // Only one check should remain
-    await expect(checksDetails.locator("details.check-entry")).toHaveCount(1);
+    await expect(checksDetails.locator(".check-entry")).toHaveCount(1);
 
     // The remaining check should be the second one (test)
-    const remainingEntry = checksDetails.locator("details.check-entry").first();
-    await remainingEntry.locator("summary").click();
+    const remainingEntry = checksDetails.locator(".check-entry").first();
+    await remainingEntry.locator('[data-slot="accordion-trigger"]').click();
     const nameInput = remainingEntry.getByRole("textbox", { name: /name/i });
     await expect(nameInput).toHaveValue("test");
 
     // Summary should show 1 configured
-    await expect(checksDetails.locator("summary").first()).toContainText(
+    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]').first()).toContainText(
       "1 configured",
     );
   });
@@ -311,13 +315,15 @@ test.describe("Checks settings section", () => {
   }) => {
     await navigateToRepoDetailWithRunning(page, mockTauri);
 
-    // Expand checks section
-    const checksDetails = page.locator("details.checks");
-    await checksDetails.locator("summary").click();
+    // Wait for checks to load, then expand checks section
+    const checksDetails = page.locator(".checks");
+    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("1 configured");
+    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // Expand the check entry
-    const checkEntry = checksDetails.locator("details.check-entry").first();
-    await checkEntry.locator("summary").click();
+    const checkEntry = checksDetails.locator(".check-entry").first();
+    await expect(checkEntry).toBeVisible();
+    await checkEntry.locator('[data-slot="accordion-trigger"]').click();
 
     // All fields should be disabled
     const nameInput = checkEntry.getByRole("textbox", { name: /name/i });
@@ -347,8 +353,8 @@ test.describe("Checks settings section", () => {
     await navigateToRepoDetailWithRunning(page, mockTauri);
 
     // Expand checks section
-    const checksDetails = page.locator("details.checks");
-    await checksDetails.locator("summary").click();
+    const checksDetails = page.locator(".checks");
+    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // The "Add Check" button should be disabled
     await expect(
@@ -362,14 +368,16 @@ test.describe("Checks settings section", () => {
   }) => {
     await navigateToRepoDetailWithRunning(page, mockTauri);
 
-    // Expand checks section
-    const checksDetails = page.locator("details.checks");
-    await checksDetails.locator("summary").click();
+    // Wait for checks to load, then expand checks section
+    const checksDetails = page.locator(".checks");
+    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("1 configured");
+    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // The remove button on the check should be disabled
-    const checkEntry = checksDetails.locator("details.check-entry").first();
+    const checkEntry = checksDetails.locator(".check-entry").first();
+    await expect(checkEntry).toBeVisible();
     await expect(
-      checkEntry.getByRole("button", { name: "\u00d7" }),
+      checkEntry.getByRole("button", { name: "\u00d7", exact: true }),
     ).toBeDisabled();
   });
 });

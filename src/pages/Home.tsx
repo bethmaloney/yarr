@@ -79,10 +79,10 @@ export default function Home() {
   return (
     <main className="max-w-[900px] mx-auto p-8">
       <Breadcrumbs crumbs={[{ label: "Home" }]} />
-      <header className="flex justify-between items-start mb-6">
+      <header className="toolbar-header flex justify-between items-start mb-6">
         <div>
           <h1 className="text-3xl text-primary font-bold">Yarr</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="subtitle text-sm text-muted-foreground mt-1">
             Claude Orchestrator
           </p>
         </div>

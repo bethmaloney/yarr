@@ -57,8 +57,8 @@ test.describe("Home view", () => {
         ],
       },
       invokeHandlers: {
-        list_latest_traces: () => [
-          {
+        list_latest_traces: () => ({
+          "repo-1": {
             session_id: "sess-abc-123",
             repo_path: "/home/user/projects/my-app",
             repo_id: "repo-1",
@@ -74,7 +74,7 @@ test.describe("Home view", () => {
             total_cache_read_tokens: 8200,
             total_cache_creation_tokens: 3100,
           },
-        ],
+        }),
       },
     });
     await page.goto("/");
@@ -143,15 +143,15 @@ test.describe("Repo detail page", () => {
   }) => {
     await navigateToRepoDetail(page, mockTauri);
 
-    const details = page.locator("details.settings");
-    await expect(details).toBeVisible();
-    // Should be closed by default (no open attribute)
-    await expect(details).not.toHaveAttribute("open", "");
-    // Summary should display model and iteration count
-    const summary = details.locator("summary");
-    await expect(summary).toContainText("Settings");
-    await expect(summary).toContainText("opus");
-    await expect(summary).toContainText("40 iters");
+    const section = page.locator(".settings");
+    await expect(section).toBeVisible();
+    // Should be closed by default
+    await expect(section).toHaveAttribute("data-state", "closed");
+    // Trigger should display model and iteration count
+    const trigger = section.locator('[data-slot="collapsible-trigger"]');
+    await expect(trigger).toContainText("Settings");
+    await expect(trigger).toContainText("opus");
+    await expect(trigger).toContainText("40 iters");
   });
 
   test("settings can be expanded by clicking summary", async ({
@@ -160,12 +160,12 @@ test.describe("Repo detail page", () => {
   }) => {
     await navigateToRepoDetail(page, mockTauri);
 
-    const details = page.locator("details.settings");
-    const summary = details.locator("summary");
-    await summary.click();
+    const section = page.locator(".settings");
+    const trigger = section.locator('[data-slot="collapsible-trigger"]');
+    await trigger.click();
 
-    // After clicking, the details should be open and the model input visible
-    await expect(details).toHaveAttribute("open", "");
+    // After clicking, the section should be open and the model input visible
+    await expect(section).toHaveAttribute("data-state", "open");
     await expect(page.getByRole("textbox", { name: /model/i })).toBeVisible();
   });
 

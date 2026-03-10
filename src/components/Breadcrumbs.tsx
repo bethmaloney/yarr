@@ -15,7 +15,7 @@ interface BreadcrumbsProps {
 
 export function Breadcrumbs({ crumbs }: BreadcrumbsProps) {
   return (
-    <Breadcrumb>
+    <Breadcrumb className="breadcrumbs">
       {crumbs.length > 0 && (
         <BreadcrumbList>
           {crumbs.map((crumb, index) => {
