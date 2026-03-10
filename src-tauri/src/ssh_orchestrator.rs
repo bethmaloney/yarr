@@ -153,7 +153,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
     fn build_invocation(&self) -> ClaudeInvocation {
         ClaudeInvocation {
             prompt: self.config.prompt.clone(),
-            working_dir: self.config.repo_path.clone(),
+            working_dir: self.config.effective_working_dir().to_path_buf(),
             model: self.config.model.clone(),
             extra_args: self.config.extra_args.clone(),
             env_vars: self.config.env_vars.clone(),
@@ -732,6 +732,7 @@ mod tests {
     fn make_config() -> SessionConfig {
         SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 5,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),

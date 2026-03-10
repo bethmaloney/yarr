@@ -252,11 +252,11 @@ Add an optional `working_dir` field to `SessionConfig` (or a builder method on `
 - No changes to event emission or iteration logic
 
 **Checklist:**
-- [ ] Add `working_dir` field to `SessionConfig`
-- [ ] Use it in `ClaudeInvocation` construction
-- [ ] Add unit test: `SessionConfig` with `working_dir = Some(path)` uses that path in invocation
-- [ ] `cargo check` passes
-- [ ] Existing `cargo test` passes (no behavioral change for `None`)
+- [x] Add `working_dir` field to `SessionConfig`
+- [x] Use it in `ClaudeInvocation` construction
+- [x] Add unit test: `SessionConfig` with `working_dir = Some(path)` uses that path in invocation
+- [x] `cargo check` passes
+- [x] Existing `cargo test` passes (no behavioral change for `None`)
 
 ---
 
@@ -574,7 +574,7 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | SessionRunner working directory override | Not Started |
+| 1 | SessionRunner working directory override | Done |
 | 2 | Decouple SessionRunner trace lifecycle | Not Started |
 | 3 | Refactor OneShotRunner to use SessionRunner | Not Started |
 | 4 | Update run_oneshot Tauri command | Not Started |

@@ -56,6 +56,7 @@ impl Default for GitSyncConfig {
 #[derive(Debug, Clone)]
 pub struct SessionConfig {
     pub repo_path: PathBuf,
+    pub working_dir: Option<PathBuf>,
     pub prompt: String,
     pub max_iterations: u32,
     pub completion_signal: String,
@@ -75,6 +76,7 @@ impl Default for SessionConfig {
     fn default() -> Self {
         Self {
             repo_path: PathBuf::from("."),
+            working_dir: None,
             prompt: String::new(),
             max_iterations: 20,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -86,6 +88,13 @@ impl Default for SessionConfig {
             checks: Vec::new(),
             git_sync: None,
         }
+    }
+}
+
+impl SessionConfig {
+    /// Returns the effective working directory: `working_dir` if set, otherwise `repo_path`.
+    pub(crate) fn effective_working_dir(&self) -> &std::path::Path {
+        self.working_dir.as_deref().unwrap_or(&self.repo_path)
     }
 }
 
@@ -267,7 +276,7 @@ impl SessionRunner {
     fn build_invocation(&self) -> ClaudeInvocation {
         ClaudeInvocation {
             prompt: self.config.prompt.clone(),
-            working_dir: self.config.repo_path.clone(),
+            working_dir: self.config.effective_working_dir().to_path_buf(),
             model: self.config.model.clone(),
             extra_args: self.config.extra_args.clone(),
             env_vars: self.config.env_vars.clone(),
@@ -297,7 +306,7 @@ impl SessionRunner {
             let cmd_result = runtime
                 .run_command(
                     &check.command,
-                    &self.config.repo_path,
+                    self.config.effective_working_dir(),
                     Duration::from_secs(check.timeout_secs as u64),
                 )
                 .await;
@@ -348,7 +357,7 @@ impl SessionRunner {
 
                 let fix_invocation = ClaudeInvocation {
                     prompt: fix_prompt,
-                    working_dir: self.config.repo_path.clone(),
+                    working_dir: self.config.effective_working_dir().to_path_buf(),
                     model: check.model.clone().or_else(|| self.config.model.clone()),
                     extra_args: vec!["--dangerously-skip-permissions".to_string()],
                     env_vars: self.config.env_vars.clone(),
@@ -384,7 +393,7 @@ impl SessionRunner {
                 let recheck = runtime
                     .run_command(
                         &check.command,
-                        &self.config.repo_path,
+                        self.config.effective_working_dir(),
                         Duration::from_secs(check.timeout_secs as u64),
                     )
                     .await;
@@ -451,7 +460,7 @@ impl SessionRunner {
 
         // Step 1: Detect current branch
         let branch = match runtime
-            .run_command("git branch --show-current", &self.config.repo_path, timeout)
+            .run_command("git branch --show-current", self.config.effective_working_dir(), timeout)
             .await
         {
             Ok(output) if output.exit_code == 0 => output.stdout.trim().to_string(),
@@ -487,7 +496,7 @@ impl SessionRunner {
         match runtime
             .run_command(
                 &format!("git push origin {branch}"),
-                &self.config.repo_path,
+                self.config.effective_working_dir(),
                 timeout,
             )
             .await
@@ -510,7 +519,7 @@ impl SessionRunner {
         match runtime
             .run_command(
                 &format!("git push -u origin {branch}"),
-                &self.config.repo_path,
+                self.config.effective_working_dir(),
                 timeout,
             )
             .await
@@ -539,7 +548,7 @@ impl SessionRunner {
             match runtime
                 .run_command(
                     &format!("git fetch origin {branch}"),
-                    &self.config.repo_path,
+                    self.config.effective_working_dir(),
                     timeout,
                 )
                 .await
@@ -571,7 +580,7 @@ impl SessionRunner {
             let rebase_result = runtime
                 .run_command(
                     &format!("git pull --rebase origin {branch}"),
-                    &self.config.repo_path,
+                    self.config.effective_working_dir(),
                     timeout,
                 )
                 .await;
@@ -582,7 +591,7 @@ impl SessionRunner {
                     match runtime
                         .run_command(
                             &format!("git push origin {branch}"),
-                            &self.config.repo_path,
+                            self.config.effective_working_dir(),
                             timeout,
                         )
                         .await
@@ -622,7 +631,7 @@ impl SessionRunner {
 
                     // Rebase failed — check for conflicts
                     let status_result = runtime
-                        .run_command("git status", &self.config.repo_path, timeout)
+                        .run_command("git status", self.config.effective_working_dir(), timeout)
                         .await;
 
                     let has_conflict = match &status_result {
@@ -638,7 +647,7 @@ impl SessionRunner {
                         let conflict_files = match runtime
                             .run_command(
                                 "git diff --name-only --diff-filter=U",
-                                &self.config.repo_path,
+                                self.config.effective_working_dir(),
                                 timeout,
                             )
                             .await
@@ -672,7 +681,7 @@ impl SessionRunner {
 
                         let invocation = ClaudeInvocation {
                             prompt: conflict_prompt,
-                            working_dir: self.config.repo_path.clone(),
+                            working_dir: self.config.effective_working_dir().to_path_buf(),
                             model: git_sync_config
                                 .model
                                 .clone()
@@ -693,7 +702,7 @@ impl SessionRunner {
                                             process.abort_handle.abort();
                                             let _ = runtime.run_command(
                                                 "git rebase --abort",
-                                                &self.config.repo_path,
+                                                self.config.effective_working_dir(),
                                                 Duration::from_secs(120),
                                             ).await;
                                             return;
@@ -706,7 +715,7 @@ impl SessionRunner {
                                 tracing::warn!("Conflict resolution agent failed to spawn: {}", e);
                                 // Abort the rebase since we can't resolve conflicts
                                 let _ = runtime
-                                    .run_command("git rebase --abort", &self.config.repo_path, timeout)
+                                    .run_command("git rebase --abort", self.config.effective_working_dir(), timeout)
                                     .await;
                                 last_error = format!("conflict resolution failed to start: {}", e);
                                 continue;
@@ -715,7 +724,7 @@ impl SessionRunner {
 
                         // Check if rebase is still in progress
                         let post_status = runtime
-                            .run_command("git status", &self.config.repo_path, timeout)
+                            .run_command("git status", self.config.effective_working_dir(), timeout)
                             .await;
 
                         let rebase_in_progress = match &post_status {
@@ -730,7 +739,7 @@ impl SessionRunner {
                             let _ = runtime
                                 .run_command(
                                     "git rebase --abort",
-                                    &self.config.repo_path,
+                                    self.config.effective_working_dir(),
                                     timeout,
                                 )
                                 .await;
@@ -751,7 +760,7 @@ impl SessionRunner {
                             match runtime
                                 .run_command(
                                     &format!("git push origin {branch}"),
-                                    &self.config.repo_path,
+                                    self.config.effective_working_dir(),
                                     timeout,
                                 )
                                 .await
@@ -790,7 +799,7 @@ impl SessionRunner {
                         // Rebase failed for non-conflict reasons
                         last_error = rebase_error;
                         let _ = runtime
-                            .run_command("git rebase --abort", &self.config.repo_path, timeout)
+                            .run_command("git rebase --abort", self.config.effective_working_dir(), timeout)
                             .await;
                     }
                 }
@@ -825,7 +834,7 @@ impl SessionRunner {
     ) -> Result<trace::SessionTrace> {
         runtime.health_check().await?;
 
-        let repo_str = self.config.repo_path.to_string_lossy().to_string();
+        let repo_str = self.config.effective_working_dir().to_string_lossy().to_string();
         let mut trace = self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref());
 
         println!(
@@ -1163,6 +1172,7 @@ mod tests {
         let runtime = MockRuntime::completing_after(2); // 2 working iterations + completion
         let config = SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -1489,6 +1499,7 @@ mod tests {
     fn make_runner(tmp: &TempDir, checks: Vec<Check>) -> SessionRunner {
         let config = SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -1727,6 +1738,7 @@ mod tests {
 
         let config = SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -1793,6 +1805,7 @@ mod tests {
 
         let config = SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -1868,6 +1881,7 @@ mod tests {
 
         let config = SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -2149,6 +2163,7 @@ mod tests {
 
         let config = SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -2199,6 +2214,7 @@ mod tests {
     fn make_runner_with_git_sync(tmp: &TempDir, git_sync: Option<GitSyncConfig>) -> SessionRunner {
         let config = SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -2522,6 +2538,7 @@ mod tests {
         let tmp = TempDir::new().expect("create temp dir");
         let config = SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -2681,6 +2698,7 @@ mod tests {
 
         let config = SessionConfig {
             repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
             prompt: "Test prompt".to_string(),
             max_iterations: 2,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
@@ -2773,6 +2791,47 @@ mod tests {
             git_sync_event_count, 0,
             "should have no git sync events when git_sync is None, got {}",
             git_sync_event_count
+        );
+    }
+
+    // =========================================================================
+    // working_dir override tests
+    // =========================================================================
+
+    #[test]
+    fn session_config_default_has_no_working_dir() {
+        let config = SessionConfig::default();
+        assert!(
+            config.working_dir.is_none(),
+            "default working_dir should be None"
+        );
+    }
+
+    #[test]
+    fn effective_working_dir_returns_repo_path_when_working_dir_is_none() {
+        let config = SessionConfig {
+            repo_path: PathBuf::from("/my/repo"),
+            working_dir: None,
+            ..SessionConfig::default()
+        };
+        assert_eq!(
+            config.effective_working_dir(),
+            std::path::Path::new("/my/repo"),
+            "effective_working_dir should fall back to repo_path when working_dir is None"
+        );
+    }
+
+    #[test]
+    fn effective_working_dir_returns_working_dir_when_set() {
+        let config = SessionConfig {
+            repo_path: PathBuf::from("/my/repo"),
+            working_dir: Some(PathBuf::from("/custom/working/dir")),
+            ..SessionConfig::default()
+        };
+        assert_eq!(
+            config.effective_working_dir(),
+            std::path::Path::new("/custom/working/dir"),
+            "effective_working_dir should return working_dir when it is Some"
         );
     }
 }

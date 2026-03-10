@@ -148,6 +148,7 @@ async fn run_session(
 
             let config = SessionConfig {
                 repo_path: repo_path_buf,
+                working_dir: None,
                 prompt,
                 max_iterations,
                 completion_signal,
@@ -196,6 +197,7 @@ async fn run_session(
 
             let config = SessionConfig {
                 repo_path: PathBuf::from(remote_path),
+                working_dir: None,
                 prompt,
                 max_iterations,
                 completion_signal,
