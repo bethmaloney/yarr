@@ -110,11 +110,11 @@ Update `fetchPlans` and the dropdown UI in `RepoDetail.tsx`.
 - React: Test that loading state shows "Loading..." in dropdown
 
 **Checklist:**
-- [ ] Add Rust test for SSH `run_command` (if feasible without real SSH)
-- [ ] Add React test for error state (toast + dropdown message)
-- [ ] Add React test for loading state
-- [ ] Verify: `cd src-tauri && cargo test`
-- [ ] Verify: `npm test`
+- [x] Add Rust test for SSH `run_command` (if feasible without real SSH) — 6 `build_run_command` unit tests in `ssh.rs`; async `run_command` requires real SSH so not unit-testable
+- [x] Add React test for error state (toast + dropdown message) — added in Task 2 at `RepoDetail.test.tsx:1199`
+- [x] Add React test for loading state — added in Task 2 at `RepoDetail.test.tsx:1225` and `:1250`
+- [x] Verify: `cd src-tauri && cargo test` — 360 passed
+- [x] Verify: `npm test` — 706 passed
 
 ---
 
@@ -124,4 +124,4 @@ Update `fetchPlans` and the dropdown UI in `RepoDetail.tsx`.
 |------|-------------|--------|
 | 1 | Implement `SshRuntime::run_command` | Done |
 | 2 | Add loading/error state to plan selector UI | Done |
-| 3 | Tests | Not Started |
+| 3 | Tests | Done |
