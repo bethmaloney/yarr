@@ -3069,7 +3069,7 @@ mod tests {
         let events_file = base_dir
             .join("traces")
             .join("test-repo")
-            .join(format!("events_{}.json", trace.session_id));
+            .join(format!("events_{}.jsonl", trace.session_id));
         assert!(
             events_file.exists(),
             "run() should write events file to disk at {:?}",
