@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use oneshot::OneShotRunner;
-use runtime::{default_runtime, ssh_command, ssh_shell_escape, RuntimeProvider, SshRuntime};
+use runtime::{default_runtime, ssh_command, ssh_command_raw, ssh_shell_escape, RuntimeProvider, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use ssh_orchestrator::SshSessionOrchestrator;
 use tauri::{Emitter, Manager, RunEvent};
@@ -363,16 +363,44 @@ async fn stop_session(app: tauri::AppHandle, repo_id: String) -> Result<(), Stri
 }
 
 fn connection_test_steps(ssh_host: &str, remote_path: &str) -> Vec<(String, tokio::process::Command)> {
+    let trimmed_path = remote_path.trim();
     vec![
-        ("SSH reachable".to_string(), ssh_command(ssh_host, "echo OK")),
+        ("SSH reachable".to_string(), ssh_command_raw(ssh_host, "echo OK")),
         ("tmux available".to_string(), ssh_command(ssh_host, "command -v tmux")),
         ("claude available".to_string(), ssh_command(ssh_host, "command -v claude")),
-        ("Remote path exists".to_string(), ssh_command(ssh_host, &format!("test -d {} && echo OK", ssh_shell_escape(remote_path)))),
+        ("Remote path exists".to_string(), ssh_command_raw(
+            ssh_host,
+            &format!("test -d {} && echo OK", ssh_shell_escape(trimmed_path))
+        )),
     ]
+}
+
+async fn diagnose_path_failure(ssh_host: &str, remote_path: &str) -> String {
+    let trimmed = remote_path.trim();
+    let escaped = ssh_shell_escape(trimmed);
+    let diag_cmd = format!(
+        "if [ -e {0} ]; then if [ -d {0} ]; then if [ -r {0} ] && [ -x {0} ]; then echo ACCESSIBLE; else echo PERM_ISSUE; fi; else echo NOT_A_DIR; fi; else echo NOT_FOUND; fi",
+        escaped
+    );
+    let output = ssh_command_raw(ssh_host, &diag_cmd).output().await;
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            match stdout.as_str() {
+                "NOT_FOUND" => format!("Directory does not exist: {trimmed}"),
+                "NOT_A_DIR" => format!("Path exists but is not a directory: {trimmed}"),
+                "PERM_ISSUE" => format!("Directory exists but is not accessible (check permissions): {trimmed}"),
+                "ACCESSIBLE" => format!("Path check failed for: {trimmed}"),
+                _ => format!("Path check failed for: {trimmed}"),
+            }
+        }
+        Err(_) => format!("Path check failed for: {trimmed}"),
+    }
 }
 
 #[tauri::command]
 async fn test_ssh_connection_steps(app: tauri::AppHandle, ssh_host: String, remote_path: String) -> Result<(), String> {
+    let remote_path = remote_path.trim().to_string();
     let steps = connection_test_steps(&ssh_host, &remote_path);
     for (step_name, mut cmd) in steps {
         let output = cmd.output().await.map_err(|e| e.to_string())?;
@@ -383,11 +411,16 @@ async fn test_ssh_connection_steps(app: tauri::AppHandle, ssh_host: String, remo
                 error: None,
             });
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let error_msg = if step_name == "Remote path exists" {
+                diagnose_path_failure(&ssh_host, &remote_path).await
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                if stderr.is_empty() { "Check failed".to_string() } else { stderr }
+            };
             let _ = app.emit("ssh-test-step", SshTestStep {
                 step: step_name,
                 status: "fail".to_string(),
-                error: Some(if stderr.is_empty() { "Check failed".to_string() } else { stderr }),
+                error: Some(error_msg),
             });
             let _ = app.emit("ssh-test-complete", ());
             return Ok(());
@@ -1348,6 +1381,12 @@ mod tests {
             all_args.contains("echo OK"),
             "SSH reachable command should contain 'echo OK', got: {all_args}"
         );
+
+        // Step 1 should use ssh_command_raw (no login shell wrapping)
+        assert!(
+            !all_args.contains("$SHELL -lc"),
+            "SSH reachable should use ssh_command_raw (no login shell), but found '$SHELL -lc' in: {all_args}"
+        );
     }
 
     #[test]
@@ -1365,6 +1404,12 @@ mod tests {
             all_args.contains("command -v tmux"),
             "tmux check command should contain 'command -v tmux', got: {all_args}"
         );
+
+        // Step 2 should use ssh_command (login shell wrapping) to find tmux via PATH
+        assert!(
+            all_args.contains("$SHELL -lc"),
+            "tmux available should use ssh_command (login shell), but '$SHELL -lc' not found in: {all_args}"
+        );
     }
 
     #[test]
@@ -1381,6 +1426,12 @@ mod tests {
         assert!(
             all_args.contains("command -v claude"),
             "claude check command should contain 'command -v claude', got: {all_args}"
+        );
+
+        // Step 3 should use ssh_command (login shell wrapping) to find claude via PATH
+        assert!(
+            all_args.contains("$SHELL -lc"),
+            "claude available should use ssh_command (login shell), but '$SHELL -lc' not found in: {all_args}"
         );
     }
 
@@ -1403,6 +1454,12 @@ mod tests {
             all_args.contains("/home/user/project"),
             "remote path check command should contain the provided path, got: {all_args}"
         );
+
+        // Step 4 should use ssh_command_raw (no login shell wrapping)
+        assert!(
+            !all_args.contains("$SHELL -lc"),
+            "Remote path exists should use ssh_command_raw (no login shell), but found '$SHELL -lc' in: {all_args}"
+        );
     }
 
     #[test]
@@ -1420,6 +1477,32 @@ mod tests {
         assert!(
             all_args.contains("/home/user/my project") || all_args.contains("'/home/user/my project'"),
             "remote path check command should include path with spaces (possibly shell-escaped), got: {all_args}"
+        );
+    }
+
+    #[test]
+    fn connection_test_steps_trims_remote_path_whitespace() {
+        let steps = connection_test_steps("myhost", "  /home/user/project  ");
+        let (name, cmd) = &steps[3];
+
+        assert_eq!(name, "Remote path exists");
+
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        // The remote path should be trimmed (no leading/trailing whitespace)
+        assert!(
+            all_args.contains("/home/user/project"),
+            "remote path check command should contain trimmed path '/home/user/project', got: {all_args}"
+        );
+        assert!(
+            !all_args.contains("  /home/user/project"),
+            "remote path should not have leading whitespace, got: {all_args}"
+        );
+        assert!(
+            !all_args.contains("/home/user/project  "),
+            "remote path should not have trailing whitespace, got: {all_args}"
         );
     }
 

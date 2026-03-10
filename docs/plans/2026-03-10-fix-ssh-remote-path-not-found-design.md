@@ -78,10 +78,10 @@ On Windows/WSL, `shell_escape(remote_cmd)` is still needed for the local bash la
 
 ### Checklist
 
-- [ ] Import `ssh_command_raw` (update the `use runtime::` import at line 16)
-- [ ] Change step 1 ("SSH reachable") to use `ssh_command_raw` — `echo OK` doesn't need login shell PATH
-- [ ] Change step 4 ("Remote path exists") to use `ssh_command_raw` — `test -d` doesn't need login shell PATH
-- [ ] Keep steps 2 and 3 using `ssh_command` (login shell) — `command -v tmux` and `command -v claude` need the user's PATH
+- [x] Import `ssh_command_raw` (update the `use runtime::` import at line 16)
+- [x] Change step 1 ("SSH reachable") to use `ssh_command_raw` — `echo OK` doesn't need login shell PATH
+- [x] Change step 4 ("Remote path exists") to use `ssh_command_raw` — `test -d` doesn't need login shell PATH
+- [x] Keep steps 2 and 3 using `ssh_command` (login shell) — `command -v tmux` and `command -v claude` need the user's PATH
 
 ### Updated function
 
@@ -112,7 +112,7 @@ Note: Added `trimmed_path` to strip any leading/trailing whitespace from the pat
 
 ### Checklist
 
-- [ ] When the "Remote path exists" step fails, run a follow-up diagnostic command to determine **why** the path check failed:
+- [x] When the "Remote path exists" step fails, run a follow-up diagnostic command to determine **why** the path check failed:
   - Run: `ssh_command_raw(ssh_host, &format!("stat {} 2>&1 || echo 'PATH_NOT_FOUND'", ssh_shell_escape(remote_path)))`
   - Parse stdout to classify the error:
     - If stdout contains `No such file or directory` → "Directory does not exist: {path}"
@@ -120,7 +120,7 @@ Note: Added `trimmed_path` to strip any leading/trailing whitespace from the pat
     - If stdout contains `Not a directory` → "Path exists but is not a directory: {path}"
     - If stdout contains `PATH_NOT_FOUND` → "Directory not found: {path}"
     - Otherwise → show the raw stderr/stdout for debugging
-- [ ] Emit the descriptive error message instead of the generic "Check failed" fallback
+- [x] Emit the descriptive error message instead of the generic "Check failed" fallback
 
 ### Implementation detail
 
@@ -179,11 +179,11 @@ Modify the main loop in `test_ssh_connection_steps` to call this diagnostic when
 
 ### Checklist
 
-- [ ] Trim `remote_path` at the start of `test_ssh_connection_steps` before passing to `connection_test_steps`:
+- [x] Trim `remote_path` at the start of `test_ssh_connection_steps` before passing to `connection_test_steps`:
   ```rust
   let remote_path = remote_path.trim().to_string();
   ```
-- [ ] This defends against whitespace in the path from frontend input (the frontend already trims in `handleAddSshRepo` at `Home.tsx:69`, but the stored value might have whitespace from direct store edits or migration)
+- [x] This defends against whitespace in the path from frontend input (the frontend already trims in `handleAddSshRepo` at `Home.tsx:69`, but the stored value might have whitespace from direct store edits or migration)
 
 ---
 
@@ -211,10 +211,10 @@ Modify the main loop in `test_ssh_connection_steps` to call this diagnostic when
 
 ### Checklist
 
-- [ ] Update `connection_test_steps_first_step_is_ssh_reachable` — verify it uses raw command (no `$SHELL -lc` in args)
-- [ ] Update `connection_test_steps_fourth_step_checks_remote_path` — verify it uses raw command (no `$SHELL -lc` in args)
-- [ ] Add `connection_test_steps_trims_remote_path_whitespace` — pass a path with leading/trailing spaces, verify the command contains the trimmed path
-- [ ] Verify steps 2 and 3 still use login shell (contain `$SHELL -lc` in args)
+- [x] Update `connection_test_steps_first_step_is_ssh_reachable` — verify it uses raw command (no `$SHELL -lc` in args)
+- [x] Update `connection_test_steps_fourth_step_checks_remote_path` — verify it uses raw command (no `$SHELL -lc` in args)
+- [x] Add `connection_test_steps_trims_remote_path_whitespace` — pass a path with leading/trailing spaces, verify the command contains the trimmed path
+- [x] Verify steps 2 and 3 still use login shell (contain `$SHELL -lc` in args)
 
 ---
 
@@ -224,9 +224,9 @@ Modify the main loop in `test_ssh_connection_steps` to call this diagnostic when
 
 ### Checklist
 
-- [ ] Run `cd src-tauri && cargo check` — no compilation errors
-- [ ] Run `cd src-tauri && cargo test` — all tests pass
-- [ ] Run `npx tsc --noEmit` — no TypeScript errors (no frontend files modified, but verify)
+- [x] Run `cd src-tauri && cargo check` — no compilation errors
+- [x] Run `cd src-tauri && cargo test` — all tests pass
+- [x] Run `npx tsc --noEmit` — no TypeScript errors (no frontend files modified; node not available in env but no TS changes)
 
 ---
 
@@ -259,9 +259,9 @@ No. `ssh_command()` remains unchanged. Only `connection_test_steps()` is modifie
 | Task | Status | Notes |
 |------|--------|-------|
 | Task 1: Add `ssh_command_raw()` | Done | New function without login shell wrapper |
-| Task 2: Use `ssh_command_raw` in connection test | Not started | Steps 1 and 4 only |
-| Task 3: Improve path check error diagnostics | Not started | Diagnostic follow-up command |
-| Task 4: Add path trimming | Not started | Defensive whitespace handling |
+| Task 2: Use `ssh_command_raw` in connection test | Done | Steps 1 and 4 use raw, steps 2 and 3 keep login shell |
+| Task 3: Improve path check error diagnostics | Done | diagnose_path_failure with proper permission checks |
+| Task 4: Add path trimming | Done | Defensive whitespace handling in test_ssh_connection_steps and connection_test_steps |
 | Task 5: Unit tests for `ssh_command_raw` | Done | 5 new tests |
-| Task 6: Update connection test step tests | Not started | 4 updated/new tests |
-| Task 7: Verify with cargo test/check | Not started | Final verification |
+| Task 6: Update connection test step tests | Done | 4 updated tests + 1 new whitespace trimming test |
+| Task 7: Verify with cargo test/check | Done | cargo check and cargo test pass (327 tests), no TS changes |
