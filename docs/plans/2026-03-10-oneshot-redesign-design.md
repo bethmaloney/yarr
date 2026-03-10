@@ -462,16 +462,16 @@ Create the new detail page with active/read-only modes.
 - Remove old `/repo/:repoId/oneshot` route from `App.tsx`
 
 **Checklist:**
-- [ ] `OneShotDetail.tsx` created with both modes
-- [ ] Route added to `App.tsx`
-- [ ] Old route removed
-- [ ] Prompt always displayed
-- [ ] Phase indicator works with lifecycle events
-- [ ] Add tests: active mode shows stop button, hides trace summary
-- [ ] Add tests: read-only mode shows trace summary, hides stop button
-- [ ] Add tests: prompt displayed in both modes
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm test` passes
+- [x] `OneShotDetail.tsx` created with both modes
+- [x] Route added to `App.tsx`
+- [x] Old route removed
+- [x] Prompt always displayed
+- [x] Phase indicator works with lifecycle events
+- [x] Add tests: active mode shows stop button, hides trace summary
+- [x] Add tests: read-only mode shows trace summary, hides stop button
+- [x] Add tests: prompt displayed in both modes
+- [x] `npx tsc --noEmit` passes
+- [x] `npm test` passes
 
 ---
 
@@ -581,7 +581,7 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | 5 | Clean up oneshot-helpers and event-format | Done |
 | 6 | Add OneShotEntry type and store state | Done |
 | 7 | OneShotCard component | Done |
-| 8 | OneShotDetail page with active/read-only modes | Not Started |
+| 8 | OneShotDetail page with active/read-only modes | Done |
 | 9 | Home page mixed cards | Not Started |
 | 10 | RepoDetail 1-shot launch form | Not Started |
 | 11 | Delete old OneShot page | Not Started |

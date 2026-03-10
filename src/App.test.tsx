@@ -23,6 +23,7 @@ vi.mock("./store", () => ({
         repos: [],
         sessions: new Map(),
         latestTraces: new Map(),
+        oneShotEntries: new Map(),
         addLocalRepo: vi.fn(),
         addSshRepo: vi.fn(),
       });
@@ -115,13 +116,25 @@ describe("App", () => {
   });
 
   // =========================================================================
-  // 4. Route: /repo/:repoId/oneshot renders OneShot page
+  // 4. Route: /oneshot/:oneshotId renders OneShotDetail page
   // =========================================================================
 
-  describe("route /repo/:repoId/oneshot", () => {
-    it("renders OneShot page for unknown repo", () => {
+  describe("route /oneshot/:oneshotId", () => {
+    it("renders OneShotDetail page showing not found for unknown oneshotId", () => {
+      renderWithRouter(["/oneshot/oneshot-nonexistent"]);
+      expect(screen.getByText(/not found/i)).toBeInTheDocument();
+    });
+  });
+
+  // =========================================================================
+  // 4b. Old route /repo/:repoId/oneshot is removed
+  // =========================================================================
+
+  describe("route /repo/:repoId/oneshot (removed)", () => {
+    it("does not render OneShot page at the old route", () => {
       renderWithRouter(["/repo/test-id/oneshot"]);
-      expect(screen.getByText("Repo not found")).toBeInTheDocument();
+      // Old route should no longer match — should not render "Repo not found" from OneShot
+      expect(screen.queryByText("Repo not found")).not.toBeInTheDocument();
     });
   });
 

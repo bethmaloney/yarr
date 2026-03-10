@@ -5,7 +5,7 @@ import Home from "./pages/Home";
 import RepoDetail from "./pages/RepoDetail";
 import History from "./pages/History";
 import RunDetail from "./pages/RunDetail";
-import OneShot from "./pages/OneShot";
+import OneShotDetail from "./pages/OneShotDetail";
 import DesignSystem from "./pages/DesignSystem";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -26,7 +26,7 @@ export function AppRoutes() {
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/repo/:repoId" element={<RepoDetail />} />
-        <Route path="/repo/:repoId/oneshot" element={<OneShot />} />
+        <Route path="/oneshot/:oneshotId" element={<OneShotDetail />} />
         <Route path="/history" element={<History />} />
         <Route path="/history/:repoId" element={<History />} />
         <Route path="/run/:repoId/:sessionId" element={<RunDetail />} />
