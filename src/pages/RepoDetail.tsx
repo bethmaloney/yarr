@@ -402,7 +402,7 @@ export default function RepoDetail() {
       : null;
 
   return (
-    <main>
+    <main className="max-w-[900px] mx-auto p-8">
       <Breadcrumbs
         crumbs={[
           { label: "Home", onClick: () => navigate("/") },
@@ -410,9 +410,9 @@ export default function RepoDetail() {
         ]}
       />
 
-      <header>
+      <header className="mb-6">
         {editingName ? (
-          <h1>
+          <h1 className="text-3xl text-primary font-bold">
             <input
               ref={nameInputRef}
               type="text"
@@ -420,36 +420,37 @@ export default function RepoDetail() {
               onChange={(e) => setNameInput(e.target.value)}
               onBlur={saveName}
               onKeyDown={handleNameKeydown}
+              className="bg-transparent border-b border-primary outline-none text-3xl text-primary font-bold w-full"
             />
           </h1>
         ) : (
           <h1
+            className="text-3xl text-primary font-bold cursor-pointer hover:opacity-80"
             onClick={() => setEditingName(true)}
-            style={{ cursor: "pointer" }}
           >
             {repo.name}
           </h1>
         )}
-        <p>{repoDisplayPath}</p>
+        <p className="text-sm text-muted-foreground mt-1">{repoDisplayPath}</p>
       </header>
 
       {/* Branch selector */}
       {branchInfo && (
-        <div>
+        <div className="mb-6">
           {session.running ? (
             <button
-              className={`branch-chip${branchInfo.behind && branchInfo.behind > 0 ? " warning" : ""}`}
+              className={`branch-chip inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground${branchInfo.behind && branchInfo.behind > 0 ? " warning border border-warning" : ""}`}
               disabled
             >
               {branchInfo.name}
               {branchInfo.ahead != null && branchInfo.ahead > 0 && (
-                <span>
+                <span className="text-xs opacity-70">
                   {"\u2191"}
                   {branchInfo.ahead}
                 </span>
               )}
               {branchInfo.behind != null && branchInfo.behind > 0 && (
-                <span>
+                <span className="text-xs opacity-70">
                   {"\u2193"}
                   {branchInfo.behind}
                 </span>
@@ -462,20 +463,20 @@ export default function RepoDetail() {
             >
               <PopoverTrigger asChild>
                 <button
-                  className={`branch-chip${branchInfo.behind && branchInfo.behind > 0 ? " warning" : ""}`}
+                  className={`branch-chip inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer${branchInfo.behind && branchInfo.behind > 0 ? " warning border border-warning" : ""}`}
                   onClick={() => {
                     if (!branchDropdownOpen) fetchBranches();
                   }}
                 >
                   {branchInfo.name}
                   {branchInfo.ahead != null && branchInfo.ahead > 0 && (
-                    <span>
+                    <span className="text-xs opacity-70">
                       {"\u2191"}
                       {branchInfo.ahead}
                     </span>
                   )}
                   {branchInfo.behind != null && branchInfo.behind > 0 && (
-                    <span>
+                    <span className="text-xs opacity-70">
                       {"\u2193"}
                       {branchInfo.behind}
                     </span>
@@ -483,19 +484,23 @@ export default function RepoDetail() {
                 </button>
               </PopoverTrigger>
               <PopoverContent
-                className="branch-dropdown"
+                className="branch-dropdown w-64 p-0"
                 onEscapeKeyDown={() => {
                   setBranchSearch("");
                 }}
               >
                 {branchInfo.behind != null && branchInfo.behind > 0 && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleFastForward}
-                  >
-                    Fast-forward
-                  </Button>
+                  <div className="p-2 border-b border-border">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="w-full"
+                      onClick={handleFastForward}
+                    >
+                      Fast-forward
+                    </Button>
+                  </div>
                 )}
                 <Command shouldFilter={false}>
                   <CommandInput
@@ -511,7 +516,7 @@ export default function RepoDetail() {
                     {filteredBranches.map((branch) => (
                       <CommandItem
                         key={branch}
-                        className={`branch-item${branch === branchInfo?.name ? " active" : ""}`}
+                        className={`branch-item${branch === branchInfo?.name ? " active font-bold" : ""}`}
                         onSelect={() => handleSwitchBranch(branch)}
                       >
                         {branch}
@@ -526,17 +531,17 @@ export default function RepoDetail() {
       )}
 
       {/* Settings section */}
-      <Collapsible className="settings">
+      <Collapsible className="settings border border-border rounded-md mb-4">
         <CollapsibleTrigger asChild>
-          <button>
+          <button className="w-full text-left px-4 py-3 text-sm font-medium text-foreground hover:bg-accent/50 cursor-pointer">
             Settings — {model}, {maxIterations} iters
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div>
+          <div className="px-4 pb-4 flex flex-col gap-4">
             {repo.type === "ssh" && (
               <>
-                <Label>
+                <Label className="flex flex-col gap-1">
                   SSH Host
                   <Input
                     type="text"
@@ -547,7 +552,7 @@ export default function RepoDetail() {
                     disabled
                   />
                 </Label>
-                <Label>
+                <Label className="flex flex-col gap-1">
                   Remote Path
                   <Input
                     type="text"
@@ -560,7 +565,7 @@ export default function RepoDetail() {
                 </Label>
               </>
             )}
-            <Label>
+            <Label className="flex flex-col gap-1">
               Model
               <Input
                 type="text"
@@ -569,7 +574,7 @@ export default function RepoDetail() {
                 disabled={session.running}
               />
             </Label>
-            <Label>
+            <Label className="flex flex-col gap-1">
               Max Iterations
               <Input
                 type="number"
@@ -579,7 +584,7 @@ export default function RepoDetail() {
                 disabled={session.running}
               />
             </Label>
-            <Label>
+            <Label className="flex flex-col gap-1">
               Completion Signal
               <Input
                 type="text"
@@ -588,7 +593,7 @@ export default function RepoDetail() {
                 disabled={session.running}
               />
             </Label>
-            <Label>
+            <Label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={createBranch}
@@ -597,10 +602,10 @@ export default function RepoDetail() {
               />
               Create branch on run
             </Label>
-            <fieldset disabled={session.running}>
-              <legend>Environment Variables</legend>
+            <fieldset disabled={session.running} className="flex flex-col gap-3">
+              <legend className="text-sm font-medium mb-2">Environment Variables</legend>
               {envVars.map((envVar, i) => (
-                <div key={i}>
+                <div key={i} className="flex items-center gap-2">
                   <Input
                     type="text"
                     value={envVar.key}
@@ -610,8 +615,9 @@ export default function RepoDetail() {
                       setEnvVars(updated);
                     }}
                     placeholder="KEY"
+                    className="flex-1"
                   />
-                  <span>=</span>
+                  <span className="text-muted-foreground">=</span>
                   <Input
                     type="text"
                     value={envVar.value}
@@ -621,10 +627,12 @@ export default function RepoDetail() {
                       setEnvVars(updated);
                     }}
                     placeholder="value"
+                    className="flex-1"
                   />
                   <Button
                     type="button"
                     variant="ghost"
+                    size="icon"
                     onClick={() =>
                       setEnvVars(envVars.filter((_, j) => j !== i))
                     }
@@ -636,12 +644,13 @@ export default function RepoDetail() {
               <Button
                 type="button"
                 variant="secondary"
+                size="sm"
                 onClick={() => setEnvVars([...envVars, { key: "", value: "" }])}
               >
                 + Add Variable
               </Button>
             </fieldset>
-            <div>
+            <div className="flex gap-2 pt-2">
               <Button
                 type="button"
                 onClick={saveSettings}
@@ -661,10 +670,10 @@ export default function RepoDetail() {
               )}
             </div>
             {connectionTest && (
-              <div data-testid="connection-checklist">
+              <div data-testid="connection-checklist" className="flex flex-col gap-2 mt-2">
                 {connectionTest.steps.map((step) => (
-                  <div key={step.name} className={`step-${step.status}`}>
-                    <span>
+                  <div key={step.name} className={`step-${step.status} flex items-center gap-2 text-sm`}>
+                    <span className={step.status === "pass" ? "text-success" : step.status === "fail" ? "text-destructive" : "text-muted-foreground"}>
                       {step.status === "running"
                         ? "..."
                         : step.status === "pass"
@@ -674,7 +683,7 @@ export default function RepoDetail() {
                             : "\u00B7"}
                     </span>
                     <span>{step.name}</span>
-                    {step.error && <span>{step.error}</span>}
+                    {step.error && <span className="text-destructive text-xs">{step.error}</span>}
                   </div>
                 ))}
               </div>
@@ -684,12 +693,14 @@ export default function RepoDetail() {
       </Collapsible>
 
       {/* Checks section */}
-      <Collapsible className="checks">
+      <Collapsible className="checks border border-border rounded-md mb-4">
         <CollapsibleTrigger asChild>
-          <button>Checks — {checks.length} configured</button>
+          <button className="w-full text-left px-4 py-3 text-sm font-medium text-foreground hover:bg-accent/50 cursor-pointer">
+            Checks — {checks.length} configured
+          </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div>
+          <div className="px-4 pb-4">
             <Accordion type="multiple">
               {checks.map((check, i) => (
                 <AccordionItem
@@ -714,87 +725,92 @@ export default function RepoDetail() {
                     </Button>
                   </div>
                   <AccordionContent>
-                    <Label>
-                      Name
-                      <Input
-                        type="text"
-                        value={check.name}
-                        onChange={(e) => {
-                          const updated = [...checks];
-                          updated[i] = { ...updated[i], name: e.target.value };
-                          setChecks(updated);
-                        }}
-                        disabled={session.running}
-                      />
-                    </Label>
-                    <Label>
-                      Command
-                      <Input
-                        type="text"
-                        value={check.command}
-                        onChange={(e) => {
-                          const updated = [...checks];
-                          updated[i] = {
-                            ...updated[i],
-                            command: e.target.value,
-                          };
-                          setChecks(updated);
-                        }}
-                        disabled={session.running}
-                      />
-                    </Label>
-                    <Label>
-                      When
-                      <select
-                        value={check.when}
-                        onChange={(e) => {
-                          const updated = [...checks];
-                          updated[i] = {
-                            ...updated[i],
-                            when: e.target.value as Check["when"],
-                          };
-                          setChecks(updated);
-                        }}
-                        disabled={session.running}
-                      >
-                        <option value="each_iteration">each_iteration</option>
-                        <option value="post_completion">post_completion</option>
-                      </select>
-                    </Label>
-                    <Label>
-                      Timeout
-                      <Input
-                        type="number"
-                        value={check.timeoutSecs}
-                        onChange={(e) => {
-                          const updated = [...checks];
-                          updated[i] = {
-                            ...updated[i],
-                            timeoutSecs: Number(e.target.value),
-                          };
-                          setChecks(updated);
-                        }}
-                        min={1}
-                        disabled={session.running}
-                      />
-                    </Label>
-                    <Label>
-                      Retries
-                      <Input
-                        type="number"
-                        value={check.maxRetries}
-                        onChange={(e) => {
-                          const updated = [...checks];
-                          updated[i] = {
-                            ...updated[i],
-                            maxRetries: Number(e.target.value),
-                          };
-                          setChecks(updated);
-                        }}
-                        min={0}
-                        disabled={session.running}
-                      />
-                    </Label>
+                    <div className="flex flex-col gap-3 pt-2">
+                      <Label className="flex flex-col gap-1">
+                        Name
+                        <Input
+                          type="text"
+                          value={check.name}
+                          onChange={(e) => {
+                            const updated = [...checks];
+                            updated[i] = { ...updated[i], name: e.target.value };
+                            setChecks(updated);
+                          }}
+                          disabled={session.running}
+                        />
+                      </Label>
+                      <Label className="flex flex-col gap-1">
+                        Command
+                        <Input
+                          type="text"
+                          value={check.command}
+                          onChange={(e) => {
+                            const updated = [...checks];
+                            updated[i] = {
+                              ...updated[i],
+                              command: e.target.value,
+                            };
+                            setChecks(updated);
+                          }}
+                          disabled={session.running}
+                        />
+                      </Label>
+                      <Label className="flex flex-col gap-1">
+                        When
+                        <select
+                          value={check.when}
+                          onChange={(e) => {
+                            const updated = [...checks];
+                            updated[i] = {
+                              ...updated[i],
+                              when: e.target.value as Check["when"],
+                            };
+                            setChecks(updated);
+                          }}
+                          disabled={session.running}
+                          className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                        >
+                          <option value="each_iteration">each_iteration</option>
+                          <option value="post_completion">post_completion</option>
+                        </select>
+                      </Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Label className="flex flex-col gap-1">
+                          Timeout
+                          <Input
+                            type="number"
+                            value={check.timeoutSecs}
+                            onChange={(e) => {
+                              const updated = [...checks];
+                              updated[i] = {
+                                ...updated[i],
+                                timeoutSecs: Number(e.target.value),
+                              };
+                              setChecks(updated);
+                            }}
+                            min={1}
+                            disabled={session.running}
+                          />
+                        </Label>
+                        <Label className="flex flex-col gap-1">
+                          Retries
+                          <Input
+                            type="number"
+                            value={check.maxRetries}
+                            onChange={(e) => {
+                              const updated = [...checks];
+                              updated[i] = {
+                                ...updated[i],
+                                maxRetries: Number(e.target.value),
+                              };
+                              setChecks(updated);
+                            }}
+                            min={0}
+                            disabled={session.running}
+                          />
+                        </Label>
+                      </div>
+                    </div>
                   </AccordionContent>
                 </AccordionItem>
               ))}
@@ -802,6 +818,8 @@ export default function RepoDetail() {
             <Button
               type="button"
               variant="secondary"
+              size="sm"
+              className="mt-3"
               disabled={session.running}
               onClick={() =>
                 setChecks([
@@ -823,13 +841,15 @@ export default function RepoDetail() {
       </Collapsible>
 
       {/* Git Sync section */}
-      <Collapsible className="git-sync">
+      <Collapsible className="git-sync border border-border rounded-md mb-6">
         <CollapsibleTrigger asChild>
-          <button>Git Sync — {gitSyncEnabled ? "enabled" : "disabled"}</button>
+          <button className="w-full text-left px-4 py-3 text-sm font-medium text-foreground hover:bg-accent/50 cursor-pointer">
+            Git Sync — {gitSyncEnabled ? "enabled" : "disabled"}
+          </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div>
-            <Label>
+          <div className="px-4 pb-4 flex flex-col gap-4">
+            <Label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={gitSyncEnabled}
@@ -838,8 +858,8 @@ export default function RepoDetail() {
               />
               Enable git sync
             </Label>
-            <div>
-              <Label>
+            <div className="flex flex-col gap-3">
+              <Label className="flex flex-col gap-1">
                 Model
                 <Input
                   type="text"
@@ -849,7 +869,7 @@ export default function RepoDetail() {
                   disabled={session.running || !gitSyncEnabled}
                 />
               </Label>
-              <Label>
+              <Label className="flex flex-col gap-1">
                 Max Push Retries
                 <Input
                   type="number"
@@ -859,7 +879,7 @@ export default function RepoDetail() {
                   disabled={session.running || !gitSyncEnabled}
                 />
               </Label>
-              <Label>
+              <Label className="flex flex-col gap-1">
                 Conflict Resolution Prompt
                 <Textarea
                   value={gitSyncPrompt}
@@ -875,34 +895,35 @@ export default function RepoDetail() {
       </Collapsible>
 
       {/* Plan section */}
-      <section className="plan-section">
-        <h2>Plan</h2>
-        <Label>
-          Prompt file
-          <div>
-            <Input
-              type="text"
-              value={planFile}
-              onChange={(e) => setPlanFile(e.target.value)}
-              placeholder="docs/plans/my-feature-design.md"
-              disabled={session.running}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={browsePrompt}
-              disabled={session.running}
-            >
-              Browse
-            </Button>
-          </div>
-        </Label>
-        {previewLoading && <p>Loading...</p>}
-        {!previewLoading && previewContent && <pre>{previewContent}</pre>}
+      <section className="plan-section mb-6">
+        <h2 className="text-lg font-semibold mb-3">Plan</h2>
+        <Label className="text-sm font-medium">Prompt file</Label>
+        <div className="flex gap-2 mt-1">
+          <Input
+            type="text"
+            value={planFile}
+            onChange={(e) => setPlanFile(e.target.value)}
+            placeholder="docs/plans/my-feature-design.md"
+            disabled={session.running}
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={browsePrompt}
+            disabled={session.running}
+          >
+            Browse
+          </Button>
+        </div>
+        {previewLoading && <p className="text-sm text-muted-foreground mt-2">Loading...</p>}
+        {!previewLoading && previewContent && (
+          <pre className="mt-3 p-3 bg-card border border-border rounded-md text-xs text-foreground overflow-x-auto max-h-48 overflow-y-auto">{previewContent}</pre>
+        )}
       </section>
 
       {/* Action buttons */}
-      <div>
+      <div className="flex gap-2 mb-6">
         {session.disconnected ? (
           <Button
             type="button"
@@ -952,13 +973,13 @@ export default function RepoDetail() {
 
       {/* Disconnected banner */}
       {session.disconnected && (
-        <section>
-          <p>
+        <section className="bg-destructive/10 border border-destructive/30 rounded-md p-4 mb-4">
+          <p className="text-destructive font-medium">
             {session.disconnectReason
               ? `Connection lost: ${session.disconnectReason}`
               : "Connection lost"}
           </p>
-          <p>The remote session may still be running.</p>
+          <p className="text-sm text-muted-foreground mt-1">The remote session may still be running.</p>
         </section>
       )}
 
@@ -971,32 +992,32 @@ export default function RepoDetail() {
 
       {/* Error section */}
       {session.error && (
-        <section>
-          <h2>Error</h2>
-          <pre>{session.error}</pre>
+        <section className="bg-destructive/10 border border-destructive/30 rounded-md p-4 mt-4">
+          <h2 className="text-lg font-semibold text-destructive mb-2">Error</h2>
+          <pre className="text-sm text-destructive whitespace-pre-wrap">{session.error}</pre>
         </section>
       )}
 
       {/* Trace/Result section */}
       {session.trace && (
-        <section>
-          <h2>Result</h2>
-          <dl>
-            <dt>Outcome</dt>
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold mb-3">Result</h2>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            <dt className="text-muted-foreground">Outcome</dt>
             <dd>{session.trace.outcome}</dd>
             {session.trace.failure_reason && (
               <>
-                <dt>Reason</dt>
-                <dd>{session.trace.failure_reason}</dd>
+                <dt className="text-muted-foreground">Reason</dt>
+                <dd className="text-destructive">{session.trace.failure_reason}</dd>
               </>
             )}
-            <dt>Iterations</dt>
+            <dt className="text-muted-foreground">Iterations</dt>
             <dd>{session.trace.total_iterations}</dd>
-            <dt>Total Cost</dt>
+            <dt className="text-muted-foreground">Total Cost</dt>
             <dd>${session.trace.total_cost_usd.toFixed(4)}</dd>
             {ctxPercent !== null && (
               <>
-                <dt>Context</dt>
+                <dt className="text-muted-foreground">Context</dt>
                 <dd>
                   <span style={{ color: sessionContextColor(ctxPercent) }}>
                     {ctxPercent}%
@@ -1004,8 +1025,8 @@ export default function RepoDetail() {
                 </dd>
               </>
             )}
-            <dt>Session ID</dt>
-            <dd>{session.trace.session_id}</dd>
+            <dt className="text-muted-foreground">Session ID</dt>
+            <dd className="font-mono text-xs">{session.trace.session_id}</dd>
           </dl>
         </section>
       )}
