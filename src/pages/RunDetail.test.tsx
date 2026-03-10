@@ -209,7 +209,7 @@ describe("RunDetail", () => {
       await waitFor(() => {
         // The date should be formatted (e.g. "Mar 10, 2026" or similar)
         expect(
-          screen.getByText(/Mar.*10.*2026|2026.*03.*10|3\/10\/2026/),
+          screen.getByText(/Mar.*10.*2026|10.*Mar.*2026|2026.*03.*10|3\/10\/2026/),
         ).toBeInTheDocument();
       });
     });
