@@ -31,6 +31,14 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Popover,
   PopoverTrigger,
@@ -45,6 +53,14 @@ import {
 } from "@/components/ui/command";
 import { toast } from "sonner";
 import { sessionContextColor } from "../context-bar";
+import {
+  Cpu,
+  Repeat,
+  ShieldCheck,
+  GitBranch,
+  Variable,
+  Settings,
+} from "lucide-react";
 import type { BranchInfo, Check, SessionState } from "../types";
 import type { RepoConfig } from "../repos";
 
@@ -593,31 +609,55 @@ export default function RepoDetail() {
       )}
 
       {/* Inline config bar */}
-      <div className="settings flex flex-wrap items-center gap-2 mb-6">
-        <Badge variant="secondary">{model}</Badge>
-        <Badge variant="secondary">{maxIterations} iters</Badge>
-        <Badge variant="secondary">{checks.length} checks</Badge>
+      <div
+        className="settings flex flex-wrap items-center gap-2 mb-6 px-3 py-2 rounded-md bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer group"
+        onClick={() => setConfigOpen(true)}
+      >
+        <Badge variant="secondary" className="font-mono">
+          <Cpu className="size-3" />
+          {model}
+        </Badge>
         <Badge variant="secondary">
-          {gitSyncEnabled ? "git sync on" : "git sync off"}
+          <Repeat className="size-3" />
+          {maxIterations} iters
+        </Badge>
+        <Badge variant="secondary">
+          <ShieldCheck className="size-3" />
+          {checks.length} checks
+        </Badge>
+        <Badge variant={gitSyncEnabled ? "success" : "outline"}>
+          <GitBranch className="size-3" />
+          git sync {gitSyncEnabled ? "on" : "off"}
         </Badge>
         {envVars.length > 0 && (
-          <Badge variant="secondary">{envVars.length} env</Badge>
+          <Badge variant="secondary">
+            <Variable className="size-3" />
+            {envVars.length} env
+          </Badge>
         )}
         <Button
           type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setConfigOpen(true)}
+          variant="ghost"
+          size="icon-xs"
+          className="ml-auto opacity-50 group-hover:opacity-100 transition-opacity"
+          aria-label="Configure"
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfigOpen(true);
+          }}
         >
-          Configure
+          <Settings />
         </Button>
       </div>
 
       {/* Config Sheet */}
       <Sheet open={configOpen} onOpenChange={setConfigOpen}>
-        <SheetContent side="right" className="overflow-y-auto">
+        <SheetContent side="right" className="overflow-y-auto border-l border-border bg-card">
           <SheetHeader>
-            <SheetTitle>Configuration</SheetTitle>
+            <SheetTitle className="flex items-center gap-2">
+              <Settings className="size-4 text-primary" />
+              Configuration
+            </SheetTitle>
             <SheetDescription>
               Settings, checks, and git sync for {repo.name}
             </SheetDescription>
@@ -665,6 +705,7 @@ export default function RepoDetail() {
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
                     disabled={session.running}
+                    className="font-mono"
                   />
                 </Label>
                 <Label className="flex flex-col gap-1">
@@ -675,6 +716,7 @@ export default function RepoDetail() {
                     onChange={(e) => setMaxIterations(Number(e.target.value))}
                     min={1}
                     disabled={session.running}
+                    className="font-mono"
                   />
                 </Label>
                 <Label className="flex flex-col gap-1">
@@ -684,6 +726,7 @@ export default function RepoDetail() {
                     value={completionSignal}
                     onChange={(e) => setCompletionSignal(e.target.value)}
                     disabled={session.running}
+                    className="font-mono"
                   />
                 </Label>
                 <Label className="flex flex-col gap-1">
@@ -696,11 +739,11 @@ export default function RepoDetail() {
                     disabled={session.running}
                   />
                 </Label>
-                <Label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                <Label htmlFor="create-branch" className="flex items-center gap-2 text-sm font-normal">
+                  <Checkbox
+                    id="create-branch"
                     checked={createBranch}
-                    onChange={(e) => setCreateBranch(e.target.checked)}
+                    onCheckedChange={(v) => setCreateBranch(v === true)}
                     disabled={session.running}
                   />
                   Create branch on run
@@ -834,22 +877,26 @@ export default function RepoDetail() {
                           </Label>
                           <Label className="flex flex-col gap-1">
                             When
-                            <select
+                            <Select
                               value={check.when}
-                              onChange={(e) => {
+                              onValueChange={(value) => {
                                 const updated = [...checks];
                                 updated[i] = {
                                   ...updated[i],
-                                  when: e.target.value as Check["when"],
+                                  when: value as Check["when"],
                                 };
                                 setChecks(updated);
                               }}
                               disabled={session.running}
-                              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
                             >
-                              <option value="each_iteration">each_iteration</option>
-                              <option value="post_completion">post_completion</option>
-                            </select>
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="each_iteration">each_iteration</SelectItem>
+                                <SelectItem value="post_completion">post_completion</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </Label>
                           <div className="grid grid-cols-2 gap-3">
                             <Label className="flex flex-col gap-1">
@@ -918,11 +965,11 @@ export default function RepoDetail() {
             {/* ── Git Sync tab ── */}
             <TabsContent value="git-sync">
               <div className="flex flex-col gap-4 pt-4">
-                <Label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                <Label htmlFor="git-sync-enabled" className="flex items-center gap-2 text-sm font-normal">
+                  <Checkbox
+                    id="git-sync-enabled"
                     checked={gitSyncEnabled}
-                    onChange={(e) => setGitSyncEnabled(e.target.checked)}
+                    onCheckedChange={(v) => setGitSyncEnabled(v === true)}
                     disabled={session.running}
                   />
                   Enable git sync
@@ -936,6 +983,7 @@ export default function RepoDetail() {
                       onChange={(e) => setGitSyncModel(e.target.value)}
                       placeholder="sonnet"
                       disabled={session.running || !gitSyncEnabled}
+                      className="font-mono"
                     />
                   </Label>
                   <Label className="flex flex-col gap-1">
@@ -962,7 +1010,7 @@ export default function RepoDetail() {
               </div>
             </TabsContent>
           </Tabs>
-          <SheetFooter>
+          <SheetFooter className="sticky bottom-0 bg-card border-t border-border">
             <div className="flex gap-2">
               <Button
                 type="button"
