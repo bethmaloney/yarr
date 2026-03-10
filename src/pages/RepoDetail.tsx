@@ -60,6 +60,10 @@ import {
   GitBranch,
   Variable,
   Settings,
+  FileText,
+  Play,
+  Square,
+  Terminal,
 } from "lucide-react";
 import type { BranchInfo, Check, SessionState } from "../types";
 import type { RepoConfig } from "../repos";
@@ -1044,9 +1048,12 @@ export default function RepoDetail() {
         </SheetContent>
       </Sheet>
 
-      {/* Plan section */}
-      <section className="plan-section mb-6">
-        <h2 className="text-lg font-semibold mb-3">Plan</h2>
+      {/* Plan + Action section */}
+      <section className="plan-section bg-card border border-border rounded-md p-4 mb-4">
+        <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+          <FileText className="size-4 text-primary" />
+          Plan
+        </h2>
         <div className="flex gap-2 mt-1">
           <Popover open={planDropdownOpen} onOpenChange={setPlanDropdownOpen}>
             <PopoverTrigger asChild>
@@ -1100,56 +1107,58 @@ export default function RepoDetail() {
         {!previewLoading && previewContent && (
           <pre className="mt-3 p-3 bg-card border border-border rounded-md text-xs text-foreground overflow-x-auto max-h-48 overflow-y-auto">{previewContent}</pre>
         )}
-      </section>
 
-      {/* Action buttons */}
-      <div className="flex gap-2 mb-6">
-        {session.disconnected ? (
-          <Button
-            type="button"
-            onClick={() => repoId && reconnectSession(repoId)}
-          >
-            Reconnect
-          </Button>
-        ) : session.reconnecting ? (
-          <Button type="button" disabled>
-            Reconnecting...
-          </Button>
-        ) : (
-          <>
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border">
+          {session.disconnected ? (
             <Button
               type="button"
-              disabled={session.running || !planFile}
-              onClick={() => repoId && runSession(repoId, planFile)}
+              onClick={() => repoId && reconnectSession(repoId)}
             >
-              {session.running ? "Running..." : "Run"}
+              Reconnect
             </Button>
-            {session.running && (
+          ) : session.reconnecting ? (
+            <Button type="button" disabled>
+              Reconnecting...
+            </Button>
+          ) : (
+            <>
               <Button
                 type="button"
-                variant="destructive"
-                onClick={() => repoId && stopSession(repoId)}
+                size="lg"
+                disabled={session.running || !planFile}
+                onClick={() => repoId && runSession(repoId, planFile)}
               >
-                Stop
+                <Play className="size-4" />
+                {session.running ? "Running..." : "Run"}
               </Button>
-            )}
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => navigate(`/repo/${repoId}/oneshot`)}
-              disabled={session.running}
-            >
-              1-Shot
-            </Button>
-          </>
-        )}
-      </div>
-
-      {!planFile && !session.running && (
-        <p className="text-muted-foreground text-xs mt-2">
-          Select a prompt file to start a run
-        </p>
-      )}
+              {session.running && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => repoId && stopSession(repoId)}
+                >
+                  <Square className="size-4" />
+                  Stop
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => navigate(`/repo/${repoId}/oneshot`)}
+                disabled={session.running}
+              >
+                1-Shot
+              </Button>
+              {!planFile && !session.running && (
+                <span className="text-muted-foreground text-xs ml-2">
+                  Select a prompt file to start a run
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      </section>
 
       {/* Disconnected banner */}
       {session.disconnected && (
@@ -1163,12 +1172,22 @@ export default function RepoDetail() {
         </section>
       )}
 
-      {/* Events list */}
-      <EventsList
-        events={session.events}
-        isLive={session.running}
-        repoPath={repoPath}
-      />
+      {/* Events list or empty state */}
+      {session.events.length === 0 && !session.running && !session.error && !session.trace ? (
+        <div className="flex flex-col items-center justify-center py-16 rounded-md border border-dashed border-border text-center">
+          <Terminal className="size-8 text-muted-foreground mb-3" />
+          <p className="text-sm font-medium">No sessions yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Select a prompt file and hit Run to start a session
+          </p>
+        </div>
+      ) : (
+        <EventsList
+          events={session.events}
+          isLive={session.running}
+          repoPath={repoPath}
+        />
+      )}
 
       {/* Error section */}
       {session.error && (
