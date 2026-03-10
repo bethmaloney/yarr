@@ -1144,6 +1144,7 @@ export default function RepoDetail() {
               )}
               <Button
                 type="button"
+                size="lg"
                 variant="secondary"
                 onClick={() => navigate(`/repo/${repoId}/oneshot`)}
                 disabled={session.running}
