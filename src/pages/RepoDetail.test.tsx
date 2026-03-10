@@ -628,6 +628,113 @@ describe("RepoDetail", () => {
         ).toBeInTheDocument();
       });
     });
+
+    describe("plansDir setting", () => {
+      it("plansDir input shows in settings", async () => {
+        setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        const settingsTrigger = screen.getByText(/settings/i);
+        fireEvent.click(settingsTrigger);
+
+        await waitFor(() => {
+          expect(
+            screen.getByPlaceholderText("docs/plans/"),
+          ).toBeInTheDocument();
+        });
+      });
+
+      it("plansDir input is pre-populated from repo config", async () => {
+        const repo = makeLocalRepo({
+          plansDir: "plans/",
+        } as Partial<RepoConfig>);
+        setupMockState({ repos: [repo] });
+        renderRepoDetail();
+
+        const settingsTrigger = screen.getByText(/settings/i);
+        fireEvent.click(settingsTrigger);
+
+        await waitFor(() => {
+          expect(screen.getByDisplayValue("plans/")).toBeInTheDocument();
+        });
+      });
+
+      it("plansDir defaults to empty when not set", async () => {
+        setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        const settingsTrigger = screen.getByText(/settings/i);
+        fireEvent.click(settingsTrigger);
+
+        await waitFor(() => {
+          const input = screen.getByPlaceholderText("docs/plans/");
+          expect(input).toHaveValue("");
+        });
+      });
+
+      it("Save includes plansDir in updateRepo call", async () => {
+        const state = setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        const settingsTrigger = screen.getByText(/settings/i);
+        fireEvent.click(settingsTrigger);
+
+        await waitFor(() => {
+          expect(
+            screen.getByPlaceholderText("docs/plans/"),
+          ).toBeInTheDocument();
+        });
+
+        const plansDirInput = screen.getByPlaceholderText("docs/plans/");
+        fireEvent.change(plansDirInput, {
+          target: { value: "custom/plans/" },
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+        expect(state.updateRepo).toHaveBeenCalledWith(
+          expect.objectContaining({ plansDir: "custom/plans/" }),
+        );
+      });
+
+      it("Save omits plansDir when empty", async () => {
+        const state = setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        const settingsTrigger = screen.getByText(/settings/i);
+        fireEvent.click(settingsTrigger);
+
+        await waitFor(() => {
+          expect(
+            screen.getByPlaceholderText("docs/plans/"),
+          ).toBeInTheDocument();
+        });
+
+        // Leave the plansDir input empty (default)
+        fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+        const call = state.updateRepo.mock.calls[0][0];
+        expect(call.plansDir === undefined || call.plansDir === "").toBe(true);
+      });
+
+      it("plansDir input is disabled when session is running", async () => {
+        setupMockState({
+          repos: [makeLocalRepo()],
+          sessions: new Map([
+            ["test-repo", makeSessionState({ running: true })],
+          ]),
+        });
+        renderRepoDetail();
+
+        const settingsTrigger = screen.getByText(/settings/i);
+        fireEvent.click(settingsTrigger);
+
+        await waitFor(() => {
+          const input = screen.getByPlaceholderText("docs/plans/");
+          expect(input).toBeDisabled();
+        });
+      });
+    });
   });
 
   // =========================================================================

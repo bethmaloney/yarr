@@ -60,9 +60,9 @@ Add the optional `plansDir` field to the repo configuration types.
 - No migration needed — field is optional, defaults handled at usage site
 
 **Checklist:**
-- [ ] Add `plansDir?: string` to `LocalRepoConfig`
-- [ ] Add `plansDir?: string` to `SshRepoConfig`
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `plansDir?: string` to `LocalRepoConfig`
+- [x] Add `plansDir?: string` to `SshRepoConfig`
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -71,22 +71,22 @@ Add the optional `plansDir` field to the repo configuration types.
 Expose the plans directory configuration in the repo settings section.
 
 **Files to modify:**
-- `src/RepoDetail.svelte`
+- `src/pages/RepoDetail.tsx` (React, not Svelte — project was migrated)
 
-**Pattern reference:** `src/RepoDetail.svelte` — existing settings fields like `model`, `completionSignal` (lines 30-43 for state, settings template section)
+**Pattern reference:** `src/pages/RepoDetail.tsx` — existing settings fields like `model`, `completionSignal` (state hooks, settings collapsible section)
 
 **Details:**
 - Add `plansDir` local state variable, initialized from `repo.plansDir ?? ""`
-- Sync in the existing `$effect` that re-syncs when repo prop changes
+- Sync in the existing useEffect that re-syncs when repo prop changes
 - Add input field in settings section with placeholder `docs/plans/`
-- Include in `handleSave` — only set on repo if non-empty
+- Include in `saveSettings` — only set on repo if non-empty (`plansDir || undefined`)
 
 **Checklist:**
-- [ ] Add `plansDir` state variable
-- [ ] Sync from repo prop in existing `$effect`
-- [ ] Add labeled input in settings section
-- [ ] Include in `handleSave` logic
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `plansDir` state variable
+- [x] Sync from repo prop in existing useEffect
+- [x] Add labeled input in settings section
+- [x] Include in `saveSettings` logic
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -282,8 +282,8 @@ Add Vitest tests for plan selector behavior.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add `plansDir` to RepoConfig | Not Started |
-| 2 | Add `plansDir` setting to RepoDetail UI | Not Started |
+| 1 | Add `plansDir` to RepoConfig | Done |
+| 2 | Add `plansDir` setting to RepoDetail UI | Done |
 | 3 | Add `list_plans` Tauri command | Not Started |
 | 4 | Add `move_plan_to_completed` Tauri command | Not Started |
 | 5 | Build plan selector dropdown component | Not Started |

@@ -76,6 +76,7 @@ export default function RepoDetail() {
   const [envVars, setEnvVars] = useState<{ key: string; value: string }[]>([]);
   const [checks, setChecks] = useState<Check[]>([]);
   const [createBranch, setCreateBranch] = useState(true);
+  const [plansDir, setPlansDir] = useState("");
   const [gitSyncEnabled, setGitSyncEnabled] = useState(false);
   const [gitSyncModel, setGitSyncModel] = useState("");
   const [gitSyncMaxRetries, setGitSyncMaxRetries] = useState(3);
@@ -117,6 +118,7 @@ export default function RepoDetail() {
     );
     setChecks(repo.checks ?? []);
     setCreateBranch(repo.createBranch ?? true);
+    setPlansDir(repo.plansDir ?? "");
     setGitSyncEnabled(repo.gitSync?.enabled ?? false);
     setGitSyncModel(repo.gitSync?.model ?? "");
     setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
@@ -254,6 +256,7 @@ export default function RepoDetail() {
       envVars: envVarsRecord,
       checks,
       createBranch,
+      plansDir: plansDir || undefined,
       gitSync: {
         enabled: gitSyncEnabled,
         model: gitSyncModel || undefined,
@@ -596,6 +599,16 @@ export default function RepoDetail() {
                 type="text"
                 value={completionSignal}
                 onChange={(e) => setCompletionSignal(e.target.value)}
+                disabled={session.running}
+              />
+            </Label>
+            <Label className="flex flex-col gap-1">
+              Plans Directory
+              <Input
+                type="text"
+                value={plansDir}
+                onChange={(e) => setPlansDir(e.target.value)}
+                placeholder="docs/plans/"
                 disabled={session.running}
               />
             </Label>
