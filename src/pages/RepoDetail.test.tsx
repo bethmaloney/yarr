@@ -6,6 +6,7 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 
 import type { RepoConfig } from "../repos";
@@ -583,9 +584,8 @@ describe("RepoDetail", () => {
       setupMockState({ repos: [makeSshRepo()] });
       renderRepoDetail();
 
-      // Click the settings trigger to expand
-      const settingsTrigger = screen.getByText(/settings/i);
-      fireEvent.click(settingsTrigger);
+      // Click the Configure button to open sheet
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
 
       await waitFor(() => {
         expect(screen.getByDisplayValue("dev-server")).toBeInTheDocument();
@@ -599,9 +599,8 @@ describe("RepoDetail", () => {
       const state = setupMockState({ repos: [makeLocalRepo()] });
       renderRepoDetail();
 
-      // Open settings
-      const settingsTrigger = screen.getByText(/settings/i);
-      fireEvent.click(settingsTrigger);
+      // Open Configure sheet
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
 
       await waitFor(() => {
         expect(
@@ -618,9 +617,8 @@ describe("RepoDetail", () => {
       setupMockState({ repos: [makeSshRepo()] });
       renderRepoDetail();
 
-      // Open settings
-      const settingsTrigger = screen.getByText(/settings/i);
-      fireEvent.click(settingsTrigger);
+      // Open Configure sheet
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
 
       await waitFor(() => {
         expect(
@@ -634,8 +632,7 @@ describe("RepoDetail", () => {
         setupMockState({ repos: [makeLocalRepo()] });
         renderRepoDetail();
 
-        const settingsTrigger = screen.getByText(/settings/i);
-        fireEvent.click(settingsTrigger);
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
 
         await waitFor(() => {
           expect(
@@ -651,8 +648,7 @@ describe("RepoDetail", () => {
         setupMockState({ repos: [repo] });
         renderRepoDetail();
 
-        const settingsTrigger = screen.getByText(/settings/i);
-        fireEvent.click(settingsTrigger);
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
 
         await waitFor(() => {
           expect(screen.getByDisplayValue("plans/")).toBeInTheDocument();
@@ -663,8 +659,7 @@ describe("RepoDetail", () => {
         setupMockState({ repos: [makeLocalRepo()] });
         renderRepoDetail();
 
-        const settingsTrigger = screen.getByText(/settings/i);
-        fireEvent.click(settingsTrigger);
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
 
         await waitFor(() => {
           const input = screen.getByPlaceholderText("docs/plans/");
@@ -676,8 +671,7 @@ describe("RepoDetail", () => {
         const state = setupMockState({ repos: [makeLocalRepo()] });
         renderRepoDetail();
 
-        const settingsTrigger = screen.getByText(/settings/i);
-        fireEvent.click(settingsTrigger);
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
 
         await waitFor(() => {
           expect(
@@ -701,8 +695,7 @@ describe("RepoDetail", () => {
         const state = setupMockState({ repos: [makeLocalRepo()] });
         renderRepoDetail();
 
-        const settingsTrigger = screen.getByText(/settings/i);
-        fireEvent.click(settingsTrigger);
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
 
         await waitFor(() => {
           expect(
@@ -726,8 +719,7 @@ describe("RepoDetail", () => {
         });
         renderRepoDetail();
 
-        const settingsTrigger = screen.getByText(/settings/i);
-        fireEvent.click(settingsTrigger);
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
 
         await waitFor(() => {
           const input = screen.getByPlaceholderText("docs/plans/");
@@ -742,24 +734,24 @@ describe("RepoDetail", () => {
   // =========================================================================
 
   describe("checks section", () => {
-    it("shows checks count in trigger", () => {
+    it("shows checks count in config bar badge", () => {
       const repo = makeLocalRepo({
         checks: [makeCheck(), makeCheck({ name: "test" })],
       } as Partial<RepoConfig>);
       setupMockState({ repos: [repo] });
       renderRepoDetail();
 
-      expect(screen.getByText(/checks/i)).toBeInTheDocument();
-      expect(screen.getByText(/2/)).toBeInTheDocument();
+      expect(screen.getByText("2 checks")).toBeInTheDocument();
     });
 
     it("Add Check button adds a new check entry", async () => {
+      const user = userEvent.setup();
       setupMockState({ repos: [makeLocalRepo()] });
       renderRepoDetail();
 
-      // Open checks section
-      const checksTrigger = screen.getByText(/checks/i);
-      fireEvent.click(checksTrigger);
+      // Open Configure sheet, then click Checks tab
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+      await user.click(screen.getByRole("tab", { name: /checks/i }));
 
       await waitFor(() => {
         expect(
@@ -788,8 +780,7 @@ describe("RepoDetail", () => {
       setupMockState({ repos: [repo] });
       renderRepoDetail();
 
-      expect(screen.getByText(/git sync/i)).toBeInTheDocument();
-      expect(screen.getByText(/enabled/i)).toBeInTheDocument();
+      expect(screen.getByText("git sync on")).toBeInTheDocument();
     });
 
     it("shows disabled when git sync is not enabled", () => {
@@ -799,20 +790,20 @@ describe("RepoDetail", () => {
       setupMockState({ repos: [repo] });
       renderRepoDetail();
 
-      expect(screen.getByText(/git sync/i)).toBeInTheDocument();
-      expect(screen.getByText(/disabled/i)).toBeInTheDocument();
+      expect(screen.getByText("git sync off")).toBeInTheDocument();
     });
 
     it("enable toggle changes state", async () => {
+      const user = userEvent.setup();
       const repo = makeLocalRepo({
         gitSync: makeGitSync({ enabled: false }),
       } as Partial<RepoConfig>);
       setupMockState({ repos: [repo] });
       renderRepoDetail();
 
-      // Open git sync section
-      const gitSyncTrigger = screen.getByText(/git sync/i);
-      fireEvent.click(gitSyncTrigger);
+      // Open Configure sheet, then click Git Sync tab
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+      await user.click(screen.getByRole("tab", { name: /git sync/i }));
 
       await waitFor(() => {
         const toggle = screen.getByRole("checkbox");
@@ -1301,7 +1292,7 @@ describe("RepoDetail", () => {
       });
       renderRepoDetail();
 
-      expect(screen.getByText(/running/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/running/i).length).toBeGreaterThanOrEqual(1);
     });
 
     it("shows 1-Shot button", () => {
@@ -1415,7 +1406,7 @@ describe("RepoDetail", () => {
       });
       renderRepoDetail();
 
-      expect(screen.getByText(/error/i)).toBeInTheDocument();
+      expect(screen.getByText("Process crashed")).toBeInTheDocument();
     });
 
     it("shows the error message", () => {

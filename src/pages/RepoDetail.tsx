@@ -10,11 +10,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-} from "@/components/ui/collapsible";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
 import {
   Accordion,
   AccordionItem,
@@ -81,6 +91,9 @@ export default function RepoDetail() {
   const [gitSyncModel, setGitSyncModel] = useState("");
   const [gitSyncMaxRetries, setGitSyncMaxRetries] = useState(3);
   const [gitSyncPrompt, setGitSyncPrompt] = useState("");
+
+  // Config sheet state
+  const [configOpen, setConfigOpen] = useState(false);
 
   // Branch state
   const [branchInfo, setBranchInfo] = useState<BranchInfo | null>(null);
@@ -579,140 +592,384 @@ export default function RepoDetail() {
         </div>
       )}
 
-      {/* Settings section */}
-      <Collapsible className="settings border border-border rounded-md mb-4">
-        <CollapsibleTrigger asChild>
-          <button className="w-full text-left px-4 py-3 text-sm font-medium text-foreground hover:bg-accent/50 cursor-pointer">
-            Settings — {model}, {maxIterations} iters
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="px-4 pb-4 flex flex-col gap-4">
-            {repo.type === "ssh" && (
-              <>
+      {/* Inline config bar */}
+      <div className="settings flex flex-wrap items-center gap-2 mb-6">
+        <Badge variant="secondary">{model}</Badge>
+        <Badge variant="secondary">{maxIterations} iters</Badge>
+        <Badge variant="secondary">{checks.length} checks</Badge>
+        <Badge variant="secondary">
+          {gitSyncEnabled ? "git sync on" : "git sync off"}
+        </Badge>
+        {envVars.length > 0 && (
+          <Badge variant="secondary">{envVars.length} env</Badge>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setConfigOpen(true)}
+        >
+          Configure
+        </Button>
+      </div>
+
+      {/* Config Sheet */}
+      <Sheet open={configOpen} onOpenChange={setConfigOpen}>
+        <SheetContent side="right" className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Configuration</SheetTitle>
+            <SheetDescription>
+              Settings, checks, and git sync for {repo.name}
+            </SheetDescription>
+          </SheetHeader>
+          <Tabs defaultValue="settings" className="px-4">
+            <TabsList className="w-full">
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+              <TabsTrigger value="checks">Checks</TabsTrigger>
+              <TabsTrigger value="git-sync">Git Sync</TabsTrigger>
+            </TabsList>
+
+            {/* ── Settings tab ── */}
+            <TabsContent value="settings">
+              <div className="flex flex-col gap-4 pt-4">
+                {repo.type === "ssh" && (
+                  <>
+                    <Label className="flex flex-col gap-1">
+                      SSH Host
+                      <Input
+                        type="text"
+                        value={
+                          (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost
+                        }
+                        readOnly
+                        disabled
+                      />
+                    </Label>
+                    <Label className="flex flex-col gap-1">
+                      Remote Path
+                      <Input
+                        type="text"
+                        value={
+                          (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath
+                        }
+                        readOnly
+                        disabled
+                      />
+                    </Label>
+                  </>
+                )}
                 <Label className="flex flex-col gap-1">
-                  SSH Host
+                  Model
                   <Input
                     type="text"
-                    value={
-                      (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost
-                    }
-                    readOnly
-                    disabled
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    disabled={session.running}
                   />
                 </Label>
                 <Label className="flex flex-col gap-1">
-                  Remote Path
+                  Max Iterations
                   <Input
-                    type="text"
-                    value={
-                      (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath
-                    }
-                    readOnly
-                    disabled
+                    type="number"
+                    value={maxIterations}
+                    onChange={(e) => setMaxIterations(Number(e.target.value))}
+                    min={1}
+                    disabled={session.running}
                   />
                 </Label>
-              </>
-            )}
-            <Label className="flex flex-col gap-1">
-              Model
-              <Input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={session.running}
-              />
-            </Label>
-            <Label className="flex flex-col gap-1">
-              Max Iterations
-              <Input
-                type="number"
-                value={maxIterations}
-                onChange={(e) => setMaxIterations(Number(e.target.value))}
-                min={1}
-                disabled={session.running}
-              />
-            </Label>
-            <Label className="flex flex-col gap-1">
-              Completion Signal
-              <Input
-                type="text"
-                value={completionSignal}
-                onChange={(e) => setCompletionSignal(e.target.value)}
-                disabled={session.running}
-              />
-            </Label>
-            <Label className="flex flex-col gap-1">
-              Plans Directory
-              <Input
-                type="text"
-                value={plansDir}
-                onChange={(e) => setPlansDir(e.target.value)}
-                placeholder="docs/plans/"
-                disabled={session.running}
-              />
-            </Label>
-            <Label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={createBranch}
-                onChange={(e) => setCreateBranch(e.target.checked)}
-                disabled={session.running}
-              />
-              Create branch on run
-            </Label>
-            <fieldset disabled={session.running} className="flex flex-col gap-3">
-              <legend className="text-sm font-medium mb-2">Environment Variables</legend>
-              {envVars.map((envVar, i) => (
-                <div key={i} className="flex items-center gap-2">
+                <Label className="flex flex-col gap-1">
+                  Completion Signal
                   <Input
                     type="text"
-                    value={envVar.key}
-                    onChange={(e) => {
-                      const updated = [...envVars];
-                      updated[i] = { ...updated[i], key: e.target.value };
-                      setEnvVars(updated);
-                    }}
-                    placeholder="KEY"
-                    className="flex-1"
+                    value={completionSignal}
+                    onChange={(e) => setCompletionSignal(e.target.value)}
+                    disabled={session.running}
                   />
-                  <span className="text-muted-foreground">=</span>
+                </Label>
+                <Label className="flex flex-col gap-1">
+                  Plans Directory
                   <Input
                     type="text"
-                    value={envVar.value}
-                    onChange={(e) => {
-                      const updated = [...envVars];
-                      updated[i] = { ...updated[i], value: e.target.value };
-                      setEnvVars(updated);
-                    }}
-                    placeholder="value"
-                    className="flex-1"
+                    value={plansDir}
+                    onChange={(e) => setPlansDir(e.target.value)}
+                    placeholder="docs/plans/"
+                    disabled={session.running}
                   />
+                </Label>
+                <Label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={createBranch}
+                    onChange={(e) => setCreateBranch(e.target.checked)}
+                    disabled={session.running}
+                  />
+                  Create branch on run
+                </Label>
+                <fieldset disabled={session.running} className="flex flex-col gap-3">
+                  <legend className="text-sm font-medium mb-2">Environment Variables</legend>
+                  {envVars.map((envVar, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        type="text"
+                        value={envVar.key}
+                        onChange={(e) => {
+                          const updated = [...envVars];
+                          updated[i] = { ...updated[i], key: e.target.value };
+                          setEnvVars(updated);
+                        }}
+                        placeholder="KEY"
+                        className="flex-1"
+                      />
+                      <span className="text-muted-foreground">=</span>
+                      <Input
+                        type="text"
+                        value={envVar.value}
+                        onChange={(e) => {
+                          const updated = [...envVars];
+                          updated[i] = { ...updated[i], value: e.target.value };
+                          setEnvVars(updated);
+                        }}
+                        placeholder="value"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          setEnvVars(envVars.filter((_, j) => j !== i))
+                        }
+                      >
+                        &times;
+                      </Button>
+                    </div>
+                  ))}
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      setEnvVars(envVars.filter((_, j) => j !== i))
-                    }
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setEnvVars([...envVars, { key: "", value: "" }])}
                   >
-                    &times;
+                    + Add Variable
                   </Button>
+                </fieldset>
+                {connectionTest && (
+                  <div data-testid="connection-checklist" className="flex flex-col gap-2 mt-2">
+                    {connectionTest.steps.map((step) => (
+                      <div key={step.name} className={`step-${step.status} flex items-center gap-2 text-sm`}>
+                        <span className={step.status === "pass" ? "text-success" : step.status === "fail" ? "text-destructive" : "text-muted-foreground"}>
+                          {step.status === "running"
+                            ? "..."
+                            : step.status === "pass"
+                              ? "\u2713"
+                              : step.status === "fail"
+                                ? "\u2717"
+                                : "\u00B7"}
+                        </span>
+                        <span>{step.name}</span>
+                        {step.error && <span className="text-destructive text-xs">{step.error}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* ── Checks tab ── */}
+            <TabsContent value="checks">
+              <div className="flex flex-col gap-4 pt-4">
+                <Accordion type="multiple">
+                  {checks.map((check, i) => (
+                    <AccordionItem
+                      key={i}
+                      value={`check-${i}`}
+                      className="check-entry"
+                    >
+                      <div className="flex items-center">
+                        <AccordionTrigger className="flex-1">
+                          {check.name || "New Check"}
+                        </AccordionTrigger>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={session.running}
+                          onClick={() => {
+                            setChecks(checks.filter((_, j) => j !== i));
+                          }}
+                        >
+                          &times;
+                        </Button>
+                      </div>
+                      <AccordionContent>
+                        <div className="flex flex-col gap-3 pt-2">
+                          <Label className="flex flex-col gap-1">
+                            Name
+                            <Input
+                              type="text"
+                              value={check.name}
+                              onChange={(e) => {
+                                const updated = [...checks];
+                                updated[i] = { ...updated[i], name: e.target.value };
+                                setChecks(updated);
+                              }}
+                              disabled={session.running}
+                            />
+                          </Label>
+                          <Label className="flex flex-col gap-1">
+                            Command
+                            <Input
+                              type="text"
+                              value={check.command}
+                              onChange={(e) => {
+                                const updated = [...checks];
+                                updated[i] = {
+                                  ...updated[i],
+                                  command: e.target.value,
+                                };
+                                setChecks(updated);
+                              }}
+                              disabled={session.running}
+                            />
+                          </Label>
+                          <Label className="flex flex-col gap-1">
+                            When
+                            <select
+                              value={check.when}
+                              onChange={(e) => {
+                                const updated = [...checks];
+                                updated[i] = {
+                                  ...updated[i],
+                                  when: e.target.value as Check["when"],
+                                };
+                                setChecks(updated);
+                              }}
+                              disabled={session.running}
+                              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                            >
+                              <option value="each_iteration">each_iteration</option>
+                              <option value="post_completion">post_completion</option>
+                            </select>
+                          </Label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Label className="flex flex-col gap-1">
+                              Timeout
+                              <Input
+                                type="number"
+                                value={check.timeoutSecs}
+                                onChange={(e) => {
+                                  const updated = [...checks];
+                                  updated[i] = {
+                                    ...updated[i],
+                                    timeoutSecs: Number(e.target.value),
+                                  };
+                                  setChecks(updated);
+                                }}
+                                min={1}
+                                disabled={session.running}
+                              />
+                            </Label>
+                            <Label className="flex flex-col gap-1">
+                              Retries
+                              <Input
+                                type="number"
+                                value={check.maxRetries}
+                                onChange={(e) => {
+                                  const updated = [...checks];
+                                  updated[i] = {
+                                    ...updated[i],
+                                    maxRetries: Number(e.target.value),
+                                  };
+                                  setChecks(updated);
+                                }}
+                                min={0}
+                                disabled={session.running}
+                              />
+                            </Label>
+                          </div>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={session.running}
+                  onClick={() =>
+                    setChecks([
+                      ...checks,
+                      {
+                        name: "",
+                        command: "",
+                        when: "each_iteration",
+                        timeoutSecs: 300,
+                        maxRetries: 1,
+                      },
+                    ])
+                  }
+                >
+                  Add Check
+                </Button>
+              </div>
+            </TabsContent>
+
+            {/* ── Git Sync tab ── */}
+            <TabsContent value="git-sync">
+              <div className="flex flex-col gap-4 pt-4">
+                <Label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={gitSyncEnabled}
+                    onChange={(e) => setGitSyncEnabled(e.target.checked)}
+                    disabled={session.running}
+                  />
+                  Enable git sync
+                </Label>
+                <div className="flex flex-col gap-3">
+                  <Label className="flex flex-col gap-1">
+                    Model
+                    <Input
+                      type="text"
+                      value={gitSyncModel}
+                      onChange={(e) => setGitSyncModel(e.target.value)}
+                      placeholder="sonnet"
+                      disabled={session.running || !gitSyncEnabled}
+                    />
+                  </Label>
+                  <Label className="flex flex-col gap-1">
+                    Max Push Retries
+                    <Input
+                      type="number"
+                      value={gitSyncMaxRetries}
+                      onChange={(e) => setGitSyncMaxRetries(Number(e.target.value))}
+                      min={1}
+                      disabled={session.running || !gitSyncEnabled}
+                    />
+                  </Label>
+                  <Label className="flex flex-col gap-1">
+                    Conflict Resolution Prompt
+                    <Textarea
+                      value={gitSyncPrompt}
+                      onChange={(e) => setGitSyncPrompt(e.target.value)}
+                      placeholder="Resolve merge conflicts..."
+                      disabled={session.running || !gitSyncEnabled}
+                      rows={3}
+                    />
+                  </Label>
                 </div>
-              ))}
+              </div>
+            </TabsContent>
+          </Tabs>
+          <SheetFooter>
+            <div className="flex gap-2">
               <Button
                 type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setEnvVars([...envVars, { key: "", value: "" }])}
-              >
-                + Add Variable
-              </Button>
-            </fieldset>
-            <div className="flex gap-2 pt-2">
-              <Button
-                type="button"
-                onClick={saveSettings}
+                onClick={() => {
+                  saveSettings();
+                  setConfigOpen(false);
+                }}
                 disabled={session.running}
               >
                 Save
@@ -727,231 +984,17 @@ export default function RepoDetail() {
                   Test Connection
                 </Button>
               )}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setConfigOpen(false)}
+              >
+                Cancel
+              </Button>
             </div>
-            {connectionTest && (
-              <div data-testid="connection-checklist" className="flex flex-col gap-2 mt-2">
-                {connectionTest.steps.map((step) => (
-                  <div key={step.name} className={`step-${step.status} flex items-center gap-2 text-sm`}>
-                    <span className={step.status === "pass" ? "text-success" : step.status === "fail" ? "text-destructive" : "text-muted-foreground"}>
-                      {step.status === "running"
-                        ? "..."
-                        : step.status === "pass"
-                          ? "\u2713"
-                          : step.status === "fail"
-                            ? "\u2717"
-                            : "\u00B7"}
-                    </span>
-                    <span>{step.name}</span>
-                    {step.error && <span className="text-destructive text-xs">{step.error}</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-
-      {/* Checks section */}
-      <Collapsible className="checks border border-border rounded-md mb-4">
-        <CollapsibleTrigger asChild>
-          <button className="w-full text-left px-4 py-3 text-sm font-medium text-foreground hover:bg-accent/50 cursor-pointer">
-            Checks — {checks.length} configured
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="px-4 pb-4">
-            <Accordion type="multiple">
-              {checks.map((check, i) => (
-                <AccordionItem
-                  key={i}
-                  value={`check-${i}`}
-                  className="check-entry"
-                >
-                  <div className="flex items-center">
-                    <AccordionTrigger className="flex-1">
-                      {check.name || "New Check"}
-                    </AccordionTrigger>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={session.running}
-                      onClick={() => {
-                        setChecks(checks.filter((_, j) => j !== i));
-                      }}
-                    >
-                      &times;
-                    </Button>
-                  </div>
-                  <AccordionContent>
-                    <div className="flex flex-col gap-3 pt-2">
-                      <Label className="flex flex-col gap-1">
-                        Name
-                        <Input
-                          type="text"
-                          value={check.name}
-                          onChange={(e) => {
-                            const updated = [...checks];
-                            updated[i] = { ...updated[i], name: e.target.value };
-                            setChecks(updated);
-                          }}
-                          disabled={session.running}
-                        />
-                      </Label>
-                      <Label className="flex flex-col gap-1">
-                        Command
-                        <Input
-                          type="text"
-                          value={check.command}
-                          onChange={(e) => {
-                            const updated = [...checks];
-                            updated[i] = {
-                              ...updated[i],
-                              command: e.target.value,
-                            };
-                            setChecks(updated);
-                          }}
-                          disabled={session.running}
-                        />
-                      </Label>
-                      <Label className="flex flex-col gap-1">
-                        When
-                        <select
-                          value={check.when}
-                          onChange={(e) => {
-                            const updated = [...checks];
-                            updated[i] = {
-                              ...updated[i],
-                              when: e.target.value as Check["when"],
-                            };
-                            setChecks(updated);
-                          }}
-                          disabled={session.running}
-                          className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                        >
-                          <option value="each_iteration">each_iteration</option>
-                          <option value="post_completion">post_completion</option>
-                        </select>
-                      </Label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Label className="flex flex-col gap-1">
-                          Timeout
-                          <Input
-                            type="number"
-                            value={check.timeoutSecs}
-                            onChange={(e) => {
-                              const updated = [...checks];
-                              updated[i] = {
-                                ...updated[i],
-                                timeoutSecs: Number(e.target.value),
-                              };
-                              setChecks(updated);
-                            }}
-                            min={1}
-                            disabled={session.running}
-                          />
-                        </Label>
-                        <Label className="flex flex-col gap-1">
-                          Retries
-                          <Input
-                            type="number"
-                            value={check.maxRetries}
-                            onChange={(e) => {
-                              const updated = [...checks];
-                              updated[i] = {
-                                ...updated[i],
-                                maxRetries: Number(e.target.value),
-                              };
-                              setChecks(updated);
-                            }}
-                            min={0}
-                            disabled={session.running}
-                          />
-                        </Label>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="mt-3"
-              disabled={session.running}
-              onClick={() =>
-                setChecks([
-                  ...checks,
-                  {
-                    name: "",
-                    command: "",
-                    when: "each_iteration",
-                    timeoutSecs: 300,
-                    maxRetries: 1,
-                  },
-                ])
-              }
-            >
-              Add Check
-            </Button>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-
-      {/* Git Sync section */}
-      <Collapsible className="git-sync border border-border rounded-md mb-6">
-        <CollapsibleTrigger asChild>
-          <button className="w-full text-left px-4 py-3 text-sm font-medium text-foreground hover:bg-accent/50 cursor-pointer">
-            Git Sync — {gitSyncEnabled ? "enabled" : "disabled"}
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="px-4 pb-4 flex flex-col gap-4">
-            <Label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={gitSyncEnabled}
-                onChange={(e) => setGitSyncEnabled(e.target.checked)}
-                disabled={session.running}
-              />
-              Enable git sync
-            </Label>
-            <div className="flex flex-col gap-3">
-              <Label className="flex flex-col gap-1">
-                Model
-                <Input
-                  type="text"
-                  value={gitSyncModel}
-                  onChange={(e) => setGitSyncModel(e.target.value)}
-                  placeholder="sonnet"
-                  disabled={session.running || !gitSyncEnabled}
-                />
-              </Label>
-              <Label className="flex flex-col gap-1">
-                Max Push Retries
-                <Input
-                  type="number"
-                  value={gitSyncMaxRetries}
-                  onChange={(e) => setGitSyncMaxRetries(Number(e.target.value))}
-                  min={1}
-                  disabled={session.running || !gitSyncEnabled}
-                />
-              </Label>
-              <Label className="flex flex-col gap-1">
-                Conflict Resolution Prompt
-                <Textarea
-                  value={gitSyncPrompt}
-                  onChange={(e) => setGitSyncPrompt(e.target.value)}
-                  placeholder="Resolve merge conflicts..."
-                  disabled={session.running || !gitSyncEnabled}
-                  rows={3}
-                />
-              </Label>
-            </div>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Plan section */}
       <section className="plan-section mb-6">
