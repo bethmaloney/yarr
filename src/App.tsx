@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router";
 import { useAppStore } from "./store";
 import Home from "./pages/Home";
+import RepoDetail from "./pages/RepoDetail";
 
 function Layout() {
   const initialize = useAppStore((s) => s.initialize);
@@ -12,10 +13,6 @@ function Layout() {
   }, [initialize]);
 
   return <Outlet />;
-}
-
-function RepoDetail() {
-  return <div>Repo Detail</div>;
 }
 
 function OneShot() {

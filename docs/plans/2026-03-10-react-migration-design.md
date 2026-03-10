@@ -508,12 +508,14 @@ Convert RepoDetail — the largest component.
 - `useEffect` for branch info refresh on mount and after session completes
 
 **Checklist:**
-- [ ] Create `src/pages/RepoDetail.tsx`
-- [ ] Branch selector works with Popover + Command
-- [ ] Settings/Checks/GitSync collapsibles work
-- [ ] Connection test stepper renders and updates
-- [ ] Verify `npm run dev` — full repo detail page functional
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/pages/RepoDetail.tsx`
+- [x] Branch selector works with Popover + Command
+- [x] Settings/Checks/GitSync collapsibles work
+- [x] Connection test stepper renders and updates
+- [x] Verify `npm run dev` — full repo detail page functional
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Default export `RepoDetail`. Uses `useParams` for repoId, `useAppStore` for repos/sessions/actions. Local state for all settings fields synced from repo via `useEffect([repo?.id])`. Branch selector uses shadcn `Popover`+`Command` with search filtering, ahead/behind display, and fast-forward button. Settings/Checks/GitSync use `Collapsible` and `Accordion`. Connection test stepper with `listen()` for step events, cleanup via `useRef`. Plan section with file preview via `invoke("read_file_preview")`. Run/Stop/Reconnect/1-Shot action buttons. EventsList integration. Trace result section with dl/dt/dd grid and context color. 48 unit tests covering all sections.
 
 ---
 
@@ -708,7 +710,7 @@ Full build, lint, format, and manual smoke test.
 | 7 | IterationGroup component | Done |
 | 8 | EventsList component | Done |
 | 9 | Home page | Done |
-| 10 | RepoDetail page | Not Started |
+| 10 | RepoDetail page | Done |
 | 11 | History page | Not Started |
 | 12 | RunDetail page | Not Started |
 | 13 | OneShot page | Not Started |

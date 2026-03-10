@@ -1,0 +1,977 @@
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useParams, useNavigate } from "react-router";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
+import { useAppStore } from "../store";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { EventsList } from "@/components/EventsList";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandItem,
+  CommandEmpty,
+} from "@/components/ui/command";
+import { sessionContextColor } from "../context-bar";
+import type { BranchInfo, Check, SessionState } from "../types";
+import type { RepoConfig } from "../repos";
+
+type ConnectionTestStep = {
+  name: string;
+  status: "pending" | "running" | "pass" | "fail";
+  error?: string;
+};
+type ConnectionTest = { running: boolean; steps: ConnectionTestStep[] };
+
+const defaultSession: SessionState = {
+  running: false,
+  events: [],
+  trace: null,
+  error: null,
+};
+
+export default function RepoDetail() {
+  const { repoId } = useParams<{ repoId: string }>();
+  const navigate = useNavigate();
+
+  const repos = useAppStore((s) => s.repos);
+  const sessions = useAppStore((s) => s.sessions);
+  const runSession = useAppStore((s) => s.runSession);
+  const stopSession = useAppStore((s) => s.stopSession);
+  const reconnectSession = useAppStore((s) => s.reconnectSession);
+  const updateRepo = useAppStore((s) => s.updateRepo);
+
+  const repo = repos.find((r) => r.id === repoId);
+  const session: SessionState = (repoId && sessions.get(repoId)) || defaultSession;
+
+  // Local settings state
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [model, setModel] = useState("");
+  const [maxIterations, setMaxIterations] = useState(0);
+  const [completionSignal, setCompletionSignal] = useState("");
+  const [envVars, setEnvVars] = useState<{ key: string; value: string }[]>([]);
+  const [checks, setChecks] = useState<Check[]>([]);
+  const [createBranch, setCreateBranch] = useState(true);
+  const [gitSyncEnabled, setGitSyncEnabled] = useState(false);
+  const [gitSyncModel, setGitSyncModel] = useState("");
+  const [gitSyncMaxRetries, setGitSyncMaxRetries] = useState(3);
+  const [gitSyncPrompt, setGitSyncPrompt] = useState("");
+
+  // Branch state
+  const [branchInfo, setBranchInfo] = useState<BranchInfo | null>(null);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
+  const [branchSearch, setBranchSearch] = useState("");
+
+  // Plan state
+  const [planFile, setPlanFile] = useState("");
+  const [previewContent, setPreviewContent] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Connection test state
+  const [connectionTest, setConnectionTest] = useState<ConnectionTest | null>(
+    null,
+  );
+
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const wasRunningRef = useRef(false);
+  const connectionTestCleanupRef = useRef<(() => void) | null>(null);
+
+  // Sync local state when repo changes
+  useEffect(() => {
+    if (!repo) return;
+    setNameInput(repo.name);
+    setEditingName(false);
+    setModel(repo.model);
+    setMaxIterations(repo.maxIterations);
+    setCompletionSignal(repo.completionSignal);
+    setEnvVars(
+      Object.entries(repo.envVars ?? {}).map(([key, value]) => ({
+        key,
+        value,
+      })),
+    );
+    setChecks(repo.checks ?? []);
+    setCreateBranch(repo.createBranch ?? true);
+    setGitSyncEnabled(repo.gitSync?.enabled ?? false);
+    setGitSyncModel(repo.gitSync?.model ?? "");
+    setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
+    setGitSyncPrompt(repo.gitSync?.conflictPrompt ?? "");
+  }, [repo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build repo payload for invoke calls
+  function buildRepoPayload() {
+    if (!repo) return null;
+    return repo.type === "local"
+      ? { type: "local" as const, path: repo.path }
+      : {
+          type: "ssh" as const,
+          sshHost: (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost,
+          remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>)
+            .remotePath,
+        };
+  }
+
+  // Fetch branch info on mount and when repo changes
+  useEffect(() => {
+    if (!repo) return;
+    const payload = buildRepoPayload();
+    if (!payload) return;
+    invoke<BranchInfo>("get_branch_info", { repo: payload })
+      .then((info) => setBranchInfo(info))
+      .catch(() => setBranchInfo(null));
+  }, [repo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh branch info after session completes
+  useEffect(() => {
+    if (wasRunningRef.current && !session.running) {
+      const payload = buildRepoPayload();
+      if (payload) {
+        invoke<BranchInfo>("get_branch_info", { repo: payload })
+          .then((info) => setBranchInfo(info))
+          .catch(() => setBranchInfo(null));
+      }
+    }
+    wasRunningRef.current = session.running;
+  }, [session.running]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Plan file preview
+  useEffect(() => {
+    if (!planFile) {
+      setPreviewContent("");
+      setPreviewLoading(false);
+      return;
+    }
+    const currentFile = planFile;
+    setPreviewLoading(true);
+    invoke("read_file_preview", { path: currentFile })
+      .then((result) => {
+        if (currentFile === planFile) {
+          setPreviewContent(result as string);
+          setPreviewLoading(false);
+        }
+      })
+      .catch(() => {
+        if (currentFile === planFile) {
+          setPreviewContent("");
+          setPreviewLoading(false);
+        }
+      });
+  }, [planFile]);
+
+  // Clean up connection test listeners on unmount
+  useEffect(() => {
+    return () => {
+      connectionTestCleanupRef.current?.();
+    };
+  }, []);
+
+  // Auto-focus name input when editing
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+    }
+  }, [editingName]);
+
+  const repoPath = useMemo(() => {
+    if (!repo) return "";
+    return repo.type === "local"
+      ? repo.path
+      : (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath;
+  }, [repo]);
+
+  const repoDisplayPath = useMemo(() => {
+    if (!repo) return "";
+    if (repo.type === "local") return repo.path;
+    const ssh = repo as Extract<RepoConfig, { type: "ssh" }>;
+    return `${ssh.sshHost}:${ssh.remotePath}`;
+  }, [repo]);
+
+  const filteredBranches = useMemo(
+    () =>
+      branchSearch
+        ? branches.filter((b) =>
+            b.toLowerCase().includes(branchSearch.toLowerCase()),
+          )
+        : branches,
+    [branches, branchSearch],
+  );
+
+  if (!repo) {
+    return <div>Repo not found</div>;
+  }
+
+  function saveName() {
+    const trimmed = nameInput.trim();
+    if (trimmed && trimmed !== repo!.name) {
+      updateRepo({ ...repo!, name: trimmed });
+    }
+    setEditingName(false);
+  }
+
+  function handleNameKeydown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      saveName();
+    } else if (e.key === "Escape") {
+      setNameInput(repo!.name);
+      setEditingName(false);
+    }
+  }
+
+  function saveSettings() {
+    const envVarsRecord: Record<string, string> = {};
+    for (const { key, value } of envVars) {
+      if (key.trim()) envVarsRecord[key.trim()] = value;
+    }
+    updateRepo({
+      ...repo!,
+      model,
+      maxIterations,
+      completionSignal,
+      envVars: envVarsRecord,
+      checks,
+      createBranch,
+      gitSync: {
+        enabled: gitSyncEnabled,
+        model: gitSyncModel || undefined,
+        maxPushRetries: gitSyncMaxRetries,
+        conflictPrompt: gitSyncPrompt || undefined,
+      },
+    });
+  }
+
+  async function browsePrompt() {
+    try {
+      const result = await open({
+        filters: [
+          { name: "Markdown", extensions: ["md"] },
+          { name: "All", extensions: ["*"] },
+        ],
+        title: "Select prompt file",
+      });
+      if (result !== null) {
+        setPlanFile(result as string);
+      }
+    } catch {
+      // silently fail
+    }
+  }
+
+  async function testConnection() {
+    if (!repo || repo.type !== "ssh") return;
+    const ssh = repo as Extract<RepoConfig, { type: "ssh" }>;
+    const stepNames = [
+      "SSH reachable",
+      "tmux available",
+      "claude available",
+      "Remote path exists",
+    ];
+    const initialSteps: ConnectionTestStep[] = stepNames.map((name, i) => ({
+      name,
+      status: i === 0 ? ("running" as const) : ("pending" as const),
+    }));
+    setConnectionTest({ running: true, steps: initialSteps });
+
+    const unlistenStep = await listen<{
+      step: string;
+      status: string;
+      error?: string;
+    }>("ssh-test-step", (e) => {
+      const payload = e.payload;
+      setConnectionTest((prev) => {
+        if (!prev) return prev;
+        const newSteps = prev.steps.map((s) => {
+          if (s.name === payload.step) {
+            return {
+              ...s,
+              status: payload.status as "pass" | "fail",
+              error: payload.error ?? undefined,
+            };
+          }
+          return s;
+        });
+        if (payload.status === "pass") {
+          const nextPending = newSteps.findIndex(
+            (s) => s.status === "pending",
+          );
+          if (nextPending !== -1) {
+            newSteps[nextPending] = { ...newSteps[nextPending], status: "running" };
+          }
+        }
+        return { ...prev, steps: newSteps };
+      });
+    });
+
+    const unlistenComplete = await listen("ssh-test-complete", () => {
+      setConnectionTest((prev) =>
+        prev ? { ...prev, running: false } : null,
+      );
+      unlistenStep();
+      unlistenComplete();
+      connectionTestCleanupRef.current = null;
+    });
+
+    connectionTestCleanupRef.current = () => {
+      unlistenStep();
+      unlistenComplete();
+    };
+
+    invoke("test_ssh_connection_steps", {
+      sshHost: ssh.sshHost,
+      remotePath: ssh.remotePath,
+    }).catch(() => {
+      setConnectionTest((prev) =>
+        prev ? { ...prev, running: false } : null,
+      );
+      unlistenStep();
+      unlistenComplete();
+    });
+  }
+
+  async function fetchBranches() {
+    const payload = buildRepoPayload();
+    if (!payload) return;
+    try {
+      const result = await invoke<string[]>("list_local_branches", {
+        repo: payload,
+      });
+      setBranches(result);
+    } catch {
+      setBranches([]);
+    }
+  }
+
+  async function handleFastForward() {
+    const payload = buildRepoPayload();
+    if (!payload) return;
+    try {
+      await invoke("fast_forward_branch", { repo: payload });
+      setBranchDropdownOpen(false);
+      setBranchSearch("");
+      const info = await invoke<BranchInfo>("get_branch_info", {
+        repo: payload,
+      });
+      setBranchInfo(info);
+    } catch (e) {
+      console.error("Failed to fast-forward:", e);
+    }
+  }
+
+  async function handleSwitchBranch(branchName: string) {
+    const payload = buildRepoPayload();
+    if (!payload) return;
+    try {
+      await invoke("switch_branch", { repo: payload, branch: branchName });
+      setBranchDropdownOpen(false);
+      setBranchSearch("");
+      const info = await invoke<BranchInfo>("get_branch_info", {
+        repo: payload,
+      });
+      setBranchInfo(info);
+    } catch (e) {
+      console.error("Failed to switch branch:", e);
+    }
+  }
+
+  // Context percentage computation
+  const ctxPercent =
+    session.trace?.context_window && session.trace?.final_context_tokens
+      ? Math.round(
+          (session.trace.final_context_tokens / session.trace.context_window) *
+            100,
+        )
+      : null;
+
+  return (
+    <main>
+      <Breadcrumbs
+        crumbs={[
+          { label: "Home", onClick: () => navigate("/") },
+          { label: repo.name },
+        ]}
+      />
+
+      <header>
+        {editingName ? (
+          <h1>
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onBlur={saveName}
+              onKeyDown={handleNameKeydown}
+            />
+          </h1>
+        ) : (
+          <h1
+            onClick={() => setEditingName(true)}
+            style={{ cursor: "pointer" }}
+          >
+            {repo.name}
+          </h1>
+        )}
+        <p>{repoDisplayPath}</p>
+      </header>
+
+      {/* Branch selector */}
+      {branchInfo && (
+        <div>
+          <Popover open={branchDropdownOpen} onOpenChange={setBranchDropdownOpen}>
+            <PopoverTrigger asChild>
+              <button
+                disabled={session.running}
+                onClick={() => {
+                  if (!session.running) {
+                    if (!branchDropdownOpen) fetchBranches();
+                  }
+                }}
+              >
+                {branchInfo.name}
+                {branchInfo.ahead != null && branchInfo.ahead > 0 && (
+                  <span>{"\u2191"}{branchInfo.ahead}</span>
+                )}
+                {branchInfo.behind != null && branchInfo.behind > 0 && (
+                  <span>{"\u2193"}{branchInfo.behind}</span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent>
+              {branchInfo.behind != null && branchInfo.behind > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleFastForward}
+                >
+                  Fast-forward
+                </Button>
+              )}
+              <Command>
+                <CommandInput
+                  placeholder="Search branches..."
+                  value={branchSearch}
+                  onValueChange={setBranchSearch}
+                />
+                <CommandList>
+                  <CommandEmpty>No matching branches</CommandEmpty>
+                  {filteredBranches.map((branch) => (
+                    <CommandItem
+                      key={branch}
+                      onSelect={() => handleSwitchBranch(branch)}
+                    >
+                      {branch}
+                    </CommandItem>
+                  ))}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
+
+      {/* Settings section */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <button>Settings — {model}, {maxIterations} iters</button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div>
+            {repo.type === "ssh" && (
+              <>
+                <Label>
+                  SSH Host
+                  <Input
+                    type="text"
+                    value={
+                      (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost
+                    }
+                    readOnly
+                    disabled
+                  />
+                </Label>
+                <Label>
+                  Remote Path
+                  <Input
+                    type="text"
+                    value={
+                      (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath
+                    }
+                    readOnly
+                    disabled
+                  />
+                </Label>
+              </>
+            )}
+            <Label>
+              Model
+              <Input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={session.running}
+              />
+            </Label>
+            <Label>
+              Max Iterations
+              <Input
+                type="number"
+                value={maxIterations}
+                onChange={(e) => setMaxIterations(Number(e.target.value))}
+                min={1}
+                disabled={session.running}
+              />
+            </Label>
+            <Label>
+              Completion Signal
+              <Input
+                type="text"
+                value={completionSignal}
+                onChange={(e) => setCompletionSignal(e.target.value)}
+                disabled={session.running}
+              />
+            </Label>
+            <Label>
+              <input
+                type="checkbox"
+                checked={createBranch}
+                onChange={(e) => setCreateBranch(e.target.checked)}
+                disabled={session.running}
+              />
+              Create branch on run
+            </Label>
+            <fieldset disabled={session.running}>
+              <legend>Environment Variables</legend>
+              {envVars.map((envVar, i) => (
+                <div key={i}>
+                  <Input
+                    type="text"
+                    value={envVar.key}
+                    onChange={(e) => {
+                      const updated = [...envVars];
+                      updated[i] = { ...updated[i], key: e.target.value };
+                      setEnvVars(updated);
+                    }}
+                    placeholder="KEY"
+                  />
+                  <span>=</span>
+                  <Input
+                    type="text"
+                    value={envVar.value}
+                    onChange={(e) => {
+                      const updated = [...envVars];
+                      updated[i] = { ...updated[i], value: e.target.value };
+                      setEnvVars(updated);
+                    }}
+                    placeholder="value"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      setEnvVars(envVars.filter((_, j) => j !== i))
+                    }
+                  >
+                    &times;
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  setEnvVars([...envVars, { key: "", value: "" }])
+                }
+              >
+                + Add Variable
+              </Button>
+            </fieldset>
+            <div>
+              <Button
+                type="button"
+                onClick={saveSettings}
+                disabled={session.running}
+              >
+                Save
+              </Button>
+              {repo.type === "ssh" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={testConnection}
+                  disabled={connectionTest?.running}
+                >
+                  Test Connection
+                </Button>
+              )}
+            </div>
+            {connectionTest && (
+              <div data-testid="connection-checklist">
+                {connectionTest.steps.map((step) => (
+                  <div key={step.name}>
+                    <span>
+                      {step.status === "running"
+                        ? "..."
+                        : step.status === "pass"
+                          ? "\u2713"
+                          : step.status === "fail"
+                            ? "\u2717"
+                            : "\u00B7"}
+                    </span>
+                    <span>{step.name}</span>
+                    {step.error && <span>{step.error}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Checks section */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <button>Checks — {checks.length} configured</button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div>
+            <Accordion type="multiple">
+              {checks.map((check, i) => (
+                <AccordionItem key={i} value={`check-${i}`}>
+                  <AccordionTrigger>
+                    {check.name || "New Check"}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={session.running}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChecks(checks.filter((_, j) => j !== i));
+                      }}
+                    >
+                      &times;
+                    </Button>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <Label>
+                      Name
+                      <Input
+                        type="text"
+                        value={check.name}
+                        onChange={(e) => {
+                          const updated = [...checks];
+                          updated[i] = { ...updated[i], name: e.target.value };
+                          setChecks(updated);
+                        }}
+                        disabled={session.running}
+                      />
+                    </Label>
+                    <Label>
+                      Command
+                      <Input
+                        type="text"
+                        value={check.command}
+                        onChange={(e) => {
+                          const updated = [...checks];
+                          updated[i] = {
+                            ...updated[i],
+                            command: e.target.value,
+                          };
+                          setChecks(updated);
+                        }}
+                        disabled={session.running}
+                      />
+                    </Label>
+                    <Label>
+                      When
+                      <select
+                        value={check.when}
+                        onChange={(e) => {
+                          const updated = [...checks];
+                          updated[i] = {
+                            ...updated[i],
+                            when: e.target.value as Check["when"],
+                          };
+                          setChecks(updated);
+                        }}
+                        disabled={session.running}
+                      >
+                        <option value="each_iteration">each_iteration</option>
+                        <option value="post_completion">post_completion</option>
+                      </select>
+                    </Label>
+                    <Label>
+                      Timeout
+                      <Input
+                        type="number"
+                        value={check.timeoutSecs}
+                        onChange={(e) => {
+                          const updated = [...checks];
+                          updated[i] = {
+                            ...updated[i],
+                            timeoutSecs: Number(e.target.value),
+                          };
+                          setChecks(updated);
+                        }}
+                        min={1}
+                        disabled={session.running}
+                      />
+                    </Label>
+                    <Label>
+                      Retries
+                      <Input
+                        type="number"
+                        value={check.maxRetries}
+                        onChange={(e) => {
+                          const updated = [...checks];
+                          updated[i] = {
+                            ...updated[i],
+                            maxRetries: Number(e.target.value),
+                          };
+                          setChecks(updated);
+                        }}
+                        min={0}
+                        disabled={session.running}
+                      />
+                    </Label>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={session.running}
+              onClick={() =>
+                setChecks([
+                  ...checks,
+                  {
+                    name: "",
+                    command: "",
+                    when: "each_iteration",
+                    timeoutSecs: 300,
+                    maxRetries: 1,
+                  },
+                ])
+              }
+            >
+              Add Check
+            </Button>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Git Sync section */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <button>
+            Git Sync — {gitSyncEnabled ? "enabled" : "disabled"}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div>
+            <Label>
+              <input
+                type="checkbox"
+                checked={gitSyncEnabled}
+                onChange={(e) => setGitSyncEnabled(e.target.checked)}
+                disabled={session.running}
+              />
+              Enable git sync
+            </Label>
+            <div>
+              <Label>
+                Model
+                <Input
+                  type="text"
+                  value={gitSyncModel}
+                  onChange={(e) => setGitSyncModel(e.target.value)}
+                  placeholder="sonnet"
+                  disabled={session.running || !gitSyncEnabled}
+                />
+              </Label>
+              <Label>
+                Max Push Retries
+                <Input
+                  type="number"
+                  value={gitSyncMaxRetries}
+                  onChange={(e) =>
+                    setGitSyncMaxRetries(Number(e.target.value))
+                  }
+                  min={1}
+                  disabled={session.running || !gitSyncEnabled}
+                />
+              </Label>
+              <Label>
+                Conflict Resolution Prompt
+                <Textarea
+                  value={gitSyncPrompt}
+                  onChange={(e) => setGitSyncPrompt(e.target.value)}
+                  placeholder="Resolve merge conflicts..."
+                  disabled={session.running || !gitSyncEnabled}
+                  rows={3}
+                />
+              </Label>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Plan section */}
+      <section>
+        <h2>Plan</h2>
+        <Label>
+          Prompt file
+          <div>
+            <Input
+              type="text"
+              value={planFile}
+              onChange={(e) => setPlanFile(e.target.value)}
+              placeholder="docs/plans/my-feature-design.md"
+              disabled={session.running}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={browsePrompt}
+              disabled={session.running}
+            >
+              Browse
+            </Button>
+          </div>
+        </Label>
+        {previewLoading && <p>Loading...</p>}
+        {!previewLoading && previewContent && <pre>{previewContent}</pre>}
+      </section>
+
+      {/* Action buttons */}
+      <div>
+        {session.disconnected ? (
+          <Button
+            type="button"
+            onClick={() => repoId && reconnectSession(repoId)}
+          >
+            Reconnect
+          </Button>
+        ) : session.reconnecting ? (
+          <Button type="button" disabled>
+            Reconnecting...
+          </Button>
+        ) : (
+          <>
+            <Button
+              type="button"
+              disabled={session.running || !planFile}
+              onClick={() => repoId && runSession(repoId, planFile)}
+            >
+              {session.running ? "Running..." : "Run"}
+            </Button>
+            {session.running && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => repoId && stopSession(repoId)}
+              >
+                Stop
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate(`/repo/${repoId}/oneshot`)}
+              disabled={session.running}
+            >
+              1-Shot
+            </Button>
+          </>
+        )}
+      </div>
+
+      {!planFile && !session.running && (
+        <p className="text-muted-foreground text-xs mt-2">Select a prompt file to start a run</p>
+      )}
+
+      {/* Disconnected banner */}
+      {session.disconnected && (
+        <section>
+          <p>
+            {session.disconnectReason
+              ? `Connection lost: ${session.disconnectReason}`
+              : "Connection lost"}
+          </p>
+          <p>The remote session may still be running.</p>
+        </section>
+      )}
+
+      {/* Events list */}
+      <EventsList
+        events={session.events}
+        isLive={session.running}
+        repoPath={repoPath}
+      />
+
+      {/* Error section */}
+      {session.error && (
+        <section>
+          <h2>Error</h2>
+          <pre>{session.error}</pre>
+        </section>
+      )}
+
+      {/* Trace/Result section */}
+      {session.trace && (
+        <section>
+          <h2>Result</h2>
+          <dl>
+            <dt>Outcome</dt>
+            <dd>{session.trace.outcome}</dd>
+            {session.trace.failure_reason && (
+              <>
+                <dt>Reason</dt>
+                <dd>{session.trace.failure_reason}</dd>
+              </>
+            )}
+            <dt>Iterations</dt>
+            <dd>{session.trace.total_iterations}</dd>
+            <dt>Total Cost</dt>
+            <dd>${session.trace.total_cost_usd.toFixed(4)}</dd>
+            {ctxPercent !== null && (
+              <>
+                <dt>Context</dt>
+                <dd>
+                  <span style={{ color: sessionContextColor(ctxPercent) }}>
+                    {ctxPercent}%
+                  </span>
+                </dd>
+              </>
+            )}
+            <dt>Session ID</dt>
+            <dd>{session.trace.session_id}</dd>
+          </dl>
+        </section>
+      )}
+    </main>
+  );
+}
