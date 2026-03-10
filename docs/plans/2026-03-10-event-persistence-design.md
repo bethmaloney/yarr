@@ -130,9 +130,9 @@ Same change for the oneshot runner.
 - `OneShotRunner` already has `collector` and `config` fields
 
 **Checklist:**
-- [ ] Call `collector.append_event()` in `OneShotRunner::emit()`
-- [ ] Handle write errors with logging
-- [ ] `cargo check` passes
+- [x] Call `collector.append_event()` in `OneShotRunner::emit()`
+- [x] Handle write errors with logging
+- [x] `cargo check` passes
 
 ---
 
@@ -218,7 +218,7 @@ Add tests for the new JSONL read/write functionality.
 | 1 | Add JSONL writer to TraceCollector | Done |
 | 2 | Update JSONL reader in TraceCollector | Done |
 | 3 | Call append_event from SessionRunner::emit() | Done |
-| 4 | Call append_event from OneShotRunner::emit() | Not Started |
+| 4 | Call append_event from OneShotRunner::emit() | Done |
 | 5 | Store session_id in ActiveSessions | Not Started |
 | 6 | Frontend event recovery on sync | Not Started |
 | 7 | Tests | Done |

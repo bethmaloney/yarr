@@ -179,6 +179,7 @@ pub struct OneShotRunner {
     on_event: Option<OnSessionEvent>,
     abort_registry: Option<AbortRegistry>,
     accumulated_events: std::sync::Mutex<Vec<SessionEvent>>,
+    session_id: std::sync::Mutex<Option<String>>,
 }
 
 impl OneShotRunner {
@@ -194,6 +195,7 @@ impl OneShotRunner {
             on_event: None,
             abort_registry: None,
             accumulated_events: std::sync::Mutex::new(Vec::new()),
+            session_id: std::sync::Mutex::new(None),
         }
     }
 
@@ -209,6 +211,11 @@ impl OneShotRunner {
 
     fn emit(&self, event: SessionEvent) {
         self.accumulated_events.lock().unwrap().push(event.clone());
+        if let Some(ref sid) = *self.session_id.lock().unwrap() {
+            if let Err(e) = self.collector.append_event(sid, &event) {
+                tracing::warn!("Failed to append event to disk: {e}");
+            }
+        }
         if let Some(ref cb) = self.on_event {
             cb(&event);
         }
@@ -369,6 +376,7 @@ impl OneShotRunner {
         let repo_str = self.config.repo_path.to_string_lossy().to_string();
         let mut trace = self.collector.start_session(&repo_str, &self.config.prompt, None);
         trace.session_type = "one_shot".to_string();
+        *self.session_id.lock().unwrap() = Some(trace.session_id.clone());
 
         let slug = slugify(&self.config.title);
         let short_id = generate_short_id();
@@ -1729,6 +1737,73 @@ mod tests {
                 _ => unreachable!(),
             }
         }
+    }
+
+    #[test]
+    fn test_oneshot_emit_persists_events_to_disk() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_config(&tmp, MergeStrategy::Branch);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        // Set the session_id so emit() will persist events via TraceCollector::append_event
+        let test_session_id = "test-session-abc123".to_string();
+        *runner.session_id.lock().unwrap() = Some(test_session_id.clone());
+
+        // Emit a few events
+        let events_to_emit = vec![
+            SessionEvent::OneShotStarted {
+                title: "Add login feature".to_string(),
+                merge_strategy: "branch".to_string(),
+            },
+            SessionEvent::DesignPhaseStarted,
+            SessionEvent::DesignPhaseComplete {
+                plan_file: "/tmp/plan.md".to_string(),
+            },
+        ];
+
+        for event in &events_to_emit {
+            runner.emit(event.clone());
+        }
+
+        // Read back from disk using TraceCollector::read_events
+        let persisted_events =
+            TraceCollector::read_events(tmp.path(), "test-repo", &test_session_id)
+                .expect("should read persisted events from disk");
+
+        // Verify all emitted events were persisted
+        assert_eq!(
+            persisted_events.len(),
+            events_to_emit.len(),
+            "should have persisted {} events, got {}",
+            events_to_emit.len(),
+            persisted_events.len()
+        );
+
+        // Verify event contents by serializing and comparing (SessionEvent may not impl PartialEq)
+        let persisted_json: Vec<String> = persisted_events
+            .iter()
+            .map(|e| serde_json::to_string(e).unwrap())
+            .collect();
+        let expected_json: Vec<String> = events_to_emit
+            .iter()
+            .map(|e| serde_json::to_string(e).unwrap())
+            .collect();
+        assert_eq!(
+            persisted_json, expected_json,
+            "persisted events should match emitted events"
+        );
+
+        // Also verify the in-memory accumulated_events captured them
+        let accumulated = runner.accumulated_events.lock().unwrap();
+        assert_eq!(
+            accumulated.len(),
+            events_to_emit.len(),
+            "accumulated_events should also have {} events",
+            events_to_emit.len()
+        );
     }
 
     #[tokio::test]
