@@ -429,14 +429,14 @@ Card component for the Home view.
 - Dismiss button (X) for failed entries, calls `onDismiss`
 
 **Checklist:**
-- [ ] Component created
-- [ ] Visual distinction from `RepoCard` (badge, layout)
-- [ ] Dismiss button for failed entries
-- [ ] Add tests: renders title, parent repo name, badge, prompt preview
-- [ ] Add tests: dismiss button shown for failed, hidden for running/completed
-- [ ] Add tests: onClick fires when card clicked
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm test` passes
+- [x] Component created
+- [x] Visual distinction from `RepoCard` (badge, layout)
+- [x] Dismiss button for failed entries
+- [x] Add tests: renders title, parent repo name, badge, prompt preview
+- [x] Add tests: dismiss button shown for failed, hidden for running/completed
+- [x] Add tests: onClick fires when card clicked
+- [x] `npx tsc --noEmit` passes
+- [x] `npm test` passes
 
 ---
 
@@ -580,7 +580,7 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | 4 | Update run_oneshot Tauri command | Done |
 | 5 | Clean up oneshot-helpers and event-format | Done |
 | 6 | Add OneShotEntry type and store state | Done |
-| 7 | OneShotCard component | Not Started |
+| 7 | OneShotCard component | Done |
 | 8 | OneShotDetail page with active/read-only modes | Not Started |
 | 9 | Home page mixed cards | Not Started |
 | 10 | RepoDetail 1-shot launch form | Not Started |
