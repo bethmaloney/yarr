@@ -92,6 +92,9 @@ export default function RepoDetail() {
   const [planFile, setPlanFile] = useState("");
   const [previewContent, setPreviewContent] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [plans, setPlans] = useState<string[]>([]);
+  const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
+  const [planSearch, setPlanSearch] = useState("");
 
   // Connection test state
   const [connectionTest, setConnectionTest] = useState<ConnectionTest | null>(
@@ -221,6 +224,22 @@ export default function RepoDetail() {
         : branches,
     [branches, branchSearch],
   );
+
+  const filteredPlans = useMemo(
+    () =>
+      planSearch
+        ? plans.filter((p) =>
+            p.toLowerCase().includes(planSearch.toLowerCase()),
+          )
+        : plans,
+    [plans, planSearch],
+  );
+
+  const selectedPlanName = useMemo(() => {
+    if (!planFile) return "";
+    const parts = planFile.replace(/\\/g, "/").split("/");
+    return parts[parts.length - 1];
+  }, [planFile]);
 
   if (!repo) {
     return <div>Repo not found</div>;
@@ -398,6 +417,27 @@ export default function RepoDetail() {
       console.error("Failed to switch branch:", e);
       toast.error(`Failed to switch branch: ${e}`);
     }
+  }
+
+  async function fetchPlans() {
+    const payload = buildRepoPayload();
+    if (!payload) return;
+    try {
+      const result = await invoke<string[]>("list_plans", {
+        repo: payload,
+        plansDir: (repo!.plansDir || "docs/plans/").replace(/\/?$/, "/"),
+      });
+      setPlans(result);
+    } catch {
+      setPlans([]);
+    }
+  }
+
+  function handleSelectPlan(filename: string) {
+    const dir = (repo!.plansDir || "docs/plans/").replace(/\/?$/, "/");
+    setPlanFile(`${dir}${filename}`);
+    setPlanDropdownOpen(false);
+    setPlanSearch("");
   }
 
   // Context percentage computation
@@ -916,16 +956,46 @@ export default function RepoDetail() {
       {/* Plan section */}
       <section className="plan-section mb-6">
         <h2 className="text-lg font-semibold mb-3">Plan</h2>
-        <Label className="text-sm font-medium">Prompt file</Label>
         <div className="flex gap-2 mt-1">
-          <Input
-            type="text"
-            value={planFile}
-            onChange={(e) => setPlanFile(e.target.value)}
-            placeholder="docs/plans/my-feature-design.md"
-            disabled={session.running}
-            className="flex-1"
-          />
+          <Popover open={planDropdownOpen} onOpenChange={setPlanDropdownOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className="flex-1 inline-flex items-center px-3 py-2 rounded-md border border-input bg-transparent text-sm text-left hover:bg-accent/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={session.running}
+                aria-label="Select a plan"
+                onClick={() => {
+                  if (!planDropdownOpen) fetchPlans();
+                }}
+              >
+                {selectedPlanName || "Select..."}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-80 p-0"
+              onEscapeKeyDown={() => setPlanSearch("")}
+            >
+              <Command shouldFilter={false}>
+                <CommandInput
+                  placeholder="Search plans..."
+                  value={planSearch}
+                  onValueChange={setPlanSearch}
+                />
+                <CommandList>
+                  <CommandEmpty>No plans found</CommandEmpty>
+                  {filteredPlans.map((plan) => (
+                    <CommandItem
+                      key={plan}
+                      value={plan}
+                      className={plan === selectedPlanName ? "font-bold" : ""}
+                      onSelect={() => handleSelectPlan(plan)}
+                    >
+                      {plan}
+                    </CommandItem>
+                  ))}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
           <Button
             type="button"
             variant="secondary"

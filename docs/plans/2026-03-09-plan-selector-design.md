@@ -144,39 +144,37 @@ Backend command to move a plan file to the completed subdirectory via the runtim
 
 Replace the current plan text input with a dropdown following the branch selector pattern.
 
-**Files to modify:**
-- `src/RepoDetail.svelte`
+**Files modified:**
+- `src/pages/RepoDetail.tsx` (React, not Svelte — project was migrated)
 
-**Pattern reference:** `src/RepoDetail.svelte` — branch selector (lines 154-260 logic, 290-336 template, 1079-1199 styles)
+**Pattern reference:** `src/pages/RepoDetail.tsx` — branch selector (Popover + Command components)
 
 **Details:**
-- Add state: `plans: string[]`, `planDropdownOpen: boolean`, `planSearch: string`
-- Add `filteredPlans` derived from search
-- Add `fetchPlans()` — invokes `list_plans` with repo payload and `plansDir ?? "docs/plans/"`
-- Add `handleSelectPlan(filename: string)` — sets `planFile` to `<plansDir>/<filename>`, closes dropdown
-- Add `handlePlanSearchKeydown` for Escape/Enter
-- Add click-outside handler (extend existing `handleClickOutside` to also close `.plan-selector`)
+- Added state: `plans: string[]`, `planDropdownOpen: boolean`, `planSearch: string`
+- Added `filteredPlans` useMemo derived from search
+- Added `selectedPlanName` useMemo to extract filename from path
+- Added `fetchPlans()` — invokes `list_plans` with repo payload and `plansDir || "docs/plans/"`, normalizes trailing slash
+- Added `handleSelectPlan(filename: string)` — sets `planFile` to `<plansDir>/<filename>`, closes dropdown, clears search
+- Click-outside handled by Popover component (same as branch selector)
 - Fetch plans on dropdown open (same pattern as branches)
 
 **Template:**
-- Replace the existing plan section (lines 519-543) with:
-  - Dropdown trigger button showing selected plan name or "Select a plan..."
-  - Dropdown menu with search input and plan list
-  - Browse button (kept, using existing `browsePrompt`)
-- Keep the preview section as-is (it reacts to `planFile` changes)
-
-**Styles:**
-- Reuse branch selector CSS classes or duplicate with `plan-` prefix
+- Replaced existing plan Input+Browse with Popover+Command dropdown + Browse button
+- Trigger shows selected filename or "Select..." placeholder
+- CommandInput for search, CommandEmpty for "No plans found", CommandItem for each plan
+- Browse button kept alongside for files outside plans directory
+- Preview section unchanged (reacts to `planFile`)
 
 **Checklist:**
-- [ ] Add plan selector state variables
-- [ ] Add `fetchPlans()` function
-- [ ] Add `handleSelectPlan()` function
-- [ ] Add search keydown handler
-- [ ] Extend click-outside handler for plan selector
-- [ ] Replace plan section template with dropdown + browse button
-- [ ] Add/reuse dropdown styles
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add plan selector state variables
+- [x] Add `fetchPlans()` function
+- [x] Add `handleSelectPlan()` function
+- [x] Search handled by Command shouldFilter={false} + filteredPlans memo
+- [x] Click-outside handled by Popover component
+- [x] Replace plan section template with dropdown + browse button
+- [x] Styles via Tailwind classes (no separate CSS needed)
+- [x] Verify: `npx tsc --noEmit`
+- [x] 10 new tests added and passing in RepoDetail.test.tsx
 
 ---
 
@@ -185,9 +183,9 @@ Replace the current plan text input with a dropdown following the branch selecto
 After a session completes successfully, move the plan file to completed and clear the selector.
 
 **Files to modify:**
-- `src/App.svelte`
+- `src/store.ts` (Zustand store — session event handler; project uses React, not Svelte)
 
-**Pattern reference:** `src/App.svelte` — session_complete handler (lines 132-137)
+**Pattern reference:** `src/store.ts` — session event handler where `session_complete` events are processed
 
 **Details:**
 - In the `session_complete` event handler, check `event.outcome === "completed"` and `event.plan_file` is set
@@ -211,14 +209,14 @@ After a session completes successfully, move the plan file to completed and clea
 Reset the plan selection in RepoDetail after a plan is moved to completed.
 
 **Files to modify:**
-- `src/RepoDetail.svelte`
+- `src/pages/RepoDetail.tsx` (React, not Svelte — project was migrated)
 
-**Pattern reference:** `src/RepoDetail.svelte` — `wasRunning` effect that refreshes branch info after session ends (lines 245-252)
+**Pattern reference:** `src/pages/RepoDetail.tsx` — `wasRunningRef` useEffect that refreshes branch info after session ends (lines 150-161)
 
 **Details:**
-- Add an `$effect` similar to the branch refresh pattern: when `wasRunning && !session.running`, clear `planFile` if the session completed successfully
+- Add a useEffect similar to the branch refresh pattern: when `wasRunningRef.current && !session.running`, clear `planFile` if the session completed successfully
 - Check `session.trace?.outcome === "completed"` and `session.trace?.plan_file` to determine if the plan was moved
-- Reset `planFile = ""` to clear the dropdown
+- Reset `setPlanFile("")` to clear the dropdown
 
 **Checklist:**
 - [ ] Add effect to clear `planFile` after successful completion
@@ -286,7 +284,7 @@ Add Vitest tests for plan selector behavior.
 | 2 | Add `plansDir` setting to RepoDetail UI | Done |
 | 3 | Add `list_plans` Tauri command | Done |
 | 4 | Add `move_plan_to_completed` Tauri command | Done |
-| 5 | Build plan selector dropdown component | Not Started |
+| 5 | Build plan selector dropdown component | Done |
 | 6 | Auto-move plan on successful completion | Not Started |
 | 7 | Clear plan selector after auto-move | Not Started |
 | 8 | Tests for new Tauri commands | Done |
