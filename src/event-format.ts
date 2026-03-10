@@ -91,7 +91,7 @@ export function toolSummary(ev: SessionEvent, repoPath?: string): string {
   if (!input) return name;
   switch (name) {
     case "Bash":
-      return input.command ? `${name}: ${input.command}` : name;
+      return input.description ? `${name}: ${input.description}` : input.command ? `${name}: ${input.command}` : name;
     case "Read":
     case "Write":
     case "Edit":

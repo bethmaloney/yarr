@@ -220,6 +220,33 @@ describe("eventLabel", () => {
       const label = eventLabel(ev);
       expect(label).toBe("Session complete: completed");
     });
+
+    it("returns tool use label with Bash description when both command and description present", () => {
+      const ev = makeEvent({
+        kind: "tool_use",
+        iteration: 2,
+        tool_name: "Bash",
+        tool_input: {
+          command: "npm run typecheck 2>&1 || npx tsc --noEmit 2>&1",
+          description: "Try alternative TypeScript check commands",
+        },
+      });
+      const label = eventLabel(ev);
+      expect(label).toBe(
+        "[2] Bash: Try alternative TypeScript check commands",
+      );
+    });
+
+    it("returns tool use label with Bash description when only description present", () => {
+      const ev = makeEvent({
+        kind: "tool_use",
+        iteration: 1,
+        tool_name: "Bash",
+        tool_input: { description: "Check project status" },
+      });
+      const label = eventLabel(ev);
+      expect(label).toBe("[1] Bash: Check project status");
+    });
   });
 
   describe("tool_use with repoPath shows relative paths", () => {
@@ -326,5 +353,23 @@ describe("toolSummary with repoPath", () => {
       tool_input: { command: "npm test" },
     });
     expect(toolSummary(ev, "/home/user/repo")).toBe("Bash: npm test");
+  });
+
+  it("prefers description over command for Bash tool", () => {
+    const ev = makeEvent({
+      kind: "tool_use",
+      tool_name: "Bash",
+      tool_input: { command: "npm test", description: "Run unit tests" },
+    });
+    expect(toolSummary(ev, "/home/user/repo")).toBe("Bash: Run unit tests");
+  });
+
+  it("shows Bash description when command is absent", () => {
+    const ev = makeEvent({
+      kind: "tool_use",
+      tool_name: "Bash",
+      tool_input: { description: "Check git status" },
+    });
+    expect(toolSummary(ev, "/home/user/repo")).toBe("Bash: Check git status");
   });
 });
