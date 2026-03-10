@@ -543,6 +543,83 @@ async fn fast_forward_branch(repo: RepoType) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) async fn list_plans_impl(
+    rt: &dyn RuntimeProvider,
+    working_dir: &Path,
+    plans_dir: &str,
+) -> Result<Vec<String>, String> {
+    let full_path = working_dir.join(plans_dir);
+    let escaped_path = ssh_shell_escape(&full_path.display().to_string());
+    let cmd = format!(
+        "find {} -maxdepth 1 -name '*.md' -type f -printf '%f\\n' | sort",
+        escaped_path
+    );
+    let timeout = std::time::Duration::from_secs(30);
+    let output = rt
+        .run_command(&cmd, working_dir, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if output.exit_code != 0 {
+        return Ok(vec![]);
+    }
+
+    let files: Vec<String> = output
+        .stdout
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+
+    Ok(files)
+}
+
+#[tauri::command]
+async fn list_plans(repo: RepoType, plans_dir: String) -> Result<Vec<String>, String> {
+    if plans_dir.contains("..") {
+        return Err("Invalid plans directory".to_string());
+    }
+    let (rt, working_dir) = resolve_runtime(&repo);
+    list_plans_impl(rt.as_ref(), &working_dir, &plans_dir).await
+}
+
+pub(crate) async fn move_plan_to_completed_impl(
+    rt: &dyn RuntimeProvider,
+    working_dir: &Path,
+    plans_dir: &str,
+    filename: &str,
+) -> Result<(), String> {
+    let escaped_plans_dir = ssh_shell_escape(plans_dir);
+    let escaped_filename = ssh_shell_escape(filename);
+    let base = ssh_shell_escape(&working_dir.display().to_string());
+    let cmd = format!(
+        "mkdir -p {base}/{escaped_plans_dir}/completed && mv {base}/{escaped_plans_dir}/{escaped_filename} {base}/{escaped_plans_dir}/completed/{escaped_filename}"
+    );
+    let timeout = std::time::Duration::from_secs(30);
+    let output = rt
+        .run_command(&cmd, working_dir, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if output.exit_code != 0 {
+        return Err(output.stderr);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn move_plan_to_completed(repo: RepoType, plans_dir: String, filename: String) -> Result<(), String> {
+    if plans_dir.contains("..") {
+        return Err("Invalid plans directory".to_string());
+    }
+    if filename.contains('/') || filename.contains("..") {
+        return Err("Invalid filename".to_string());
+    }
+    let (rt, working_dir) = resolve_runtime(&repo);
+    move_plan_to_completed_impl(rt.as_ref(), &working_dir, &plans_dir, &filename).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -557,7 +634,7 @@ pub fn run() {
         .manage(GlobalAbortRegistry {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
-        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {
@@ -1344,5 +1421,154 @@ mod tests {
             all_args.contains("/home/user/my project") || all_args.contains("'/home/user/my project'"),
             "remote path check command should include path with spaces (possibly shell-escaped), got: {all_args}"
         );
+    }
+
+    // --- list_plans_impl / move_plan_to_completed_impl tests (TDD) ---
+
+    #[tokio::test]
+    async fn list_plans_impl_returns_only_md_files() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let plans_path = dir.path().join("plans");
+        std::fs::create_dir_all(&plans_path).expect("failed to create plans dir");
+
+        // Create some .md files and a non-.md file
+        std::fs::write(plans_path.join("alpha.md"), "# Alpha").unwrap();
+        std::fs::write(plans_path.join("beta.md"), "# Beta").unwrap();
+        std::fs::write(plans_path.join("notes.txt"), "not a plan").unwrap();
+        std::fs::write(plans_path.join("readme.rs"), "fn main() {}").unwrap();
+
+        let rt = default_runtime();
+        let result = list_plans_impl(rt.as_ref(), dir.path(), "plans")
+            .await
+            .expect("list_plans_impl should succeed");
+
+        assert!(result.contains(&"alpha.md".to_string()), "should contain alpha.md, got: {:?}", result);
+        assert!(result.contains(&"beta.md".to_string()), "should contain beta.md, got: {:?}", result);
+        assert!(!result.contains(&"notes.txt".to_string()), "should not contain notes.txt");
+        assert!(!result.contains(&"readme.rs".to_string()), "should not contain readme.rs");
+        assert_eq!(result.len(), 2, "should contain exactly 2 .md files");
+    }
+
+    #[tokio::test]
+    async fn list_plans_impl_excludes_files_in_subdirectories() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let plans_path = dir.path().join("plans");
+        let completed_path = plans_path.join("completed");
+        std::fs::create_dir_all(&completed_path).expect("failed to create completed dir");
+
+        // Top-level plan files
+        std::fs::write(plans_path.join("active.md"), "# Active").unwrap();
+        // Completed plan files (in subdirectory -- should be excluded by maxdepth 1)
+        std::fs::write(completed_path.join("done.md"), "# Done").unwrap();
+
+        let rt = default_runtime();
+        let result = list_plans_impl(rt.as_ref(), dir.path(), "plans")
+            .await
+            .expect("list_plans_impl should succeed");
+
+        assert!(result.contains(&"active.md".to_string()), "should contain active.md");
+        assert!(!result.contains(&"done.md".to_string()), "should not contain done.md from completed/");
+        assert_eq!(result.len(), 1, "should contain exactly 1 file");
+    }
+
+    #[tokio::test]
+    async fn list_plans_impl_returns_empty_vec_when_dir_missing() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        // Do NOT create the plans directory
+
+        let rt = default_runtime();
+        let result = list_plans_impl(rt.as_ref(), dir.path(), "nonexistent-plans")
+            .await
+            .expect("list_plans_impl should return Ok even when dir is missing");
+
+        assert!(result.is_empty(), "should return empty vec when plans dir doesn't exist, got: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn list_plans_impl_returns_sorted_filenames() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let plans_path = dir.path().join("plans");
+        std::fs::create_dir_all(&plans_path).expect("failed to create plans dir");
+
+        // Create files in non-alphabetical order
+        std::fs::write(plans_path.join("zebra.md"), "# Zebra").unwrap();
+        std::fs::write(plans_path.join("alpha.md"), "# Alpha").unwrap();
+        std::fs::write(plans_path.join("middle.md"), "# Middle").unwrap();
+
+        let rt = default_runtime();
+        let result = list_plans_impl(rt.as_ref(), dir.path(), "plans")
+            .await
+            .expect("list_plans_impl should succeed");
+
+        assert_eq!(result, vec!["alpha.md", "middle.md", "zebra.md"],
+            "files should be returned in sorted order");
+    }
+
+    #[tokio::test]
+    async fn list_plans_impl_returns_filenames_without_directory_prefix() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let plans_path = dir.path().join("my-plans");
+        std::fs::create_dir_all(&plans_path).expect("failed to create plans dir");
+
+        std::fs::write(plans_path.join("feature.md"), "# Feature").unwrap();
+
+        let rt = default_runtime();
+        let result = list_plans_impl(rt.as_ref(), dir.path(), "my-plans")
+            .await
+            .expect("list_plans_impl should succeed");
+
+        assert_eq!(result.len(), 1);
+        // Should be just the filename, not a path like "my-plans/feature.md"
+        assert_eq!(result[0], "feature.md",
+            "should return bare filename without directory prefix");
+        assert!(!result[0].contains('/'),
+            "filename should not contain any path separators");
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_moves_file_and_creates_dir() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let plans_path = dir.path().join("plans");
+        std::fs::create_dir_all(&plans_path).expect("failed to create plans dir");
+
+        // Create a plan file to move
+        std::fs::write(plans_path.join("my-plan.md"), "# My Plan").unwrap();
+
+        // completed/ directory does NOT exist yet -- impl should create it
+        assert!(!plans_path.join("completed").exists(),
+            "completed/ should not exist before the call");
+
+        let rt = default_runtime();
+        move_plan_to_completed_impl(rt.as_ref(), dir.path(), "plans", "my-plan.md")
+            .await
+            .expect("move_plan_to_completed_impl should succeed");
+
+        // File should no longer be in the plans directory
+        assert!(!plans_path.join("my-plan.md").exists(),
+            "source file should no longer exist after move");
+
+        // File should now be in the completed/ subdirectory
+        assert!(plans_path.join("completed").join("my-plan.md").exists(),
+            "file should exist in plans/completed/ after move");
+
+        // Verify contents are preserved
+        let content = std::fs::read_to_string(plans_path.join("completed").join("my-plan.md"))
+            .expect("should be able to read moved file");
+        assert_eq!(content, "# My Plan", "file contents should be preserved after move");
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_fails_for_nonexistent_file() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let plans_path = dir.path().join("plans");
+        std::fs::create_dir_all(&plans_path).expect("failed to create plans dir");
+
+        // Do NOT create the file -- it doesn't exist
+        let rt = default_runtime();
+        let result = move_plan_to_completed_impl(rt.as_ref(), dir.path(), "plans", "nonexistent.md")
+            .await;
+
+        assert!(result.is_err(),
+            "should return Err when source file does not exist");
     }
 }
