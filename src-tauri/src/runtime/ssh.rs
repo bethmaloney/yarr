@@ -225,6 +225,12 @@ impl SshRuntime {
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
+    pub fn build_run_command(&self, command: &str, working_dir: &std::path::Path) -> Command {
+        let escaped_dir = shell_escape(&working_dir.to_string_lossy());
+        let remote_cmd = format!("cd {} && {}", escaped_dir, command);
+        ssh_command(&self.ssh_host, &remote_cmd)
+    }
+
     /// Parse the combined output of tmux check and last log line into a RemoteState.
     pub fn parse_remote_state(tmux_output: &str, last_log_line: &str) -> RemoteState {
         if tmux_output.trim().contains("ALIVE") {
@@ -445,11 +451,30 @@ impl RuntimeProvider for SshRuntime {
 
     async fn run_command(
         &self,
-        _command: &str,
-        _working_dir: &std::path::Path,
-        _timeout: std::time::Duration,
+        command: &str,
+        working_dir: &std::path::Path,
+        timeout: std::time::Duration,
     ) -> Result<CommandOutput> {
-        anyhow::bail!("run_command is not yet supported for SSH runtime")
+        let child = self
+            .build_run_command(command, working_dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+
+        let result = tokio::time::timeout(timeout, child.wait_with_output()).await;
+        match result {
+            Ok(Ok(output)) => Ok(CommandOutput {
+                exit_code: output.status.code().unwrap_or(-1),
+                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            }),
+            Ok(Err(e)) => Err(e.into()),
+            Err(_) => {
+                // child is dropped here, kill_on_drop(true) ensures cleanup
+                anyhow::bail!("Command timed out after {:?}", timeout)
+            }
+        }
     }
 }
 
@@ -2187,5 +2212,124 @@ mod tests {
         assert!(matches!(events[0], StreamEvent::System(_)));
         assert!(matches!(events[1], StreamEvent::Assistant(_)));
         assert!(matches!(events[2], StreamEvent::Result(_)));
+    }
+
+    // ── build_run_command tests ──────────────────────────────────────
+
+    #[test]
+    fn build_run_command_wraps_with_cd() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let working_dir = PathBuf::from("/some/path");
+        let cmd = rt.build_run_command("ls -la", &working_dir);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("cd") && all_args.contains("/some/path") && all_args.contains("&&"),
+            "expected cd with /some/path and && in command, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_run_command_uses_ssh_command() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let working_dir = PathBuf::from("/some/path");
+        let cmd = rt.build_run_command("echo hello", &working_dir);
+        let std_cmd = cmd.as_std();
+
+        if cfg!(target_os = "windows") {
+            assert_eq!(
+                std_cmd.get_program(),
+                "wsl",
+                "on Windows the outer program should be wsl"
+            );
+        } else {
+            assert_eq!(
+                std_cmd.get_program(),
+                "ssh",
+                "on unix the program should be ssh"
+            );
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn build_run_command_wraps_in_login_shell() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let working_dir = PathBuf::from("/some/path");
+        let cmd = rt.build_run_command("ls -la", &working_dir);
+        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let last_arg = args_str.last().expect("should have args");
+
+        assert!(
+            last_arg.starts_with("$SHELL -lc "),
+            "expected last arg to start with '$SHELL -lc ', got: {}",
+            last_arg
+        );
+    }
+
+    #[test]
+    fn build_run_command_escapes_working_dir_with_spaces() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let working_dir = PathBuf::from("/path with spaces");
+        let cmd = rt.build_run_command("ls", &working_dir);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("cd") && all_args.contains("/path with spaces") && all_args.contains("&&"),
+            "expected cd with escaped path and && in command, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_run_command_includes_original_command() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let working_dir = PathBuf::from("/some/path");
+        let cmd = rt.build_run_command("cargo test --release", &working_dir);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("cargo test --release"),
+            "expected original command 'cargo test --release' in args, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_run_command_escapes_working_dir_with_single_quotes() {
+        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let working_dir = PathBuf::from("/home/user/it's a dir");
+        let cmd = rt.build_run_command("ls", &working_dir);
+        let std_cmd = cmd.as_std();
+
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        // shell_escape("it's a dir") wraps in single quotes and escapes the embedded quote
+        assert!(
+            all_args.contains("'\\''"),
+            "expected shell-escaped single quote in working dir path, got: {}",
+            all_args
+        );
+        assert!(
+            all_args.contains("cd "),
+            "expected 'cd' in command, got: {}",
+            all_args
+        );
     }
 }

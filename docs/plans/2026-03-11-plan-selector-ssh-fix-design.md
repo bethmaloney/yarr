@@ -65,9 +65,9 @@ Replace the stub in `src-tauri/src/runtime/ssh.rs` with a working implementation
 - On success: return `CommandOutput { exit_code, stdout, stderr }`
 
 **Checklist:**
-- [ ] Replace stub `run_command` with SSH implementation
-- [ ] Verify: `cd src-tauri && cargo check`
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Replace stub `run_command` with SSH implementation
+- [x] Verify: `cd src-tauri && cargo check`
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -122,6 +122,6 @@ Update `fetchPlans` and the dropdown UI in `RepoDetail.tsx`.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Implement `SshRuntime::run_command` | Not Started |
+| 1 | Implement `SshRuntime::run_command` | Done |
 | 2 | Add loading/error state to plan selector UI | Not Started |
 | 3 | Tests | Not Started |
