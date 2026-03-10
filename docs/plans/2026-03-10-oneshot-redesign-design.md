@@ -336,12 +336,12 @@ Accept implementation config and return `oneshot_id`. Key `ActiveSessions` and e
 - Clean up `oneshot_id` from `ActiveSessions` when done
 
 **Checklist:**
-- [ ] Add new parameters to command signature
-- [ ] Generate and return `oneshot_id`
-- [ ] Key `ActiveSessions` by `oneshot_id`
-- [ ] Events tagged with `oneshot_id`
-- [ ] `cargo check` passes
-- [ ] `cargo test` passes
+- [x] Add new parameters to command signature
+- [x] Generate and return `oneshot_id`
+- [x] Key `ActiveSessions` by `oneshot_id`
+- [x] Events tagged with `oneshot_id`
+- [x] `cargo check` passes
+- [x] `cargo test` passes
 
 ---
 
@@ -577,7 +577,7 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | 1 | SessionRunner working directory override | Done |
 | 2 | Decouple SessionRunner trace lifecycle | Done |
 | 3 | Refactor OneShotRunner to use SessionRunner | Done |
-| 4 | Update run_oneshot Tauri command | Not Started |
+| 4 | Update run_oneshot Tauri command | Done |
 | 5 | Clean up oneshot-helpers and event-format | Not Started |
 | 6 | Add OneShotEntry type and store state | Not Started |
 | 7 | OneShotCard component | Not Started |

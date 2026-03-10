@@ -253,6 +253,12 @@ async fn run_session(
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct OneShotResult {
+    pub oneshot_id: String,
+    pub trace: trace::SessionTrace,
+}
+
 #[tauri::command]
 async fn run_oneshot(
     app: tauri::AppHandle,
@@ -263,12 +269,17 @@ async fn run_oneshot(
     model: String,
     merge_strategy: oneshot::MergeStrategy,
     env_vars: Option<HashMap<String, String>>,
-) -> Result<trace::SessionTrace, String> {
+    max_iterations: u32,
+    completion_signal: String,
+    checks: Option<Vec<session::Check>>,
+    git_sync: Option<session::GitSyncConfig>,
+) -> Result<OneShotResult, String> {
+    let oneshot_id = oneshot::generate_oneshot_id();
     let cancel_token = CancellationToken::new();
     let session_id = Uuid::new_v4().to_string();
     {
         let active = app.state::<ActiveSessions>();
-        active.tokens.lock().await.insert(repo_id.clone(), (cancel_token.clone(), session_id.clone()));
+        active.tokens.lock().await.insert(oneshot_id.clone(), (cancel_token.clone(), session_id.clone()));
     }
 
     match &repo {
@@ -284,40 +295,40 @@ async fn run_oneshot(
                 model,
                 merge_strategy,
                 env_vars: env_vars.unwrap_or_default(),
-                max_iterations: 20,
-                completion_signal: "<promise>COMPLETE</promise>".to_string(),
-                checks: vec![],
-                git_sync: None,
+                max_iterations,
+                completion_signal,
+                checks: checks.unwrap_or_default(),
+                git_sync,
             };
 
             let base_dir = match app.path().app_data_dir() {
                 Ok(d) => d,
                 Err(e) => {
-                    app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
                     return Err(e.to_string());
                 }
             };
-            let collector = TraceCollector::new(base_dir, &repo_id);
+            let collector = TraceCollector::new(base_dir, &oneshot_id);
 
             let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
             let app_handle = app.clone();
-            let repo_id_clone = repo_id.clone();
+            let oneshot_id_clone = oneshot_id.clone();
             let runner = OneShotRunner::new(config, collector, cancel_token)
                 .abort_registry(abort_registry)
                 .on_event(Box::new(move |event| {
                     let _ = app_handle.emit("session-event", TaggedSessionEvent {
-                        repo_id: repo_id_clone.clone(),
+                        repo_id: oneshot_id_clone.clone(),
                         event: event.clone(),
                     });
                 }))
                 .with_session_id(session_id);
 
             let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
-            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
-            result
+            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+            result.map(|trace| OneShotResult { oneshot_id, trace })
         }
         RepoType::Ssh { .. } => {
-            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
             Err("1-shot is not supported for SSH repos".to_string())
         }
     }
@@ -1672,5 +1683,105 @@ mod tests {
 
         assert!(result.is_err(),
             "should return Err when source file does not exist");
+    }
+
+    // --- OneShotResult tests (TDD — struct does not exist yet) ---
+
+    /// Helper to build a minimal SessionTrace for use in OneShotResult tests.
+    fn make_test_session_trace() -> trace::SessionTrace {
+        trace::SessionTrace {
+            trace_id: "abc123".to_string(),
+            root_span_id: "span456".to_string(),
+            session_id: "sess-789".to_string(),
+            repo_path: "/tmp/repo".to_string(),
+            prompt: "implement feature X".to_string(),
+            plan_file: None,
+            repo_id: Some("test-repo".to_string()),
+            session_type: "ralph_loop".to_string(),
+            start_time: chrono::Utc::now(),
+            end_time: Some(chrono::Utc::now()),
+            outcome: SessionOutcome::Completed,
+            failure_reason: None,
+            iterations: vec![],
+            total_cost_usd: 1.23,
+            total_iterations: 2,
+            total_input_tokens: 100,
+            total_output_tokens: 50,
+            total_cache_read_tokens: 10,
+            total_cache_creation_tokens: 5,
+            context_window: 0,
+            final_context_tokens: 0,
+        }
+    }
+
+    #[test]
+    fn oneshot_result_serializes_with_both_fields() {
+        let result = OneShotResult {
+            oneshot_id: "oneshot-a1b2c3".to_string(),
+            trace: make_test_session_trace(),
+        };
+
+        let json = serde_json::to_value(&result).expect("serialization should succeed");
+
+        assert!(json.get("oneshot_id").is_some(), "JSON should contain 'oneshot_id' field");
+        assert!(json.get("trace").is_some(), "JSON should contain 'trace' field");
+        assert_eq!(json["oneshot_id"], "oneshot-a1b2c3");
+        assert_eq!(json["trace"]["trace_id"], "abc123");
+        assert_eq!(json["trace"]["session_id"], "sess-789");
+        assert_eq!(json["trace"]["outcome"], "completed");
+    }
+
+    #[test]
+    fn oneshot_result_clone_produces_equal_json() {
+        let result = OneShotResult {
+            oneshot_id: "oneshot-d4e5f6".to_string(),
+            trace: make_test_session_trace(),
+        };
+
+        let cloned = result.clone();
+
+        let json_original =
+            serde_json::to_string(&result).expect("serialization should succeed");
+        let json_cloned =
+            serde_json::to_string(&cloned).expect("serialization should succeed");
+
+        assert_eq!(json_original, json_cloned,
+            "cloned OneShotResult should serialize to identical JSON");
+    }
+
+    #[test]
+    fn oneshot_result_oneshot_id_is_string() {
+        let result = OneShotResult {
+            oneshot_id: "oneshot-aabbcc".to_string(),
+            trace: make_test_session_trace(),
+        };
+
+        let json = serde_json::to_value(&result).expect("serialization should succeed");
+
+        assert!(json["oneshot_id"].is_string(),
+            "oneshot_id should serialize as a JSON string, got: {:?}", json["oneshot_id"]);
+    }
+
+    #[test]
+    fn tagged_event_with_oneshot_id() {
+        let event = TaggedSessionEvent {
+            repo_id: "oneshot-x1y2z3".to_string(),
+            event: SessionEvent::OneShotStarted {
+                title: "Fix bug".to_string(),
+                parent_repo_id: "repo-original".to_string(),
+                prompt: "Fix the login bug".to_string(),
+                merge_strategy: "branch".to_string(),
+            },
+        };
+
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+
+        assert_eq!(json["repo_id"], "oneshot-x1y2z3",
+            "repo_id field should hold the oneshot ID");
+        assert!(json["repo_id"].as_str().unwrap().starts_with("oneshot-"),
+            "repo_id should start with 'oneshot-' prefix");
+        assert_eq!(json["event"]["kind"], "one_shot_started");
+        assert_eq!(json["event"]["title"], "Fix bug");
+        assert_eq!(json["event"]["parent_repo_id"], "repo-original");
     }
 }
