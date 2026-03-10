@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use tracing::warn;
 use uuid::Uuid;
@@ -189,7 +190,7 @@ impl TraceCollector {
     pub async fn finalize(
         &self,
         trace: &mut SessionTrace,
-        events: &[crate::session::SessionEvent],
+        _events: &[crate::session::SessionEvent],
     ) -> anyhow::Result<PathBuf> {
         trace.end_time = Some(Utc::now());
 
@@ -236,12 +237,6 @@ impl TraceCollector {
 
         let json = serde_json::to_string_pretty(trace)?;
         tokio::fs::write(&trace_path, json).await?;
-
-        let events_filename = format!("events_{}.json", trace.session_id);
-        let events_path = self.output_dir.join(&events_filename);
-
-        let events_json = serde_json::to_string_pretty(events)?;
-        tokio::fs::write(&events_path, events_json).await?;
 
         Ok(trace_path)
     }
@@ -358,10 +353,32 @@ impl TraceCollector {
         let path = base_dir
             .join("traces")
             .join(repo_id)
-            .join(format!("events_{}.json", session_id));
+            .join(format!("events_{}.jsonl", session_id));
         let contents = std::fs::read_to_string(&path)?;
-        let events: Vec<crate::session::SessionEvent> = serde_json::from_str(&contents)?;
+        let mut events = Vec::new();
+        for line in contents.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<crate::session::SessionEvent>(line) {
+                Ok(event) => events.push(event),
+                Err(e) => {
+                    warn!("Skipping malformed event line in {:?}: {}", path, e);
+                }
+            }
+        }
         Ok(events)
+    }
+
+    /// Append a single event as a JSONL line to the events file
+    pub fn append_event(&self, session_id: &str, event: &crate::session::SessionEvent) -> anyhow::Result<()> {
+        validate_path_component(session_id, "session_id")?;
+        std::fs::create_dir_all(&self.output_dir)?;
+        let path = self.output_dir.join(format!("events_{}.jsonl", session_id));
+        let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+        writeln!(file, "{}", serde_json::to_string(event)?)?;
+        Ok(())
     }
 }
 
@@ -594,10 +611,10 @@ mod tests {
 
     use tempfile::TempDir;
 
-    // ── Test 9: finalize writes both trace and events files ──
+    // ── Test 9: finalize writes only trace file (not events) ──
 
     #[tokio::test]
-    async fn finalize_writes_both_trace_and_events_files() {
+    async fn finalize_writes_only_trace_file() {
         let tmp = TempDir::new().expect("create temp dir");
         let base_dir = tmp.path();
 
@@ -629,19 +646,13 @@ mod tests {
             .join(format!("events_{}.json", session_id));
 
         assert!(trace_path.exists(), "trace file should exist at {:?}", trace_path);
-        assert!(events_path.exists(), "events file should exist at {:?}", events_path);
+        assert!(!events_path.exists(), "events file should NOT exist at {:?}", events_path);
 
         // Read back and verify trace
         let trace_json = std::fs::read_to_string(&trace_path).expect("read trace file");
         let restored_trace: SessionTrace =
             serde_json::from_str(&trace_json).expect("deserialize trace");
         assert_eq!(restored_trace.session_id, session_id);
-
-        // Read back and verify events
-        let events_json = std::fs::read_to_string(&events_path).expect("read events file");
-        let restored_events: Vec<SessionEvent> =
-            serde_json::from_str(&events_json).expect("deserialize events");
-        assert_eq!(restored_events.len(), 2);
     }
 
     // ── Test 10: finalize uses full session_id in filenames ──
@@ -792,20 +803,19 @@ mod tests {
         assert_eq!(restored.outcome, SessionOutcome::Running); // finalize may set end_time but outcome depends on implementation
     }
 
-    // ── Test 14: read_events returns correct events ──
+    // ── Test 14: read_events returns correct events (via append_event) ──
 
-    #[tokio::test]
-    async fn read_events_returns_correct_events() {
+    #[test]
+    fn read_events_returns_correct_events() {
         let tmp = TempDir::new().expect("create temp dir");
         let base_dir = tmp.path();
 
         let collector = TraceCollector::new(base_dir, "repo-1");
-        let mut trace = collector.start_session("/tmp/repo", "events test", None);
-        let session_id = trace.session_id.clone();
+        let session_id = "sess-read-events-test";
 
         let events: Vec<SessionEvent> = vec![
             SessionEvent::SessionStarted {
-                session_id: session_id.clone(),
+                session_id: session_id.to_string(),
             },
             SessionEvent::IterationStarted { iteration: 1 },
             SessionEvent::ToolUse {
@@ -822,19 +832,20 @@ mod tests {
             },
         ];
 
-        collector
-            .finalize(&mut trace, &events)
-            .await
-            .expect("finalize should succeed");
+        for event in &events {
+            collector
+                .append_event(session_id, event)
+                .expect("append_event should succeed");
+        }
 
-        let restored_events = TraceCollector::read_events(base_dir, "repo-1", &session_id)
+        let restored_events = TraceCollector::read_events(base_dir, "repo-1", session_id)
             .expect("read_events should succeed");
 
         assert_eq!(restored_events.len(), 5);
 
         // Verify first event is SessionStarted with the right session_id
         if let SessionEvent::SessionStarted { session_id: sid } = &restored_events[0] {
-            assert_eq!(sid.as_str(), session_id.as_str());
+            assert_eq!(sid.as_str(), session_id);
         } else {
             panic!("expected SessionStarted as first event");
         }
@@ -1306,6 +1317,289 @@ mod tests {
 
         assert_eq!(restored.final_context_tokens, 0);
         assert_eq!(restored.iteration, 1);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Tests for JSONL append/read functionality
+    // ══════════════════════════════════════════════════════════════
+
+    /// Helper: build a list of diverse SessionEvent variants for JSONL testing
+    fn make_test_events(session_id: &str) -> Vec<SessionEvent> {
+        vec![
+            SessionEvent::SessionStarted {
+                session_id: session_id.to_string(),
+            },
+            SessionEvent::IterationStarted { iteration: 1 },
+            SessionEvent::ToolUse {
+                iteration: 1,
+                tool_name: "Bash".to_string(),
+                tool_input: Some(serde_json::json!({"command": "cargo test"})),
+            },
+            SessionEvent::AssistantText {
+                iteration: 1,
+                text: "Running tests now...".to_string(),
+            },
+            SessionEvent::IterationComplete {
+                iteration: 1,
+                result: make_test_result_event(),
+            },
+            SessionEvent::SessionComplete {
+                outcome: SessionOutcome::Completed,
+            },
+        ]
+    }
+
+    // ── Test: append_event writes valid JSONL ──
+
+    #[test]
+    fn append_event_writes_valid_jsonl() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "repo-jsonl");
+
+        // Create the output directory so append_event can write
+        let output_dir = base_dir.join("traces").join("repo-jsonl");
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+
+        let session_id = "sess-jsonl-001";
+        let events = make_test_events(session_id);
+
+        // Append each event individually
+        for event in &events {
+            collector
+                .append_event(session_id, event)
+                .expect("append_event should succeed");
+        }
+
+        // Read the file manually and verify each line is valid JSON
+        let jsonl_path = output_dir.join(format!("events_{}.jsonl", session_id));
+        assert!(jsonl_path.exists(), "JSONL file should exist at {:?}", jsonl_path);
+
+        let contents = std::fs::read_to_string(&jsonl_path).expect("read JSONL file");
+        let lines: Vec<&str> = contents.lines().collect();
+
+        assert_eq!(
+            lines.len(),
+            events.len(),
+            "should have one line per appended event"
+        );
+
+        // Each line should deserialize to a valid SessionEvent
+        for (i, line) in lines.iter().enumerate() {
+            let parsed: SessionEvent = serde_json::from_str(line)
+                .unwrap_or_else(|e| panic!("line {} should be valid JSON: {}", i, e));
+
+            // Spot-check the first and last events
+            if i == 0 {
+                match &parsed {
+                    SessionEvent::SessionStarted { session_id: sid } => {
+                        assert_eq!(sid, "sess-jsonl-001");
+                    }
+                    other => panic!("expected SessionStarted as first event, got {:?}", other),
+                }
+            }
+            if i == lines.len() - 1 {
+                match &parsed {
+                    SessionEvent::SessionComplete { outcome } => {
+                        assert_eq!(*outcome, SessionOutcome::Completed);
+                    }
+                    other => panic!("expected SessionComplete as last event, got {:?}", other),
+                }
+            }
+        }
+    }
+
+    // ── Test: read_events reads JSONL correctly ──
+
+    #[test]
+    fn read_events_reads_jsonl_correctly() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let repo_id = "repo-jsonl-read";
+        let session_id = "sess-jsonl-002";
+
+        // Create the directory structure
+        let output_dir = base_dir.join("traces").join(repo_id);
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+
+        // Write a JSONL file manually (one JSON object per line)
+        let events = vec![
+            SessionEvent::SessionStarted {
+                session_id: session_id.to_string(),
+            },
+            SessionEvent::IterationStarted { iteration: 1 },
+            SessionEvent::AssistantText {
+                iteration: 1,
+                text: "Hello world".to_string(),
+            },
+            SessionEvent::SessionComplete {
+                outcome: SessionOutcome::Completed,
+            },
+        ];
+
+        let jsonl_path = output_dir.join(format!("events_{}.jsonl", session_id));
+        let mut content = String::new();
+        for event in &events {
+            let line = serde_json::to_string(event).expect("serialize event");
+            content.push_str(&line);
+            content.push('\n');
+        }
+        std::fs::write(&jsonl_path, &content).expect("write JSONL file");
+
+        // Now use read_events to read them back
+        let restored = TraceCollector::read_events(base_dir, repo_id, session_id)
+            .expect("read_events should succeed");
+
+        assert_eq!(restored.len(), 4, "should read all 4 events");
+
+        // Verify first event
+        match &restored[0] {
+            SessionEvent::SessionStarted { session_id: sid } => {
+                assert_eq!(sid, session_id);
+            }
+            other => panic!("expected SessionStarted, got {:?}", other),
+        }
+
+        // Verify last event
+        match &restored[3] {
+            SessionEvent::SessionComplete { outcome } => {
+                assert_eq!(*outcome, SessionOutcome::Completed);
+            }
+            other => panic!("expected SessionComplete, got {:?}", other),
+        }
+    }
+
+    // ── Test: round-trip — append then read ──
+
+    #[test]
+    fn append_then_read_round_trip() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let repo_id = "repo-roundtrip";
+        let session_id = "sess-roundtrip-001";
+
+        let collector = TraceCollector::new(base_dir, repo_id);
+
+        // Create the output directory
+        let output_dir = base_dir.join("traces").join(repo_id);
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+
+        let events = make_test_events(session_id);
+
+        // Append each event
+        for event in &events {
+            collector
+                .append_event(session_id, event)
+                .expect("append_event should succeed");
+        }
+
+        // Read them back using read_events
+        let restored = TraceCollector::read_events(base_dir, repo_id, session_id)
+            .expect("read_events should succeed");
+
+        assert_eq!(
+            restored.len(),
+            events.len(),
+            "should read back the same number of events"
+        );
+
+        // Verify each event matches by serializing both and comparing JSON
+        for (i, (original, roundtripped)) in events.iter().zip(restored.iter()).enumerate() {
+            let orig_json = serde_json::to_string(original).expect("serialize original");
+            let rt_json = serde_json::to_string(roundtripped).expect("serialize roundtripped");
+            assert_eq!(
+                orig_json, rt_json,
+                "event {} should match after round-trip",
+                i
+            );
+        }
+    }
+
+    // ── Test: empty file returns empty vec ──
+
+    #[test]
+    fn read_events_empty_file_returns_empty_vec() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let repo_id = "repo-empty";
+        let session_id = "sess-empty-001";
+
+        // Create the directory structure and an empty JSONL file
+        let output_dir = base_dir.join("traces").join(repo_id);
+        std::fs::create_dir_all(&output_dir).expect("create output dir");
+
+        let jsonl_path = output_dir.join(format!("events_{}.jsonl", session_id));
+        std::fs::write(&jsonl_path, "").expect("write empty JSONL file");
+
+        let restored = TraceCollector::read_events(base_dir, repo_id, session_id)
+            .expect("read_events on empty file should return Ok");
+
+        assert!(
+            restored.is_empty(),
+            "should return empty vec for empty JSONL file"
+        );
+    }
+
+    // ── Test: finalize does NOT create events file ──
+
+    #[tokio::test]
+    async fn finalize_does_not_create_events_file() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "repo-no-events");
+        let mut trace = collector.start_session("/tmp/repo", "finalize test", None);
+        let session_id = trace.session_id.clone();
+
+        let events: Vec<SessionEvent> = vec![
+            SessionEvent::SessionStarted {
+                session_id: session_id.clone(),
+            },
+            SessionEvent::SessionComplete {
+                outcome: SessionOutcome::Completed,
+            },
+        ];
+
+        collector
+            .finalize(&mut trace, &events)
+            .await
+            .expect("finalize should succeed");
+
+        // The trace file SHOULD exist
+        let trace_path = base_dir
+            .join("traces")
+            .join("repo-no-events")
+            .join(format!("trace_{}.json", session_id));
+        assert!(
+            trace_path.exists(),
+            "trace file should exist at {:?}",
+            trace_path
+        );
+
+        // The events file SHOULD NOT exist (finalize should no longer write it)
+        let events_json_path = base_dir
+            .join("traces")
+            .join("repo-no-events")
+            .join(format!("events_{}.json", session_id));
+        let events_jsonl_path = base_dir
+            .join("traces")
+            .join("repo-no-events")
+            .join(format!("events_{}.jsonl", session_id));
+
+        assert!(
+            !events_json_path.exists(),
+            "events .json file should NOT exist after finalize (got {:?})",
+            events_json_path
+        );
+        assert!(
+            !events_jsonl_path.exists(),
+            "events .jsonl file should NOT exist after finalize (got {:?})",
+            events_jsonl_path
+        );
     }
 }
 

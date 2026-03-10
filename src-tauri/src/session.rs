@@ -235,6 +235,7 @@ pub struct SessionRunner {
     cancel_token: CancellationToken,
     accumulated_events: std::sync::Mutex<Vec<SessionEvent>>,
     abort_registry: Option<AbortRegistry>,
+    session_id: std::sync::Mutex<Option<String>>,
 }
 
 impl SessionRunner {
@@ -246,6 +247,7 @@ impl SessionRunner {
             cancel_token,
             accumulated_events: std::sync::Mutex::new(Vec::new()),
             abort_registry: None,
+            session_id: std::sync::Mutex::new(None),
         }
     }
 
@@ -268,6 +270,11 @@ impl SessionRunner {
 
     fn emit(&self, event: SessionEvent) {
         self.accumulated_events.lock().unwrap().push(event.clone());
+        if let Some(ref sid) = *self.session_id.lock().unwrap() {
+            if let Err(e) = self.collector.append_event(sid, &event) {
+                tracing::warn!("Failed to append event to disk: {e}");
+            }
+        }
         if let Some(ref cb) = self.on_event {
             cb(&event);
         }
@@ -850,6 +857,8 @@ impl SessionRunner {
             println!("[harness] Model: {model}");
         }
         println!();
+
+        *self.session_id.lock().unwrap() = Some(trace.session_id.clone());
 
         self.emit(SessionEvent::SessionStarted {
             session_id: trace.session_id.clone(),

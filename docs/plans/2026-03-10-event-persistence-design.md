@@ -65,10 +65,10 @@ Add a method to `TraceCollector` for appending a single event to a JSONL file, a
 - Change file extension from `.json` to `.jsonl`
 
 **Checklist:**
-- [ ] Add `append_event()` method to `TraceCollector`
-- [ ] Remove events write from `finalize()`
-- [ ] Update file extension to `.jsonl`
-- [ ] `cargo check` passes
+- [x] Add `append_event()` method to `TraceCollector`
+- [x] Remove events write from `finalize()`
+- [x] Update file extension to `.jsonl`
+- [x] `cargo check` passes
 
 ---
 
@@ -88,9 +88,9 @@ Update `read_events()` to parse JSONL format instead of JSON array.
 - Return `Vec<SessionEvent>` (same return type)
 
 **Checklist:**
-- [ ] Update `read_events()` to parse JSONL
-- [ ] Update file extension to `.jsonl`
-- [ ] `cargo check` passes
+- [x] Update `read_events()` to parse JSONL
+- [x] Update file extension to `.jsonl`
+- [x] `cargo check` passes
 
 ---
 
@@ -109,10 +109,10 @@ Wire up the incremental write in the session runner's event emission path.
 - Handle errors gracefully — log and continue, don't fail the session
 
 **Checklist:**
-- [ ] Call `collector.append_event()` in `SessionRunner::emit()`
-- [ ] Ensure session_id is accessible in `emit()`
-- [ ] Handle write errors with logging (don't panic)
-- [ ] `cargo check` passes
+- [x] Call `collector.append_event()` in `SessionRunner::emit()`
+- [x] Ensure session_id is accessible in `emit()`
+- [x] Handle write errors with logging (don't panic)
+- [x] `cargo check` passes
 
 ---
 
@@ -204,10 +204,10 @@ Add tests for the new JSONL read/write functionality.
 - Test `finalize()` no longer creates events file
 
 **Checklist:**
-- [ ] Add test for `append_event()` JSONL output
-- [ ] Add test for `read_events()` JSONL parsing
-- [ ] Add test for round-trip (append then read)
-- [ ] `cargo test` passes in `src-tauri/`
+- [x] Add test for `append_event()` JSONL output
+- [x] Add test for `read_events()` JSONL parsing
+- [x] Add test for round-trip (append then read)
+- [x] `cargo test` passes in `src-tauri/`
 
 ---
 
@@ -215,10 +215,10 @@ Add tests for the new JSONL read/write functionality.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add JSONL writer to TraceCollector | Not Started |
-| 2 | Update JSONL reader in TraceCollector | Not Started |
-| 3 | Call append_event from SessionRunner::emit() | Not Started |
+| 1 | Add JSONL writer to TraceCollector | Done |
+| 2 | Update JSONL reader in TraceCollector | Done |
+| 3 | Call append_event from SessionRunner::emit() | Done |
 | 4 | Call append_event from OneShotRunner::emit() | Not Started |
 | 5 | Store session_id in ActiveSessions | Not Started |
 | 6 | Frontend event recovery on sync | Not Started |
-| 7 | Tests | Not Started |
+| 7 | Tests | Done |
