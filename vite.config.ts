@@ -3,8 +3,6 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import path from "path";
 
-const port = parseInt(process.env.YARR_PORT || "5174", 10);
-
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -15,7 +13,7 @@ export default defineConfig({
   clearScreen: false,
   server: {
     strictPort: true,
-    port,
+    port: 5199,
   },
   test: {
     exclude: ["e2e/**", "node_modules/**"],
