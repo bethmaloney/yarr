@@ -87,3 +87,15 @@ export type TaggedSessionEvent = {
   repo_id: string;
   event: SessionEvent;
 };
+
+export type OneShotEntry = {
+  id: string; // oneshot-<short_id>
+  parentRepoId: string;
+  parentRepoName: string;
+  title: string;
+  prompt: string;
+  model: string;
+  mergeStrategy: string;
+  status: "running" | "completed" | "failed";
+  startedAt: number;
+};

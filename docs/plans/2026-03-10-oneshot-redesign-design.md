@@ -394,17 +394,17 @@ Add the new type and Zustand store actions for managing 1-shot entries.
 - On init: load entries, prune, reconcile running with `ActiveSessions`
 
 **Checklist:**
-- [ ] `OneShotEntry` type added
-- [ ] Store state and actions added
-- [ ] Event listener handles 1-shot status updates
-- [ ] Persistence to Tauri store works
-- [ ] Pruning logic: keep last 5 completed, all failed, all running
-- [ ] Add store tests: `runOneShot` creates entry and calls invoke
-- [ ] Add store tests: `dismissOneShot` removes entry
-- [ ] Add store tests: event listener updates entry status on `one_shot_complete`/`one_shot_failed`
-- [ ] Add store tests: pruning keeps last 5 completed, all failed
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm test` passes
+- [x] `OneShotEntry` type added
+- [x] Store state and actions added
+- [x] Event listener handles 1-shot status updates
+- [x] Persistence to Tauri store works
+- [x] Pruning logic: keep last 5 completed, all failed, all running
+- [x] Add store tests: `runOneShot` creates entry and calls invoke
+- [x] Add store tests: `dismissOneShot` removes entry
+- [x] Add store tests: event listener updates entry status on `one_shot_complete`/`one_shot_failed`
+- [x] Add store tests: pruning keeps last 5 completed, all failed
+- [x] `npx tsc --noEmit` passes
+- [x] `npm test` passes
 
 ---
 
@@ -579,7 +579,7 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | 3 | Refactor OneShotRunner to use SessionRunner | Done |
 | 4 | Update run_oneshot Tauri command | Done |
 | 5 | Clean up oneshot-helpers and event-format | Done |
-| 6 | Add OneShotEntry type and store state | Not Started |
+| 6 | Add OneShotEntry type and store state | Done |
 | 7 | OneShotCard component | Not Started |
 | 8 | OneShotDetail page with active/read-only modes | Not Started |
 | 9 | Home page mixed cards | Not Started |

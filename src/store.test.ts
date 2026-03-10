@@ -1,6 +1,11 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { RepoConfig } from "./repos";
-import type { SessionTrace, SessionEvent, TaggedSessionEvent } from "./types";
+import type {
+  SessionTrace,
+  SessionEvent,
+  TaggedSessionEvent,
+  OneShotEntry,
+} from "./types";
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — must be declared before any vi.mock() calls
@@ -135,6 +140,23 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
   };
 }
 
+function makeOneShotEntry(
+  overrides: Partial<OneShotEntry> = {},
+): OneShotEntry {
+  return {
+    id: "oneshot-abc123",
+    parentRepoId: "repo-1",
+    parentRepoName: "yarr",
+    title: "Fix the bug",
+    prompt: "Fix the flaky test in store.test.ts",
+    model: "opus",
+    mergeStrategy: "fast-forward",
+    status: "running",
+    startedAt: 1000,
+    ...overrides,
+  };
+}
+
 /** Simulate a Tauri session-event by calling the captured listener. */
 function emitSessionEvent(repoId: string, event: SessionEvent): void {
   if (!mockListenerCallback.current) {
@@ -180,6 +202,7 @@ beforeEach(() => {
     repos: [],
     sessions: new Map(),
     latestTraces: new Map(),
+    oneShotEntries: new Map(),
   });
 });
 
@@ -1106,5 +1129,329 @@ describe("repo actions", () => {
       expect(mockLoadRepos).toHaveBeenCalled();
       expect(useAppStore.getState().repos).toEqual([updatedRepo]);
     });
+  });
+});
+
+// ===========================================================================
+// 9. OneShotEntry initial state
+// ===========================================================================
+
+describe("OneShotEntry initial state", () => {
+  it("oneShotEntries starts as empty Map", () => {
+    const state = useAppStore.getState();
+    expect(state.oneShotEntries).toBeInstanceOf(Map);
+    expect(state.oneShotEntries.size).toBe(0);
+  });
+});
+
+// ===========================================================================
+// 10. runOneShot
+// ===========================================================================
+
+describe("runOneShot", () => {
+  const repo = makeLocalRepo({
+    maxIterations: 40,
+    completionSignal: "ALL TODO ITEMS COMPLETE",
+    checks: [],
+    gitSync: { enabled: true, conflictPrompt: undefined, model: undefined, maxPushRetries: 3 },
+    envVars: { MY_VAR: "hello" },
+  });
+
+  beforeEach(() => {
+    useAppStore.setState({ repos: [repo] });
+  });
+
+  it("returns early if repo not found", async () => {
+    useAppStore.setState({ repos: [] });
+    await useAppStore.getState().runOneShot("nonexistent", "Fix bug", "fix it", "opus", "fast-forward");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "run_oneshot",
+      expect.anything(),
+    );
+  });
+
+  it("creates OneShotEntry with status running and calls invoke", async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "run_oneshot") {
+        // Check state during the call — an entry with status "running" should exist
+        const entries = useAppStore.getState().oneShotEntries;
+        // There should be exactly one entry with status "running"
+        const running = [...entries.values()].filter((e) => e.status === "running");
+        expect(running.length).toBeGreaterThanOrEqual(1);
+        return { oneshot_id: "oneshot-xyz", trace: makeTrace() };
+      }
+      return undefined;
+    });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_oneshot",
+      expect.objectContaining({
+        repoId: "repo-1",
+        title: "Fix bug",
+        prompt: "fix it",
+        model: "opus",
+        mergeStrategy: "fast-forward",
+      }),
+    );
+  });
+
+  it("passes repo config fields (maxIterations, completionSignal, checks, gitSync) to invoke", async () => {
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_oneshot",
+      expect.objectContaining({
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        checks: [],
+        gitSync: { enabled: true, conflictPrompt: undefined, model: undefined, maxPushRetries: 3 },
+        envVars: { MY_VAR: "hello" },
+      }),
+    );
+  });
+
+  it("on success: stores entry with returned oneshot_id and updates status", async () => {
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.has("oneshot-xyz")).toBe(true);
+
+    const entry = entries.get("oneshot-xyz")!;
+    expect(entry.id).toBe("oneshot-xyz");
+    expect(entry.parentRepoId).toBe("repo-1");
+    expect(entry.parentRepoName).toBe("yarr");
+    expect(entry.title).toBe("Fix bug");
+    expect(entry.prompt).toBe("fix it");
+    expect(entry.model).toBe("opus");
+    expect(entry.mergeStrategy).toBe("fast-forward");
+    expect(entry.status).toBe("running");
+    expect(entry.startedAt).toBeGreaterThan(0);
+  });
+
+  it("on error: updates entry status to failed", async () => {
+    mockInvoke.mockRejectedValue(new Error("backend crashed"));
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    const entries = useAppStore.getState().oneShotEntries;
+    // There should be an entry with status "failed"
+    const failed = [...entries.values()].filter((e) => e.status === "failed");
+    expect(failed.length).toBe(1);
+    expect(failed[0].parentRepoId).toBe("repo-1");
+  });
+
+  it("returns the oneshot_id on success", async () => {
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
+
+    const result = await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    expect(result).toBe("oneshot-xyz");
+  });
+});
+
+// ===========================================================================
+// 11. dismissOneShot
+// ===========================================================================
+
+describe("dismissOneShot", () => {
+  it("removes failed entry from oneShotEntries", async () => {
+    const entry = makeOneShotEntry({ id: "oneshot-abc", status: "failed" });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().dismissOneShot("oneshot-abc");
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.has("oneshot-abc")).toBe(false);
+    expect(entries.size).toBe(0);
+  });
+
+  it("does nothing if entry does not exist", async () => {
+    const entry = makeOneShotEntry({ id: "oneshot-abc", status: "failed" });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().dismissOneShot("oneshot-nonexistent");
+
+    // Original entry should still be there
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.has("oneshot-abc")).toBe(true);
+    expect(entries.size).toBe(1);
+  });
+});
+
+// ===========================================================================
+// 12. 1-shot event listener
+// ===========================================================================
+
+describe("1-shot event listener", () => {
+  beforeEach(() => {
+    useAppStore.getState().initialize();
+  });
+
+  it("updates entry status to completed on one_shot_complete event", () => {
+    const entry = makeOneShotEntry({ id: "oneshot-abc", status: "running" });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.get("oneshot-abc")!.status).toBe("completed");
+  });
+
+  it("updates entry status to failed on one_shot_failed event", () => {
+    const entry = makeOneShotEntry({ id: "oneshot-abc", status: "running" });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_failed" });
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.get("oneshot-abc")!.status).toBe("failed");
+  });
+
+  it("prunes completed entries to keep last 5 by startedAt", () => {
+    // Create 6 completed entries
+    const entries = new Map<string, OneShotEntry>();
+    for (let i = 0; i < 5; i++) {
+      entries.set(
+        `oneshot-old-${i}`,
+        makeOneShotEntry({
+          id: `oneshot-old-${i}`,
+          status: "completed",
+          startedAt: 1000 + i,
+        }),
+      );
+    }
+    // Add one more running entry that will become completed
+    entries.set(
+      "oneshot-new",
+      makeOneShotEntry({
+        id: "oneshot-new",
+        status: "running",
+        startedAt: 2000,
+      }),
+    );
+
+    useAppStore.setState({ oneShotEntries: entries });
+
+    // Complete the newest one — now there are 6 completed, should prune to 5
+    emitSessionEvent("oneshot-new", { kind: "one_shot_complete" });
+
+    const result = useAppStore.getState().oneShotEntries;
+    const completedEntries = [...result.values()].filter(
+      (e) => e.status === "completed",
+    );
+    expect(completedEntries.length).toBe(5);
+
+    // The oldest entry (startedAt: 1000) should have been pruned
+    expect(result.has("oneshot-old-0")).toBe(false);
+    // The newest entry should still be there
+    expect(result.has("oneshot-new")).toBe(true);
+  });
+
+  it("does not prune running or failed entries", () => {
+    const entries = new Map<string, OneShotEntry>();
+    // 5 completed entries
+    for (let i = 0; i < 5; i++) {
+      entries.set(
+        `oneshot-done-${i}`,
+        makeOneShotEntry({
+          id: `oneshot-done-${i}`,
+          status: "completed",
+          startedAt: 1000 + i,
+        }),
+      );
+    }
+    // 1 failed entry
+    entries.set(
+      "oneshot-fail",
+      makeOneShotEntry({
+        id: "oneshot-fail",
+        status: "failed",
+        startedAt: 500,
+      }),
+    );
+    // 1 running entry that will become completed
+    entries.set(
+      "oneshot-running",
+      makeOneShotEntry({
+        id: "oneshot-running",
+        status: "running",
+        startedAt: 2000,
+      }),
+    );
+
+    useAppStore.setState({ oneShotEntries: entries });
+
+    // Complete the running one — now 6 completed, should prune to 5
+    emitSessionEvent("oneshot-running", { kind: "one_shot_complete" });
+
+    const result = useAppStore.getState().oneShotEntries;
+    // Failed entry should NOT be pruned
+    expect(result.has("oneshot-fail")).toBe(true);
+    expect(result.get("oneshot-fail")!.status).toBe("failed");
+  });
+
+  it("ignores one_shot_complete for unknown oneshot IDs", () => {
+    const entry = makeOneShotEntry({ id: "oneshot-abc", status: "running" });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    // Emit for an unknown ID — should not throw or modify existing entries
+    emitSessionEvent("oneshot-unknown", { kind: "one_shot_complete" });
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.size).toBe(1);
+    expect(entries.get("oneshot-abc")!.status).toBe("running");
+  });
+});
+
+// ===========================================================================
+// 13. 1-shot persistence
+// ===========================================================================
+
+describe("1-shot persistence", () => {
+  it("saveOneShotEntries persists to store", async () => {
+    const entry = makeOneShotEntry({ id: "oneshot-abc", status: "completed" });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().saveOneShotEntries();
+
+    // The mock LazyStore saves to mockData — check the key
+    const saved = mockData.get("oneshot-entries") as [string, OneShotEntry][];
+    expect(saved).toBeDefined();
+    // Should be an array of [key, value] pairs (Map serialization)
+    const restoredMap = new Map(saved);
+    expect(restoredMap.has("oneshot-abc")).toBe(true);
+    expect(restoredMap.get("oneshot-abc")!.status).toBe("completed");
+  });
+
+  it("loadOneShotEntries restores from store", async () => {
+    const entry = makeOneShotEntry({ id: "oneshot-abc", status: "completed" });
+    // Pre-populate the mock store with serialized entries
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    await useAppStore.getState().loadOneShotEntries();
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.has("oneshot-abc")).toBe(true);
+    expect(entries.get("oneshot-abc")!.id).toBe("oneshot-abc");
+    expect(entries.get("oneshot-abc")!.status).toBe("completed");
   });
 });

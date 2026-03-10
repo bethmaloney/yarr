@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { LazyStore } from "@tauri-apps/plugin-store";
 import { saveRecent } from "./recents";
 import {
   loadRepos as reposLoadRepos,
@@ -10,11 +11,14 @@ import {
   type RepoConfig,
 } from "./repos";
 import type {
+  OneShotEntry,
   SessionEvent,
   SessionState,
   SessionTrace,
   TaggedSessionEvent,
 } from "./types";
+
+const oneShotStore = new LazyStore("oneshot-entries.json");
 
 export interface AppStore {
   // --- Repos ---
@@ -30,6 +34,13 @@ export interface AppStore {
   runSession: (repoId: string, planFile: string) => Promise<void>;
   stopSession: (repoId: string) => Promise<void>;
   reconnectSession: (repoId: string) => Promise<void>;
+
+  // --- 1-Shot ---
+  oneShotEntries: Map<string, OneShotEntry>;
+  runOneShot: (repoId: string, title: string, prompt: string, model: string, mergeStrategy: string) => Promise<string | undefined>;
+  dismissOneShot: (oneshotId: string) => Promise<void>;
+  saveOneShotEntries: () => Promise<void>;
+  loadOneShotEntries: () => Promise<void>;
 
   // --- Init ---
   initialize: () => () => void;
@@ -104,6 +115,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     repos: [],
     sessions: new Map(),
     latestTraces: new Map(),
+    oneShotEntries: new Map(),
 
     initialize: () => {
       // 1. Load repos
@@ -197,6 +209,31 @@ export const useAppStore = create<AppStore>((set, get) => {
           const next = new Map(get().sessions);
           next.set(repo_id, { ...session, ...updates });
           set({ sessions: next });
+
+          // Update 1-shot entry status
+          if (sessionEvent.kind === "one_shot_complete" || sessionEvent.kind === "one_shot_failed") {
+            const oneshotEntries = new Map(get().oneShotEntries);
+            const entry = oneshotEntries.get(repo_id);
+            if (entry) {
+              const newStatus = sessionEvent.kind === "one_shot_complete" ? "completed" : "failed";
+              oneshotEntries.set(repo_id, { ...entry, status: newStatus as "completed" | "failed" });
+
+              // Prune completed to keep last 5
+              if (newStatus === "completed") {
+                const completed = [...oneshotEntries.entries()]
+                  .filter(([, e]) => e.status === "completed")
+                  .sort(([, a], [, b]) => b.startedAt - a.startedAt);
+                if (completed.length > 5) {
+                  for (const [key] of completed.slice(5)) {
+                    oneshotEntries.delete(key);
+                  }
+                }
+              }
+
+              set({ oneShotEntries: oneshotEntries });
+              oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch(() => {});
+            }
+          }
         },
       );
 
@@ -233,6 +270,98 @@ export const useAppStore = create<AppStore>((set, get) => {
       await reposUpdateRepo(repo);
       const repos = await reposLoadRepos();
       set({ repos });
+    },
+
+    runOneShot: async (repoId, title, prompt, model, mergeStrategy) => {
+      const repo = get().repos.find((r) => r.id === repoId);
+      if (!repo) return undefined;
+
+      // Create a temporary ID for the entry before we get the real oneshot_id back
+      const tempId = `temp-${Date.now()}`;
+      const entry: OneShotEntry = {
+        id: tempId,
+        parentRepoId: repoId,
+        parentRepoName: repo.name,
+        title,
+        prompt,
+        model,
+        mergeStrategy,
+        status: "running",
+        startedAt: Date.now(),
+      };
+
+      // Add to entries with temp key
+      const next = new Map(get().oneShotEntries);
+      next.set(tempId, entry);
+      set({ oneShotEntries: next });
+
+      try {
+        const repoPayload =
+          repo.type === "local"
+            ? { type: "local" as const, path: repo.path }
+            : {
+                type: "ssh" as const,
+                sshHost: (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost,
+                remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath,
+              };
+
+        const result = await invoke<{ oneshot_id: string; trace: SessionTrace }>("run_oneshot", {
+          repoId,
+          repo: repoPayload,
+          title,
+          prompt,
+          model,
+          mergeStrategy,
+          envVars: repo.envVars ?? {},
+          maxIterations: repo.maxIterations,
+          completionSignal: repo.completionSignal,
+          checks: repo.checks ?? [],
+          gitSync: repo.gitSync,
+        });
+
+        // Replace temp entry with real oneshot_id
+        const entries = new Map(get().oneShotEntries);
+        entries.delete(tempId);
+        const realEntry = { ...entry, id: result.oneshot_id };
+        entries.set(result.oneshot_id, realEntry);
+        set({ oneShotEntries: entries });
+        oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch(() => {});
+
+        return result.oneshot_id;
+      } catch (e) {
+        // Mark as failed
+        const entries = new Map(get().oneShotEntries);
+        const current = entries.get(tempId);
+        if (current) {
+          entries.set(tempId, { ...current, status: "failed" });
+          set({ oneShotEntries: entries });
+          oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch(() => {});
+        }
+        return undefined;
+      }
+    },
+
+    dismissOneShot: async (oneshotId) => {
+      const entries = new Map(get().oneShotEntries);
+      if (!entries.has(oneshotId)) return;
+      entries.delete(oneshotId);
+      set({ oneShotEntries: entries });
+      // Persist
+      await oneShotStore.set("oneshot-entries", [...entries]);
+      await oneShotStore.save();
+    },
+
+    saveOneShotEntries: async () => {
+      const entries = get().oneShotEntries;
+      await oneShotStore.set("oneshot-entries", [...entries]);
+      await oneShotStore.save();
+    },
+
+    loadOneShotEntries: async () => {
+      const raw = await oneShotStore.get<[string, OneShotEntry][]>("oneshot-entries");
+      if (raw) {
+        set({ oneShotEntries: new Map(raw) });
+      }
     },
 
     runSession: async (repoId: string, planFile: string) => {
