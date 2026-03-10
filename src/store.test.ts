@@ -559,7 +559,7 @@ describe("syncActiveSessions", () => {
 
   it("creates session entry for active repo that has no session", async () => {
     mockInvoke.mockImplementation(async (cmd: string) => {
-      if (cmd === "get_active_sessions") return ["repo-new"];
+      if (cmd === "get_active_sessions") return [["repo-new", "sess-new"]];
       return undefined;
     });
 
@@ -589,7 +589,7 @@ describe("syncActiveSessions", () => {
     });
 
     mockInvoke.mockImplementation(async (cmd: string) => {
-      if (cmd === "get_active_sessions") return ["repo-1"];
+      if (cmd === "get_active_sessions") return [["repo-1", "sess-123"]];
       return undefined;
     });
 
@@ -619,7 +619,7 @@ describe("syncActiveSessions", () => {
     });
 
     mockInvoke.mockImplementation(async (cmd: string) => {
-      if (cmd === "get_active_sessions") return ["repo-1"];
+      if (cmd === "get_active_sessions") return [["repo-1", "sess-123"]];
       return undefined;
     });
 
@@ -633,6 +633,152 @@ describe("syncActiveSessions", () => {
       // Events should be preserved
       expect(session!.events).toHaveLength(1);
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // New format: [string, string][] — session_id stored in SessionState
+  // -------------------------------------------------------------------------
+
+  it("stores session_id in SessionState when creating new session entry", async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_active_sessions") return [["repo-1", "sess-123"]];
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+    vi.advanceTimersByTime(5000);
+
+    await vi.waitFor(() => {
+      const session = useAppStore.getState().sessions.get("repo-1");
+      expect(session).toBeDefined();
+      expect(session!.session_id).toBe("sess-123");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Event recovery: load historical events from disk for empty sessions
+  // -------------------------------------------------------------------------
+
+  it("loads events from disk when running session has empty events array", async () => {
+    const recoveredEvents: SessionEvent[] = [
+      { kind: "iteration_start", iteration: 1 },
+      { kind: "tool_use", tool_name: "Bash" },
+    ];
+
+    useAppStore.setState({
+      sessions: new Map([
+        [
+          "repo-1",
+          {
+            running: true,
+            events: [],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "get_active_sessions") return [["repo-1", "sess-123"]];
+      if (cmd === "get_trace_events") {
+        const typedArgs = args as { repoId: string; sessionId: string };
+        expect(typedArgs.repoId).toBe("repo-1");
+        expect(typedArgs.sessionId).toBe("sess-123");
+        return recoveredEvents;
+      }
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+    vi.advanceTimersByTime(5000);
+
+    await vi.waitFor(() => {
+      const session = useAppStore.getState().sessions.get("repo-1");
+      expect(session).toBeDefined();
+      expect(session!.events).toEqual(recoveredEvents);
+    });
+  });
+
+  it("does NOT call get_trace_events when session already has events", async () => {
+    useAppStore.setState({
+      sessions: new Map([
+        [
+          "repo-1",
+          {
+            running: true,
+            events: [{ kind: "iteration_start", iteration: 1 }],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_active_sessions") return [["repo-1", "sess-123"]];
+      if (cmd === "get_trace_events") {
+        throw new Error("get_trace_events should not have been called");
+      }
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+    vi.advanceTimersByTime(5000);
+
+    // Wait for the sync to complete, then verify get_trace_events was never called
+    await vi.waitFor(() => {
+      const calls = mockInvoke.mock.calls.filter(
+        (c) => c[0] === "get_active_sessions",
+      );
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    const traceEventCalls = mockInvoke.mock.calls.filter(
+      (c) => c[0] === "get_trace_events",
+    );
+    expect(traceEventCalls).toHaveLength(0);
+  });
+
+  it("handles get_trace_events failure gracefully without crashing", async () => {
+    useAppStore.setState({
+      sessions: new Map([
+        [
+          "repo-1",
+          {
+            running: true,
+            events: [],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_active_sessions") return [["repo-1", "sess-123"]];
+      if (cmd === "get_trace_events") {
+        throw new Error("disk read failed");
+      }
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+    vi.advanceTimersByTime(5000);
+
+    // Wait for the sync cycle to complete
+    await vi.waitFor(() => {
+      const calls = mockInvoke.mock.calls.filter(
+        (c) => c[0] === "get_active_sessions",
+      );
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Session should still exist with empty events — no crash
+    const session = useAppStore.getState().sessions.get("repo-1");
+    expect(session).toBeDefined();
+    expect(session!.running).toBe(true);
+    expect(session!.events).toEqual([]);
   });
 });
 

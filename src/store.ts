@@ -9,7 +9,12 @@ import {
   updateRepo as reposUpdateRepo,
   type RepoConfig,
 } from "./repos";
-import type { SessionState, SessionTrace, TaggedSessionEvent } from "./types";
+import type {
+  SessionEvent,
+  SessionState,
+  SessionTrace,
+  TaggedSessionEvent,
+} from "./types";
 
 export interface AppStore {
   // --- Repos ---
@@ -31,33 +36,68 @@ export interface AppStore {
 }
 
 export const useAppStore = create<AppStore>((set, get) => {
+  const recoveryInFlight = new Set<string>();
+
   async function syncActiveSession() {
-    const activeRepoIds = (await invoke<string[]>("get_active_sessions")) ?? [];
-    const activeSet = new Set(activeRepoIds);
+    const activePairs =
+      (await invoke<[string, string][]>("get_active_sessions")) ?? [];
+    const activeMap = new Map<string, string>(activePairs);
     const sessions = get().sessions;
     const next = new Map(sessions);
 
     for (const [repoId, session] of sessions) {
-      if (session.running && !activeSet.has(repoId)) {
+      if (session.running && !activeMap.has(repoId)) {
         next.set(repoId, { ...session, running: false });
       }
     }
 
-    for (const activeRepoId of activeRepoIds) {
-      const existing = sessions.get(activeRepoId);
+    for (const [repoId, sessionId] of activeMap) {
+      const existing = sessions.get(repoId);
       if (!existing || !existing.running) {
-        next.set(activeRepoId, {
+        next.set(repoId, {
           running: true,
+          session_id: sessionId,
           disconnected: false,
           reconnecting: false,
           events: existing?.events ?? [],
           trace: null,
           error: null,
         });
+      } else if (existing.running && existing.session_id !== sessionId) {
+        next.set(repoId, { ...existing, session_id: sessionId });
       }
     }
 
     set({ sessions: next });
+
+    // Event recovery: load historical events from disk for running sessions with empty events
+    for (const [repoId, session] of next) {
+      if (
+        session.running &&
+        session.events.length === 0 &&
+        session.session_id &&
+        !recoveryInFlight.has(repoId)
+      ) {
+        const sessionId = session.session_id;
+        recoveryInFlight.add(repoId);
+        invoke<SessionEvent[]>("get_trace_events", { repoId, sessionId })
+          .then((events) => {
+            recoveryInFlight.delete(repoId);
+            if (events && events.length > 0) {
+              const s = new Map(get().sessions);
+              const current = s.get(repoId);
+              if (current && current.events.length === 0) {
+                s.set(repoId, { ...current, events });
+                set({ sessions: s });
+              }
+            }
+          })
+          .catch((e) => {
+            recoveryInFlight.delete(repoId);
+            console.warn("Failed to load trace events for", repoId, e);
+          });
+      }
+    }
   }
 
   return {

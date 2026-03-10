@@ -179,10 +179,10 @@ Update the frontend to load historical events when it detects a running session 
 - Add `session_id?: string` to `SessionState` type
 
 **Checklist:**
-- [ ] Add `session_id` to `SessionState` type
-- [ ] Update `syncActiveSession()` to parse new return format
-- [ ] Add event recovery call when events array is empty
-- [ ] `npx tsc --noEmit` passes
+- [x] Add `session_id` to `SessionState` type
+- [x] Update `syncActiveSession()` to parse new return format
+- [x] Add event recovery call when events array is empty
+- [x] `npx tsc --noEmit` passes
 - [ ] Test manually: start a session, reload the page, verify events are recovered
 
 ---
@@ -220,5 +220,5 @@ Add tests for the new JSONL read/write functionality.
 | 3 | Call append_event from SessionRunner::emit() | Done |
 | 4 | Call append_event from OneShotRunner::emit() | Done |
 | 5 | Store session_id in ActiveSessions | Done |
-| 6 | Frontend event recovery on sync | Not Started |
+| 6 | Frontend event recovery on sync | Done |
 | 7 | Tests | Done |

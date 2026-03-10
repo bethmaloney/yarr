@@ -70,6 +70,7 @@ export type SessionTrace = {
 
 export type SessionState = {
   running: boolean;
+  session_id?: string;
   disconnected?: boolean;
   reconnecting?: boolean;
   disconnectReason?: string;
