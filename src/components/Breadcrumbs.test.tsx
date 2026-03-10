@@ -113,10 +113,7 @@ describe("Breadcrumbs", () => {
   });
 
   it("renders exactly one separator for two crumbs", () => {
-    const crumbs = [
-      { label: "Home", onClick: vi.fn() },
-      { label: "Current" },
-    ];
+    const crumbs = [{ label: "Home", onClick: vi.fn() }, { label: "Current" }];
     render(<Breadcrumbs crumbs={crumbs} />);
 
     const separators = document.querySelectorAll(
@@ -169,10 +166,7 @@ describe("Breadcrumbs", () => {
   });
 
   it("renders the last crumb as BreadcrumbPage only when it has no onClick", () => {
-    const crumbs = [
-      { label: "Home", onClick: vi.fn() },
-      { label: "Final" },
-    ];
+    const crumbs = [{ label: "Home", onClick: vi.fn() }, { label: "Final" }];
     render(<Breadcrumbs crumbs={crumbs} />);
 
     const finalPage = screen.getByText("Final");

@@ -151,9 +151,7 @@ test.describe("1-Shot form interaction", () => {
     await navigateToOneShotView(page, mockTauri);
 
     // Fill title, leave prompt empty
-    await page
-      .locator(".form-section #oneshot-title")
-      .fill("My Task");
+    await page.locator(".form-section #oneshot-title").fill("My Task");
 
     const runButton = page.getByRole("button", { name: "Run" });
     await expect(runButton).toBeDisabled();
@@ -165,9 +163,7 @@ test.describe("1-Shot form interaction", () => {
   }) => {
     await navigateToOneShotView(page, mockTauri);
 
-    await page
-      .locator(".form-section #oneshot-title")
-      .fill("My Task");
+    await page.locator(".form-section #oneshot-title").fill("My Task");
     await page.locator(".form-section textarea").fill("Do something important");
 
     const runButton = page.getByRole("button", { name: "Run" });
@@ -219,17 +215,11 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // Fill the form
-    await page
-      .locator(".form-section #oneshot-title")
-      .fill("Add auth");
+    await page.locator(".form-section #oneshot-title").fill("Add auth");
     await page.locator(".form-section textarea").fill("Implement OAuth2");
     // Change model
-    await page
-      .locator(".form-section #oneshot-model")
-      .fill("");
-    await page
-      .locator(".form-section #oneshot-model")
-      .fill("sonnet");
+    await page.locator(".form-section #oneshot-model").fill("");
+    await page.locator(".form-section #oneshot-model").fill("sonnet");
     // Select "Create branch" merge strategy
     await page.locator('input[type="radio"][value="branch"]').check();
 
@@ -276,9 +266,7 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator(".form-section")).toBeVisible();
 
     // Fill and run
-    await page
-      .locator(".form-section #oneshot-title")
-      .fill("Task");
+    await page.locator(".form-section #oneshot-title").fill("Task");
     await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
 
@@ -328,9 +316,7 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // Fill and run
-    await page
-      .locator(".form-section #oneshot-title")
-      .fill("Task");
+    await page.locator(".form-section #oneshot-title").fill("Task");
     await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
 
@@ -400,9 +386,7 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // Fill and run
-    await page
-      .locator(".form-section #oneshot-title")
-      .fill("Task");
+    await page.locator(".form-section #oneshot-title").fill("Task");
     await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
 
@@ -470,9 +454,7 @@ test.describe("1-Shot launch flow", () => {
     await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
     // Fill and run
-    await page
-      .locator(".form-section #oneshot-title")
-      .fill("Task");
+    await page.locator(".form-section #oneshot-title").fill("Task");
     await page.locator(".form-section textarea").fill("Do work");
     await page.getByRole("button", { name: "Run" }).click();
 

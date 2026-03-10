@@ -164,6 +164,7 @@ async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
 export const test = base.extend<{
   tauriPage: Page;
   mockTauri: (opts?: TauriMockOptions) => Promise<void>;
+  /* eslint-disable react-hooks/rules-of-hooks */
 }>({
   mockTauri: async ({ page }, use) => {
     await use(async (opts?: TauriMockOptions) => {
@@ -177,5 +178,6 @@ export const test = base.extend<{
     await use(page);
   },
 });
+/* eslint-enable react-hooks/rules-of-hooks */
 
 export { expect } from "@playwright/test";

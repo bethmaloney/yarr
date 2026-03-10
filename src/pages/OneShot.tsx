@@ -73,22 +73,17 @@ export default function OneShot() {
     }
   }
 
-  const repoPath =
-    repo.type === "local" ? repo.path : repo.remotePath;
+  const repoPath = repo.type === "local" ? repo.path : repo.remotePath;
 
   const repoDisplayPath =
-    repo.type === "local"
-      ? repo.path
-      : `${repo.sshHost}:${repo.remotePath}`;
+    repo.type === "local" ? repo.path : `${repo.sshHost}:${repo.remotePath}`;
 
   return (
     <main className="max-w-[700px] mx-auto p-8">
       <Breadcrumbs crumbs={breadcrumbs} />
 
       <header>
-        <h1 className="text-3xl text-primary mb-0">
-          {repo.name} — 1-Shot
-        </h1>
+        <h1 className="text-3xl text-primary mb-0">{repo.name} — 1-Shot</h1>
         <p className="mt-1 text-muted-foreground text-sm font-mono">
           {repoDisplayPath}
         </p>
@@ -97,7 +92,10 @@ export default function OneShot() {
       {!session.running && (
         <section className="form-section flex flex-col gap-3 mt-6">
           <div>
-            <Label htmlFor="oneshot-title" className="text-sm text-muted-foreground">
+            <Label
+              htmlFor="oneshot-title"
+              className="text-sm text-muted-foreground"
+            >
               Title
             </Label>
             <Input
@@ -108,7 +106,10 @@ export default function OneShot() {
             />
           </div>
           <div>
-            <Label htmlFor="oneshot-prompt" className="text-sm text-muted-foreground">
+            <Label
+              htmlFor="oneshot-prompt"
+              className="text-sm text-muted-foreground"
+            >
               Prompt
             </Label>
             <Textarea
@@ -118,7 +119,10 @@ export default function OneShot() {
             />
           </div>
           <div>
-            <Label htmlFor="oneshot-model" className="text-sm text-muted-foreground">
+            <Label
+              htmlFor="oneshot-model"
+              className="text-sm text-muted-foreground"
+            >
               Model
             </Label>
             <Input

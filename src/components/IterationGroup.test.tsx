@@ -38,8 +38,17 @@ function makeGroup(overrides: Partial<IterationGroup> = {}): IterationGroup {
     iteration: 1,
     events: [
       makeEvent({ kind: "iteration_started", iteration: 1 }),
-      makeEvent({ kind: "tool_use", tool_name: "Read", tool_input: { file_path: "/home/beth/repos/yarr/src/main.ts" }, iteration: 1 }),
-      makeEvent({ kind: "iteration_complete", iteration: 1, result: { total_cost_usd: 0.05 } }),
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Read",
+        tool_input: { file_path: "/home/beth/repos/yarr/src/main.ts" },
+        iteration: 1,
+      }),
+      makeEvent({
+        kind: "iteration_complete",
+        iteration: 1,
+        result: { total_cost_usd: 0.05 },
+      }),
     ],
     cost: 0.05,
     inputTokens: 10000,
@@ -152,7 +161,9 @@ describe("IterationGroupComponent", () => {
   // =========================================================================
 
   it("shows token counts when inputTokens and outputTokens are present", () => {
-    renderComponent({ group: makeGroup({ inputTokens: 50000, outputTokens: 12000 }) });
+    renderComponent({
+      group: makeGroup({ inputTokens: 50000, outputTokens: 12000 }),
+    });
     // inputTokens uses toLocaleString() in the header stats
     expect(screen.getByText(/50,000/)).toBeInTheDocument();
     // outputTokens also uses toLocaleString() in the header stats
@@ -217,7 +228,9 @@ describe("IterationGroupComponent", () => {
   // =========================================================================
 
   it("shows context bar when contextWindow is greater than 0", () => {
-    renderComponent({ group: makeGroup({ contextWindow: 200000, inputTokens: 100000 }) });
+    renderComponent({
+      group: makeGroup({ contextWindow: 200000, inputTokens: 100000 }),
+    });
     expect(screen.getByText(/200k/)).toBeInTheDocument();
   });
 
@@ -255,8 +268,12 @@ describe("IterationGroupComponent", () => {
       group: makeGroup({ contextWindow: 200000, inputTokens: 100000 }),
     });
     // Should show "100k / 200k (50%)" or similar
-    expect(screen.getByText(new RegExp(`${formatTokenCount(100000)}`))).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(`${formatTokenCount(200000)}`))).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(`${formatTokenCount(100000)}`)),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(`${formatTokenCount(200000)}`)),
+    ).toBeInTheDocument();
   });
 
   // =========================================================================
@@ -328,29 +345,55 @@ describe("IterationGroupComponent", () => {
   it("shows the correct emoji for each event kind", () => {
     const events = [
       makeEvent({ kind: "iteration_started", iteration: 1 }),
-      makeEvent({ kind: "tool_use", tool_name: "Bash", tool_input: { command: "ls" }, iteration: 1 }),
-      makeEvent({ kind: "iteration_complete", iteration: 1, result: { total_cost_usd: 0.05 } }),
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Bash",
+        tool_input: { command: "ls" },
+        iteration: 1,
+      }),
+      makeEvent({
+        kind: "iteration_complete",
+        iteration: 1,
+        result: { total_cost_usd: 0.05 },
+      }),
     ];
     const group = makeGroup({ events });
     renderComponent({ expanded: true, group });
 
     for (const ev of events) {
       const emoji = eventEmoji(ev.kind);
-      expect(screen.getByText(new RegExp(emoji.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          new RegExp(emoji.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        ),
+      ).toBeInTheDocument();
     }
   });
 
   it("shows the correct label for each event", () => {
     const events = [
       makeEvent({ kind: "iteration_started", iteration: 2 }),
-      makeEvent({ kind: "tool_use", tool_name: "Read", tool_input: { file_path: "/home/beth/repos/yarr/src/main.ts" }, iteration: 2 }),
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Read",
+        tool_input: { file_path: "/home/beth/repos/yarr/src/main.ts" },
+        iteration: 2,
+      }),
     ];
     const group = makeGroup({ events, iteration: 2 });
-    renderComponent({ expanded: true, group, repoPath: "/home/beth/repos/yarr" });
+    renderComponent({
+      expanded: true,
+      group,
+      repoPath: "/home/beth/repos/yarr",
+    });
 
     for (const ev of events) {
       const label = eventLabel(ev, "/home/beth/repos/yarr");
-      expect(screen.getByText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        ),
+      ).toBeInTheDocument();
     }
   });
 
@@ -393,12 +436,16 @@ describe("IterationGroupComponent", () => {
 
     // Find event buttons (excluding the header button)
     const label0 = eventLabel(events[0]!);
-    const button0 = screen.getByText(new RegExp(label0.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).closest("button");
+    const button0 = screen
+      .getByText(new RegExp(label0.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+      .closest("button");
     if (button0) fireEvent.click(button0);
     expect(toggleEvent).toHaveBeenCalledWith(10);
 
     const label1 = eventLabel(events[1]!);
-    const button1 = screen.getByText(new RegExp(label1.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).closest("button");
+    const button1 = screen
+      .getByText(new RegExp(label1.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+      .closest("button");
     if (button1) fireEvent.click(button1);
     expect(toggleEvent).toHaveBeenCalledWith(11);
   });
@@ -408,9 +455,17 @@ describe("IterationGroupComponent", () => {
   // =========================================================================
 
   it("shows tool_input JSON when a tool_use event is expanded", () => {
-    const toolInput = { file_path: "/home/beth/repos/yarr/src/main.ts", content: "hello" };
+    const toolInput = {
+      file_path: "/home/beth/repos/yarr/src/main.ts",
+      content: "hello",
+    };
     const events = [
-      makeEvent({ kind: "tool_use", tool_name: "Write", tool_input: toolInput, iteration: 1 }),
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Write",
+        tool_input: toolInput,
+        iteration: 1,
+      }),
     ];
     const group = makeGroup({ events });
     const expandedEvents = new Set([5]);
@@ -588,7 +643,11 @@ describe("IterationGroupComponent", () => {
     // With repoPath set, eventLabel should show relative path "src/main.ts"
     // rather than the full absolute path
     const expectedLabel = eventLabel(events[0]!, "/home/beth/repos/yarr");
-    expect(screen.getByText(new RegExp(expectedLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        new RegExp(expectedLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      ),
+    ).toBeInTheDocument();
     expect(expectedLabel).toContain("src/main.ts");
   });
 
@@ -609,7 +668,11 @@ describe("IterationGroupComponent", () => {
     });
 
     const expectedLabel = eventLabel(events[0]!, undefined);
-    expect(screen.getByText(new RegExp(expectedLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        new RegExp(expectedLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      ),
+    ).toBeInTheDocument();
     expect(expectedLabel).toContain("/home/beth/repos/yarr/src/main.ts");
   });
 });

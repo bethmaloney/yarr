@@ -63,7 +63,8 @@ export default function RepoDetail() {
   const updateRepo = useAppStore((s) => s.updateRepo);
 
   const repo = repos.find((r) => r.id === repoId);
-  const session: SessionState = (repoId && sessions.get(repoId)) || defaultSession;
+  const session: SessionState =
+    (repoId && sessions.get(repoId)) || defaultSession;
 
   // Local settings state
   const [editingName, setEditingName] = useState(false);
@@ -129,8 +130,7 @@ export default function RepoDetail() {
       : {
           type: "ssh" as const,
           sshHost: (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost,
-          remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>)
-            .remotePath,
+          remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath,
         };
   }
 
@@ -313,11 +313,12 @@ export default function RepoDetail() {
           return s;
         });
         if (payload.status === "pass") {
-          const nextPending = newSteps.findIndex(
-            (s) => s.status === "pending",
-          );
+          const nextPending = newSteps.findIndex((s) => s.status === "pending");
           if (nextPending !== -1) {
-            newSteps[nextPending] = { ...newSteps[nextPending], status: "running" };
+            newSteps[nextPending] = {
+              ...newSteps[nextPending],
+              status: "running",
+            };
           }
         }
         return { ...prev, steps: newSteps };
@@ -325,9 +326,7 @@ export default function RepoDetail() {
     });
 
     const unlistenComplete = await listen("ssh-test-complete", () => {
-      setConnectionTest((prev) =>
-        prev ? { ...prev, running: false } : null,
-      );
+      setConnectionTest((prev) => (prev ? { ...prev, running: false } : null));
       unlistenStep();
       unlistenComplete();
       connectionTestCleanupRef.current = null;
@@ -342,9 +341,7 @@ export default function RepoDetail() {
       sshHost: ssh.sshHost,
       remotePath: ssh.remotePath,
     }).catch(() => {
-      setConnectionTest((prev) =>
-        prev ? { ...prev, running: false } : null,
-      );
+      setConnectionTest((prev) => (prev ? { ...prev, running: false } : null));
       unlistenStep();
       unlistenComplete();
     });
@@ -446,67 +443,84 @@ export default function RepoDetail() {
             >
               {branchInfo.name}
               {branchInfo.ahead != null && branchInfo.ahead > 0 && (
-                <span>{"\u2191"}{branchInfo.ahead}</span>
+                <span>
+                  {"\u2191"}
+                  {branchInfo.ahead}
+                </span>
               )}
               {branchInfo.behind != null && branchInfo.behind > 0 && (
-                <span>{"\u2193"}{branchInfo.behind}</span>
+                <span>
+                  {"\u2193"}
+                  {branchInfo.behind}
+                </span>
               )}
             </button>
           ) : (
-          <Popover open={branchDropdownOpen} onOpenChange={setBranchDropdownOpen}>
-            <PopoverTrigger asChild>
-              <button
-                className={`branch-chip${branchInfo.behind && branchInfo.behind > 0 ? " warning" : ""}`}
-                onClick={() => {
-                  if (!branchDropdownOpen) fetchBranches();
+            <Popover
+              open={branchDropdownOpen}
+              onOpenChange={setBranchDropdownOpen}
+            >
+              <PopoverTrigger asChild>
+                <button
+                  className={`branch-chip${branchInfo.behind && branchInfo.behind > 0 ? " warning" : ""}`}
+                  onClick={() => {
+                    if (!branchDropdownOpen) fetchBranches();
+                  }}
+                >
+                  {branchInfo.name}
+                  {branchInfo.ahead != null && branchInfo.ahead > 0 && (
+                    <span>
+                      {"\u2191"}
+                      {branchInfo.ahead}
+                    </span>
+                  )}
+                  {branchInfo.behind != null && branchInfo.behind > 0 && (
+                    <span>
+                      {"\u2193"}
+                      {branchInfo.behind}
+                    </span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="branch-dropdown"
+                onEscapeKeyDown={() => {
+                  setBranchSearch("");
                 }}
               >
-                {branchInfo.name}
-                {branchInfo.ahead != null && branchInfo.ahead > 0 && (
-                  <span>{"\u2191"}{branchInfo.ahead}</span>
-                )}
                 {branchInfo.behind != null && branchInfo.behind > 0 && (
-                  <span>{"\u2193"}{branchInfo.behind}</span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleFastForward}
+                  >
+                    Fast-forward
+                  </Button>
                 )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              className="branch-dropdown"
-              onEscapeKeyDown={() => {
-                setBranchSearch("");
-              }}
-            >
-              {branchInfo.behind != null && branchInfo.behind > 0 && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleFastForward}
-                >
-                  Fast-forward
-                </Button>
-              )}
-              <Command shouldFilter={false}>
-                <CommandInput
-                  className="branch-search"
-                  placeholder="Search branches..."
-                  value={branchSearch}
-                  onValueChange={setBranchSearch}
-                />
-                <CommandList>
-                  <CommandEmpty className="branch-empty">No matching branches</CommandEmpty>
-                  {filteredBranches.map((branch) => (
-                    <CommandItem
-                      key={branch}
-                      className={`branch-item${branch === branchInfo?.name ? " active" : ""}`}
-                      onSelect={() => handleSwitchBranch(branch)}
-                    >
-                      {branch}
-                    </CommandItem>
-                  ))}
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    className="branch-search"
+                    placeholder="Search branches..."
+                    value={branchSearch}
+                    onValueChange={setBranchSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty className="branch-empty">
+                      No matching branches
+                    </CommandEmpty>
+                    {filteredBranches.map((branch) => (
+                      <CommandItem
+                        key={branch}
+                        className={`branch-item${branch === branchInfo?.name ? " active" : ""}`}
+                        onSelect={() => handleSwitchBranch(branch)}
+                      >
+                        {branch}
+                      </CommandItem>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           )}
         </div>
       )}
@@ -514,7 +528,9 @@ export default function RepoDetail() {
       {/* Settings section */}
       <Collapsible className="settings">
         <CollapsibleTrigger asChild>
-          <button>Settings — {model}, {maxIterations} iters</button>
+          <button>
+            Settings — {model}, {maxIterations} iters
+          </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div>
@@ -620,9 +636,7 @@ export default function RepoDetail() {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() =>
-                  setEnvVars([...envVars, { key: "", value: "" }])
-                }
+                onClick={() => setEnvVars([...envVars, { key: "", value: "" }])}
               >
                 + Add Variable
               </Button>
@@ -678,7 +692,11 @@ export default function RepoDetail() {
           <div>
             <Accordion type="multiple">
               {checks.map((check, i) => (
-                <AccordionItem key={i} value={`check-${i}`} className="check-entry">
+                <AccordionItem
+                  key={i}
+                  value={`check-${i}`}
+                  className="check-entry"
+                >
                   <div className="flex items-center">
                     <AccordionTrigger className="flex-1">
                       {check.name || "New Check"}
@@ -807,9 +825,7 @@ export default function RepoDetail() {
       {/* Git Sync section */}
       <Collapsible className="git-sync">
         <CollapsibleTrigger asChild>
-          <button>
-            Git Sync — {gitSyncEnabled ? "enabled" : "disabled"}
-          </button>
+          <button>Git Sync — {gitSyncEnabled ? "enabled" : "disabled"}</button>
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div>
@@ -838,9 +854,7 @@ export default function RepoDetail() {
                 <Input
                   type="number"
                   value={gitSyncMaxRetries}
-                  onChange={(e) =>
-                    setGitSyncMaxRetries(Number(e.target.value))
-                  }
+                  onChange={(e) => setGitSyncMaxRetries(Number(e.target.value))}
                   min={1}
                   disabled={session.running || !gitSyncEnabled}
                 />
@@ -931,7 +945,9 @@ export default function RepoDetail() {
       </div>
 
       {!planFile && !session.running && (
-        <p className="text-muted-foreground text-xs mt-2">Select a prompt file to start a run</p>
+        <p className="text-muted-foreground text-xs mt-2">
+          Select a prompt file to start a run
+        </p>
       )}
 
       {/* Disconnected banner */}

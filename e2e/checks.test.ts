@@ -165,9 +165,9 @@ test.describe("Checks settings section", () => {
     await expect(checksDetails.locator(".check-entry")).toHaveCount(1);
 
     // Summary should update to show 1 configured
-    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]').first()).toContainText(
-      "1 configured",
-    );
+    await expect(
+      checksDetails.locator('[data-slot="collapsible-trigger"]').first(),
+    ).toContainText("1 configured");
   });
 
   test("new check has default values", async ({ page, mockTauri }) => {
@@ -215,7 +215,9 @@ test.describe("Checks settings section", () => {
 
     // Wait for checks to load, then expand checks section
     const checksDetails = page.locator(".checks");
-    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("1 configured");
+    await expect(
+      checksDetails.locator('[data-slot="collapsible-trigger"]'),
+    ).toContainText("1 configured");
     await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // Wait for check entry to appear, then expand it
@@ -253,7 +255,9 @@ test.describe("Checks settings section", () => {
 
     // Wait for checks to load, then expand checks section
     const checksDetails = page.locator(".checks");
-    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("1 configured");
+    await expect(
+      checksDetails.locator('[data-slot="collapsible-trigger"]'),
+    ).toContainText("1 configured");
     await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // Verify one check entry exists
@@ -261,15 +265,17 @@ test.describe("Checks settings section", () => {
 
     // Click the remove button on the check
     const checkEntry = checksDetails.locator(".check-entry").first();
-    await checkEntry.getByRole("button", { name: "\u00d7", exact: true }).click();
+    await checkEntry
+      .getByRole("button", { name: "\u00d7", exact: true })
+      .click();
 
     // Check entry should be removed
     await expect(checksDetails.locator(".check-entry")).toHaveCount(0);
 
     // Summary should update to show 0 configured
-    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]').first()).toContainText(
-      "0 configured",
-    );
+    await expect(
+      checksDetails.locator('[data-slot="collapsible-trigger"]').first(),
+    ).toContainText("0 configured");
   });
 
   test("remove only removes the targeted check", async ({
@@ -282,17 +288,19 @@ test.describe("Checks settings section", () => {
 
     // Wait for checks to load, then expand checks section
     const checksDetails = page.locator(".checks");
-    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("2 configured");
+    await expect(
+      checksDetails.locator('[data-slot="collapsible-trigger"]'),
+    ).toContainText("2 configured");
     await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // Verify two check entries exist
     await expect(checksDetails.locator(".check-entry")).toHaveCount(2);
 
     // Remove the first check (clippy)
-    const firstCheckEntry = checksDetails
-      .locator(".check-entry")
-      .first();
-    await firstCheckEntry.getByRole("button", { name: "\u00d7", exact: true }).click();
+    const firstCheckEntry = checksDetails.locator(".check-entry").first();
+    await firstCheckEntry
+      .getByRole("button", { name: "\u00d7", exact: true })
+      .click();
 
     // Only one check should remain
     await expect(checksDetails.locator(".check-entry")).toHaveCount(1);
@@ -304,9 +312,9 @@ test.describe("Checks settings section", () => {
     await expect(nameInput).toHaveValue("test");
 
     // Summary should show 1 configured
-    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]').first()).toContainText(
-      "1 configured",
-    );
+    await expect(
+      checksDetails.locator('[data-slot="collapsible-trigger"]').first(),
+    ).toContainText("1 configured");
   });
 
   test("check fields are disabled while session is running", async ({
@@ -317,7 +325,9 @@ test.describe("Checks settings section", () => {
 
     // Wait for checks to load, then expand checks section
     const checksDetails = page.locator(".checks");
-    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("1 configured");
+    await expect(
+      checksDetails.locator('[data-slot="collapsible-trigger"]'),
+    ).toContainText("1 configured");
     await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // Expand the check entry
@@ -370,7 +380,9 @@ test.describe("Checks settings section", () => {
 
     // Wait for checks to load, then expand checks section
     const checksDetails = page.locator(".checks");
-    await expect(checksDetails.locator('[data-slot="collapsible-trigger"]')).toContainText("1 configured");
+    await expect(
+      checksDetails.locator('[data-slot="collapsible-trigger"]'),
+    ).toContainText("1 configured");
     await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
 
     // The remove button on the check should be disabled

@@ -86,24 +86,21 @@ test.describe("Git Sync settings section", () => {
     await navigateToRepo(page, mockTauri);
 
     // Expand the git-sync details section
-    await page.locator(".git-sync").locator('[data-slot="collapsible-trigger"]').click();
+    await page
+      .locator(".git-sync")
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
 
     // Enable checkbox
-    const enableCheckbox = page
-      .locator(".git-sync")
-      .getByRole("checkbox");
+    const enableCheckbox = page.locator(".git-sync").getByRole("checkbox");
     await expect(enableCheckbox).toBeVisible();
 
     // Model text input with placeholder "sonnet"
-    const modelInput = page
-      .locator(".git-sync")
-      .getByPlaceholder("sonnet");
+    const modelInput = page.locator(".git-sync").getByPlaceholder("sonnet");
     await expect(modelInput).toBeVisible();
 
     // Max push retries number input (default value 3)
-    const retriesInput = page
-      .locator(".git-sync")
-      .getByRole("spinbutton");
+    const retriesInput = page.locator(".git-sync").getByRole("spinbutton");
     await expect(retriesInput).toBeVisible();
     await expect(retriesInput).toHaveValue("3");
 
@@ -139,7 +136,10 @@ test.describe("Git Sync settings section", () => {
     await navigateToRepo(page, mockTauri);
 
     // Expand the git-sync section
-    await page.locator(".git-sync").locator('[data-slot="collapsible-trigger"]').click();
+    await page
+      .locator(".git-sync")
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
 
     const gitSyncSection = page.locator(".git-sync");
 
@@ -178,7 +178,10 @@ test.describe("Git Sync settings section", () => {
     await startRunningSession(page, mockTauri);
 
     // Expand the git-sync section
-    await page.locator(".git-sync").locator('[data-slot="collapsible-trigger"]').click();
+    await page
+      .locator(".git-sync")
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
 
     const gitSyncSection = page.locator(".git-sync");
 
@@ -311,7 +314,10 @@ test.describe("Git Sync settings section", () => {
     await textarea.fill("Custom prompt");
 
     // Expand the settings section and click Save
-    await page.locator(".settings").locator('[data-slot="collapsible-trigger"]').click();
+    await page
+      .locator(".settings")
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
     await page
       .locator(".settings")
       .getByRole("button", { name: "Save" })
@@ -332,7 +338,9 @@ test.describe("Git Sync settings section", () => {
     await gitSyncAfter.locator('[data-slot="collapsible-trigger"]').click();
 
     // Summary should show enabled
-    await expect(gitSyncAfter.locator('[data-slot="collapsible-trigger"]')).toContainText("enabled");
+    await expect(
+      gitSyncAfter.locator('[data-slot="collapsible-trigger"]'),
+    ).toContainText("enabled");
 
     // Checkbox should be checked
     await expect(gitSyncAfter.getByRole("checkbox")).toBeChecked();

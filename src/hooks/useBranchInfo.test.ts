@@ -129,7 +129,10 @@ describe("useBranchInfo", () => {
     const repos = [
       makeLocalRepo({ id: "local-1" } as Partial<RepoConfig>),
       makeSshRepo({ id: "ssh-1" }),
-      makeLocalRepo({ id: "local-2", path: "/other/path" } as Partial<RepoConfig>),
+      makeLocalRepo({
+        id: "local-2",
+        path: "/other/path",
+      } as Partial<RepoConfig>),
     ];
 
     renderHook(() => useBranchInfo(repos));
@@ -192,9 +195,7 @@ describe("useBranchInfo", () => {
       },
     );
 
-    const { result } = renderHook(() =>
-      useBranchInfo([repo1, repo2, repo3]),
-    );
+    const { result } = renderHook(() => useBranchInfo([repo1, repo2, repo3]));
 
     await waitFor(() => {
       // Should have 2 entries (the failed one is excluded)

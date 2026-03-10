@@ -1,11 +1,5 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  render,
-  screen,
-  cleanup,
-  fireEvent,
-  waitFor,
-} from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router";
 
 import type { RepoConfig } from "../repos";
@@ -127,9 +121,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
   };
 }
 
-function makeSessionState(
-  overrides: Partial<SessionState> = {},
-): SessionState {
+function makeSessionState(overrides: Partial<SessionState> = {}): SessionState {
   return {
     running: false,
     events: [],
@@ -192,7 +184,9 @@ describe("OneShot", () => {
 
   describe("not found state", () => {
     it('shows "Repo not found" when repoId does not match any repo', () => {
-      setupMockState({ repos: [makeLocalRepo({ id: "other-id" } as Partial<RepoConfig>)] });
+      setupMockState({
+        repos: [makeLocalRepo({ id: "other-id" } as Partial<RepoConfig>)],
+      });
       renderOneShot("non-existent-id");
 
       expect(screen.getByText(/repo not found/i)).toBeInTheDocument();
@@ -216,7 +210,9 @@ describe("OneShot", () => {
       renderOneShot();
 
       expect(screen.getByText("Home")).toBeInTheDocument();
-      expect(screen.getAllByText("my-project").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("my-project").length).toBeGreaterThanOrEqual(
+        1,
+      );
       expect(screen.getByText("1-Shot")).toBeInTheDocument();
     });
 
@@ -329,9 +325,7 @@ describe("OneShot", () => {
     it("form is hidden when session is running", () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ running: true })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ running: true })]]),
       });
       renderOneShot();
 
@@ -378,7 +372,9 @@ describe("OneShot", () => {
       fireEvent.change(titleInput, { target: { value: "My Feature" } });
 
       const promptArea = screen.getByRole("textbox", { name: /prompt/i });
-      fireEvent.change(promptArea, { target: { value: "Implement the feature" } });
+      fireEvent.change(promptArea, {
+        target: { value: "Implement the feature" },
+      });
 
       const runButton = screen.getByRole("button", { name: /^run$/i });
       expect(runButton).toBeEnabled();
@@ -387,9 +383,7 @@ describe("OneShot", () => {
     it('shows "Running..." text when session is running', () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ running: true })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ running: true })]]),
       });
       renderOneShot();
 
@@ -399,9 +393,7 @@ describe("OneShot", () => {
     it("is disabled when session is running", () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ running: true })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ running: true })]]),
       });
       renderOneShot();
 
@@ -520,9 +512,7 @@ describe("OneShot", () => {
     it("is not visible when not running", () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ running: false })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ running: false })]]),
       });
       renderOneShot();
 
@@ -534,23 +524,17 @@ describe("OneShot", () => {
     it("is visible when running", () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ running: true })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ running: true })]]),
       });
       renderOneShot();
 
-      expect(
-        screen.getByRole("button", { name: /stop/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /stop/i })).toBeInTheDocument();
     });
 
     it('on click, calls invoke("stop_session", { repoId })', () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ running: true })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ running: true })]]),
       });
       renderOneShot();
 
@@ -733,9 +717,7 @@ describe("OneShot", () => {
       ];
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ events })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ events })]]),
       });
       renderOneShot();
 
@@ -746,9 +728,7 @@ describe("OneShot", () => {
     it("passes repoPath for local repo", () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ events: [] })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ events: [] })]]),
       });
       renderOneShot();
 
@@ -762,9 +742,7 @@ describe("OneShot", () => {
     it("passes remotePath as repoPath for SSH repo", () => {
       setupMockState({
         repos: [makeSshRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ events: [] })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ events: [] })]]),
       });
       renderOneShot();
 
@@ -810,9 +788,7 @@ describe("OneShot", () => {
     it("is not shown when session.error is null", () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ error: null })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ error: null })]]),
       });
       renderOneShot();
 
@@ -833,9 +809,7 @@ describe("OneShot", () => {
       renderOneShot();
 
       expect(screen.getByText("Error")).toBeInTheDocument();
-      const errorText = screen.getByText(
-        "Process crashed with signal SIGKILL",
-      );
+      const errorText = screen.getByText("Process crashed with signal SIGKILL");
       expect(errorText).toBeInTheDocument();
       expect(errorText.tagName).toBe("PRE");
     });
@@ -849,9 +823,7 @@ describe("OneShot", () => {
     it("is not shown when session.trace is null", () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ trace: null })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ trace: null })]]),
       });
       renderOneShot();
 
@@ -945,9 +917,7 @@ describe("OneShot", () => {
       renderOneShot();
 
       expect(screen.getByText("Reason")).toBeInTheDocument();
-      expect(
-        screen.getByText("Design phase timed out"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Design phase timed out")).toBeInTheDocument();
     });
 
     it("does NOT show failure_reason row when failure_reason is null", () => {
@@ -1002,9 +972,7 @@ describe("OneShot", () => {
       mockInvoke.mockRejectedValue(new Error("Stop failed"));
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["repo-1", makeSessionState({ running: true })],
-        ]),
+        sessions: new Map([["repo-1", makeSessionState({ running: true })]]),
       });
       renderOneShot();
 

@@ -9,11 +9,7 @@ import {
 import { MemoryRouter } from "react-router";
 
 import type { RepoConfig } from "../repos";
-import type {
-  SessionState,
-  SessionTrace,
-  BranchInfo,
-} from "../types";
+import type { SessionState, SessionTrace, BranchInfo } from "../types";
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -115,9 +111,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
   };
 }
 
-function makeSessionState(
-  overrides: Partial<SessionState> = {},
-): SessionState {
+function makeSessionState(overrides: Partial<SessionState> = {}): SessionState {
   return {
     running: false,
     events: [],
@@ -257,9 +251,7 @@ describe("Home", () => {
     it("shows running when session.running is true", () => {
       setupMockState({
         repos: [makeLocalRepo({ id: "r1" } as Partial<RepoConfig>)],
-        sessions: new Map([
-          ["r1", makeSessionState({ running: true })],
-        ]),
+        sessions: new Map([["r1", makeSessionState({ running: true })]]),
       });
       renderHome();
       expect(screen.getByText("RUNNING")).toBeInTheDocument();
@@ -269,10 +261,7 @@ describe("Home", () => {
       setupMockState({
         repos: [makeLocalRepo({ id: "r1" } as Partial<RepoConfig>)],
         sessions: new Map([
-          [
-            "r1",
-            makeSessionState({ running: true, disconnected: true }),
-          ],
+          ["r1", makeSessionState({ running: true, disconnected: true })],
         ]),
       });
       renderHome();
@@ -283,10 +272,7 @@ describe("Home", () => {
       setupMockState({
         repos: [makeLocalRepo({ id: "r1" } as Partial<RepoConfig>)],
         sessions: new Map([
-          [
-            "r1",
-            makeSessionState({ running: true, disconnected: true }),
-          ],
+          ["r1", makeSessionState({ running: true, disconnected: true })],
         ]),
       });
       renderHome();
@@ -316,10 +302,7 @@ describe("Home", () => {
       setupMockState({
         repos: [makeLocalRepo({ id: "r1" } as Partial<RepoConfig>)],
         sessions: new Map([
-          [
-            "r1",
-            makeSessionState({ error: "something broke" }),
-          ],
+          ["r1", makeSessionState({ error: "something broke" })],
         ]),
       });
       renderHome();
@@ -330,10 +313,7 @@ describe("Home", () => {
       setupMockState({
         repos: [makeLocalRepo({ id: "r1" } as Partial<RepoConfig>)],
         sessions: new Map([
-          [
-            "r1",
-            makeSessionState({ running: false, trace: makeTrace() }),
-          ],
+          ["r1", makeSessionState({ running: false, trace: makeTrace() })],
         ]),
       });
       renderHome();
@@ -389,9 +369,7 @@ describe("Home", () => {
       expect(
         screen.getByRole("button", { name: /local/i }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: /ssh/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /ssh/i })).toBeInTheDocument();
     });
   });
 
@@ -420,9 +398,7 @@ describe("Home", () => {
     fireEvent.click(screen.getByRole("button", { name: /add repo/i }));
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /ssh/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /ssh/i })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /ssh/i }));
@@ -439,9 +415,7 @@ describe("Home", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /add repo/i }));
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /ssh/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /ssh/i })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /ssh/i }));
@@ -489,9 +463,7 @@ describe("Home", () => {
     // null -> choosing -> ssh-form
     fireEvent.click(screen.getByRole("button", { name: /add repo/i }));
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /ssh/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /ssh/i })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: /ssh/i }));
     await waitFor(() => {
@@ -595,9 +567,7 @@ describe("Home", () => {
     // null -> choosing -> ssh-form
     fireEvent.click(screen.getByRole("button", { name: /add repo/i }));
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /ssh/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /ssh/i })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: /ssh/i }));
 

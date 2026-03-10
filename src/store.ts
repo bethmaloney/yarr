@@ -32,8 +32,7 @@ export interface AppStore {
 
 export const useAppStore = create<AppStore>((set, get) => {
   async function syncActiveSession() {
-    const activeRepoIds =
-      (await invoke<string[]>("get_active_sessions")) ?? [];
+    const activeRepoIds = (await invoke<string[]>("get_active_sessions")) ?? [];
     const activeSet = new Set(activeRepoIds);
     const sessions = get().sessions;
     const next = new Map(sessions);
@@ -68,62 +67,67 @@ export const useAppStore = create<AppStore>((set, get) => {
 
     initialize: () => {
       // 1. Load repos
-      reposLoadRepos().then((repos) => {
-        set({ repos });
-      }).catch(() => {});
+      reposLoadRepos()
+        .then((repos) => {
+          set({ repos });
+        })
+        .catch(() => {});
 
       // 2. Load latest traces
-      invoke<Record<string, SessionTrace>>("list_latest_traces").then(
-        (result) => {
+      invoke<Record<string, SessionTrace>>("list_latest_traces")
+        .then((result) => {
           if (result) {
             const tracesMap = new Map<string, SessionTrace>(
               Object.entries(result),
             );
             set({ latestTraces: tracesMap });
           }
-        },
-      ).catch(() => {});
+        })
+        .catch(() => {});
 
       // 3. Listen for session events
-      const listenPromise = listen<TaggedSessionEvent>("session-event", (event) => {
-        const { repo_id, event: sessionEvent } = event.payload;
-        sessionEvent._ts = Date.now();
+      const listenPromise = listen<TaggedSessionEvent>(
+        "session-event",
+        (event) => {
+          const { repo_id, event: sessionEvent } = event.payload;
+          sessionEvent._ts = Date.now();
 
-        const session = get().sessions.get(repo_id) ?? {
-          running: true,
-          disconnected: false,
-          reconnecting: false,
-          events: [],
-          trace: null,
-          error: null,
-        };
+          const session = get().sessions.get(repo_id) ?? {
+            running: true,
+            disconnected: false,
+            reconnecting: false,
+            events: [],
+            trace: null,
+            error: null,
+          };
 
-        const updates: Partial<SessionState> = {
-          events: [...session.events, sessionEvent],
-        };
+          const updates: Partial<SessionState> = {
+            events: [...session.events, sessionEvent],
+          };
 
-        if (sessionEvent.kind === "disconnected") {
-          updates.disconnected = true;
-          updates.reconnecting = false;
-          updates.disconnectReason = sessionEvent.reason;
-        } else if (sessionEvent.kind === "reconnecting") {
-          updates.reconnecting = true;
-          updates.disconnected = false;
-        } else if (sessionEvent.kind === "session_complete") {
-          updates.running = false;
-          updates.disconnected = false;
-          updates.reconnecting = false;
-          updates.disconnectReason = undefined;
-        } else if (session.disconnected || session.reconnecting) {
-          updates.disconnected = false;
-          updates.reconnecting = false;
-          updates.disconnectReason = undefined;
-        }
+          if (sessionEvent.kind === "disconnected") {
+            updates.disconnected = true;
+            updates.reconnecting = false;
+            updates.disconnectReason = sessionEvent.reason;
+          } else if (sessionEvent.kind === "reconnecting") {
+            updates.reconnecting = true;
+            updates.disconnected = false;
+          } else if (sessionEvent.kind === "session_complete") {
+            updates.running = false;
+            updates.disconnected = false;
+            updates.reconnecting = false;
+            updates.disconnectReason = undefined;
+          } else if (session.disconnected || session.reconnecting) {
+            updates.disconnected = false;
+            updates.reconnecting = false;
+            updates.disconnectReason = undefined;
+          }
 
-        const next = new Map(get().sessions);
-        next.set(repo_id, { ...session, ...updates });
-        set({ sessions: next });
-      });
+          const next = new Map(get().sessions);
+          next.set(repo_id, { ...session, ...updates });
+          set({ sessions: next });
+        },
+      );
 
       // 4. Start sync interval
       const intervalId = setInterval(() => {
@@ -220,9 +224,10 @@ export const useAppStore = create<AppStore>((set, get) => {
       } finally {
         const s2 = new Map(get().sessions);
         const current = s2.get(repoId);
-        if (!current) return;
-        s2.set(repoId, { ...current, running: false });
-        set({ sessions: s2 });
+        if (current) {
+          s2.set(repoId, { ...current, running: false });
+          set({ sessions: s2 });
+        }
       }
     },
 

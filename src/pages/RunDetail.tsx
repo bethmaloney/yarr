@@ -162,54 +162,54 @@ export default function RunDetail() {
       </p>
 
       <div className="summary">
-      <h2 className="text-sm text-muted-foreground uppercase tracking-wide border-b border-border pb-1 mb-0">
-        Summary
-      </h2>
+        <h2 className="text-sm text-muted-foreground uppercase tracking-wide border-b border-border pb-1 mb-0">
+          Summary
+        </h2>
 
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 mt-3">
-        <dt className="text-muted-foreground text-sm">Outcome</dt>
-        <dd className="m-0 text-sm">
-          <Badge variant={badge.variant}>{badge.label}</Badge>
-        </dd>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 mt-3">
+          <dt className="text-muted-foreground text-sm">Outcome</dt>
+          <dd className="m-0 text-sm">
+            <Badge variant={badge.variant}>{badge.label}</Badge>
+          </dd>
 
-        {trace.failure_reason && (
-          <>
-            <dt className="text-muted-foreground text-sm">Failure Reason</dt>
-            <dd className="m-0 text-sm">{trace.failure_reason}</dd>
-          </>
-        )}
+          {trace.failure_reason && (
+            <>
+              <dt className="text-muted-foreground text-sm">Failure Reason</dt>
+              <dd className="m-0 text-sm">{trace.failure_reason}</dd>
+            </>
+          )}
 
-        <dt className="text-muted-foreground text-sm">Plan</dt>
-        <dd className="m-0 text-sm">{planFilename(trace.plan_file)}</dd>
+          <dt className="text-muted-foreground text-sm">Plan</dt>
+          <dd className="m-0 text-sm">{planFilename(trace.plan_file)}</dd>
 
-        <dt className="text-muted-foreground text-sm">Iterations</dt>
-        <dd className="m-0 text-sm">{trace.total_iterations}</dd>
+          <dt className="text-muted-foreground text-sm">Iterations</dt>
+          <dd className="m-0 text-sm">{trace.total_iterations}</dd>
 
-        <dt className="text-muted-foreground text-sm">Cost</dt>
-        <dd className="m-0 text-sm">${trace.total_cost_usd.toFixed(4)}</dd>
+          <dt className="text-muted-foreground text-sm">Cost</dt>
+          <dd className="m-0 text-sm">${trace.total_cost_usd.toFixed(4)}</dd>
 
-        <dt className="text-muted-foreground text-sm">Duration</dt>
-        <dd className="m-0 text-sm">
-          {formatDuration(trace.start_time, trace.end_time)}
-        </dd>
+          <dt className="text-muted-foreground text-sm">Duration</dt>
+          <dd className="m-0 text-sm">
+            {formatDuration(trace.start_time, trace.end_time)}
+          </dd>
 
-        <dt className="text-muted-foreground text-sm">Tokens</dt>
-        <dd className="m-0 text-sm">
-          {totalInputTokens.toLocaleString()} /{" "}
-          {trace.total_output_tokens.toLocaleString()}
-        </dd>
+          <dt className="text-muted-foreground text-sm">Tokens</dt>
+          <dd className="m-0 text-sm">
+            {totalInputTokens.toLocaleString()} /{" "}
+            {trace.total_output_tokens.toLocaleString()}
+          </dd>
 
-        <dt className="text-muted-foreground text-sm">Session ID</dt>
-        <dd className="m-0 text-sm">
-          <span>{trace.session_id}</span>
-          <button
-            className="text-xs px-1.5 py-0.5 bg-secondary text-muted-foreground border border-border rounded cursor-pointer ml-2 align-middle"
-            onClick={handleCopy}
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
-        </dd>
-      </dl>
+          <dt className="text-muted-foreground text-sm">Session ID</dt>
+          <dd className="m-0 text-sm">
+            <span>{trace.session_id}</span>
+            <button
+              className="text-xs px-1.5 py-0.5 bg-secondary text-muted-foreground border border-border rounded cursor-pointer ml-2 align-middle"
+              onClick={handleCopy}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </dd>
+        </dl>
       </div>
 
       <EventsList events={events} repoPath={trace.repo_path} />

@@ -11,18 +11,19 @@ afterEach(cleanup);
 /** Render a Badge with the given variant and return the element. */
 function renderBadge(variant: string, text?: string) {
   const label = text ?? `badge-${variant}`;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { getByText } = render(
-    <Badge variant={variant as any}>{label}</Badge>,
+    <Badge variant={variant as Parameters<typeof Badge>[0]["variant"]}>
+      {label}
+    </Badge>,
   );
   return getByText(label);
 }
 
 /** Call badgeVariants with a variant string, bypassing the narrow union type. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function variantClasses(variant: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return badgeVariants({ variant } as any);
+  return badgeVariants({
+    variant,
+  } as Parameters<typeof badgeVariants>[0]);
 }
 
 // ---------------------------------------------------------------------------

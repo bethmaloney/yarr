@@ -63,7 +63,9 @@ test.describe("Breadcrumb navigation", () => {
     await expect(nav.locator('[aria-current="page"]')).toHaveText("my-app");
 
     // Separator should be present (ChevronRight icon via BreadcrumbSeparator)
-    await expect(nav.locator('[data-slot="breadcrumb-separator"]')).toBeVisible();
+    await expect(
+      nav.locator('[data-slot="breadcrumb-separator"]'),
+    ).toBeVisible();
   });
 
   test("Clicking 'Home' breadcrumb in RepoDetail navigates back to home", async ({

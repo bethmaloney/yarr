@@ -30,9 +30,15 @@ const eventKindColor: Record<string, string> = {
   git_sync_failed: "text-[#ef4444]",
 };
 
-export function EventsList({ events, isLive = false, repoPath }: EventsListProps) {
+export function EventsList({
+  events,
+  isLive = false,
+  repoPath,
+}: EventsListProps) {
   const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
-  const [expandedIterations, setExpandedIterations] = useState<Set<number>>(new Set());
+  const [expandedIterations, setExpandedIterations] = useState<Set<number>>(
+    new Set(),
+  );
   const [autoScroll, setAutoScroll] = useState(true);
   const lastExpandedIterRef = useRef(-1);
   const eventsContainerRef = useRef<HTMLDivElement>(null);
@@ -42,7 +48,9 @@ export function EventsList({ events, isLive = false, repoPath }: EventsListProps
   // Compute global index mapping
   const { iterationGlobalStartIndices, afterStartIndex } = useMemo(() => {
     const map = new Map<number, number>();
-    const beforeCount = grouped.standaloneEvents.filter(s => s.index === "before").length;
+    const beforeCount = grouped.standaloneEvents.filter(
+      (s) => s.index === "before",
+    ).length;
     let offset = beforeCount;
     for (const iter of grouped.iterations) {
       map.set(iter.iteration, offset);
@@ -54,10 +62,11 @@ export function EventsList({ events, isLive = false, repoPath }: EventsListProps
   // Auto-expand latest iteration when live
   useEffect(() => {
     if (isLive && grouped.iterations.length > 0) {
-      const lastIter = grouped.iterations[grouped.iterations.length - 1].iteration;
+      const lastIter =
+        grouped.iterations[grouped.iterations.length - 1].iteration;
       if (lastIter !== lastExpandedIterRef.current) {
         lastExpandedIterRef.current = lastIter;
-        setExpandedIterations(prev => {
+        setExpandedIterations((prev) => {
           const next = new Set(prev);
           next.add(lastIter);
           return next;
@@ -81,7 +90,7 @@ export function EventsList({ events, isLive = false, repoPath }: EventsListProps
   if (events.length === 0) return null;
 
   function toggleIteration(iteration: number) {
-    setExpandedIterations(prev => {
+    setExpandedIterations((prev) => {
       const next = new Set(prev);
       if (next.has(iteration)) next.delete(iteration);
       else next.add(iteration);
@@ -90,7 +99,7 @@ export function EventsList({ events, isLive = false, repoPath }: EventsListProps
   }
 
   function toggleEvent(globalIndex: number) {
-    setExpandedEvents(prev => {
+    setExpandedEvents((prev) => {
       const next = new Set(prev);
       if (next.has(globalIndex)) next.delete(globalIndex);
       else next.add(globalIndex);
@@ -126,7 +135,9 @@ export function EventsList({ events, isLive = false, repoPath }: EventsListProps
   return (
     <section className="events relative">
       <div className="events-header flex items-center gap-2 mb-2">
-        <h2 className="text-base text-[#aaa] uppercase tracking-wider border-b border-[#333] pb-1 m-0">Events</h2>
+        <h2 className="text-base text-[#aaa] uppercase tracking-wider border-b border-[#333] pb-1 m-0">
+          Events
+        </h2>
         <span className="event-count bg-[#333] text-[#aaa] text-xs px-2 py-0.5 rounded-[10px] font-mono">
           {events.length}
         </span>
@@ -139,28 +150,44 @@ export function EventsList({ events, isLive = false, repoPath }: EventsListProps
         <ul className="list-none p-0 m-0">
           {/* Before standalones */}
           {grouped.standaloneEvents
-            .filter(s => s.index === "before")
+            .filter((s) => s.index === "before")
             .map((standalone, i) => {
               const isExpanded = expandedEvents.has(i);
               const colorClass = eventKindColor[standalone.event.kind] ?? "";
               return (
-                <li key={`before-${i}`} className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}>
-                  <button className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left" onClick={() => toggleEvent(i)}>
-                    <span className="event-emoji shrink-0">{eventEmoji(standalone.event.kind)}</span>
-                    <span className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}>{eventLabel(standalone.event, repoPath)}</span>
-                    <span className="event-time shrink-0 text-[#555] text-xs">{formatTime(standalone.event._ts)}</span>
+                <li
+                  key={`before-${i}`}
+                  className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}
+                >
+                  <button
+                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left"
+                    onClick={() => toggleEvent(i)}
+                  >
+                    <span className="event-emoji shrink-0">
+                      {eventEmoji(standalone.event.kind)}
+                    </span>
+                    <span
+                      className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                    >
+                      {eventLabel(standalone.event, repoPath)}
+                    </span>
+                    <span className="event-time shrink-0 text-[#555] text-xs">
+                      {formatTime(standalone.event._ts)}
+                    </span>
                   </button>
-                  {isExpanded && standalone.event.kind === "git_sync_failed" && standalone.event.error && (
-                    <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
-                      {standalone.event.error}
-                    </pre>
-                  )}
+                  {isExpanded &&
+                    standalone.event.kind === "git_sync_failed" &&
+                    standalone.event.error && (
+                      <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                        {standalone.event.error}
+                      </pre>
+                    )}
                 </li>
               );
             })}
 
           {/* Iteration groups */}
-          {grouped.iterations.map(iter => (
+          {grouped.iterations.map((iter) => (
             <IterationGroupComponent
               key={iter.iteration}
               group={iter}
@@ -169,37 +196,58 @@ export function EventsList({ events, isLive = false, repoPath }: EventsListProps
               formatTime={formatTime}
               expandedEvents={expandedEvents}
               toggleEvent={toggleEvent}
-              globalStartIndex={iterationGlobalStartIndices.get(iter.iteration) ?? 0}
+              globalStartIndex={
+                iterationGlobalStartIndices.get(iter.iteration) ?? 0
+              }
               repoPath={repoPath}
             />
           ))}
 
           {/* After standalones */}
           {grouped.standaloneEvents
-            .filter(s => s.index === "after")
+            .filter((s) => s.index === "after")
             .map((standalone, i) => {
               const globalIndex = afterStartIndex + i;
               const isExpanded = expandedEvents.has(globalIndex);
               const colorClass = eventKindColor[standalone.event.kind] ?? "";
               return (
-                <li key={`after-${i}`} className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}>
-                  <button className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left" onClick={() => toggleEvent(globalIndex)}>
-                    <span className="event-emoji shrink-0">{eventEmoji(standalone.event.kind)}</span>
-                    <span className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}>{eventLabel(standalone.event, repoPath)}</span>
-                    <span className="event-time shrink-0 text-[#555] text-xs">{formatTime(standalone.event._ts)}</span>
+                <li
+                  key={`after-${i}`}
+                  className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}
+                >
+                  <button
+                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left"
+                    onClick={() => toggleEvent(globalIndex)}
+                  >
+                    <span className="event-emoji shrink-0">
+                      {eventEmoji(standalone.event.kind)}
+                    </span>
+                    <span
+                      className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                    >
+                      {eventLabel(standalone.event, repoPath)}
+                    </span>
+                    <span className="event-time shrink-0 text-[#555] text-xs">
+                      {formatTime(standalone.event._ts)}
+                    </span>
                   </button>
-                  {isExpanded && standalone.event.kind === "git_sync_failed" && standalone.event.error && (
-                    <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
-                      {standalone.event.error}
-                    </pre>
-                  )}
+                  {isExpanded &&
+                    standalone.event.kind === "git_sync_failed" &&
+                    standalone.event.error && (
+                      <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                        {standalone.event.error}
+                      </pre>
+                    )}
                 </li>
               );
             })}
         </ul>
       </div>
       {!autoScroll && (
-        <button className="jump-bottom absolute bottom-2 left-1/2 -translate-x-1/2 px-4 py-1 text-xs bg-[#e8d44d] text-[#1a1a2e] border-none rounded-xl cursor-pointer font-semibold shadow-md z-10 hover:bg-[#f0e060]" onClick={jumpToBottom}>
+        <button
+          className="jump-bottom absolute bottom-2 left-1/2 -translate-x-1/2 px-4 py-1 text-xs bg-[#e8d44d] text-[#1a1a2e] border-none rounded-xl cursor-pointer font-semibold shadow-md z-10 hover:bg-[#f0e060]"
+          onClick={jumpToBottom}
+        >
           ↓ New events
         </button>
       )}

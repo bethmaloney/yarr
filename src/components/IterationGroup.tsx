@@ -58,12 +58,18 @@ export function IterationGroupComponent({
   return (
     <div className={`iteration-group${expanded ? " expanded" : ""}`}>
       <button className="iteration-header" onClick={onToggle}>
-        <span className="iteration-toggle">{expanded ? "\u25BC" : "\u25B6"}</span>
+        <span className="iteration-toggle">
+          {expanded ? "\u25BC" : "\u25B6"}
+        </span>
         <span className="iteration-title">Iteration {group.iteration}</span>
         <span className="iteration-stats">
           — {group.events.length} events · ${group.cost.toFixed(4)}
-          {(group.inputTokens || group.outputTokens) ? (
-            <> · {group.inputTokens.toLocaleString()} in / {group.outputTokens.toLocaleString()} out</>
+          {group.inputTokens || group.outputTokens ? (
+            <>
+              {" "}
+              · {group.inputTokens.toLocaleString()} in /{" "}
+              {group.outputTokens.toLocaleString()} out
+            </>
           ) : null}
           {group.startTs && group.endTs ? (
             <> · {formatDuration(group.endTs - group.startTs)}</>
@@ -83,7 +89,8 @@ export function IterationGroupComponent({
             />
           </div>
           <span className="context-bar-label">
-            {formatTokenCount(group.inputTokens)} / {formatTokenCount(group.contextWindow)} ({percentage}%)
+            {formatTokenCount(group.inputTokens)} /{" "}
+            {formatTokenCount(group.contextWindow)} ({percentage}%)
           </span>
         </div>
       )}

@@ -1,11 +1,6 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { RepoConfig } from "./repos";
-import type {
-  SessionState,
-  SessionTrace,
-  SessionEvent,
-  TaggedSessionEvent,
-} from "./types";
+import type { SessionTrace, SessionEvent, TaggedSessionEvent } from "./types";
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — must be declared before any vi.mock() calls
@@ -17,7 +12,9 @@ const { mockInvoke, mockListen, mockListenerCallback, mockUnlisten } =
       mockInvoke: vi.fn(),
       mockListen: vi.fn(),
       mockListenerCallback: {
-        current: null as ((event: { payload: TaggedSessionEvent }) => void) | null,
+        current: null as
+          | ((event: { payload: TaggedSessionEvent }) => void)
+          | null,
       },
       mockUnlisten: vi.fn(),
     };
@@ -297,9 +294,7 @@ describe("initialize", () => {
     });
 
     const state = useAppStore.getState();
-    expect(state.latestTraces.get("repo-1")).toEqual(
-      tracesMap["repo-1"],
-    );
+    expect(state.latestTraces.get("repo-1")).toEqual(tracesMap["repo-1"]);
   });
 
   it("populates repos via loadRepos", async () => {

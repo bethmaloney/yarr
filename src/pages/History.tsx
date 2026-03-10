@@ -63,10 +63,7 @@ function planFilename(path: string | null): string {
   return parts[parts.length - 1] || path;
 }
 
-function traceRepoId(
-  trace: SessionTrace,
-  repoId: string | undefined,
-): string {
+function traceRepoId(trace: SessionTrace, repoId: string | undefined): string {
   if (repoId) return repoId;
   return trace.repo_id ?? "unknown";
 }
@@ -196,19 +193,51 @@ export default function History() {
       <div className="trace-list flex flex-col gap-1">
         {/* Column headers */}
         <div className="trace-header flex items-center gap-4 px-3 py-1.5 text-muted-foreground font-mono text-xs font-semibold uppercase tracking-wide">
-          {renderSortButton("Date", "start_time", "text-left flex-shrink-0 min-w-28")}
-          {renderSortButton("Type", "session_type", "text-left flex-shrink-0 min-w-22")}
+          {renderSortButton(
+            "Date",
+            "start_time",
+            "text-left flex-shrink-0 min-w-28",
+          )}
+          {renderSortButton(
+            "Type",
+            "session_type",
+            "text-left flex-shrink-0 min-w-22",
+          )}
           {!repoId && (
             <span className="flex-shrink-0 min-w-24 max-w-40 overflow-hidden text-ellipsis whitespace-nowrap">
               Repo
             </span>
           )}
-          {renderSortButton("Plan", "plan_file", "text-left flex-shrink-0 w-32 overflow-hidden text-ellipsis whitespace-nowrap")}
-          {renderSortButton("Prompt", "prompt", "text-left flex-1 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap")}
-          {renderSortButton("Status", "outcome", "text-center flex-shrink-0 min-w-22")}
-          {renderSortButton("Iters", "total_iterations", "text-right flex-shrink-0 min-w-16")}
-          {renderSortButton("Cost", "total_cost_usd", "text-right flex-shrink-0 min-w-16")}
-          {renderSortButton("Duration", "duration", "text-right flex-shrink-0 min-w-16")}
+          {renderSortButton(
+            "Plan",
+            "plan_file",
+            "text-left flex-shrink-0 w-32 overflow-hidden text-ellipsis whitespace-nowrap",
+          )}
+          {renderSortButton(
+            "Prompt",
+            "prompt",
+            "text-left flex-1 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap",
+          )}
+          {renderSortButton(
+            "Status",
+            "outcome",
+            "text-center flex-shrink-0 min-w-22",
+          )}
+          {renderSortButton(
+            "Iters",
+            "total_iterations",
+            "text-right flex-shrink-0 min-w-16",
+          )}
+          {renderSortButton(
+            "Cost",
+            "total_cost_usd",
+            "text-right flex-shrink-0 min-w-16",
+          )}
+          {renderSortButton(
+            "Duration",
+            "duration",
+            "text-right flex-shrink-0 min-w-16",
+          )}
         </div>
 
         {/* Trace rows */}

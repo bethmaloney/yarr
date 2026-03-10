@@ -77,7 +77,11 @@ vi.mock("../components/EventsList", () => ({
     isLive?: boolean;
     repoPath?: string;
   }) => (
-    <div data-testid="events-list" data-is-live={isLive} data-repo-path={repoPath}>
+    <div
+      data-testid="events-list"
+      data-is-live={isLive}
+      data-repo-path={repoPath}
+    >
       {events.length} events
     </div>
   ),
@@ -161,9 +165,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
   };
 }
 
-function makeSessionState(
-  overrides: Partial<SessionState> = {},
-): SessionState {
+function makeSessionState(overrides: Partial<SessionState> = {}): SessionState {
   return {
     running: false,
     events: [],
@@ -240,7 +242,9 @@ describe("RepoDetail", () => {
       renderRepoDetail();
 
       expect(screen.getByText("Home")).toBeInTheDocument();
-      expect(screen.getAllByText("my-project").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("my-project").length).toBeGreaterThanOrEqual(
+        1,
+      );
     });
 
     it("shows repo name as heading", () => {
@@ -271,7 +275,9 @@ describe("RepoDetail", () => {
     });
 
     it('shows "Repo not found" when repo ID does not match', () => {
-      setupMockState({ repos: [makeLocalRepo({ id: "other-id" } as Partial<RepoConfig>)] });
+      setupMockState({
+        repos: [makeLocalRepo({ id: "other-id" } as Partial<RepoConfig>)],
+      });
       renderRepoDetail("non-existent-id");
 
       expect(screen.getByText(/repo not found/i)).toBeInTheDocument();
@@ -327,8 +333,12 @@ describe("RepoDetail", () => {
       fireEvent.keyDown(input, { key: "Escape" });
 
       // Should revert to original name, no input visible
-      expect(screen.queryByDisplayValue("renamed-project")).not.toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: /my-project/ })).toBeInTheDocument();
+      expect(
+        screen.queryByDisplayValue("renamed-project"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /my-project/ }),
+      ).toBeInTheDocument();
     });
 
     it("blur saves the name", () => {
@@ -821,9 +831,7 @@ describe("RepoDetail", () => {
       });
       renderRepoDetail();
 
-      expect(
-        screen.getByText("Claude exited with code 1"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Claude exited with code 1")).toBeInTheDocument();
     });
   });
 
@@ -919,9 +927,7 @@ describe("RepoDetail", () => {
       });
       renderRepoDetail();
 
-      expect(
-        screen.getByText(/Max iterations exceeded/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Max iterations exceeded/)).toBeInTheDocument();
     });
 
     it("shows session ID", () => {
@@ -955,9 +961,7 @@ describe("RepoDetail", () => {
       ];
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["test-repo", makeSessionState({ events })],
-        ]),
+        sessions: new Map([["test-repo", makeSessionState({ events })]]),
       });
       renderRepoDetail();
 
@@ -983,9 +987,7 @@ describe("RepoDetail", () => {
       const events: SessionEvent[] = [{ kind: "session_started" }];
       setupMockState({
         repos: [makeLocalRepo()],
-        sessions: new Map([
-          ["test-repo", makeSessionState({ events })],
-        ]),
+        sessions: new Map([["test-repo", makeSessionState({ events })]]),
       });
       renderRepoDetail();
 

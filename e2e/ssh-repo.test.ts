@@ -102,7 +102,10 @@ test.describe("RepoDetail for SSH repos", () => {
     await page.getByRole("button", { name: /remote-app/ }).click();
 
     // Expand the settings section
-    await page.locator(".settings").locator('[data-slot="collapsible-trigger"]').click();
+    await page
+      .locator(".settings")
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
 
     // Settings section should display SSH host and remote path
     await expect(page.getByText("SSH Host")).toBeVisible();
@@ -123,7 +126,10 @@ test.describe("RepoDetail for SSH repos", () => {
     await page.getByRole("button", { name: /remote-app/ }).click();
 
     // Expand the settings section
-    await page.locator(".settings").locator('[data-slot="collapsible-trigger"]').click();
+    await page
+      .locator(".settings")
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
 
     await expect(
       page.getByRole("button", { name: "Test Connection" }),
@@ -152,7 +158,10 @@ test.describe("RepoDetail for Local repos", () => {
     await page.getByRole("button", { name: /my-app/ }).click();
 
     // Expand settings to verify Test Connection is truly absent, not just hidden
-    await page.locator(".settings").locator('[data-slot="collapsible-trigger"]').click();
+    await page
+      .locator(".settings")
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
 
     // Local repos should not have the Test Connection button
     await expect(
@@ -330,7 +339,9 @@ test.describe("Disconnected and Reconnecting states", () => {
     await emitSessionEvent(page, { kind: "disconnected" });
 
     // Banner should show the fallback text without a colon
-    await expect(page.getByText("Connection lost", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Connection lost", { exact: true }),
+    ).toBeVisible();
 
     // Should still show the "remote session may still be running" text
     await expect(
@@ -425,7 +436,10 @@ test.describe("Connection test checklist", () => {
     await page.goto("/");
 
     await page.getByRole("button", { name: /remote-app/ }).click();
-    await page.locator(".settings").locator('[data-slot="collapsible-trigger"]').click();
+    await page
+      .locator(".settings")
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
   }
 
   test("clicking Test Connection shows checklist with step names", async ({
@@ -483,15 +497,11 @@ test.describe("Connection test checklist", () => {
     const checklist = page.getByTestId("connection-checklist");
 
     // First step should show pass
-    const firstStep = checklist
-      .locator(`:has-text("SSH reachable")`)
-      .first();
+    const firstStep = checklist.locator(`:has-text("SSH reachable")`).first();
     await expect(firstStep).toHaveClass(/step-pass/);
 
     // Second step should show fail
-    const secondStep = checklist
-      .locator(`:has-text("tmux available")`)
-      .first();
+    const secondStep = checklist.locator(`:has-text("tmux available")`).first();
     await expect(secondStep).toHaveClass(/step-fail/);
 
     // The error message should be visible

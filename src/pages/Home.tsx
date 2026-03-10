@@ -87,10 +87,7 @@ export default function Home() {
           </p>
         </div>
         <div className="flex gap-2 items-center pt-2">
-          <Button
-            variant="secondary"
-            onClick={() => navigate("/history")}
-          >
+          <Button variant="secondary" onClick={() => navigate("/history")}>
             History
           </Button>
           {addMode === null && (

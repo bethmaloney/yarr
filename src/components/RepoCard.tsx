@@ -76,25 +76,26 @@ export function RepoCard({
             </>
           )}
           <span>${(lastTrace.total_cost_usd ?? 0).toFixed(2)}</span>
-          {lastTrace.context_window && (() => {
-            const ctxPct = Math.round(
-              ((lastTrace.final_context_tokens ?? 0) /
-                lastTrace.context_window) *
-                100,
-            );
-            return (
-              <>
-                <span className="separator"> &middot; </span>
-                <span
-                  style={{
-                    color: sessionContextColor(ctxPct),
-                  }}
-                >
-                  {ctxPct}%
-                </span>
-              </>
-            );
-          })()}
+          {lastTrace.context_window &&
+            (() => {
+              const ctxPct = Math.round(
+                ((lastTrace.final_context_tokens ?? 0) /
+                  lastTrace.context_window) *
+                  100,
+              );
+              return (
+                <>
+                  <span className="separator"> &middot; </span>
+                  <span
+                    style={{
+                      color: sessionContextColor(ctxPct),
+                    }}
+                  >
+                    {ctxPct}%
+                  </span>
+                </>
+              );
+            })()}
           <span className="separator"> &middot; </span>
           <span>{timeAgo(lastTrace.start_time)}</span>
         </div>

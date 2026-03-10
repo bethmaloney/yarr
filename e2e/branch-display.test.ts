@@ -224,9 +224,7 @@ test.describe("Branch display chip", () => {
     await expect(dropdown).toBeVisible();
 
     // Click "feature/foo" branch
-    await dropdown
-      .locator(".branch-item", { hasText: "feature/foo" })
-      .click();
+    await dropdown.locator(".branch-item", { hasText: "feature/foo" }).click();
 
     // Verify switch_branch was called with correct args
     const capturedArgs = await page.evaluate(() => {
@@ -527,9 +525,7 @@ test.describe("Branch display chip", () => {
     await searchInput.fill("dev");
 
     // Click the matching branch item
-    await dropdown
-      .locator(".branch-item", { hasText: "develop" })
-      .click();
+    await dropdown.locator(".branch-item", { hasText: "develop" }).click();
 
     // Dropdown should close
     await expect(dropdown).not.toBeVisible();

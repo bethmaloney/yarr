@@ -698,14 +698,16 @@ Update Playwright E2E tests for React DOM structure and routing.
 Full build, lint, format, and manual smoke test.
 
 **Checklist:**
-- [ ] `npm run dev` — app starts, all pages render
-- [ ] `npx tsc --noEmit` — no type errors
-- [ ] `npx eslint .` — no lint errors
-- [ ] `npx prettier --check .` — formatting clean
-- [ ] `npm test` — all unit tests pass
-- [ ] `npm run test:e2e` — all E2E tests pass
+- [x] `npm run dev` — app starts, all pages render
+- [x] `npx tsc --noEmit` — no type errors
+- [x] `npx eslint .` — no lint errors
+- [x] `npx prettier --check .` — formatting clean
+- [x] `npm test` — all unit tests pass
+- [x] `npm run test:e2e` — all E2E tests pass
 - [ ] Manual: add a repo, open repo detail, toggle settings, browse branches
-- [ ] Remove any leftover Svelte references in comments or config
+- [x] Remove any leftover Svelte references in comments or config
+
+**Notes:** Fixed 8 ESLint errors: removed unused `container` destructurings in EventsList.test.tsx, removed unused imports (`waitFor` in OneShot.test.tsx, `SessionState` in store.test.ts), replaced `as any` casts with proper type assertions in badge.test.tsx, fixed `return` in `finally` block in store.ts (replaced with `if` guard), added `eslint-disable` block for Playwright fixture `use()` parameter (false positive for react-hooks/rules-of-hooks) in e2e/fixtures.ts. Ran `prettier --write` to format 44 files. Remaining 2 ESLint warnings are expected shadcn/ui patterns (badge.tsx and button.tsx exporting utility functions alongside components). No Svelte references found in source, tests, or config. Manual smoke test left for user. 668 unit tests (24 files), 113 E2E tests all passing.
 
 ---
 
@@ -729,4 +731,4 @@ Full build, lint, format, and manual smoke test.
 | 14 | Delete Svelte files | Done |
 | 15 | Update unit tests | Done |
 | 16 | Update E2E tests | Done |
-| 17 | Final verification and cleanup | Not Started |
+| 17 | Final verification and cleanup | In Progress |

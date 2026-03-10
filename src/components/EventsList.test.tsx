@@ -51,9 +51,17 @@ function makeIterationEvents(
   extraEvents: Partial<SessionEvent>[] = [],
 ): SessionEvent[] {
   return [
-    makeEvent({ kind: "iteration_started", iteration, _ts: 1700000000000 + iteration * 60000 }),
+    makeEvent({
+      kind: "iteration_started",
+      iteration,
+      _ts: 1700000000000 + iteration * 60000,
+    }),
     ...extraEvents.map((ov) =>
-      makeEvent({ iteration, _ts: 1700000000000 + iteration * 60000 + 5000, ...ov }),
+      makeEvent({
+        iteration,
+        _ts: 1700000000000 + iteration * 60000 + 5000,
+        ...ov,
+      }),
     ),
     makeEvent({
       kind: "iteration_complete",
@@ -151,13 +159,19 @@ describe("EventsList", () => {
     expect(screen.getByText(label)).toBeInTheDocument();
 
     // Check time is rendered (formatted time span should exist)
-    const timeStr = new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const timeStr = new Date(ts).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
     expect(screen.getByText(timeStr)).toBeInTheDocument();
   });
 
   it("renders design_phase_started as a before-standalone event", async () => {
     const EventsList = await importEventsList();
-    const events = [makeEvent({ kind: "design_phase_started", _ts: 1700000000000 })];
+    const events = [
+      makeEvent({ kind: "design_phase_started", _ts: 1700000000000 }),
+    ];
     render(<EventsList events={events} />);
 
     const label = eventLabel(events[0]!);
@@ -172,7 +186,11 @@ describe("EventsList", () => {
     const EventsList = await importEventsList();
     const ts = 1700000060000;
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
       makeEvent({ kind: "session_complete", outcome: "completed", _ts: ts }),
     ];
     render(<EventsList events={events} />);
@@ -186,14 +204,23 @@ describe("EventsList", () => {
     expect(screen.getByText(label)).toBeInTheDocument();
 
     // time
-    const timeStr = new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const timeStr = new Date(ts).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
     expect(screen.getByText(timeStr)).toBeInTheDocument();
   });
 
   it("renders one_shot_complete as an after-standalone event", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "one_shot_started", title: "Fix bug", merge_strategy: "squash", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "one_shot_started",
+        title: "Fix bug",
+        merge_strategy: "squash",
+        _ts: 1700000000000,
+      }),
       makeEvent({ kind: "one_shot_complete", _ts: 1700000060000 }),
     ];
     render(<EventsList events={events} />);
@@ -205,8 +232,17 @@ describe("EventsList", () => {
   it("renders one_shot_failed as an after-standalone event", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "one_shot_started", title: "Deploy", merge_strategy: "merge", _ts: 1700000000000 }),
-      makeEvent({ kind: "one_shot_failed", reason: "timeout", _ts: 1700000060000 }),
+      makeEvent({
+        kind: "one_shot_started",
+        title: "Deploy",
+        merge_strategy: "merge",
+        _ts: 1700000000000,
+      }),
+      makeEvent({
+        kind: "one_shot_failed",
+        reason: "timeout",
+        _ts: 1700000060000,
+      }),
     ];
     render(<EventsList events={events} />);
 
@@ -221,10 +257,30 @@ describe("EventsList", () => {
   it("renders IterationGroup components for iteration events", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
-      ...makeIterationEvents(1, [{ kind: "tool_use", tool_name: "Read", tool_input: { file_path: "/src/main.ts" } }]),
-      ...makeIterationEvents(2, [{ kind: "tool_use", tool_name: "Bash", tool_input: { command: "npm test" } }]),
-      makeEvent({ kind: "session_complete", outcome: "completed", _ts: 1700000200000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
+      ...makeIterationEvents(1, [
+        {
+          kind: "tool_use",
+          tool_name: "Read",
+          tool_input: { file_path: "/src/main.ts" },
+        },
+      ]),
+      ...makeIterationEvents(2, [
+        {
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "npm test" },
+        },
+      ]),
+      makeEvent({
+        kind: "session_complete",
+        outcome: "completed",
+        _ts: 1700000200000,
+      }),
     ];
     render(<EventsList events={events} />);
 
@@ -251,9 +307,13 @@ describe("EventsList", () => {
   it("toggles expanded class on a standalone before-event when clicked", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
     ];
-    const { container } = render(<EventsList events={events} />);
+    render(<EventsList events={events} />);
 
     // Find the event button
     const label = eventLabel(events[0]!);
@@ -279,8 +339,16 @@ describe("EventsList", () => {
   it("toggles expanded class on a standalone after-event when clicked", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
-      makeEvent({ kind: "session_complete", outcome: "completed", _ts: 1700000060000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
+      makeEvent({
+        kind: "session_complete",
+        outcome: "completed",
+        _ts: 1700000060000,
+      }),
     ];
     render(<EventsList events={events} />);
 
@@ -310,14 +378,22 @@ describe("EventsList", () => {
     // The implementation should render a <pre class="tool-input-detail"> for
     // expanded git_sync_failed events that have an .error field.
     const eventsWithGitFail = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
       makeEvent({
         kind: "git_sync_failed",
         error: "fatal: remote origin not found",
         iteration: 1,
         _ts: 1700000060000,
       }),
-      makeEvent({ kind: "session_complete", outcome: "failed", _ts: 1700000120000 }),
+      makeEvent({
+        kind: "session_complete",
+        outcome: "failed",
+        _ts: 1700000120000,
+      }),
     ];
     const { container } = render(<EventsList events={eventsWithGitFail} />);
 
@@ -332,7 +408,9 @@ describe("EventsList", () => {
 
     // Find and click the git_sync_failed event button to expand it
     const gitSyncLabel = eventLabel(eventsWithGitFail[1]!);
-    const btn = screen.queryByText(new RegExp(gitSyncLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    const btn = screen.queryByText(
+      new RegExp(gitSyncLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
     if (btn) {
       const button = btn.closest("button");
       if (button) fireEvent.click(button);
@@ -353,7 +431,11 @@ describe("EventsList", () => {
   it("does NOT show expandable detail for non-git_sync_failed standalone events", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
     ];
     const { container } = render(<EventsList events={events} />);
 
@@ -374,8 +456,16 @@ describe("EventsList", () => {
   it("does NOT show detail for expanded session_complete event", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
-      makeEvent({ kind: "session_complete", outcome: "completed", _ts: 1700000060000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
+      makeEvent({
+        kind: "session_complete",
+        outcome: "completed",
+        _ts: 1700000060000,
+      }),
     ];
     const { container } = render(<EventsList events={events} />);
 
@@ -396,10 +486,20 @@ describe("EventsList", () => {
     const EventsList = await importEventsList();
     // 2 before-standalones, 1 iteration with 3 events, 1 after-standalone
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
       makeEvent({ kind: "design_phase_started", _ts: 1700000001000 }),
-      ...makeIterationEvents(1, [{ kind: "tool_use", tool_name: "Bash", tool_input: { command: "ls" } }]),
-      makeEvent({ kind: "session_complete", outcome: "completed", _ts: 1700000200000 }),
+      ...makeIterationEvents(1, [
+        { kind: "tool_use", tool_name: "Bash", tool_input: { command: "ls" } },
+      ]),
+      makeEvent({
+        kind: "session_complete",
+        outcome: "completed",
+        _ts: 1700000200000,
+      }),
     ];
     render(<EventsList events={events} />);
 
@@ -414,11 +514,19 @@ describe("EventsList", () => {
     const EventsList = await importEventsList();
     // 1 before-standalone, 1 iteration with 3 events, 1 after-standalone
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
       ...makeIterationEvents(1, [{ kind: "tool_use", tool_name: "Read" }]),
-      makeEvent({ kind: "session_complete", outcome: "completed", _ts: 1700000200000 }),
+      makeEvent({
+        kind: "session_complete",
+        outcome: "completed",
+        _ts: 1700000200000,
+      }),
     ];
-    const { container } = render(<EventsList events={events} />);
+    render(<EventsList events={events} />);
 
     // before-standalone: index 0 (session_started)
     // iteration events: indices 1, 2, 3 (iteration_started, tool_use, iteration_complete)
@@ -435,10 +543,18 @@ describe("EventsList", () => {
     const EventsList = await importEventsList();
     // 1 before, iteration 1 (3 events), iteration 2 (3 events), 1 after
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
       ...makeIterationEvents(1, [{ kind: "tool_use", tool_name: "Read" }]),
       ...makeIterationEvents(2, [{ kind: "tool_use", tool_name: "Write" }]),
-      makeEvent({ kind: "session_complete", outcome: "completed", _ts: 1700000300000 }),
+      makeEvent({
+        kind: "session_complete",
+        outcome: "completed",
+        _ts: 1700000300000,
+      }),
     ];
     render(<EventsList events={events} />);
 
@@ -459,7 +575,11 @@ describe("EventsList", () => {
   it("auto-expands the latest iteration when isLive is true", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
       ...makeIterationEvents(1, [{ kind: "tool_use", tool_name: "Read" }]),
       ...makeIterationEvents(2, [{ kind: "tool_use", tool_name: "Write" }]),
     ];
@@ -477,7 +597,11 @@ describe("EventsList", () => {
   it("does not auto-expand iterations when isLive is false", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
       ...makeIterationEvents(1, [{ kind: "tool_use", tool_name: "Read" }]),
     ];
     render(<EventsList events={events} isLive={false} />);
@@ -489,7 +613,11 @@ describe("EventsList", () => {
   it("does not auto-expand when isLive is not provided (defaults to false)", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
       ...makeIterationEvents(1, [{ kind: "tool_use", tool_name: "Read" }]),
     ];
     render(<EventsList events={events} />);
@@ -505,13 +633,19 @@ describe("EventsList", () => {
   it("does not show the jump-to-bottom button initially (autoScroll starts true)", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
     ];
     render(<EventsList events={events} isLive={true} />);
 
     // The jump-to-bottom button should not be present when autoScroll is true
     expect(screen.queryByText(/jump to bottom/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /bottom/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /bottom/i }),
+    ).not.toBeInTheDocument();
   });
 
   // =========================================================================
@@ -521,7 +655,11 @@ describe("EventsList", () => {
   it("applies text-[#4ecdc4] class for session_started standalone events", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
     ];
     const { container } = render(<EventsList events={events} />);
 
@@ -533,8 +671,16 @@ describe("EventsList", () => {
   it("applies text-[#e8d44d] and font-semibold classes for session_complete events", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
-      makeEvent({ kind: "session_complete", outcome: "completed", _ts: 1700000060000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
+      makeEvent({
+        kind: "session_complete",
+        outcome: "completed",
+        _ts: 1700000060000,
+      }),
     ];
     const { container } = render(<EventsList events={events} />);
 
@@ -567,9 +713,17 @@ describe("EventsList", () => {
   it("applies kind as a CSS class on each standalone event li", async () => {
     const EventsList = await importEventsList();
     const events = [
-      makeEvent({ kind: "session_started", session_id: "s1", _ts: 1700000000000 }),
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
       makeEvent({ kind: "design_phase_started", _ts: 1700000001000 }),
-      makeEvent({ kind: "session_complete", outcome: "completed", _ts: 1700000060000 }),
+      makeEvent({
+        kind: "session_complete",
+        outcome: "completed",
+        _ts: 1700000060000,
+      }),
     ];
     const { container } = render(<EventsList events={events} />);
 

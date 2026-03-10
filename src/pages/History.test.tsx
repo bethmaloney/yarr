@@ -178,9 +178,7 @@ describe("History", () => {
       renderHistory();
 
       await waitFor(() => {
-        expect(
-          screen.getByText(/no runs recorded yet/i),
-        ).toBeInTheDocument();
+        expect(screen.getByText(/no runs recorded yet/i)).toBeInTheDocument();
       });
     });
   });
@@ -205,7 +203,14 @@ describe("History", () => {
 
     it("repo-filtered view (with repoId): renders Home > RepoName > History", async () => {
       mockInvoke.mockResolvedValue([]);
-      setupMockState({ repos: [makeLocalRepo({ id: "repo-1", name: "my-project" } as Partial<RepoConfig>)] });
+      setupMockState({
+        repos: [
+          makeLocalRepo({
+            id: "repo-1",
+            name: "my-project",
+          } as Partial<RepoConfig>),
+        ],
+      });
       renderHistory("/history/repo-1");
 
       await waitFor(() => {
@@ -276,14 +281,18 @@ describe("History", () => {
       });
 
       // Default sort is start_time desc, so Date column should show down arrow
-      const dateHeader = screen.getByText(/^Date$/).closest("button") ?? screen.getByText(/^Date$/);
+      const dateHeader =
+        screen.getByText(/^Date$/).closest("button") ??
+        screen.getByText(/^Date$/);
       expect(dateHeader.textContent).toContain("\u2193"); // ↓ for desc
 
       // Click to toggle to asc
       fireEvent.click(dateHeader);
 
       await waitFor(() => {
-        const updatedHeader = screen.getByText(/^Date$/).closest("button") ?? screen.getByText(/^Date$/);
+        const updatedHeader =
+          screen.getByText(/^Date$/).closest("button") ??
+          screen.getByText(/^Date$/);
         expect(updatedHeader.textContent).toContain("\u2191"); // ↑ for asc
       });
     });
@@ -297,12 +306,16 @@ describe("History", () => {
         expect(screen.getByText(/^Cost$/)).toBeInTheDocument();
       });
 
-      const costHeader = screen.getByText(/^Cost$/).closest("button") ?? screen.getByText(/^Cost$/);
+      const costHeader =
+        screen.getByText(/^Cost$/).closest("button") ??
+        screen.getByText(/^Cost$/);
       fireEvent.click(costHeader);
 
       await waitFor(() => {
         // Cost column should now have a sort indicator
-        const updatedHeader = screen.getByText(/^Cost$/).closest("button") ?? screen.getByText(/^Cost$/);
+        const updatedHeader =
+          screen.getByText(/^Cost$/).closest("button") ??
+          screen.getByText(/^Cost$/);
         expect(
           updatedHeader.textContent?.includes("\u2191") ||
             updatedHeader.textContent?.includes("\u2193"),
@@ -341,8 +354,16 @@ describe("History", () => {
 
     it('shows "1-Shot" for session_type "one_shot", "Ralph Loop" otherwise', async () => {
       const traces = [
-        makeTrace({ session_id: "sess-1", session_type: "one_shot", prompt: "one shot task" }),
-        makeTrace({ session_id: "sess-2", session_type: "ralph_loop", prompt: "loop task" }),
+        makeTrace({
+          session_id: "sess-1",
+          session_type: "one_shot",
+          prompt: "one shot task",
+        }),
+        makeTrace({
+          session_id: "sess-2",
+          session_type: "ralph_loop",
+          prompt: "loop task",
+        }),
       ];
       mockInvoke.mockResolvedValue(traces);
       setupMockState({ repos: [makeLocalRepo()] });
@@ -356,7 +377,11 @@ describe("History", () => {
 
     it('shows plan filename (last segment of path), or "—" if null', async () => {
       const traces = [
-        makeTrace({ session_id: "sess-1", plan_file: "/home/beth/plans/fix-bug.md", prompt: "with plan" }),
+        makeTrace({
+          session_id: "sess-1",
+          plan_file: "/home/beth/plans/fix-bug.md",
+          prompt: "with plan",
+        }),
         makeTrace({ session_id: "sess-2", plan_file: null, prompt: "no plan" }),
       ];
       mockInvoke.mockResolvedValue(traces);
@@ -372,7 +397,14 @@ describe("History", () => {
     it("shows repo name column in global view", async () => {
       const trace = makeTrace({ repo_id: "repo-1" });
       mockInvoke.mockResolvedValue([trace]);
-      setupMockState({ repos: [makeLocalRepo({ id: "repo-1", name: "my-project" } as Partial<RepoConfig>)] });
+      setupMockState({
+        repos: [
+          makeLocalRepo({
+            id: "repo-1",
+            name: "my-project",
+          } as Partial<RepoConfig>),
+        ],
+      });
       renderHistory("/history");
 
       await waitFor(() => {
@@ -392,7 +424,8 @@ describe("History", () => {
       });
 
       // The row should be a clickable button
-      const row = screen.getByText(/Fix the login bug/).closest("button") ??
+      const row =
+        screen.getByText(/Fix the login bug/).closest("button") ??
         screen.getByText(/Fix the login bug/).closest("tr");
       expect(row).not.toBeNull();
       fireEvent.click(row!);
@@ -417,7 +450,9 @@ describe("History", () => {
     });
 
     it('shows "Failed" badge for failed outcome', async () => {
-      mockInvoke.mockResolvedValue([makeTrace({ outcome: "failed", session_id: "sess-fail" })]);
+      mockInvoke.mockResolvedValue([
+        makeTrace({ outcome: "failed", session_id: "sess-fail" }),
+      ]);
       setupMockState({ repos: [makeLocalRepo()] });
       renderHistory();
 
@@ -427,7 +462,12 @@ describe("History", () => {
     });
 
     it('shows "Max Iters" badge for max_iterations_reached outcome', async () => {
-      mockInvoke.mockResolvedValue([makeTrace({ outcome: "max_iterations_reached", session_id: "sess-max" })]);
+      mockInvoke.mockResolvedValue([
+        makeTrace({
+          outcome: "max_iterations_reached",
+          session_id: "sess-max",
+        }),
+      ]);
       setupMockState({ repos: [makeLocalRepo()] });
       renderHistory();
 
@@ -437,7 +477,9 @@ describe("History", () => {
     });
 
     it('shows "Cancelled" badge for cancelled outcome', async () => {
-      mockInvoke.mockResolvedValue([makeTrace({ outcome: "cancelled", session_id: "sess-cancel" })]);
+      mockInvoke.mockResolvedValue([
+        makeTrace({ outcome: "cancelled", session_id: "sess-cancel" }),
+      ]);
       setupMockState({ repos: [makeLocalRepo()] });
       renderHistory();
 
@@ -468,7 +510,14 @@ describe("History", () => {
 
     it("repo breadcrumb click (in repo-filtered view) navigates to /repo/:repoId", async () => {
       mockInvoke.mockResolvedValue([]);
-      setupMockState({ repos: [makeLocalRepo({ id: "repo-1", name: "my-project" } as Partial<RepoConfig>)] });
+      setupMockState({
+        repos: [
+          makeLocalRepo({
+            id: "repo-1",
+            name: "my-project",
+          } as Partial<RepoConfig>),
+        ],
+      });
       renderHistory("/history/repo-1");
 
       await waitFor(() => {

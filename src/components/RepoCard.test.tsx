@@ -72,13 +72,7 @@ describe("RepoCard", () => {
   // =========================================================================
 
   it("renders as a button element", () => {
-    render(
-      <RepoCard
-        repo={makeLocalRepo()}
-        status="idle"
-        onClick={vi.fn()}
-      />,
-    );
+    render(<RepoCard repo={makeLocalRepo()} status="idle" onClick={vi.fn()} />);
     const button = screen.getByRole("button");
     expect(button).toBeInTheDocument();
   });
@@ -99,16 +93,8 @@ describe("RepoCard", () => {
   // =========================================================================
 
   it("shows repo.path for local repos", () => {
-    render(
-      <RepoCard
-        repo={makeLocalRepo()}
-        status="idle"
-        onClick={vi.fn()}
-      />,
-    );
-    expect(
-      screen.getByText("/home/beth/repos/my-project"),
-    ).toBeInTheDocument();
+    render(<RepoCard repo={makeLocalRepo()} status="idle" onClick={vi.fn()} />);
+    expect(screen.getByText("/home/beth/repos/my-project")).toBeInTheDocument();
   });
 
   // =========================================================================
@@ -116,13 +102,7 @@ describe("RepoCard", () => {
   // =========================================================================
 
   it("shows sshHost:remotePath for SSH repos", () => {
-    render(
-      <RepoCard
-        repo={makeSshRepo()}
-        status="idle"
-        onClick={vi.fn()}
-      />,
-    );
+    render(<RepoCard repo={makeSshRepo()} status="idle" onClick={vi.fn()} />);
     expect(
       screen.getByText("dev-server:/home/beth/repos/remote-project"),
     ).toBeInTheDocument();
@@ -145,13 +125,7 @@ describe("RepoCard", () => {
   });
 
   it("does not show branch name when not provided", () => {
-    render(
-      <RepoCard
-        repo={makeLocalRepo()}
-        status="idle"
-        onClick={vi.fn()}
-      />,
-    );
+    render(<RepoCard repo={makeLocalRepo()} status="idle" onClick={vi.fn()} />);
     // No branch text should be present — query should return null
     expect(screen.queryByText(/feat\//)).not.toBeInTheDocument();
   });
@@ -171,11 +145,7 @@ describe("RepoCard", () => {
   for (const { status, label } of statuses) {
     it(`shows "${label}" label for ${status} status`, () => {
       render(
-        <RepoCard
-          repo={makeLocalRepo()}
-          status={status}
-          onClick={vi.fn()}
-        />,
+        <RepoCard repo={makeLocalRepo()} status={status} onClick={vi.fn()} />,
       );
       expect(screen.getByText(label)).toBeInTheDocument();
     });
@@ -187,11 +157,7 @@ describe("RepoCard", () => {
 
   it("renders status labels in uppercase", () => {
     render(
-      <RepoCard
-        repo={makeLocalRepo()}
-        status="running"
-        onClick={vi.fn()}
-      />,
+      <RepoCard repo={makeLocalRepo()} status="running" onClick={vi.fn()} />,
     );
     const label = screen.getByText("RUNNING");
     expect(label).toBeInTheDocument();
@@ -236,11 +202,7 @@ describe("RepoCard", () => {
   it("calls onClick when the card is clicked", () => {
     const handleClick = vi.fn();
     render(
-      <RepoCard
-        repo={makeLocalRepo()}
-        status="idle"
-        onClick={handleClick}
-      />,
+      <RepoCard repo={makeLocalRepo()} status="idle" onClick={handleClick} />,
     );
     const button = screen.getByRole("button");
     fireEvent.click(button);
@@ -250,11 +212,7 @@ describe("RepoCard", () => {
   it("does not call onClick before clicking", () => {
     const handleClick = vi.fn();
     render(
-      <RepoCard
-        repo={makeLocalRepo()}
-        status="idle"
-        onClick={handleClick}
-      />,
+      <RepoCard repo={makeLocalRepo()} status="idle" onClick={handleClick} />,
     );
     expect(handleClick).not.toHaveBeenCalled();
   });
@@ -410,13 +368,7 @@ describe("RepoCard", () => {
   // =========================================================================
 
   it("does not render last-run info when lastTrace is undefined", () => {
-    render(
-      <RepoCard
-        repo={makeLocalRepo()}
-        status="idle"
-        onClick={vi.fn()}
-      />,
-    );
+    render(<RepoCard repo={makeLocalRepo()} status="idle" onClick={vi.fn()} />);
     // Cost indicators should not be present
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
     // "ago" time markers should not be present
@@ -425,13 +377,7 @@ describe("RepoCard", () => {
   });
 
   it("does not show plan name when lastTrace is undefined", () => {
-    render(
-      <RepoCard
-        repo={makeLocalRepo()}
-        status="idle"
-        onClick={vi.fn()}
-      />,
-    );
+    render(<RepoCard repo={makeLocalRepo()} status="idle" onClick={vi.fn()} />);
     expect(screen.queryByText(/\.md$/)).not.toBeInTheDocument();
   });
 });

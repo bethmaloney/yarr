@@ -41,9 +41,7 @@ vi.mock("../components/EventsList", () => ({
     <div
       data-testid="events-list"
       data-repo-path={props.repoPath}
-      data-event-count={
-        Array.isArray(props.events) ? props.events.length : 0
-      }
+      data-event-count={Array.isArray(props.events) ? props.events.length : 0}
     />
   ),
 }));
@@ -210,7 +208,9 @@ describe("RunDetail", () => {
 
       await waitFor(() => {
         // The date should be formatted (e.g. "Mar 10, 2026" or similar)
-        expect(screen.getByText(/Mar.*10.*2026|2026.*03.*10|3\/10\/2026/)).toBeInTheDocument();
+        expect(
+          screen.getByText(/Mar.*10.*2026|2026.*03.*10|3\/10\/2026/),
+        ).toBeInTheDocument();
       });
     });
   });
