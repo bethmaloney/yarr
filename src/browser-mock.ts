@@ -420,6 +420,20 @@ if (!(window as any).__TAURI_INTERNALS__) {
       }
       return [...latest.values()];
     }
+    if (cmd === "get_branch_info") {
+      return { name: "main", ahead: 0, behind: 2 };
+    }
+    if (cmd === "list_local_branches") {
+      return [
+        "main",
+        "feat/login-flow",
+        "feat/dashboard-v2",
+        "fix/auth-bug",
+        "chore/deps-update",
+      ];
+    }
+    if (cmd === "switch_branch") return;
+    if (cmd === "fast_forward_branch") return;
     if (cmd === "read_file_preview")
       return "# Sample Plan\n\nThis is a stub preview for browser dev mode.\n\n## Steps\n";
     if (cmd === "stop_session") return;
