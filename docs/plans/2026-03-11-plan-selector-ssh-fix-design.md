@@ -89,12 +89,12 @@ Update `fetchPlans` and the dropdown UI in `RepoDetail.tsx`.
 - In `CommandEmpty`: show "Failed to load plans" if `plansError` is set, otherwise "No plans found"
 
 **Checklist:**
-- [ ] Add `plansLoading` and `plansError` state variables
-- [ ] Update `fetchPlans` with loading/error handling and toast
-- [ ] Update dropdown trigger disabled state
-- [ ] Update `CommandList` with loading state
-- [ ] Update `CommandEmpty` with error vs empty distinction
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `plansLoading` and `plansError` state variables
+- [x] Update `fetchPlans` with loading/error handling and toast
+- [x] Update dropdown trigger disabled state
+- [x] Update `CommandList` with loading state
+- [x] Update `CommandEmpty` with error vs empty distinction
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -123,5 +123,5 @@ Update `fetchPlans` and the dropdown UI in `RepoDetail.tsx`.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Implement `SshRuntime::run_command` | Done |
-| 2 | Add loading/error state to plan selector UI | Not Started |
+| 2 | Add loading/error state to plan selector UI | Done |
 | 3 | Tests | Not Started |

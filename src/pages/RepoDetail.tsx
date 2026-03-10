@@ -128,6 +128,8 @@ export default function RepoDetail() {
   const [plans, setPlans] = useState<string[]>([]);
   const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
   const [planSearch, setPlanSearch] = useState("");
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [plansError, setPlansError] = useState<string | null>(null);
 
   // Connection test state
   const [connectionTest, setConnectionTest] = useState<ConnectionTest | null>(
@@ -469,14 +471,21 @@ export default function RepoDetail() {
   async function fetchPlans() {
     const payload = buildRepoPayload();
     if (!payload) return;
+    setPlansLoading(true);
+    setPlansError(null);
     try {
       const result = await invoke<string[]>("list_plans", {
         repo: payload,
         plansDir: (repo!.plansDir || "docs/plans/").replace(/\/?$/, "/"),
       });
       setPlans(result);
-    } catch {
+    } catch (e) {
       setPlans([]);
+      const msg = typeof e === "string" ? e : String(e);
+      setPlansError(msg);
+      toast.error(msg);
+    } finally {
+      setPlansLoading(false);
     }
   }
 
@@ -1073,7 +1082,7 @@ export default function RepoDetail() {
             <PopoverTrigger asChild>
               <button
                 className="flex-1 inline-flex items-center px-3 py-2 rounded-md border border-input bg-transparent text-sm text-left hover:bg-accent/50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={session.running}
+                disabled={session.running || plansLoading}
                 aria-label="Select a plan"
                 onClick={() => {
                   if (!planDropdownOpen) fetchPlans();
@@ -1093,17 +1102,21 @@ export default function RepoDetail() {
                   onValueChange={setPlanSearch}
                 />
                 <CommandList>
-                  <CommandEmpty>No plans found</CommandEmpty>
-                  {filteredPlans.map((plan) => (
-                    <CommandItem
-                      key={plan}
-                      value={plan}
-                      className={plan === selectedPlanName ? "font-bold" : ""}
-                      onSelect={() => handleSelectPlan(plan)}
-                    >
-                      {plan}
-                    </CommandItem>
-                  ))}
+                  <CommandEmpty>{plansError ? "Failed to load plans" : "No plans found"}</CommandEmpty>
+                  {plansLoading ? (
+                    <CommandItem disabled value="loading">Loading...</CommandItem>
+                  ) : (
+                    filteredPlans.map((plan) => (
+                      <CommandItem
+                        key={plan}
+                        value={plan}
+                        className={plan === selectedPlanName ? "font-bold" : ""}
+                        onSelect={() => handleSelectPlan(plan)}
+                      >
+                        {plan}
+                      </CommandItem>
+                    ))
+                  )}
                 </CommandList>
               </Command>
             </PopoverContent>

@@ -1195,6 +1195,82 @@ describe("RepoDetail", () => {
         expect(planTrigger).toHaveTextContent("Select...");
       });
     });
+
+    it("shows error toast and 'Failed to load plans' when list_plans rejects", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "list_plans")
+          return Promise.reject("Plans directory not found");
+        return Promise.resolve(null);
+      });
+
+      renderRepoDetail();
+
+      const trigger = screen.getByRole("button", { name: /select a plan/i });
+      fireEvent.click(trigger);
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalledWith(
+          "Plans directory not found",
+        );
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/failed to load plans/i),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("shows 'Loading...' in dropdown while list_plans is in-flight", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+
+      let resolveListPlans: (value: string[]) => void;
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "list_plans")
+          return new Promise<string[]>((resolve) => {
+            resolveListPlans = resolve;
+          });
+        return Promise.resolve(null);
+      });
+
+      renderRepoDetail();
+
+      const trigger = screen.getByRole("button", { name: /select a plan/i });
+      fireEvent.click(trigger);
+
+      await waitFor(() => {
+        expect(screen.getByText(/loading\.\.\./i)).toBeInTheDocument();
+      });
+
+      // Clean up by resolving the pending promise
+      resolveListPlans!([]);
+    });
+
+    it("disables plan selector trigger while plans are loading", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+
+      let resolveListPlans: (value: string[]) => void;
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "list_plans")
+          return new Promise<string[]>((resolve) => {
+            resolveListPlans = resolve;
+          });
+        return Promise.resolve(null);
+      });
+
+      renderRepoDetail();
+
+      const trigger = screen.getByRole("button", { name: /select a plan/i });
+      fireEvent.click(trigger);
+
+      await waitFor(() => {
+        expect(trigger).toBeDisabled();
+      });
+
+      // Clean up by resolving the pending promise
+      resolveListPlans!([]);
+    });
   });
 
   // =========================================================================
