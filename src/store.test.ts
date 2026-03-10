@@ -407,6 +407,113 @@ describe("session event handling", () => {
     expect(sessions.get("repo-1")!.disconnected).toBe(true);
     expect(sessions.get("repo-2")!.disconnected).toBeFalsy();
   });
+
+  // -------------------------------------------------------------------------
+  // Auto-move plan on successful session completion
+  // -------------------------------------------------------------------------
+
+  it("auto-move: invokes move_plan_to_completed on successful completion with plan_file", () => {
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+        } as Partial<RepoConfig>),
+      ],
+    });
+
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "completed",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
+
+  it("auto-move: uses default plansDir when repo has no plansDir", () => {
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+    });
+
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "completed",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
+
+  it("auto-move: NOT invoked when outcome is not completed", () => {
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+    });
+
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "failed",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "move_plan_to_completed",
+      expect.anything(),
+    );
+  });
+
+  it("auto-move: NOT invoked when plan_file is not set", () => {
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+    });
+
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "completed",
+    });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "move_plan_to_completed",
+      expect.anything(),
+    );
+  });
+
+  it("auto-move: failure is logged but does not throw", async () => {
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "move_plan_to_completed") {
+        throw new Error("filesystem error");
+      }
+      return undefined;
+    });
+
+    // Should not throw — fire-and-forget
+    expect(() => {
+      emitSessionEvent("repo-1", {
+        kind: "session_complete",
+        outcome: "completed",
+        plan_file: "docs/plans/my-plan.md",
+      });
+    }).not.toThrow();
+
+    // Let the rejected promise settle
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "move_plan_to_completed",
+        expect.anything(),
+      );
+    });
+  });
 });
 
 // ===========================================================================

@@ -192,6 +192,20 @@ export default function RepoDetail() {
           .then((info) => setBranchInfo(info))
           .catch(() => setBranchInfo(null));
       }
+
+      // Clear plan selector after successful completion with a plan file.
+      // Use session.events (not session.trace) because trace may not be set yet
+      // when the event listener flips running=false — both events and running
+      // are updated in the same store state update, avoiding a race condition.
+      const completeEvent = session.events.findLast(
+        (e) =>
+          e.kind === "session_complete" &&
+          e.outcome === "completed" &&
+          e.plan_file,
+      );
+      if (completeEvent) {
+        setPlanFile("");
+      }
     }
     wasRunningRef.current = session.running;
   }, [session.running]); // eslint-disable-line react-hooks/exhaustive-deps

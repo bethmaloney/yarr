@@ -117,6 +117,37 @@ export const useAppStore = create<AppStore>((set, get) => {
             updates.disconnected = false;
             updates.reconnecting = false;
             updates.disconnectReason = undefined;
+
+            // Auto-move plan to completed directory on successful completion
+            if (
+              sessionEvent.outcome === "completed" &&
+              sessionEvent.plan_file
+            ) {
+              const repo = get().repos.find((r) => r.id === repo_id);
+              if (repo) {
+                const plansDir = repo.plansDir || "docs/plans/";
+                const filename =
+                  sessionEvent.plan_file.split("/").pop() ||
+                  sessionEvent.plan_file;
+                const repoPayload =
+                  repo.type === "local"
+                    ? { type: "local" as const, path: repo.path }
+                    : {
+                        type: "ssh" as const,
+                        sshHost: (
+                          repo as Extract<RepoConfig, { type: "ssh" }>
+                        ).sshHost,
+                        remotePath: (
+                          repo as Extract<RepoConfig, { type: "ssh" }>
+                        ).remotePath,
+                      };
+                invoke("move_plan_to_completed", {
+                  repo: repoPayload,
+                  plansDir,
+                  filename,
+                }).catch((e) => console.warn("Failed to move plan:", e));
+              }
+            }
           } else if (session.disconnected || session.reconnecting) {
             updates.disconnected = false;
             updates.reconnecting = false;
