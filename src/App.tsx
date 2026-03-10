@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Outlet } from "react-router";
 import { useAppStore } from "./store";
 import Home from "./pages/Home";
 import RepoDetail from "./pages/RepoDetail";
+import History from "./pages/History";
 
 function Layout() {
   const initialize = useAppStore((s) => s.initialize);
@@ -17,10 +18,6 @@ function Layout() {
 
 function OneShot() {
   return <div>OneShot</div>;
-}
-
-function History() {
-  return <div>History</div>;
 }
 
 function RunDetail() {

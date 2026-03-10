@@ -539,10 +539,12 @@ Convert HistoryView.
 - Navigation: `onSelectRun` → `navigate(/run/${repoId}/${sessionId})`
 
 **Checklist:**
-- [ ] Create `src/pages/History.tsx`
-- [ ] Verify sorting works
-- [ ] Verify navigation to run detail works
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/pages/History.tsx`
+- [x] Verify sorting works
+- [x] Verify navigation to run detail works
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Default export `History`. Uses `useParams` for optional repoId, `useAppStore` for repos. Local state for traces, loading, error, sortField, sortDir. Loads traces via `invoke("list_traces")` in useEffect with cleanup flag. Sorted via `useMemo(sortTraces)`. Column headers are sort buttons with ↓/↑ indicators. Repo column only shown in global view. Outcome badges use shadcn Badge with completed/failed/maxiters/cancelled variants. Breadcrumbs: global shows Home > History; repo-filtered shows Home > RepoName > History (repo crumb navigates to /repo/:repoId). Trace rows navigate to /run/:repoId/:sessionId. 21 unit tests covering loading/error/empty states, breadcrumbs, column headers, sorting, trace rows, outcome badges, and navigation.
 
 ---
 
@@ -711,7 +713,7 @@ Full build, lint, format, and manual smoke test.
 | 8 | EventsList component | Done |
 | 9 | Home page | Done |
 | 10 | RepoDetail page | Done |
-| 11 | History page | Not Started |
+| 11 | History page | Done |
 | 12 | RunDetail page | Not Started |
 | 13 | OneShot page | Not Started |
 | 14 | Delete Svelte files | Not Started |
