@@ -147,7 +147,7 @@ pub enum SessionEvent {
     /// A fix agent has completed
     CheckFixComplete { iteration: u32, check_name: String, attempt: u32, success: bool },
     /// 1-shot session has started
-    OneShotStarted { title: String, merge_strategy: String },
+    OneShotStarted { title: String, parent_repo_id: String, prompt: String, merge_strategy: String },
     /// Design phase has begun
     DesignPhaseStarted,
     /// Design phase completed, plan file written
@@ -164,8 +164,6 @@ pub enum SessionEvent {
     OneShotComplete,
     /// 1-shot failed
     OneShotFailed { reason: String },
-    /// Phase output from a 1-shot design or implementation phase
-    PhaseOutput { phase: String, output_type: String, summary: String },
     /// Git sync has started
     GitSyncStarted { iteration: u32 },
     /// Git push succeeded
@@ -1968,11 +1966,15 @@ mod tests {
         // 1. OneShotStarted
         let event = SessionEvent::OneShotStarted {
             title: "Implement auth module".to_string(),
+            parent_repo_id: "test-repo".to_string(),
+            prompt: "Implement auth".to_string(),
             merge_strategy: "squash".to_string(),
         };
         let json = serde_json::to_value(&event).expect("serialize OneShotStarted");
         assert_eq!(json["kind"], "one_shot_started");
         assert_eq!(json["title"], "Implement auth module");
+        assert_eq!(json["parent_repo_id"], "test-repo");
+        assert_eq!(json["prompt"], "Implement auth");
         assert_eq!(json["merge_strategy"], "squash");
 
         // 2. DesignPhaseStarted

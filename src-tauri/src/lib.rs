@@ -284,6 +284,10 @@ async fn run_oneshot(
                 model,
                 merge_strategy,
                 env_vars: env_vars.unwrap_or_default(),
+                max_iterations: 20,
+                completion_signal: "<promise>COMPLETE</promise>".to_string(),
+                checks: vec![],
+                git_sync: None,
             };
 
             let base_dir = match app.path().app_data_dir() {
@@ -1001,6 +1005,10 @@ mod tests {
             model: "claude-sonnet-4-20250514".to_string(),
             merge_strategy: MergeStrategy::MergeToMain,
             env_vars: env,
+            max_iterations: 20,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            checks: vec![],
+            git_sync: None,
         };
 
         assert_eq!(config.repo_id, "repo-123");
@@ -1019,6 +1027,8 @@ mod tests {
             repo_id: "repo-1".to_string(),
             event: SessionEvent::OneShotStarted {
                 title: "Add feature X".to_string(),
+                parent_repo_id: "repo-1".to_string(),
+                prompt: "Add feature X".to_string(),
                 merge_strategy: "merge_to_main".to_string(),
             },
         };

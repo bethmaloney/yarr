@@ -304,18 +304,18 @@ Replace the manual `run_phase()` / `run_claude_phase()` with `SessionRunner` cal
 - Add `parent_repo_id` and `prompt` to `OneShotStarted` event
 
 **Checklist:**
-- [ ] Remove `PhaseOutput` event variant
-- [ ] Remove `run_phase()` and `run_claude_phase()`
-- [ ] Design phase uses `SessionRunner` with `max_iterations: 1`
-- [ ] Plan file extraction from `ToolUse` events works
-- [ ] Implementation phase uses `SessionRunner` with full config
-- [ ] Lifecycle events (`DesignPhaseStarted`, etc.) still emitted around runner calls
-- [ ] `OneShotStarted` includes `parent_repo_id` and `prompt`
-- [ ] Update existing oneshot tests: mock expectations for new event structure (real iteration events instead of `PhaseOutput`)
-- [ ] Add test: `oneshot_id` generation produces unique IDs
-- [ ] Add test: plan file extraction from `ToolUse` events
-- [ ] `cargo check` passes
-- [ ] `cargo test` passes
+- [x] Remove `PhaseOutput` event variant
+- [x] Remove `run_phase()` and `run_claude_phase()`
+- [x] Design phase uses `SessionRunner` with `max_iterations: 1`
+- [x] Plan file extraction from `ToolUse` events works
+- [x] Implementation phase uses `SessionRunner` with full config
+- [x] Lifecycle events (`DesignPhaseStarted`, etc.) still emitted around runner calls
+- [x] `OneShotStarted` includes `parent_repo_id` and `prompt`
+- [x] Update existing oneshot tests: mock expectations for new event structure (real iteration events instead of `PhaseOutput`)
+- [x] Add test: `oneshot_id` generation produces unique IDs
+- [x] Add test: plan file extraction from `ToolUse` events
+- [x] `cargo check` passes
+- [x] `cargo test` passes
 
 ---
 
@@ -576,7 +576,7 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 |------|-------------|--------|
 | 1 | SessionRunner working directory override | Done |
 | 2 | Decouple SessionRunner trace lifecycle | Done |
-| 3 | Refactor OneShotRunner to use SessionRunner | Not Started |
+| 3 | Refactor OneShotRunner to use SessionRunner | Done |
 | 4 | Update run_oneshot Tauri command | Not Started |
 | 5 | Clean up oneshot-helpers and event-format | Not Started |
 | 6 | Add OneShotEntry type and store state | Not Started |

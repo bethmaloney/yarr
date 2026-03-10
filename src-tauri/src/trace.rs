@@ -88,6 +88,7 @@ pub enum SessionOutcome {
 }
 
 /// Collects spans and writes them to disk as OTLP-compatible JSON
+#[derive(Clone)]
 pub struct TraceCollector {
     output_dir: PathBuf,
     repo_id: String,
