@@ -18,6 +18,17 @@ import type {
 } from "../types";
 
 // ---------------------------------------------------------------------------
+// Polyfill ResizeObserver for jsdom (needed by cmdk inside Command popover)
+// ---------------------------------------------------------------------------
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
@@ -39,6 +50,10 @@ const { mockListen } = vi.hoisted(() => ({
 
 const { mockUseAppStore } = vi.hoisted(() => ({
   mockUseAppStore: vi.fn(),
+}));
+
+const { mockToast } = vi.hoisted(() => ({
+  mockToast: { success: vi.fn(), error: vi.fn() },
 }));
 
 // ---------------------------------------------------------------------------
@@ -64,6 +79,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../store", () => ({
   useAppStore: mockUseAppStore,
+}));
+
+vi.mock("sonner", () => ({
+  toast: mockToast,
 }));
 
 // Mock EventsList to avoid complexity
@@ -415,6 +434,134 @@ describe("RepoDetail", () => {
       await waitFor(() => {
         const branchChip = screen.getByText("main").closest("button");
         expect(branchChip).toBeDisabled();
+      });
+    });
+
+    it("shows success toast when branch switch succeeds", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "get_branch_info")
+          return Promise.resolve({ name: "main", ahead: 0, behind: 0 });
+        if (cmd === "list_local_branches")
+          return Promise.resolve(["main", "develop"]);
+        if (cmd === "switch_branch") return Promise.resolve(null);
+        return Promise.resolve(null);
+      });
+
+      renderRepoDetail();
+
+      // Wait for branch chip to appear, then click it to open popover
+      await waitFor(() => {
+        expect(screen.getByText("main")).toBeInTheDocument();
+      });
+      const branchChip = screen.getByText("main").closest("button")!;
+      fireEvent.click(branchChip);
+
+      // Wait for branch list to appear, then click "develop"
+      await waitFor(() => {
+        expect(screen.getByText("develop")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText("develop"));
+
+      await waitFor(() => {
+        expect(mockToast.success).toHaveBeenCalledWith(
+          expect.stringContaining("develop"),
+        );
+      });
+    });
+
+    it("shows error toast when branch switch fails", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "get_branch_info")
+          return Promise.resolve({ name: "main", ahead: 0, behind: 0 });
+        if (cmd === "list_local_branches")
+          return Promise.resolve(["main", "develop"]);
+        if (cmd === "switch_branch")
+          return Promise.reject("Branch switch failed");
+        return Promise.resolve(null);
+      });
+
+      renderRepoDetail();
+
+      await waitFor(() => {
+        expect(screen.getByText("main")).toBeInTheDocument();
+      });
+      const branchChip = screen.getByText("main").closest("button")!;
+      fireEvent.click(branchChip);
+
+      await waitFor(() => {
+        expect(screen.getByText("develop")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText("develop"));
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalled();
+      });
+    });
+
+    it("shows success toast when fast-forward succeeds", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "get_branch_info")
+          return Promise.resolve({ name: "main", ahead: 0, behind: 5 });
+        if (cmd === "list_local_branches")
+          return Promise.resolve(["main"]);
+        if (cmd === "fast_forward_branch") return Promise.resolve(null);
+        return Promise.resolve(null);
+      });
+
+      renderRepoDetail();
+
+      // Wait for branch chip to appear (behind > 0 so fast-forward will be available)
+      await waitFor(() => {
+        expect(screen.getByText("main")).toBeInTheDocument();
+      });
+      const branchChip = screen.getByText("main").closest("button")!;
+      fireEvent.click(branchChip);
+
+      // Wait for the Fast-forward button inside the popover
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /fast-forward/i }),
+        ).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /fast-forward/i }));
+
+      await waitFor(() => {
+        expect(mockToast.success).toHaveBeenCalled();
+      });
+    });
+
+    it("shows error toast when fast-forward fails", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "get_branch_info")
+          return Promise.resolve({ name: "main", ahead: 0, behind: 5 });
+        if (cmd === "list_local_branches")
+          return Promise.resolve(["main"]);
+        if (cmd === "fast_forward_branch")
+          return Promise.reject("Fast-forward failed");
+        return Promise.resolve(null);
+      });
+
+      renderRepoDetail();
+
+      await waitFor(() => {
+        expect(screen.getByText("main")).toBeInTheDocument();
+      });
+      const branchChip = screen.getByText("main").closest("button")!;
+      fireEvent.click(branchChip);
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /fast-forward/i }),
+        ).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /fast-forward/i }));
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalled();
       });
     });
   });

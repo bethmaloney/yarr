@@ -33,6 +33,7 @@ import {
   CommandItem,
   CommandEmpty,
 } from "@/components/ui/command";
+import { toast } from "sonner";
 import { sessionContextColor } from "../context-bar";
 import type { BranchInfo, Check, SessionState } from "../types";
 import type { RepoConfig } from "../repos";
@@ -371,8 +372,10 @@ export default function RepoDetail() {
         repo: payload,
       });
       setBranchInfo(info);
+      toast.success("Branch fast-forwarded");
     } catch (e) {
       console.error("Failed to fast-forward:", e);
+      toast.error(`Failed to fast-forward: ${e}`);
     }
   }
 
@@ -387,8 +390,10 @@ export default function RepoDetail() {
         repo: payload,
       });
       setBranchInfo(info);
+      toast.success(`Switched to ${branchName}`);
     } catch (e) {
       console.error("Failed to switch branch:", e);
+      toast.error(`Failed to switch branch: ${e}`);
     }
   }
 
@@ -516,6 +521,7 @@ export default function RepoDetail() {
                     {filteredBranches.map((branch) => (
                       <CommandItem
                         key={branch}
+                        value={branch}
                         className={`branch-item${branch === branchInfo?.name ? " active font-bold" : ""}`}
                         onSelect={() => handleSwitchBranch(branch)}
                       >

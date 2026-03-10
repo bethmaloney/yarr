@@ -6,6 +6,7 @@ import RepoDetail from "./pages/RepoDetail";
 import History from "./pages/History";
 import RunDetail from "./pages/RunDetail";
 import OneShot from "./pages/OneShot";
+import { Toaster } from "@/components/ui/sonner";
 
 function Layout() {
   const initialize = useAppStore((s) => s.initialize);
@@ -37,6 +38,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppRoutes />
+      <Toaster />
     </BrowserRouter>
   );
 }
