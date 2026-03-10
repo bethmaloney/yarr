@@ -261,6 +261,11 @@ impl SessionRunner {
         self
     }
 
+    pub fn with_session_id(self, id: String) -> Self {
+        *self.session_id.lock().unwrap() = Some(id);
+        self
+    }
+
     fn unregister_abort(&self, handle: &std::sync::Arc<dyn crate::runtime::AbortHandle>) {
         if let Some(ref registry) = self.abort_registry {
             let mut handles = registry.lock().unwrap();
@@ -842,7 +847,10 @@ impl SessionRunner {
         runtime.health_check().await?;
 
         let repo_str = self.config.effective_working_dir().to_string_lossy().to_string();
-        let mut trace = self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref());
+        let mut trace = match self.session_id.lock().unwrap().as_ref() {
+            Some(sid) => self.collector.start_session_with_id(sid, &repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
+            None => self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
+        };
 
         println!(
             "[harness] Starting Ralph loop on '{}' (max {} iterations)",

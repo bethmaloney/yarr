@@ -152,12 +152,12 @@ Update `ActiveSessions` to track session IDs alongside cancellation tokens, and 
 - Update `stop_session()` to destructure the tuple when accessing the token
 
 **Checklist:**
-- [ ] Update `ActiveSessions` struct
-- [ ] Update session insertion in `run_session()`
-- [ ] Update session insertion in `run_oneshot()`
-- [ ] Update `get_active_sessions()` to return session IDs
-- [ ] Update `stop_session()` token access
-- [ ] `cargo check` passes
+- [x] Update `ActiveSessions` struct
+- [x] Update session insertion in `run_session()`
+- [x] Update session insertion in `run_oneshot()`
+- [x] Update `get_active_sessions()` to return session IDs
+- [x] Update `stop_session()` token access
+- [x] `cargo check` passes
 
 ---
 
@@ -219,6 +219,6 @@ Add tests for the new JSONL read/write functionality.
 | 2 | Update JSONL reader in TraceCollector | Done |
 | 3 | Call append_event from SessionRunner::emit() | Done |
 | 4 | Call append_event from OneShotRunner::emit() | Done |
-| 5 | Store session_id in ActiveSessions | Not Started |
+| 5 | Store session_id in ActiveSessions | Done |
 | 6 | Frontend event recovery on sync | Not Started |
 | 7 | Tests | Done |

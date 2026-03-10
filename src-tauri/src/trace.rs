@@ -115,6 +115,35 @@ impl TraceCollector {
         }
     }
 
+    /// Create a new session trace with a pre-generated session_id
+    pub fn start_session_with_id(&self, session_id: &str, repo_path: &str, prompt: &str, plan_file: Option<&str>) -> SessionTrace {
+        let trace_id = Uuid::new_v4().to_string().replace('-', "");
+        let root_span_id = Uuid::new_v4().to_string().replace('-', "")[..16].to_string();
+        SessionTrace {
+            trace_id,
+            root_span_id,
+            session_id: session_id.to_string(),
+            repo_path: repo_path.to_string(),
+            prompt: prompt.to_string(),
+            plan_file: plan_file.map(|s| s.to_string()),
+            repo_id: Some(self.repo_id.clone()),
+            session_type: "ralph_loop".to_string(),
+            start_time: Utc::now(),
+            end_time: None,
+            outcome: SessionOutcome::Running,
+            failure_reason: None,
+            iterations: Vec::new(),
+            total_cost_usd: 0.0,
+            total_iterations: 0,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_cache_read_tokens: 0,
+            total_cache_creation_tokens: 0,
+            context_window: 0,
+            final_context_tokens: 0,
+        }
+    }
+
     /// Create a new session trace (call at loop start)
     pub fn start_session(&self, repo_path: &str, prompt: &str, plan_file: Option<&str>) -> SessionTrace {
         let trace_id = Uuid::new_v4().to_string().replace('-', "");
@@ -1600,6 +1629,65 @@ mod tests {
             "events .jsonl file should NOT exist after finalize (got {:?})",
             events_jsonl_path
         );
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Tests for session_id in ActiveSessions
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Test: start_session_with_id uses provided session_id ──
+
+    #[test]
+    fn start_session_with_provided_session_id() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let session_id = "my-custom-session-id".to_string();
+        let trace = collector.start_session_with_id(&session_id, "/test/repo", "test prompt", None);
+        assert_eq!(trace.session_id, session_id);
+    }
+
+    // ── Test: start_session still generates unique IDs ──
+
+    #[test]
+    fn start_session_generates_unique_id() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let trace1 = collector.start_session("/test/repo", "prompt1", None);
+        let trace2 = collector.start_session("/test/repo", "prompt2", None);
+        assert_ne!(trace1.session_id, trace2.session_id);
+        assert!(!trace1.session_id.is_empty());
+    }
+
+    // ── Test: append and read with provided session_id ──
+
+    #[test]
+    fn append_and_read_with_provided_session_id() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let session_id = "custom-session-123";
+
+        let event = SessionEvent::SessionStarted {
+            session_id: session_id.to_string(),
+        };
+        collector
+            .append_event(session_id, &event)
+            .expect("append_event should succeed");
+
+        let events = TraceCollector::read_events(base_dir, "test-repo", session_id)
+            .expect("read_events should succeed");
+        assert_eq!(events.len(), 1);
+
+        // Verify the event round-tripped correctly
+        match &events[0] {
+            SessionEvent::SessionStarted {
+                session_id: sid,
+            } => {
+                assert_eq!(sid, session_id);
+            }
+            other => panic!("expected SessionStarted, got {:?}", other),
+        }
     }
 }
 

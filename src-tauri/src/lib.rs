@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use oneshot::OneShotRunner;
 use runtime::{default_runtime, ssh_command, ssh_command_raw, ssh_shell_escape, RuntimeProvider, SshRuntime};
@@ -43,7 +44,7 @@ pub(crate) struct SshTestStep {
 
 /// Shared state tracking cancellation tokens for all active sessions, keyed by repo_id
 struct ActiveSessions {
-    tokens: Mutex<HashMap<String, CancellationToken>>,
+    tokens: Mutex<HashMap<String, (CancellationToken, String)>>,
 }
 
 /// Shared abort registry for child processes. On app exit, all handles are aborted
@@ -80,9 +81,10 @@ async fn run_session(
     create_branch: bool,
 ) -> Result<trace::SessionTrace, String> {
     let cancel_token = CancellationToken::new();
+    let session_id = Uuid::new_v4().to_string();
     {
         let active = app.state::<ActiveSessions>();
-        active.tokens.lock().await.insert(repo_id.clone(), cancel_token.clone());
+        active.tokens.lock().await.insert(repo_id.clone(), (cancel_token.clone(), session_id.clone()));
     }
 
     match &repo {
@@ -174,7 +176,8 @@ async fn run_session(
                         repo_id: repo_id_clone.clone(),
                         event: event.clone(),
                     });
-                }));
+                }))
+                .with_session_id(session_id);
 
             let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
             app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
@@ -218,7 +221,8 @@ async fn run_session(
                 config,
                 collector,
                 cancel_token.clone(),
-            );
+            )
+            .with_trace_session_id(session_id);
 
             // Store reconnect handle
             let reconnect_notify = orchestrator.reconnect_notify();
@@ -261,9 +265,10 @@ async fn run_oneshot(
     env_vars: Option<HashMap<String, String>>,
 ) -> Result<trace::SessionTrace, String> {
     let cancel_token = CancellationToken::new();
+    let session_id = Uuid::new_v4().to_string();
     {
         let active = app.state::<ActiveSessions>();
-        active.tokens.lock().await.insert(repo_id.clone(), cancel_token.clone());
+        active.tokens.lock().await.insert(repo_id.clone(), (cancel_token.clone(), session_id.clone()));
     }
 
     match &repo {
@@ -300,7 +305,8 @@ async fn run_oneshot(
                         repo_id: repo_id_clone.clone(),
                         event: event.clone(),
                     });
-                }));
+                }))
+                .with_session_id(session_id);
 
             let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
             app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
@@ -346,17 +352,20 @@ fn read_file_preview(path: String, max_lines: Option<u32>) -> Result<String, Str
 }
 
 #[tauri::command]
-async fn get_active_sessions(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+async fn get_active_sessions(app: tauri::AppHandle) -> Result<Vec<(String, String)>, String> {
     let active = app.state::<ActiveSessions>();
-    let repo_ids: Vec<String> = active.tokens.lock().await.keys().cloned().collect();
-    Ok(repo_ids)
+    let pairs: Vec<(String, String)> = active.tokens.lock().await
+        .iter()
+        .map(|(repo_id, (_, session_id))| (repo_id.clone(), session_id.clone()))
+        .collect();
+    Ok(pairs)
 }
 
 #[tauri::command]
 async fn stop_session(app: tauri::AppHandle, repo_id: String) -> Result<(), String> {
     let active = app.state::<ActiveSessions>();
     let tokens = active.tokens.lock().await;
-    if let Some(token) = tokens.get(&repo_id) {
+    if let Some((token, _)) = tokens.get(&repo_id) {
         token.cancel();
         Ok(())
     } else {
@@ -675,7 +684,7 @@ pub fn run() {
                 // Cancel all cancellation tokens
                 let active = app.state::<ActiveSessions>();
                 if let Ok(guard) = active.tokens.try_lock() {
-                    for (repo_id, token) in guard.iter() {
+                    for (repo_id, (token, _)) in guard.iter() {
                         tracing::info!("Cancelling session for repo {repo_id} on exit");
                         token.cancel();
                     }

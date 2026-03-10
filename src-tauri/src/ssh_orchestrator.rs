@@ -106,6 +106,7 @@ pub struct SshSessionOrchestrator<S: SshOps> {
     on_event: Option<OnSessionEvent>,
     accumulated_events: std::sync::Mutex<Vec<SessionEvent>>,
     line_count: AtomicU64,
+    trace_session_id: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -125,11 +126,17 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             on_event: None,
             accumulated_events: std::sync::Mutex::new(Vec::new()),
             line_count: AtomicU64::new(1),
+            trace_session_id: None,
         }
     }
 
     pub fn on_event(mut self, cb: OnSessionEvent) -> Self {
         self.on_event = Some(cb);
+        self
+    }
+
+    pub fn with_trace_session_id(mut self, id: String) -> Self {
+        self.trace_session_id = Some(id);
         self
     }
 
@@ -291,11 +298,10 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
 
         // 5. Start trace
         let repo_str = self.config.repo_path.to_string_lossy().to_string();
-        let mut trace = self.collector.start_session(
-            &repo_str,
-            &self.config.prompt,
-            self.config.plan_file.as_deref(),
-        );
+        let mut trace = match &self.trace_session_id {
+            Some(sid) => self.collector.start_session_with_id(sid, &repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
+            None => self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
+        };
 
         // 6. Emit SessionStarted
         self.emit(SessionEvent::SessionStarted {

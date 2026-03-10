@@ -209,6 +209,11 @@ impl OneShotRunner {
         self
     }
 
+    pub fn with_session_id(self, id: String) -> Self {
+        *self.session_id.lock().unwrap() = Some(id);
+        self
+    }
+
     fn emit(&self, event: SessionEvent) {
         self.accumulated_events.lock().unwrap().push(event.clone());
         if let Some(ref sid) = *self.session_id.lock().unwrap() {
@@ -374,7 +379,10 @@ impl OneShotRunner {
     /// Run the full 1-shot lifecycle.
     pub async fn run(&self, runtime: &dyn RuntimeProvider) -> Result<SessionTrace> {
         let repo_str = self.config.repo_path.to_string_lossy().to_string();
-        let mut trace = self.collector.start_session(&repo_str, &self.config.prompt, None);
+        let mut trace = match self.session_id.lock().unwrap().as_ref() {
+            Some(sid) => self.collector.start_session_with_id(sid, &repo_str, &self.config.prompt, None),
+            None => self.collector.start_session(&repo_str, &self.config.prompt, None),
+        };
         trace.session_type = "one_shot".to_string();
         *self.session_id.lock().unwrap() = Some(trace.session_id.clone());
 
