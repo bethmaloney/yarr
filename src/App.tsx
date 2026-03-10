@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import RepoDetail from "./pages/RepoDetail";
 import History from "./pages/History";
 import RunDetail from "./pages/RunDetail";
+import OneShot from "./pages/OneShot";
 
 function Layout() {
   const initialize = useAppStore((s) => s.initialize);
@@ -15,10 +16,6 @@ function Layout() {
   }, [initialize]);
 
   return <Outlet />;
-}
-
-function OneShot() {
-  return <div>OneShot</div>;
 }
 
 export function AppRoutes() {

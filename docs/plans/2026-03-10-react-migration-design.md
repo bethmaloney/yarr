@@ -593,9 +593,11 @@ Convert OneShotView.
 - `runOneShot` invokes Tauri `run_oneshot` command
 
 **Checklist:**
-- [ ] Create `src/pages/OneShot.tsx`
-- [ ] Verify form renders, submit triggers Tauri invoke
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/pages/OneShot.tsx`
+- [x] Verify form renders, submit triggers Tauri invoke
+- [x] Verify `npx tsc --noEmit` passes
+
+**Notes:** Default export `OneShot`. Uses `useParams` for repoId, `useAppStore` for repos/sessions. Local state for title, prompt, model (defaults to repo.model), mergeStrategy (defaults to "merge_to_main"). Form hidden when running. Phase indicator via `useMemo(getPhaseFromEvents)` with color classes: `text-red-400` for failed, `text-emerald-400` for complete. Run calls `invoke("run_oneshot", buildOneShotArgs(...))`, Stop calls `invoke("stop_session", { repoId })`. EventsList with isLive prop. Error and trace result sections. Wired into App.tsx router replacing placeholder. 53 unit tests covering all sections including invoke rejection handling.
 
 ---
 
@@ -717,7 +719,7 @@ Full build, lint, format, and manual smoke test.
 | 10 | RepoDetail page | Done |
 | 11 | History page | Done |
 | 12 | RunDetail page | Done |
-| 13 | OneShot page | Not Started |
+| 13 | OneShot page | Done |
 | 14 | Delete Svelte files | Not Started |
 | 15 | Update unit tests | Not Started |
 | 16 | Update E2E tests | Not Started |
