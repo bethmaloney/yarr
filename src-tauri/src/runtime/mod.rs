@@ -120,11 +120,18 @@ pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
         .get_or_init(|| async {
             match shell_env::snapshot_shell_env(
                 |cmd| async move {
-                    let output = tokio::process::Command::new("bash")
-                        .arg("-c")
-                        .arg(&cmd)
-                        .output()
-                        .await?;
+                    let output = if cfg!(target_os = "windows") {
+                        tokio::process::Command::new("wsl")
+                            .args(&["-e", "bash", "-c", &cmd])
+                            .output()
+                            .await?
+                    } else {
+                        tokio::process::Command::new("bash")
+                            .arg("-c")
+                            .arg(&cmd)
+                            .output()
+                            .await?
+                    };
                     Ok(output)
                 },
                 shell_env::LOCAL_TIMEOUT,

@@ -166,11 +166,11 @@ Wire up WSL runtime to use the shared local cache and apply env via exports.
 - On error, log `tracing::warn!` and fall back to current behavior (`bash -lc`)
 
 **Checklist:**
-- [ ] Implement `resolve_env` for WslRuntime
-- [ ] Update `spawn_claude` to use resolved env, drop `-l` flag
-- [ ] Update `run_command` to use resolved env, drop `-l` flag
-- [ ] Update `health_check` to use resolved env, drop `-l` flag
-- [ ] `cd src-tauri && cargo check`
+- [x] Implement `resolve_env` for WslRuntime
+- [x] Update `spawn_claude` to use resolved env, drop `-l` flag
+- [x] Update `run_command` to use resolved env, drop `-l` flag
+- [x] Update `health_check` to use resolved env, drop `-l` flag
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -283,7 +283,7 @@ Ensure MockRuntime and existing tests still pass, add new tests.
 | 1 | Create `shell_env.rs` module with snapshot logic | Done |
 | 2 | Add local env cache and `resolve_env` to trait | Done |
 | 3 | Implement `resolve_env` for LocalRuntime | Done |
-| 4 | Implement `resolve_env` for WslRuntime | Not Started |
+| 4 | Implement `resolve_env` for WslRuntime | Done |
 | 5 | Implement `resolve_env` for SshRuntime | Not Started |
 | 6 | Wire up `SshEnvCache` in Tauri state | Not Started |
 | 7 | Surface warnings as toast notifications | Not Started |
