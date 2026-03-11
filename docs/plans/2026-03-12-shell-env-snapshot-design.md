@@ -194,13 +194,17 @@ Wire up SSH runtime with per-host cache from Tauri managed state.
 - Drop `$SHELL -lc` wrapper from `ssh_command()` → use `bash -c` since env is pre-resolved
 
 **Checklist:**
-- [ ] Add `env_cache` field to SshRuntime
-- [ ] Update `SshRuntime::new()` signature
-- [ ] Implement `resolve_env` for SshRuntime
-- [ ] Update `build_tmux_command` to use resolved env
-- [ ] Update `build_run_command` to use resolved env
-- [ ] Update `ssh_command` to drop `$SHELL -lc` wrapper
-- [ ] `cd src-tauri && cargo check`
+- [x] Add `env_cache` field to SshRuntime
+- [x] Update `SshRuntime::new()` signature
+- [x] Implement `resolve_env` for SshRuntime
+- [x] Update `build_tmux_command` to use resolved env
+- [x] Update `build_run_command` to use resolved env
+- [x] Update `ssh_command` to drop `$SHELL -lc` wrapper (switched `build_tmux_command`, `build_run_command`, and `build_health_check_command` to `ssh_command_raw`; kept `ssh_command` global function unchanged since it's used by diagnostics in `lib.rs`)
+- [x] `cd src-tauri && cargo check`
+
+**Known limitation:** `snapshot_shell_env` uses the local `$SHELL` env var to pick the shell binary for the snapshot command. For SSH, this means the local user's shell is used on the remote. If the remote doesn't have that shell, the snapshot falls back to empty env (graceful degradation). A future improvement could pass a shell override or always use `bash` for SSH.
+
+**Note:** `SshRuntime::new()` call sites in `lib.rs` currently create inline `Arc::new(DashMap::new())` caches. Task 6 will wire these through Tauri managed state for proper cross-call-site caching.
 
 ---
 
@@ -284,7 +288,7 @@ Ensure MockRuntime and existing tests still pass, add new tests.
 | 2 | Add local env cache and `resolve_env` to trait | Done |
 | 3 | Implement `resolve_env` for LocalRuntime | Done |
 | 4 | Implement `resolve_env` for WslRuntime | Done |
-| 5 | Implement `resolve_env` for SshRuntime | Not Started |
+| 5 | Implement `resolve_env` for SshRuntime | Done |
 | 6 | Wire up `SshEnvCache` in Tauri state | Not Started |
 | 7 | Surface warnings as toast notifications | Not Started |
 | 8 | Update tests | Not Started |

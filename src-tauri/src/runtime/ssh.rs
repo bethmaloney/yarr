@@ -1,10 +1,12 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::{AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
+use super::{shell_env, AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
 use crate::output::StreamEvent;
 
 /// State of a remote SSH session, determined by checking tmux and log file.
@@ -91,9 +93,16 @@ pub fn ssh_command_raw(host: &str, remote_cmd: &str) -> Command {
     }
 }
 
+fn env_export_parts(env: &HashMap<String, String>) -> Vec<String> {
+    env.iter()
+        .map(|(key, val)| format!("export {}={}", key, shell_escape(val)))
+        .collect()
+}
+
 pub struct SshRuntime {
     pub ssh_host: String,
     pub remote_path: String,
+    pub(crate) env_cache: Arc<dashmap::DashMap<String, HashMap<String, String>>>,
 }
 
 /// Abort handle that kills the remote tmux session before aborting the task.
@@ -131,10 +140,11 @@ impl AbortHandle for SshAbortHandle {
 }
 
 impl SshRuntime {
-    pub fn new(host: &str, remote_path: &str) -> Self {
+    pub fn new(host: &str, remote_path: &str, env_cache: Arc<dashmap::DashMap<String, HashMap<String, String>>>) -> Self {
         Self {
             ssh_host: host.to_string(),
             remote_path: remote_path.to_string(),
+            env_cache,
         }
     }
 
@@ -142,7 +152,7 @@ impl SshRuntime {
         ssh_command(&self.ssh_host, "mkdir -p ~/.yarr/logs")
     }
 
-    pub fn build_tmux_command(&self, session_id: &str, invocation: &ClaudeInvocation) -> Command {
+    pub fn build_tmux_command(&self, session_id: &str, invocation: &ClaudeInvocation, resolved_env: &HashMap<String, String>) -> Command {
         let escaped_prompt = shell_escape(&invocation.prompt);
         let escaped_remote_path = shell_escape(&self.remote_path);
 
@@ -159,7 +169,6 @@ impl SshRuntime {
         claude_cmd.push_str(&format!(" {}", escaped_prompt));
 
         // Build the inner command that runs inside tmux (executed by sh -c).
-        // Values use shell_escape for proper quoting at the tmux shell layer.
         let mut env_exports = String::new();
         for (key, val) in &invocation.env_vars {
             env_exports.push_str(&format!("export {}={} && ", key, shell_escape(val)));
@@ -169,16 +178,16 @@ impl SshRuntime {
             "cd {escaped_remote_path} && {env_exports}{claude_cmd} 2>/tmp/yarr-{session_id}.stderr | tee ~/.yarr/logs/yarr-{session_id}.log"
         );
 
-        // shell_escape the entire tmux body so it is passed as a single
-        // properly-quoted argument to tmux through the SSH remote shell.
-        // The SSH remote shell strips the outer quoting layer, and tmux
-        // passes the result to sh -c which strips the inner quoting layer.
-        let remote_cmd = format!(
-            "tmux new-session -d -s yarr-{session_id} {escaped_body}",
-            escaped_body = shell_escape(&tmux_body)
-        );
+        // Build the outer command: env exports + tmux new-session
+        let mut parts: Vec<String> = Vec::new();
+        parts.extend(env_export_parts(resolved_env));
+        parts.push(format!(
+            "tmux new-session -d -s yarr-{session_id} {}",
+            shell_escape(&tmux_body)
+        ));
 
-        ssh_command(&self.ssh_host, &remote_cmd)
+        let remote_cmd = parts.join(" && ");
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
     pub fn build_tail_command(&self, session_id: &str) -> Command {
@@ -186,11 +195,12 @@ impl SshRuntime {
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
-    pub fn build_health_check_command(&self) -> Command {
-        ssh_command(
-            &self.ssh_host,
-            "command -v tmux && command -v claude && echo OK",
-        )
+    pub fn build_health_check_command(&self, resolved_env: &HashMap<String, String>) -> Command {
+        let mut parts: Vec<String> = Vec::new();
+        parts.extend(env_export_parts(resolved_env));
+        parts.push("command -v tmux && command -v claude && echo OK".to_string());
+        let remote_cmd = parts.join(" && ");
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
     pub fn build_check_tmux_command(&self, session_id: &str) -> Command {
@@ -227,10 +237,14 @@ impl SshRuntime {
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
-    pub fn build_run_command(&self, command: &str, working_dir: &std::path::Path) -> Command {
+    pub fn build_run_command(&self, command: &str, working_dir: &std::path::Path, resolved_env: &HashMap<String, String>) -> Command {
         let escaped_dir = shell_escape(&working_dir.to_string_lossy());
-        let remote_cmd = format!("cd {} && {}", escaped_dir, command);
-        ssh_command(&self.ssh_host, &remote_cmd)
+        let mut parts: Vec<String> = Vec::new();
+        parts.extend(env_export_parts(resolved_env));
+        parts.push(format!("cd {}", escaped_dir));
+        parts.push(command.to_string());
+        let remote_cmd = parts.join(" && ");
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
     /// Parse the combined output of tmux check and last log line into a RemoteState.
@@ -356,6 +370,7 @@ impl RuntimeProvider for SshRuntime {
     }
 
     async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess> {
+        let env = self.resolve_env().await?;
         let start = std::time::Instant::now();
         let session_id = uuid::Uuid::new_v4().to_string();
 
@@ -369,9 +384,9 @@ impl RuntimeProvider for SshRuntime {
             anyhow::bail!("Failed to set up remote log directory: {}", stderr);
         }
 
-        // Start tmux session with claude on remote
+        // Start tmux session with resolved env
         let tmux_output = self
-            .build_tmux_command(&session_id, invocation)
+            .build_tmux_command(&session_id, invocation, &env)
             .output()
             .await?;
         if !tmux_output.status.success() {
@@ -434,7 +449,8 @@ impl RuntimeProvider for SshRuntime {
     }
 
     async fn health_check(&self) -> Result<()> {
-        let output = self.build_health_check_command().output().await?;
+        let env = self.resolve_env().await?;
+        let output = self.build_health_check_command(&env).output().await?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         if !stdout.contains("OK") {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -457,8 +473,9 @@ impl RuntimeProvider for SshRuntime {
         working_dir: &std::path::Path,
         timeout: std::time::Duration,
     ) -> Result<CommandOutput> {
+        let env = self.resolve_env().await?;
         let child = self
-            .build_run_command(command, working_dir)
+            .build_run_command(command, working_dir, &env)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
@@ -475,6 +492,41 @@ impl RuntimeProvider for SshRuntime {
             Err(_) => {
                 // child is dropped here, kill_on_drop(true) ensures cleanup
                 anyhow::bail!("Command timed out after {:?}", timeout)
+            }
+        }
+    }
+
+    async fn resolve_env(&self) -> Result<HashMap<String, String>> {
+        // Check cache first
+        if let Some(cached) = self.env_cache.get(&self.ssh_host) {
+            return Ok(cached.clone());
+        }
+
+        // Snapshot via SSH
+        let host = self.ssh_host.clone();
+        match shell_env::snapshot_shell_env(
+            |cmd| {
+                let host = host.clone();
+                async move {
+                    let output = ssh_command_raw(&host, &cmd).output().await?;
+                    Ok(output)
+                }
+            },
+            shell_env::SSH_TIMEOUT,
+            shell_env::SSH_DENYLIST,
+        )
+        .await
+        {
+            Ok(env) => {
+                self.env_cache.insert(self.ssh_host.clone(), env.clone());
+                Ok(env)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "failed to snapshot SSH shell environment for {}, falling back to empty env: {e}",
+                    self.ssh_host
+                );
+                Ok(HashMap::new())
             }
         }
     }
@@ -500,6 +552,11 @@ pub(crate) fn parse_log_lines(input: &str) -> Vec<StreamEvent> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
+    fn test_cache() -> std::sync::Arc<dashmap::DashMap<String, HashMap<String, String>>> {
+        std::sync::Arc::new(dashmap::DashMap::new())
+    }
 
     // ── shell_escape tests ──────────────────────────────────────────
 
@@ -798,31 +855,31 @@ mod tests {
 
     #[test]
     fn ssh_runtime_new_stores_host() {
-        let rt = SshRuntime::new("devbox.example.com", "/home/user/project");
+        let rt = SshRuntime::new("devbox.example.com", "/home/user/project", test_cache());
         assert_eq!(rt.ssh_host, "devbox.example.com");
     }
 
     #[test]
     fn ssh_runtime_new_stores_remote_path() {
-        let rt = SshRuntime::new("devbox.example.com", "/home/user/project");
+        let rt = SshRuntime::new("devbox.example.com", "/home/user/project", test_cache());
         assert_eq!(rt.remote_path, "/home/user/project");
     }
 
     #[test]
     fn ssh_runtime_name_returns_ssh() {
-        let rt = SshRuntime::new("devbox.example.com", "/home/user/project");
+        let rt = SshRuntime::new("devbox.example.com", "/home/user/project", test_cache());
         assert_eq!(rt.name(), "ssh");
     }
 
     #[test]
     fn ssh_runtime_new_with_user_at_host() {
-        let rt = SshRuntime::new("beth@devbox.example.com", "/home/beth/repos");
+        let rt = SshRuntime::new("beth@devbox.example.com", "/home/beth/repos", test_cache());
         assert_eq!(rt.ssh_host, "beth@devbox.example.com");
     }
 
     #[test]
     fn ssh_runtime_new_with_ip_address() {
-        let rt = SshRuntime::new("192.168.1.100", "/opt/project");
+        let rt = SshRuntime::new("192.168.1.100", "/opt/project", test_cache());
         assert_eq!(rt.ssh_host, "192.168.1.100");
     }
 
@@ -830,7 +887,7 @@ mod tests {
 
     #[test]
     fn build_mkdir_command_creates_log_directory() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_mkdir_command();
         let std_cmd = cmd.as_std();
 
@@ -847,7 +904,7 @@ mod tests {
 
     #[test]
     fn build_mkdir_command_targets_correct_host() {
-        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos", test_cache());
         let cmd = rt.build_mkdir_command();
         let std_cmd = cmd.as_std();
 
@@ -863,7 +920,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_contains_session_name() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "abc-123";
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
@@ -872,7 +929,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command(session_id, &invocation);
+        let cmd = rt.build_tmux_command(session_id, &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -888,7 +945,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_uses_tmux_new_session_detached() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -896,7 +953,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -912,7 +969,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_includes_cd_to_remote_path() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -920,7 +977,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -939,7 +996,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_includes_claude_with_stream_json() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "do something".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -947,7 +1004,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -973,7 +1030,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_includes_stderr_redirect() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "abc-123";
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
@@ -982,7 +1039,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command(session_id, &invocation);
+        let cmd = rt.build_tmux_command(session_id, &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -998,7 +1055,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_pipes_to_tee_with_log_path() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "abc-123";
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
@@ -1007,7 +1064,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command(session_id, &invocation);
+        let cmd = rt.build_tmux_command(session_id, &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1023,7 +1080,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_includes_model_when_specified() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1031,7 +1088,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1047,7 +1104,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_excludes_model_when_none() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1055,7 +1112,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1071,7 +1128,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_includes_extra_args() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1082,7 +1139,7 @@ mod tests {
             ],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1103,7 +1160,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_embeds_prompt_in_command() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "Fix the bug in main.rs".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1111,7 +1168,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1128,7 +1185,7 @@ mod tests {
 
     #[test]
     fn build_tail_command_follows_correct_log_file() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "abc-123";
         let cmd = rt.build_tail_command(session_id);
         let std_cmd = cmd.as_std();
@@ -1146,7 +1203,7 @@ mod tests {
 
     #[test]
     fn build_tail_command_targets_correct_host() {
-        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos", test_cache());
         let cmd = rt.build_tail_command("sess-1");
         let std_cmd = cmd.as_std();
 
@@ -1162,8 +1219,8 @@ mod tests {
 
     #[test]
     fn build_health_check_command_checks_tmux_and_claude() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
-        let cmd = rt.build_health_check_command();
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let cmd = rt.build_health_check_command(&HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1189,8 +1246,8 @@ mod tests {
 
     #[test]
     fn build_health_check_command_targets_correct_host() {
-        let rt = SshRuntime::new("user@10.0.0.1", "/opt/repos/app");
-        let cmd = rt.build_health_check_command();
+        let rt = SshRuntime::new("user@10.0.0.1", "/opt/repos/app", test_cache());
+        let cmd = rt.build_health_check_command(&HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1207,7 +1264,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_escapes_remote_path_with_spaces() {
-        let rt = SshRuntime::new("devbox", "/home/user/my project");
+        let rt = SshRuntime::new("devbox", "/home/user/my project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/my project"),
@@ -1215,7 +1272,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1235,7 +1292,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_escapes_prompt_with_single_quotes() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "Fix the bug in it's parser".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1243,7 +1300,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1266,7 +1323,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_escapes_prompt_with_double_quotes() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: r#"Fix the "broken" function"#.to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1274,7 +1331,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1290,7 +1347,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_escapes_prompt_with_shell_metacharacters() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "Run $(whoami) && echo $HOME | cat".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1298,7 +1355,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1316,7 +1373,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_handles_empty_prompt() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1324,7 +1381,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1339,7 +1396,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_session_id_appears_in_tmux_name_and_log_and_stderr() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "550e8400-e29b-41d4-a716-446655440000";
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
@@ -1348,7 +1405,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command(session_id, &invocation);
+        let cmd = rt.build_tmux_command(session_id, &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1378,7 +1435,7 @@ mod tests {
 
     #[test]
     fn build_tail_command_session_id_in_log_path() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "my-session-42";
         let cmd = rt.build_tail_command(session_id);
         let std_cmd = cmd.as_std();
@@ -1398,7 +1455,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_with_model_and_extra_args() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1409,7 +1466,7 @@ mod tests {
             ],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1432,7 +1489,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_targets_correct_host() {
-        let rt = SshRuntime::new("deploy@prod-server.internal", "/srv/app");
+        let rt = SshRuntime::new("deploy@prod-server.internal", "/srv/app", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/srv/app"),
@@ -1440,7 +1497,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1457,7 +1514,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_uses_ssh_with_batch_mode() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1465,7 +1522,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1481,8 +1538,8 @@ mod tests {
 
     #[test]
     fn build_health_check_command_uses_ssh_with_batch_mode() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
-        let cmd = rt.build_health_check_command();
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let cmd = rt.build_health_check_command(&HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1500,7 +1557,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_handles_multiline_prompt() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "Fix the bug.\nThen run the tests.\nReport results.".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1508,7 +1565,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1530,7 +1587,7 @@ mod tests {
 
     #[test]
     fn build_tmux_command_handles_prompt_with_backticks() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let invocation = ClaudeInvocation {
             prompt: "Explain what `main()` does".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
@@ -1538,7 +1595,7 @@ mod tests {
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
-        let cmd = rt.build_tmux_command("sess-1", &invocation);
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1557,7 +1614,7 @@ mod tests {
 
     #[test]
     fn build_check_tmux_command_contains_tmux_has_session() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_check_tmux_command("abc-123");
         let std_cmd = cmd.as_std();
 
@@ -1574,7 +1631,7 @@ mod tests {
 
     #[test]
     fn build_check_tmux_command_echoes_alive_or_dead() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_check_tmux_command("abc-123");
         let std_cmd = cmd.as_std();
 
@@ -1596,7 +1653,7 @@ mod tests {
 
     #[test]
     fn build_check_tmux_command_suppresses_stderr() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_check_tmux_command("abc-123");
         let std_cmd = cmd.as_std();
 
@@ -1613,7 +1670,7 @@ mod tests {
 
     #[test]
     fn build_check_tmux_command_targets_correct_host() {
-        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos", test_cache());
         let cmd = rt.build_check_tmux_command("sess-1");
         let std_cmd = cmd.as_std();
 
@@ -1629,7 +1686,7 @@ mod tests {
 
     #[test]
     fn build_check_tmux_command_substitutes_session_id() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "550e8400-e29b-41d4-a716-446655440000";
         let cmd = rt.build_check_tmux_command(session_id);
         let std_cmd = cmd.as_std();
@@ -1649,7 +1706,7 @@ mod tests {
 
     #[test]
     fn build_tail_last_line_command_tails_one_line() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_tail_last_line_command("abc-123");
         let std_cmd = cmd.as_std();
 
@@ -1666,7 +1723,7 @@ mod tests {
 
     #[test]
     fn build_tail_last_line_command_targets_correct_host() {
-        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos", test_cache());
         let cmd = rt.build_tail_last_line_command("sess-1");
         let std_cmd = cmd.as_std();
 
@@ -1682,7 +1739,7 @@ mod tests {
 
     #[test]
     fn build_tail_last_line_command_substitutes_session_id() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "my-session-42";
         let cmd = rt.build_tail_last_line_command(session_id);
         let std_cmd = cmd.as_std();
@@ -1702,7 +1759,7 @@ mod tests {
 
     #[test]
     fn build_recover_command_tails_from_line() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_recover_command("abc-123", 42);
         let std_cmd = cmd.as_std();
 
@@ -1719,7 +1776,7 @@ mod tests {
 
     #[test]
     fn build_recover_command_targets_correct_host() {
-        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos", test_cache());
         let cmd = rt.build_recover_command("sess-1", 1);
         let std_cmd = cmd.as_std();
 
@@ -1735,7 +1792,7 @@ mod tests {
 
     #[test]
     fn build_recover_command_substitutes_session_id() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "550e8400-e29b-41d4";
         let cmd = rt.build_recover_command(session_id, 100);
         let std_cmd = cmd.as_std();
@@ -1753,7 +1810,7 @@ mod tests {
 
     #[test]
     fn build_recover_command_uses_correct_from_line() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_recover_command("abc-123", 999);
         let std_cmd = cmd.as_std();
 
@@ -1770,7 +1827,7 @@ mod tests {
 
     #[test]
     fn build_recover_command_does_not_follow() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_recover_command("abc-123", 1);
         let std_cmd = cmd.as_std();
 
@@ -1790,7 +1847,7 @@ mod tests {
 
     #[test]
     fn build_resume_tail_command_follows_from_line() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_resume_tail_command("abc-123", 42);
         let std_cmd = cmd.as_std();
 
@@ -1807,7 +1864,7 @@ mod tests {
 
     #[test]
     fn build_resume_tail_command_targets_correct_host() {
-        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos", test_cache());
         let cmd = rt.build_resume_tail_command("sess-1", 1);
         let std_cmd = cmd.as_std();
 
@@ -1823,7 +1880,7 @@ mod tests {
 
     #[test]
     fn build_resume_tail_command_substitutes_session_id() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "my-session-42";
         let cmd = rt.build_resume_tail_command(session_id, 10);
         let std_cmd = cmd.as_std();
@@ -1841,7 +1898,7 @@ mod tests {
 
     #[test]
     fn build_resume_tail_command_uses_correct_from_line() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_resume_tail_command("abc-123", 500);
         let std_cmd = cmd.as_std();
 
@@ -1860,7 +1917,7 @@ mod tests {
 
     #[test]
     fn build_cleanup_command_removes_log_and_stderr() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_cleanup_command("abc-123");
         let std_cmd = cmd.as_std();
 
@@ -1887,7 +1944,7 @@ mod tests {
 
     #[test]
     fn build_cleanup_command_targets_correct_host() {
-        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos", test_cache());
         let cmd = rt.build_cleanup_command("sess-1");
         let std_cmd = cmd.as_std();
 
@@ -1903,7 +1960,7 @@ mod tests {
 
     #[test]
     fn build_cleanup_command_substitutes_session_id() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "550e8400-e29b-41d4-a716-446655440000";
         let cmd = rt.build_cleanup_command(session_id);
         let std_cmd = cmd.as_std();
@@ -1931,7 +1988,7 @@ mod tests {
 
     #[test]
     fn build_get_stderr_command_cats_stderr_file() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_get_stderr_command("abc-123");
         let std_cmd = cmd.as_std();
 
@@ -1948,7 +2005,7 @@ mod tests {
 
     #[test]
     fn build_get_stderr_command_suppresses_errors() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let cmd = rt.build_get_stderr_command("abc-123");
         let std_cmd = cmd.as_std();
 
@@ -1965,7 +2022,7 @@ mod tests {
 
     #[test]
     fn build_get_stderr_command_targets_correct_host() {
-        let rt = SshRuntime::new("beth@server", "/home/beth/repos");
+        let rt = SshRuntime::new("beth@server", "/home/beth/repos", test_cache());
         let cmd = rt.build_get_stderr_command("sess-1");
         let std_cmd = cmd.as_std();
 
@@ -1981,7 +2038,7 @@ mod tests {
 
     #[test]
     fn build_get_stderr_command_substitutes_session_id() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "550e8400-e29b-41d4";
         let cmd = rt.build_get_stderr_command(session_id);
         let std_cmd = cmd.as_std();
@@ -2221,9 +2278,9 @@ mod tests {
 
     #[test]
     fn build_run_command_wraps_with_cd() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let working_dir = PathBuf::from("/some/path");
-        let cmd = rt.build_run_command("ls -la", &working_dir);
+        let cmd = rt.build_run_command("ls -la", &working_dir, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -2239,9 +2296,9 @@ mod tests {
 
     #[test]
     fn build_run_command_uses_ssh_command() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let working_dir = PathBuf::from("/some/path");
-        let cmd = rt.build_run_command("echo hello", &working_dir);
+        let cmd = rt.build_run_command("echo hello", &working_dir, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         if cfg!(target_os = "windows") {
@@ -2261,26 +2318,31 @@ mod tests {
 
     #[cfg(not(target_os = "windows"))]
     #[test]
-    fn build_run_command_wraps_in_login_shell() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+    fn build_run_command_uses_raw_ssh_without_login_shell() {
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let working_dir = PathBuf::from("/some/path");
-        let cmd = rt.build_run_command("ls -la", &working_dir);
+        let cmd = rt.build_run_command("ls -la", &working_dir, &HashMap::new());
         let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
         let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
         let last_arg = args_str.last().expect("should have args");
 
         assert!(
-            last_arg.starts_with("$SHELL -lc "),
-            "expected last arg to start with '$SHELL -lc ', got: {}",
+            !last_arg.starts_with("$SHELL -lc "),
+            "expected last arg to NOT start with '$SHELL -lc ' (env is pre-resolved), got: {}",
+            last_arg
+        );
+        assert!(
+            last_arg.contains("ls -la"),
+            "expected command to still contain 'ls -la', got: {}",
             last_arg
         );
     }
 
     #[test]
     fn build_run_command_escapes_working_dir_with_spaces() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let working_dir = PathBuf::from("/path with spaces");
-        let cmd = rt.build_run_command("ls", &working_dir);
+        let cmd = rt.build_run_command("ls", &working_dir, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -2296,9 +2358,9 @@ mod tests {
 
     #[test]
     fn build_run_command_includes_original_command() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let working_dir = PathBuf::from("/some/path");
-        let cmd = rt.build_run_command("cargo test --release", &working_dir);
+        let cmd = rt.build_run_command("cargo test --release", &working_dir, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -2314,9 +2376,9 @@ mod tests {
 
     #[test]
     fn build_run_command_escapes_working_dir_with_single_quotes() {
-        let rt = SshRuntime::new("devbox", "/home/user/project");
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let working_dir = PathBuf::from("/home/user/it's a dir");
-        let cmd = rt.build_run_command("ls", &working_dir);
+        let cmd = rt.build_run_command("ls", &working_dir, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -2334,5 +2396,187 @@ mod tests {
             "expected 'cd' in command, got: {}",
             all_args
         );
+    }
+
+    // ── env_cache field tests ───────────────────────────────────────
+
+    #[test]
+    fn ssh_runtime_new_stores_env_cache() {
+        let cache = test_cache();
+        cache.insert(
+            "other-host".to_string(),
+            HashMap::from([("K".to_string(), "V".to_string())]),
+        );
+        let rt = SshRuntime::new("myhost", "/path", cache.clone());
+        // The runtime should store the same Arc — verify by checking the existing entry
+        assert!(rt.env_cache.contains_key("other-host"));
+    }
+
+    // ── build_tmux_command with resolved env tests ──────────────────
+
+    #[test]
+    fn build_tmux_command_includes_resolved_env_exports() {
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let invocation = ClaudeInvocation {
+            prompt: "hello".to_string(),
+            working_dir: PathBuf::from("/home/user/project"),
+            model: None,
+            extra_args: vec![],
+            env_vars: HashMap::new(),
+        };
+        let mut resolved_env = HashMap::new();
+        resolved_env.insert("HOME".to_string(), "/home/user".to_string());
+        resolved_env.insert("PATH".to_string(), "/usr/bin:/bin".to_string());
+
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &resolved_env);
+        let std_cmd = cmd.as_std();
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("export HOME=") && all_args.contains("/home/user"),
+            "command should contain resolved HOME export, got: {all_args}"
+        );
+        assert!(
+            all_args.contains("export PATH=") && all_args.contains("/usr/bin:/bin"),
+            "command should contain resolved PATH export, got: {all_args}"
+        );
+    }
+
+    #[test]
+    fn build_tmux_command_with_empty_resolved_env_still_works() {
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let invocation = ClaudeInvocation {
+            prompt: "hello".to_string(),
+            working_dir: PathBuf::from("/home/user/project"),
+            model: None,
+            extra_args: vec![],
+            env_vars: HashMap::new(),
+        };
+        let resolved_env = HashMap::new();
+
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &resolved_env);
+        let std_cmd = cmd.as_std();
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("claude -p"),
+            "command should still contain claude invocation with empty env, got: {all_args}"
+        );
+    }
+
+    #[test]
+    fn build_tmux_command_invocation_env_vars_still_present_with_resolved_env() {
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let invocation = ClaudeInvocation {
+            prompt: "hello".to_string(),
+            working_dir: PathBuf::from("/home/user/project"),
+            model: None,
+            extra_args: vec![],
+            env_vars: HashMap::from([("MY_VAR".to_string(), "my_value".to_string())]),
+        };
+        let mut resolved_env = HashMap::new();
+        resolved_env.insert("HOME".to_string(), "/home/user".to_string());
+
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &resolved_env);
+        let std_cmd = cmd.as_std();
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("export MY_VAR=") && all_args.contains("my_value"),
+            "command should contain invocation env_vars export, got: {all_args}"
+        );
+        assert!(
+            all_args.contains("export HOME=") && all_args.contains("/home/user"),
+            "command should also contain resolved env export, got: {all_args}"
+        );
+    }
+
+    // ── build_run_command with resolved env tests ───────────────────
+
+    #[test]
+    fn build_run_command_includes_resolved_env_exports() {
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let mut resolved_env = HashMap::new();
+        resolved_env.insert("HOME".to_string(), "/home/user".to_string());
+        resolved_env.insert("PATH".to_string(), "/usr/bin".to_string());
+
+        let cmd = rt.build_run_command("ls -la", &PathBuf::from("/home/user/project"), &resolved_env);
+        let std_cmd = cmd.as_std();
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("export HOME="),
+            "command should contain resolved HOME export, got: {all_args}"
+        );
+        assert!(
+            all_args.contains("export PATH="),
+            "command should contain resolved PATH export, got: {all_args}"
+        );
+        assert!(
+            all_args.contains("ls -la"),
+            "command should still contain the actual command, got: {all_args}"
+        );
+    }
+
+    #[test]
+    fn build_run_command_with_empty_resolved_env() {
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let resolved_env = HashMap::new();
+
+        let cmd = rt.build_run_command("ls -la", &PathBuf::from("/home/user/project"), &resolved_env);
+        let std_cmd = cmd.as_std();
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("ls -la"),
+            "command should contain the actual command even with empty env, got: {all_args}"
+        );
+    }
+
+    // ── build_health_check_command with resolved env tests ──────────
+
+    #[test]
+    fn build_health_check_command_includes_resolved_env_exports() {
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let mut resolved_env = HashMap::new();
+        resolved_env.insert("PATH".to_string(), "/usr/bin:/home/user/.local/bin".to_string());
+
+        let cmd = rt.build_health_check_command(&resolved_env);
+        let std_cmd = cmd.as_std();
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+
+        assert!(
+            all_args.contains("export PATH="),
+            "health check should contain resolved PATH export, got: {all_args}"
+        );
+        assert!(
+            all_args.contains("command -v tmux") && all_args.contains("command -v claude"),
+            "health check should still verify tmux and claude, got: {all_args}"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_env_returns_cached_value() {
+        let cache = test_cache();
+        let expected = HashMap::from([
+            ("PATH".to_string(), "/usr/bin".to_string()),
+            ("HOME".to_string(), "/home/user".to_string()),
+        ]);
+        cache.insert("devbox".to_string(), expected.clone());
+        let rt = SshRuntime::new("devbox", "/path", cache);
+        let result = rt.resolve_env().await.unwrap();
+        assert_eq!(result, expected, "resolve_env should return cached value");
     }
 }

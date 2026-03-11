@@ -185,7 +185,7 @@ async fn run_session(
             result
         }
         RepoType::Ssh { ssh_host, remote_path } => {
-            let ssh_runtime = SshRuntime::new(ssh_host, remote_path);
+            let ssh_runtime = SshRuntime::new(ssh_host, remote_path, std::sync::Arc::new(dashmap::DashMap::new()));
 
             let plan_path = {
                 let p = std::path::Path::new(&plan_file);
@@ -494,7 +494,7 @@ fn resolve_runtime(repo: &RepoType) -> (Box<dyn RuntimeProvider>, PathBuf) {
     match repo {
         RepoType::Local { path } => (default_runtime(), PathBuf::from(path)),
         RepoType::Ssh { ssh_host, remote_path } => {
-            (Box::new(SshRuntime::new(ssh_host, remote_path)), PathBuf::from(remote_path))
+            (Box::new(SshRuntime::new(ssh_host, remote_path, std::sync::Arc::new(dashmap::DashMap::new()))), PathBuf::from(remote_path))
         }
     }
 }
