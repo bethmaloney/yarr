@@ -1,6 +1,7 @@
 import type { IterationGroup } from "../iteration-groups";
 import { eventEmoji, eventLabel } from "../event-format";
 import { formatTokenCount, contextBarColor } from "../context-bar";
+import Markdown from "react-markdown";
 
 interface IterationGroupProps {
   group: IterationGroup;
@@ -116,7 +117,25 @@ export function IterationGroupComponent({
                   <span className="event-time shrink-0 text-[#555] text-xs">{formatTime(ev._ts)}</span>
                 </button>
 
-                {isExpanded && ev.kind === "tool_use" && ev.tool_input && (
+                {isExpanded && ev.kind === "tool_use" && ev.tool_input && ev.tool_name === "Agent" && (
+                  <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded text-xs text-[#9ca3af]">
+                    {Object.entries(ev.tool_input)
+                      .filter(([key]) => key !== "prompt")
+                      .map(([key, value]) => (
+                        <div key={key} className="flex gap-2 py-0.5">
+                          <span className="font-semibold text-[#a78bfa]">{key}:</span>
+                          <span>{typeof value === "object" ? JSON.stringify(value) : String(value)}</span>
+                        </div>
+                      ))}
+                    {typeof ev.tool_input.prompt === "string" && (
+                      <div className="mt-2 border-t border-[#2a2a3e] pt-2">
+                        <Markdown>{ev.tool_input.prompt}</Markdown>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isExpanded && ev.kind === "tool_use" && ev.tool_input && ev.tool_name !== "Agent" && (
                   <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
                     {JSON.stringify(ev.tool_input, null, 2)}
                   </pre>

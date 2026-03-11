@@ -675,4 +675,256 @@ describe("IterationGroupComponent", () => {
     ).toBeInTheDocument();
     expect(expectedLabel).toContain("/home/beth/repos/yarr/src/main.ts");
   });
+
+  // =========================================================================
+  // 20. Agent tool_use detail: Structured view instead of raw JSON
+  // =========================================================================
+
+  it("renders Agent metadata fields when an Agent tool_use event is expanded", () => {
+    const toolInput = {
+      description: "Research the codebase structure",
+      model: "claude-sonnet-4-20250514",
+      subagent_type: "research",
+      prompt: "Look at the src/ directory and summarize the architecture.",
+    };
+    const events = [
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Agent",
+        tool_input: toolInput,
+        iteration: 1,
+      }),
+    ];
+    const group = makeGroup({ events });
+    const expandedEvents = new Set([0]);
+
+    renderComponent({
+      expanded: true,
+      group,
+      expandedEvents,
+      globalStartIndex: 0,
+    });
+
+    // Metadata fields (model, subagent_type) should be rendered as
+    // structured key-value pairs outside of <pre> elements.
+    // These values do NOT appear in the event label, so they should
+    // only be present in the detail area.
+    const preElements = document.querySelectorAll("pre");
+    const preTexts = Array.from(preElements).map(
+      (pre) => pre.textContent ?? "",
+    );
+
+    // Collect text from all leaf-level elements that are not inside <pre>
+    function getTextOutsidePre(): string {
+      const body = document.body;
+      const walker = document.createTreeWalker(
+        body,
+        NodeFilter.SHOW_TEXT,
+        {
+          acceptNode(node) {
+            let parent = node.parentElement;
+            while (parent) {
+              if (parent.tagName === "PRE") return NodeFilter.FILTER_REJECT;
+              parent = parent.parentElement;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          },
+        },
+      );
+      const texts: string[] = [];
+      while (walker.nextNode()) {
+        texts.push(walker.currentNode.textContent ?? "");
+      }
+      return texts.join(" ");
+    }
+
+    const textOutsidePre = getTextOutsidePre();
+
+    // model and subagent_type should appear outside of <pre> blocks
+    expect(textOutsidePre).toContain("claude-sonnet-4-20250514");
+    expect(textOutsidePre).toContain("research");
+  });
+
+  it("renders Agent prompt content when an Agent tool_use event is expanded", () => {
+    const toolInput = {
+      description: "Analyze code",
+      model: "claude-sonnet-4-20250514",
+      subagent_type: "research",
+      prompt: "Look at the src/ directory and summarize the architecture.",
+    };
+    const events = [
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Agent",
+        tool_input: toolInput,
+        iteration: 1,
+      }),
+    ];
+    const group = makeGroup({ events });
+    const expandedEvents = new Set([0]);
+
+    renderComponent({
+      expanded: true,
+      group,
+      expandedEvents,
+      globalStartIndex: 0,
+    });
+
+    // The prompt text should appear outside of the raw JSON <pre> block,
+    // rendered as content (e.g. via react-markdown or similar).
+    function getTextOutsidePre(): string {
+      const body = document.body;
+      const walker = document.createTreeWalker(
+        body,
+        NodeFilter.SHOW_TEXT,
+        {
+          acceptNode(node) {
+            let parent = node.parentElement;
+            while (parent) {
+              if (parent.tagName === "PRE") return NodeFilter.FILTER_REJECT;
+              parent = parent.parentElement;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          },
+        },
+      );
+      const texts: string[] = [];
+      while (walker.nextNode()) {
+        texts.push(walker.currentNode.textContent ?? "");
+      }
+      return texts.join(" ");
+    }
+
+    const textOutsidePre = getTextOutsidePre();
+    expect(textOutsidePre).toContain(
+      "Look at the src/ directory and summarize the architecture.",
+    );
+  });
+
+  it("does not show raw JSON pre block for expanded Agent tool_use events", () => {
+    const toolInput = {
+      description: "Research the codebase structure",
+      model: "claude-sonnet-4-20250514",
+      subagent_type: "research",
+      prompt: "Look at the src/ directory and summarize the architecture.",
+    };
+    const events = [
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Agent",
+        tool_input: toolInput,
+        iteration: 1,
+      }),
+    ];
+    const group = makeGroup({ events });
+    const expandedEvents = new Set([0]);
+
+    renderComponent({
+      expanded: true,
+      group,
+      expandedEvents,
+      globalStartIndex: 0,
+    });
+
+    // The full JSON.stringify output should NOT appear in any <pre> block
+    const expectedJson = JSON.stringify(toolInput, null, 2);
+    const preElements = document.querySelectorAll("pre");
+    const found = Array.from(preElements).some((pre) =>
+      pre.textContent?.includes(expectedJson),
+    );
+    expect(found).toBe(false);
+  });
+
+  it("still shows raw JSON for non-Agent tool_use events when expanded", () => {
+    const toolInput = {
+      command: "ls -la",
+      description: "List files",
+    };
+    const events = [
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Bash",
+        tool_input: toolInput,
+        iteration: 1,
+      }),
+    ];
+    const group = makeGroup({ events });
+    const expandedEvents = new Set([0]);
+
+    renderComponent({
+      expanded: true,
+      group,
+      expandedEvents,
+      globalStartIndex: 0,
+    });
+
+    // Non-Agent tools should still render as raw JSON in a <pre> block
+    const expectedJson = JSON.stringify(toolInput, null, 2);
+    const preElements = document.querySelectorAll("pre");
+    const found = Array.from(preElements).some((pre) =>
+      pre.textContent?.includes(expectedJson),
+    );
+    expect(found).toBe(true);
+  });
+
+  it("renders Agent tool_use with no prompt field without crashing", () => {
+    const toolInput = {
+      description: "Quick check",
+      model: "opus",
+    };
+    const events = [
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Agent",
+        tool_input: toolInput,
+        iteration: 1,
+      }),
+    ];
+    const group = makeGroup({ events });
+    const expandedEvents = new Set([0]);
+
+    const { container } = renderComponent({
+      expanded: true,
+      group,
+      expandedEvents,
+      globalStartIndex: 0,
+    });
+
+    // The agent-detail div should exist
+    const agentDetail = container.querySelector(".agent-detail");
+    expect(agentDetail).not.toBeNull();
+
+    // Metadata fields should appear in the DOM
+    expect(agentDetail!.textContent).toContain("opus");
+    expect(agentDetail!.textContent).toContain("Quick check");
+  });
+
+  it("renders Agent tool_use with empty tool_input without crashing", () => {
+    const toolInput = {};
+    const events = [
+      makeEvent({
+        kind: "tool_use",
+        tool_name: "Agent",
+        tool_input: toolInput,
+        iteration: 1,
+      }),
+    ];
+    const group = makeGroup({ events });
+    const expandedEvents = new Set([0]);
+
+    const { container } = renderComponent({
+      expanded: true,
+      group,
+      expandedEvents,
+      globalStartIndex: 0,
+    });
+
+    // The agent-detail div should exist even with empty tool_input
+    const agentDetail = container.querySelector(".agent-detail");
+    expect(agentDetail).not.toBeNull();
+
+    // There should be no key-value pairs rendered inside
+    const keyValuePairs = agentDetail!.querySelectorAll(".flex.gap-2.py-0\\.5");
+    expect(keyValuePairs.length).toBe(0);
+  });
 });

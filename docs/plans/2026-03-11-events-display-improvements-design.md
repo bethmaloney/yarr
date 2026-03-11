@@ -121,9 +121,9 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 - Style markdown container with the same bg/border as existing detail blocks, but use prose-friendly text styling
 
 **Checklist:**
-- [ ] Install `react-markdown`
-- [ ] Add Agent-specific expanded detail rendering
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Install `react-markdown`
+- [x] Add Agent-specific expanded detail rendering
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -182,7 +182,7 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 | 2 | Tests for `toWslPath()` and `relativePath()` | Done |
 | 3 | Agent description in `toolSummary()` | Done |
 | 4 | Tests for Agent `toolSummary()` | Done |
-| 5 | Install `react-markdown` and render Agent prompt | Not Started |
+| 5 | Install `react-markdown` and render Agent prompt | Done |
 | 6 | Round cost to nearest cent | Not Started |
 | 7 | Add context percentage to iteration title | Not Started |
 | 8 | Tests for iteration title and cost changes | Not Started |
