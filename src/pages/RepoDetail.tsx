@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/command";
 import { toast } from "sonner";
 import { sessionContextColor } from "../context-bar";
+import { parsePlanPreview, planDisplayName } from "../plan-preview";
 import {
   Cpu,
   Repeat,
@@ -131,6 +132,12 @@ export default function RepoDetail() {
   const [planSearch, setPlanSearch] = useState("");
   const [plansLoading, setPlansLoading] = useState(false);
   const [plansError, setPlansError] = useState<string | null>(null);
+
+  // Session plan preview state (distinct from plan-selector preview)
+  const [sessionPlanParsed, setSessionPlanParsed] = useState<{
+    name: string;
+    excerpt: string;
+  } | null>(null);
 
   // 1-shot form state
   const [oneShotOpen, setOneShotOpen] = useState(false);
@@ -245,6 +252,42 @@ export default function RepoDetail() {
         }
       });
   }, [planFile]);
+
+  // Session plan preview — load and parse preview from the session's plan file
+  const sessionPlanFile = session.trace?.plan_file ?? null;
+  useEffect(() => {
+    if (!sessionPlanFile) {
+      setSessionPlanParsed(null);
+      return;
+    }
+    const currentPath = sessionPlanFile;
+
+    function tryPath(path: string) {
+      return invoke("read_file_preview", { path, maxLines: 8 }).then(
+        (result) => result as string,
+      );
+    }
+
+    // Build a fallback path with /completed/ inserted before the filename
+    function completedVariant(path: string): string {
+      const lastSep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+      if (lastSep < 0) return "completed/" + path;
+      return path.slice(0, lastSep) + "/completed" + path.slice(lastSep);
+    }
+
+    tryPath(currentPath)
+      .catch(() => tryPath(completedVariant(currentPath)))
+      .then((content) => {
+        if (currentPath === sessionPlanFile) {
+          setSessionPlanParsed(parsePlanPreview(content));
+        }
+      })
+      .catch(() => {
+        if (currentPath === sessionPlanFile) {
+          setSessionPlanParsed(null);
+        }
+      });
+  }, [sessionPlanFile]);
 
   // Clean up connection test listeners on unmount
   useEffect(() => {
@@ -1312,6 +1355,25 @@ export default function RepoDetail() {
           </div>
         )}
       </section>
+
+      {/* Session plan preview banner */}
+      {(() => {
+        const showSessionPlanBanner =
+          sessionPlanFile && !planFile && (session.running || session.trace) && sessionPlanParsed;
+        if (!showSessionPlanBanner) return null;
+        return (
+          <div className="bg-muted/50 border border-border rounded-md p-3 mb-4">
+            <p className="text-sm font-semibold">
+              {planDisplayName(sessionPlanFile, sessionPlanParsed.name)}
+            </p>
+            {sessionPlanParsed.excerpt && (
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                {sessionPlanParsed.excerpt}
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Disconnected banner */}
       {session.disconnected && (
