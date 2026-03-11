@@ -140,13 +140,13 @@ Replace the pretty-printed trace summary output with tracing calls.
 Manual verification that everything works together.
 
 **Checklist:**
-- [ ] `npx tauri dev` — confirm backend tracing output appears in terminal
-- [ ] Trigger a frontend `console.log` — confirm it appears in the same terminal
-- [ ] Check log file is created in `~/.local/share/com.yarr.desktop/logs/`
-- [ ] Set `RUST_LOG=debug` and confirm debug-level output appears
-- [ ] `npx tsc --noEmit`
-- [ ] `npm test`
-- [ ] `cd src-tauri && cargo test`
+- [ ] `npx tauri dev` — confirm backend tracing output appears in terminal (manual)
+- [ ] Trigger a frontend `console.log` — confirm it appears in the same terminal (manual)
+- [ ] Check log file is created in `~/.local/share/com.yarr.desktop/logs/` (manual)
+- [ ] Set `RUST_LOG=debug` and confirm debug-level output appears (manual)
+- [x] `npx tsc --noEmit`
+- [x] `npm test` — 745 tests passed
+- [x] `cd src-tauri && cargo test` — 361 tests passed
 
 ---
 
@@ -158,4 +158,4 @@ Manual verification that everything works together.
 | 2 | Add frontend log plugin and attach console | Done |
 | 3 | Migrate println!/eprintln! in session.rs | Done |
 | 4 | Migrate println! in trace.rs | Done |
-| 5 | Verify end-to-end logging | Not Started |
+| 5 | Verify end-to-end logging | Automated checks done; manual verification remaining |
