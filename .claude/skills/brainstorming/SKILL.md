@@ -72,7 +72,8 @@ End the plan with a **Progress Tracking** table:
 - DTOs, controllers, mappers, and validators should be separate tasks even if they're in the same folder.
 - Each endpoint or API method can be its own task when the logic is non-trivial.
 - UI components, query hooks, page composition, and route wiring should all be separate tasks.
-- Tests are always their own task — never bundled with the code they test.
+- Unit and integration tests should be included within the task for the code they test — not split into a separate task.
+- E2E tests should be their own task at the end of the plan, when appropriate.
 - Every task must end with a verification step (build, typecheck, lint, or test run).
 
 ## Key Principles
