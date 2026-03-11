@@ -540,10 +540,10 @@ Remove the old page file and its test file.
 - Delete `src/pages/OneShot.test.tsx`
 
 **Checklist:**
-- [ ] Files deleted
-- [ ] No remaining imports reference the old file
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm test` passes
+- [x] Files deleted
+- [x] No remaining imports reference the old file
+- [x] `npx tsc --noEmit` passes
+- [x] `npm test` passes
 
 ---
 
@@ -584,5 +584,5 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | 8 | OneShotDetail page with active/read-only modes | Done |
 | 9 | Home page mixed cards | Done |
 | 10 | RepoDetail 1-shot launch form | Done |
-| 11 | Delete old OneShot page | Not Started |
+| 11 | Delete old OneShot page | Done |
 | 12 | Update E2E tests | Not Started |
