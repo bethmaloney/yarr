@@ -54,14 +54,14 @@ Show a plan name and excerpt banner between the plan selector section and the ev
 **Pattern reference:** The existing plan preview at lines 225-247 and 1164-1167 in RepoDetail.tsx — `useEffect` that calls `read_file_preview` and shows content in a bounded container.
 
 **Checklist:**
-- [ ] Import `parsePlanPreview`, `planDisplayName` from `../plan-preview`
-- [ ] Add a new state: `sessionPlanPreview: string` and `sessionPlanLoading: boolean` for the *session's* plan preview (distinct from the plan-selector preview which uses `previewContent`)
-- [ ] Add a `useEffect` that triggers when `session.trace?.plan_file` changes or when a `session_start` event appears with a `plan_file`:
+- [x] Import `parsePlanPreview`, `planDisplayName` from `../plan-preview`
+- [x] Add a new state: `sessionPlanPreview: string` and `sessionPlanLoading: boolean` for the *session's* plan preview (distinct from the plan-selector preview which uses `previewContent`)
+- [x] Add a `useEffect` that triggers when `session.trace?.plan_file` changes or when a `session_start` event appears with a `plan_file`:
   - Determine the plan file path: use `session.trace?.plan_file` if available, otherwise look for the `plan_file` from the latest `session_complete` or first event with `plan_file`
   - If we have a plan path, call `invoke("read_file_preview", { path, maxLines: 8 })`
   - Store result in `sessionPlanPreview`
   - On error (file moved/deleted), try the `completed/` variant of the path (insert `/completed/` before the filename)
-- [ ] Render a plan banner section between the plan section (`</section>` at line 1306) and the disconnected banner / events list:
+- [x] Render a plan banner section between the plan section (`</section>` at line 1306) and the disconnected banner / events list:
   - Show plan display name (from `planDisplayName` + parsed heading) as a bold label
   - Show excerpt in muted text, truncated to 2 lines with `line-clamp-2`
   - Style: subtle card with `bg-muted/50 border border-border rounded-md p-3 mb-4`
@@ -135,7 +135,7 @@ Show the plan name and excerpt in the run detail summary.
 | Task | Status | Notes |
 |------|--------|-------|
 | 1. Plan preview utility | Done | `src/plan-preview.ts` |
-| 2. RepoDetail plan banner | Not started | Running + last session display |
+| 2. RepoDetail plan banner | Done | Running + last session display |
 | 3. RepoCard plan excerpt | Not started | Home page cards |
 | 4. RunDetail plan preview | Not started | Historical run detail |
 | 5. Unit tests | Done | `src/plan-preview.test.ts` — 26 tests |
