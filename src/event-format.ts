@@ -1,6 +1,45 @@
 import type { SessionEvent } from "./types";
 
 /**
+ * Convert a backslash-normalized path to its WSL equivalent.
+ *
+ * - `//wsl.localhost/Distro/path` or `//wsl$/Distro/path` → `/path`
+ * - `C:/rest` (drive letter) → `/mnt/c/rest`
+ * - Everything else passes through unchanged.
+ */
+export function toWslPath(path: string): string {
+  const wslLocalhostPrefix = "//wsl.localhost/";
+  const wslDollarPrefix = "//wsl$/";
+
+  if (path.startsWith(wslLocalhostPrefix)) {
+    const withoutPrefix = path.slice(wslLocalhostPrefix.length);
+    const pos = withoutPrefix.indexOf("/");
+    if (pos !== -1) {
+      return withoutPrefix.slice(pos);
+    }
+    return "/";
+  }
+
+  if (path.startsWith(wslDollarPrefix)) {
+    const withoutPrefix = path.slice(wslDollarPrefix.length);
+    const pos = withoutPrefix.indexOf("/");
+    if (pos !== -1) {
+      return withoutPrefix.slice(pos);
+    }
+    return "/";
+  }
+
+  // Drive letter pattern: single letter followed by :/
+  if (path.length >= 3 && /^[a-zA-Z]$/.test(path[0]) && path[1] === ":" && path[2] === "/") {
+    const drive = path[0].toLowerCase();
+    const rest = path.slice(3);
+    return `/mnt/${drive}/${rest}`;
+  }
+
+  return path;
+}
+
+/**
  * Convert an absolute file path to a relative path by stripping the repo root prefix.
  * Handles both Unix paths (/home/user/repo/src/file.ts) and Windows-style paths
  * (C:\Users\user\repo\src\file.ts), as well as mixed separators that can appear
@@ -12,9 +51,10 @@ export function relativePath(
 ): string {
   if (!repoPath) return filePath;
 
-  // Normalise separators to forward slashes for comparison
-  const normFile = filePath.replace(/\\/g, "/");
-  const normRepo = repoPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  // Normalise separators to forward slashes for comparison, then convert
+  // Windows/UNC paths to their WSL equivalents so both sides match.
+  const normFile = toWslPath(filePath.replace(/\\/g, "/"));
+  const normRepo = toWslPath(repoPath.replace(/\\/g, "/").replace(/\/+$/, ""));
 
   if (normFile.startsWith(normRepo + "/")) {
     return normFile.slice(normRepo.length + 1);

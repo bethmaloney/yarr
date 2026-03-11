@@ -54,9 +54,9 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 - Handle `X:/path` → `/mnt/x/path` (drive letter, after normalization)
 
 **Checklist:**
-- [ ] Add `toWslPath()` function
-- [ ] Update `relativePath()` to use it
-- [ ] Verify: `npm test -- event-format`
+- [x] Add `toWslPath()` function
+- [x] Update `relativePath()` to use it
+- [x] Verify: `npm test -- event-format`
 
 ---
 
@@ -72,9 +72,9 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 - Test that existing Unix-to-Unix matching still works
 
 **Checklist:**
-- [ ] Add `toWslPath` unit tests
-- [ ] Add `relativePath` tests with UNC repo paths
-- [ ] Verify: `npm test -- event-format`
+- [x] Add `toWslPath` unit tests
+- [x] Add `relativePath` tests with UNC repo paths
+- [x] Verify: `npm test -- event-format`
 
 ---
 
@@ -178,8 +178,8 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add `toWslPath()` and fix `relativePath()` | Not Started |
-| 2 | Tests for `toWslPath()` and `relativePath()` | Not Started |
+| 1 | Add `toWslPath()` and fix `relativePath()` | Done |
+| 2 | Tests for `toWslPath()` and `relativePath()` | Done |
 | 3 | Agent description in `toolSummary()` | Not Started |
 | 4 | Tests for Agent `toolSummary()` | Not Started |
 | 5 | Install `react-markdown` and render Agent prompt | Not Started |

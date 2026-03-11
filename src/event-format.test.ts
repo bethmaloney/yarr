@@ -4,6 +4,7 @@ import {
   eventLabel,
   toolSummary,
   relativePath,
+  toWslPath,
 } from "./event-format";
 import type { SessionEvent } from "./types";
 
@@ -334,6 +335,33 @@ describe("relativePath", () => {
       relativePath("/home/user/repo-extra/file.ts", "/home/user/repo"),
     ).toBe("/home/user/repo-extra/file.ts");
   });
+
+  it("handles UNC wsl.localhost repoPath with Unix filePath", () => {
+    expect(
+      relativePath(
+        "/home/beth/repos/yarr/src/file.ts",
+        "\\\\wsl.localhost\\Ubuntu-24.04\\home\\beth\\repos\\yarr",
+      ),
+    ).toBe("src/file.ts");
+  });
+
+  it("handles UNC wsl$ repoPath with Unix filePath", () => {
+    expect(
+      relativePath(
+        "/home/beth/repos/yarr/src/file.ts",
+        "\\\\wsl$\\Ubuntu-24.04\\home\\beth\\repos\\yarr",
+      ),
+    ).toBe("src/file.ts");
+  });
+
+  it("handles drive letter repoPath with /mnt/ filePath", () => {
+    expect(
+      relativePath(
+        "/mnt/c/Users/beth/repo/src/file.ts",
+        "C:\\Users\\beth\\repo",
+      ),
+    ).toBe("src/file.ts");
+  });
 });
 
 describe("toolSummary with repoPath", () => {
@@ -371,5 +399,49 @@ describe("toolSummary with repoPath", () => {
       tool_input: { description: "Check git status" },
     });
     expect(toolSummary(ev, "/home/user/repo")).toBe("Bash: Check git status");
+  });
+
+  it("shows relative path for Read tool with UNC repoPath", () => {
+    const ev = makeEvent({
+      kind: "tool_use",
+      tool_name: "Read",
+      tool_input: { file_path: "/home/beth/repos/yarr/src/main.ts" },
+    });
+    expect(
+      toolSummary(
+        ev,
+        "\\\\wsl.localhost\\Ubuntu-24.04\\home\\beth\\repos\\yarr",
+      ),
+    ).toBe("Read: src/main.ts");
+  });
+});
+
+describe("toWslPath", () => {
+  it("converts UNC //wsl.localhost/Distro/path to /path", () => {
+    expect(
+      toWslPath("//wsl.localhost/Ubuntu-24.04/home/beth/repos/yarr"),
+    ).toBe("/home/beth/repos/yarr");
+  });
+
+  it("converts UNC //wsl$/Distro/path to /path", () => {
+    expect(toWslPath("//wsl$/Ubuntu-24.04/home/beth/repos/yarr")).toBe(
+      "/home/beth/repos/yarr",
+    );
+  });
+
+  it("converts drive letter C:/path to /mnt/c/path", () => {
+    expect(toWslPath("C:/Users/beth/repo")).toBe("/mnt/c/Users/beth/repo");
+  });
+
+  it("converts lowercase drive letter d:/path to /mnt/d/path", () => {
+    expect(toWslPath("d:/projects/foo")).toBe("/mnt/d/projects/foo");
+  });
+
+  it("passes through Unix paths unchanged", () => {
+    expect(toWslPath("/home/user/repo")).toBe("/home/user/repo");
+  });
+
+  it("returns / for UNC path with only distro and no further path", () => {
+    expect(toWslPath("//wsl.localhost/Ubuntu-24.04")).toBe("/");
   });
 });
