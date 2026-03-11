@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { EventsList } from "@/components/EventsList";
+import { parsePlanPreview, planDisplayName } from "../plan-preview";
 import type { SessionTrace, SessionEvent } from "../types";
 
 function formatDate(iso: string): string {
@@ -50,12 +51,6 @@ function outcomeBadge(outcome: string): {
   }
 }
 
-function planFilename(path: string | null): string {
-  if (!path) return "\u2014";
-  const parts = path.split("/");
-  return parts[parts.length - 1] || path;
-}
-
 export default function RunDetail() {
   const { repoId, sessionId } = useParams<{
     repoId: string;
@@ -69,6 +64,10 @@ export default function RunDetail() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [planParsed, setPlanParsed] = useState<{
+    name: string;
+    excerpt: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +102,40 @@ export default function RunDetail() {
       }
     };
   }, []);
+
+  const tracePlanFile = trace?.plan_file ?? null;
+  useEffect(() => {
+    if (!tracePlanFile) {
+      setPlanParsed(null);
+      return;
+    }
+    const currentPath = tracePlanFile;
+
+    function tryPath(path: string) {
+      return invoke("read_file_preview", { path, maxLines: 8 }).then(
+        (result) => result as string,
+      );
+    }
+
+    function completedVariant(path: string): string {
+      const lastSep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+      if (lastSep < 0) return "completed/" + path;
+      return path.slice(0, lastSep) + "/completed" + path.slice(lastSep);
+    }
+
+    tryPath(currentPath)
+      .catch(() => tryPath(completedVariant(currentPath)))
+      .then((content) => {
+        if (currentPath === tracePlanFile) {
+          setPlanParsed(parsePlanPreview(content));
+        }
+      })
+      .catch(() => {
+        if (currentPath === tracePlanFile) {
+          setPlanParsed(null);
+        }
+      });
+  }, [tracePlanFile]);
 
   function handleCopy() {
     if (!trace) return;
@@ -180,7 +213,18 @@ export default function RunDetail() {
           )}
 
           <dt className="text-muted-foreground text-sm">Plan</dt>
-          <dd className="m-0 text-sm">{planFilename(trace.plan_file)}</dd>
+          <dd className="m-0 text-sm">
+            {planDisplayName(trace.plan_file, planParsed?.name)}
+          </dd>
+
+          {planParsed?.excerpt && (
+            <>
+              <dt className="text-muted-foreground text-sm">Plan Preview</dt>
+              <dd className="m-0 text-sm text-muted-foreground line-clamp-3">
+                {planParsed.excerpt}
+              </dd>
+            </>
+          )}
 
           <dt className="text-muted-foreground text-sm">Iterations</dt>
           <dd className="m-0 text-sm">{trace.total_iterations}</dd>

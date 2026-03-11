@@ -319,3 +319,139 @@ test.describe("RunDetail — iteration groups with token data", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Plan preview in RunDetail summary
+// ---------------------------------------------------------------------------
+
+async function navigateToRunDetailWithPlanPreview(
+  page: import("@playwright/test").Page,
+  mockTauri: (opts?: TauriMockOptions) => Promise<void>,
+  overrides?: {
+    trace?: typeof SAMPLE_TRACE;
+    readFilePreview?:
+      | string
+      | ((args: Record<string, unknown>) => string);
+  },
+) {
+  await mockTauri({
+    storeData: { repos: [REPO_FIXTURE] },
+    invokeHandlers: {
+      list_traces: [overrides?.trace ?? SAMPLE_TRACE],
+      get_trace: overrides?.trace ?? SAMPLE_TRACE,
+      get_trace_events: SAMPLE_EVENTS,
+      ...(overrides?.readFilePreview !== undefined
+        ? { read_file_preview: overrides.readFilePreview }
+        : {}),
+    },
+  });
+  await page.goto("/");
+
+  // Home -> History
+  await page.getByRole("button", { name: "History" }).click();
+  await expect(page.locator("h1", { hasText: "History" })).toBeVisible();
+
+  // History -> RunDetail (click the trace row)
+  await page.locator(".trace-row").first().click();
+  await expect(page.locator("h1", { hasText: "Run Detail" })).toBeVisible();
+}
+
+test.describe("RunDetail — plan preview", () => {
+  test("shows plan display name from H1 heading", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRunDetailWithPlanPreview(page, mockTauri, {
+      readFilePreview:
+        "# Fix Login Bug\nResolve the auth bypass in the login flow.",
+    });
+
+    const summary = page.locator(".summary");
+
+    // The plan row should show the extracted H1 heading, not the raw filename
+    const planDt = summary.locator("dt", { hasText: /^Plan$/ });
+    await expect(planDt).toBeVisible();
+
+    const planDd = planDt.locator("+ dd");
+    await expect(planDd).toContainText("Fix Login Bug");
+    await expect(planDd).not.toContainText("fix-login.md");
+  });
+
+  test("shows plan preview excerpt", async ({ page, mockTauri }) => {
+    await navigateToRunDetailWithPlanPreview(page, mockTauri, {
+      readFilePreview:
+        "# Fix Login Bug\nResolve the auth bypass in the login flow.",
+    });
+
+    const summary = page.locator(".summary");
+
+    // There should be a "Plan Preview" dt element
+    const previewDt = summary.locator("dt", { hasText: "Plan Preview" });
+    await expect(previewDt).toBeVisible();
+
+    // The dd following it should contain the excerpt text
+    const previewDd = previewDt.locator("+ dd");
+    await expect(previewDd).toContainText(
+      "Resolve the auth bypass in the login flow.",
+    );
+  });
+
+  test("falls back to filename when no heading in plan", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRunDetailWithPlanPreview(page, mockTauri, {
+      readFilePreview: "Just some plain text without a heading.",
+    });
+
+    const summary = page.locator(".summary");
+
+    // planDisplayName("plans/fix-login.md") with no parsed name → "fix-login"
+    const planDt = summary.locator("dt", { hasText: /^Plan$/ });
+    await expect(planDt).toBeVisible();
+
+    const planDd = planDt.locator("+ dd");
+    await expect(planDd).toContainText("fix-login");
+  });
+
+  test("shows excerpt from plain content (no heading)", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRunDetailWithPlanPreview(page, mockTauri, {
+      readFilePreview: "First line of plan content.\nSecond line.",
+    });
+
+    const summary = page.locator(".summary");
+
+    // "Plan Preview" row should exist with the excerpt text
+    const previewDt = summary.locator("dt", { hasText: "Plan Preview" });
+    await expect(previewDt).toBeVisible();
+
+    const previewDd = previewDt.locator("+ dd");
+    await expect(previewDd).toContainText("First line of plan content.");
+  });
+
+  test("hides plan preview row when no plan file", async ({
+    page,
+    mockTauri,
+  }) => {
+    const traceWithNoPlan = { ...SAMPLE_TRACE, plan_file: null };
+    await navigateToRunDetailWithPlanPreview(page, mockTauri, {
+      trace: traceWithNoPlan,
+    });
+
+    const summary = page.locator(".summary");
+
+    // Plan value should show em dash
+    const planDt = summary.locator("dt", { hasText: /^Plan$/ });
+    await expect(planDt).toBeVisible();
+
+    const planDd = planDt.locator("+ dd");
+    await expect(planDd).toContainText("\u2014");
+
+    // There should be NO "Plan Preview" dt element
+    const previewDt = summary.locator("dt", { hasText: "Plan Preview" });
+    await expect(previewDt).toHaveCount(0);
+  });
+});

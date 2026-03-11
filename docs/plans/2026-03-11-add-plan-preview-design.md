@@ -98,16 +98,17 @@ Show the plan name and excerpt in the run detail summary.
 **Pattern reference:** Lines 182-183 — existing plan filename display in the summary `<dl>`.
 
 **Checklist:**
-- [ ] Import `parsePlanPreview`, `planDisplayName` from `../plan-preview`
-- [ ] Add state: `planPreview: string` for the plan file content preview
-- [ ] Add `useEffect` watching `trace?.plan_file`:
+- [x] Import `parsePlanPreview`, `planDisplayName` from `../plan-preview`
+- [x] Add state: `planParsed: { name: string; excerpt: string } | null` for the plan file content preview
+- [x] Add `useEffect` watching `trace?.plan_file`:
   - Call `invoke("read_file_preview", { path: trace.plan_file, maxLines: 8 })`
   - On error, try the `completed/` variant path
-  - Store in `planPreview`
-- [ ] Replace the plain `planFilename()` display (line 183) with:
-  - Show `planDisplayName(trace.plan_file, parsedName)` as the plan value
-  - Add a new row below it: `<dt>Plan Preview</dt><dd>` with the excerpt in muted text, max 3 lines
-  - Only show the preview row if `planPreview` is non-empty
+  - Store in `planParsed`
+- [x] Replace the plain `planFilename()` display with:
+  - Show `planDisplayName(trace.plan_file, planParsed?.name)` as the plan value
+  - Add a new row below it: `<dt>Plan Preview</dt><dd>` with the excerpt in muted text, max 3 lines (`line-clamp-3`)
+  - Only show the preview row if `planParsed?.excerpt` is non-empty
+- [x] Removed dead `planFilename` helper function
 
 ### Task 5: Add Unit Tests for Plan Preview Utility
 
@@ -137,5 +138,5 @@ Show the plan name and excerpt in the run detail summary.
 | 1. Plan preview utility | Done | `src/plan-preview.ts` |
 | 2. RepoDetail plan banner | Done | Running + last session display |
 | 3. RepoCard plan excerpt | Done | Home page cards — `RepoCard.tsx`, `Home.tsx` |
-| 4. RunDetail plan preview | Not started | Historical run detail |
+| 4. RunDetail plan preview | Done | Historical run detail — `RunDetail.tsx`, E2E tests in `run-detail.test.ts` |
 | 5. Unit tests | Done | `src/plan-preview.test.ts` — 26 tests |
