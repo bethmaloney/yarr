@@ -129,9 +129,9 @@ Replace the pretty-printed trace summary output with tracing calls.
 - Remove decorative separators (`"=".repeat(60)`) — keep the content, lose the ASCII art
 
 **Checklist:**
-- [ ] Migrate all 16 println! calls in trace.rs
-- [ ] `cd src-tauri && cargo check`
-- [ ] `cd src-tauri && cargo test`
+- [x] Migrate all 16 println! calls in trace.rs
+- [x] `cd src-tauri && cargo check`
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -157,5 +157,5 @@ Manual verification that everything works together.
 | 1 | Add tauri-plugin-log Rust dependency and initialize | Done |
 | 2 | Add frontend log plugin and attach console | Done |
 | 3 | Migrate println!/eprintln! in session.rs | Done |
-| 4 | Migrate println! in trace.rs | Not Started |
+| 4 | Migrate println! in trace.rs | Done |
 | 5 | Verify end-to-end logging | Not Started |

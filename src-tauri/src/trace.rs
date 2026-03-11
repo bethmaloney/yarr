@@ -1690,52 +1690,234 @@ mod tests {
             other => panic!("expected SessionStarted, got {:?}", other),
         }
     }
+
+    #[test]
+    fn test_print_trace_summary_emits_tracing_output() {
+        use std::sync::{Arc, Mutex};
+        use tracing_subscriber::fmt;
+        use tracing_subscriber::fmt::MakeWriter;
+
+        // Newtype wrapper so we can implement io::Write for Arc<Mutex<Vec<u8>>>
+        #[derive(Clone)]
+        struct SharedWriter(Arc<Mutex<Vec<u8>>>);
+
+        impl std::io::Write for SharedWriter {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                self.0.lock().unwrap().flush()
+            }
+        }
+
+        impl<'a> MakeWriter<'a> for SharedWriter {
+            type Writer = SharedWriter;
+            fn make_writer(&'a self) -> Self::Writer {
+                self.clone()
+            }
+        }
+
+        let mut trace = make_test_trace(None);
+
+        // Add iteration spans so the per-iteration loop is exercised
+        let now = Utc::now();
+        let span1 = IterationSpan {
+            trace_id: trace.trace_id.clone(),
+            span_id: "span-iter-1".to_string(),
+            parent_span_id: trace.root_span_id.clone(),
+            operation_name: "ralph.iteration.1".to_string(),
+            start_time: now,
+            end_time: now + chrono::Duration::seconds(3),
+            duration_ms: 3000,
+            status: SpanStatus::Ok,
+            attributes: make_test_span_attrs(1, 60_000, 200_000),
+        };
+        let span2 = IterationSpan {
+            trace_id: trace.trace_id.clone(),
+            span_id: "span-iter-2".to_string(),
+            parent_span_id: trace.root_span_id.clone(),
+            operation_name: "ralph.iteration.2".to_string(),
+            start_time: now + chrono::Duration::seconds(3),
+            end_time: now + chrono::Duration::seconds(8),
+            duration_ms: 5000,
+            status: SpanStatus::Error,
+            attributes: SpanAttributes {
+                iteration: 2,
+                claude_session_id: None,
+                cost_usd: 0.07,
+                num_turns: Some(4),
+                api_duration_ms: Some(900),
+                completion_signal_found: false,
+                exit_code: 1,
+                result_preview: "failed".to_string(),
+                token_usage: TokenUsage {
+                    input_tokens: 2500,
+                    output_tokens: 800,
+                    cache_read_input_tokens: 300,
+                    cache_creation_input_tokens: 50,
+                },
+                model_token_usage: HashMap::from([(
+                    "test-model".to_string(),
+                    ModelTokenUsage {
+                        input_tokens: 2500,
+                        output_tokens: 800,
+                        cache_read_input_tokens: 300,
+                        cache_creation_input_tokens: 50,
+                        cost_usd: 0.07,
+                        context_window: 200_000,
+                        max_output_tokens: 32000,
+                    },
+                )]),
+                final_context_tokens: 80_000,
+            },
+        };
+        trace.iterations.push(span1);
+        trace.iterations.push(span2);
+
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let writer = SharedWriter(buffer.clone());
+
+        // Build a subscriber that writes to the shared buffer
+        let subscriber = fmt::Subscriber::builder()
+            .with_writer(writer)
+            .with_max_level(tracing::Level::INFO)
+            .without_time()
+            .with_ansi(false)
+            .finish();
+
+        // Run print_trace_summary under the test subscriber
+        tracing::subscriber::with_default(subscriber, || {
+            print_trace_summary(&trace);
+        });
+
+        let output = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();
+
+        // Verify key fields appear in the captured tracing output
+        assert!(
+            output.contains("abc123"),
+            "expected trace_id 'abc123' in output: {output}"
+        );
+        assert!(
+            output.contains("sess-789"),
+            "expected session_id 'sess-789' in output: {output}"
+        );
+        assert!(
+            output.contains("/tmp/repo"),
+            "expected repo_path '/tmp/repo' in output: {output}"
+        );
+        assert!(
+            output.contains("Completed"),
+            "expected outcome 'Completed' in output: {output}"
+        );
+        assert!(
+            output.contains("1.23"),
+            "expected cost '1.23' in output: {output}"
+        );
+        assert!(
+            output.contains("100"),
+            "expected input token count '100' in output: {output}"
+        );
+        assert!(
+            output.contains("50"),
+            "expected output token count '50' in output: {output}"
+        );
+
+        // Verify iteration 1 breakdown appears
+        assert!(
+            output.contains("Iteration 1"),
+            "expected 'Iteration 1' in output: {output}"
+        );
+        assert!(
+            output.contains("iteration=1"),
+            "expected structured field 'iteration=1' in output: {output}"
+        );
+        assert!(
+            output.contains("duration_ms=3000"),
+            "expected structured field 'duration_ms=3000' in output: {output}"
+        );
+        assert!(
+            output.contains("3000ms"),
+            "expected '3000ms' in iteration 1 message: {output}"
+        );
+        assert!(
+            output.contains("input_tokens=1000"),
+            "expected structured field 'input_tokens=1000' in output: {output}"
+        );
+
+        // Verify iteration 2 breakdown appears with distinct values
+        assert!(
+            output.contains("Iteration 2"),
+            "expected 'Iteration 2' in output: {output}"
+        );
+        assert!(
+            output.contains("iteration=2"),
+            "expected structured field 'iteration=2' in output: {output}"
+        );
+        assert!(
+            output.contains("duration_ms=5000"),
+            "expected structured field 'duration_ms=5000' in output: {output}"
+        );
+        assert!(
+            output.contains("5000ms"),
+            "expected '5000ms' in iteration 2 message: {output}"
+        );
+        assert!(
+            output.contains("cost=0.07"),
+            "expected structured field 'cost=0.07' in output: {output}"
+        );
+        assert!(
+            output.contains("turns=4"),
+            "expected structured field 'turns=4' in output: {output}"
+        );
+        assert!(
+            output.contains("input_tokens=2500"),
+            "expected structured field 'input_tokens=2500' in output: {output}"
+        );
+        assert!(
+            output.contains("status=Error"),
+            "expected 'status=Error' for iteration 2 in output: {output}"
+        );
+    }
 }
 
-/// Pretty-print a session trace summary to stdout
+/// Log a session trace summary via tracing
 pub fn print_trace_summary(trace: &SessionTrace) {
-    println!("\n{}", "=".repeat(60));
-    println!("  RALPH SESSION TRACE SUMMARY");
-    println!("{}", "=".repeat(60));
-    println!("  Trace ID:    {}", trace.trace_id);
-    println!("  Session:     {}", trace.session_id);
-    println!("  Repo:        {}", trace.repo_path);
-    println!("  Outcome:     {:?}", trace.outcome);
-    println!("  Iterations:  {}", trace.total_iterations);
-    println!("  Total cost:  ${:.4}", trace.total_cost_usd);
-    println!(
-        "  Tokens:      {} in / {} out / {} cache-read / {} cache-create",
+    let duration_str = trace
+        .end_time
+        .map(|end| format!("{}s", (end - trace.start_time).num_seconds()))
+        .unwrap_or_else(|| "in progress".to_string());
+
+    tracing::info!(
+        trace_id = %trace.trace_id,
+        session_id = %trace.session_id,
+        "Ralph session trace: repo={}, outcome={:?}, iterations={}, \
+         cost=${:.4}, tokens={} in / {} out / {} cache-read / {} cache-create, \
+         duration={}",
+        trace.repo_path,
+        trace.outcome,
+        trace.total_iterations,
+        trace.total_cost_usd,
         trace.total_input_tokens,
         trace.total_output_tokens,
         trace.total_cache_read_tokens,
         trace.total_cache_creation_tokens,
-    );
-
-    if let Some(end) = trace.end_time {
-        let duration = end - trace.start_time;
-        println!("  Duration:    {}s", duration.num_seconds());
-    }
-
-    println!("\n  ITERATION BREAKDOWN:");
-    println!(
-        "  {:<6} {:<10} {:<10} {:<10} {:<12} {:<8}",
-        "Iter", "Duration", "Cost", "Turns", "In tokens", "Status"
-    );
-    println!(
-        "  {:-<6} {:-<10} {:-<10} {:-<10} {:-<12} {:-<8}",
-        "", "", "", "", "", ""
+        duration_str,
     );
 
     for span in &trace.iterations {
-        println!(
-            "  {:<6} {:<10} ${:<9.4} {:<10} {:<12} {:?}",
+        tracing::info!(
+            iteration = span.attributes.iteration,
+            duration_ms = span.duration_ms,
+            cost = span.attributes.cost_usd,
+            turns = span.attributes.num_turns.unwrap_or(0),
+            input_tokens = span.attributes.token_usage.input_tokens,
+            "Iteration {}: status={:?}, cost=${:.4}, {}ms, {} turns, {} in-tokens",
             span.attributes.iteration,
-            format!("{}ms", span.duration_ms),
+            span.status,
             span.attributes.cost_usd,
+            span.duration_ms,
             span.attributes.num_turns.unwrap_or(0),
             span.attributes.token_usage.input_tokens,
-            span.status,
         );
     }
-    println!("{}\n", "=".repeat(60));
 }
