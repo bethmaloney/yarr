@@ -141,11 +141,11 @@ Wire up the local runtime to use the shared cache.
 - Update `health_check` to inject env via `Command::envs()`
 
 **Checklist:**
-- [ ] Implement `resolve_env` for LocalRuntime
-- [ ] Update `spawn_claude` to use resolved env
-- [ ] Update `run_command` to use resolved env
-- [ ] Update `health_check` to use resolved env
-- [ ] `cd src-tauri && cargo check`
+- [x] Implement `resolve_env` for LocalRuntime
+- [x] Update `spawn_claude` to use resolved env
+- [x] Update `run_command` to use resolved env
+- [x] Update `health_check` to use resolved env
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -282,7 +282,7 @@ Ensure MockRuntime and existing tests still pass, add new tests.
 |------|-------------|--------|
 | 1 | Create `shell_env.rs` module with snapshot logic | Done |
 | 2 | Add local env cache and `resolve_env` to trait | Done |
-| 3 | Implement `resolve_env` for LocalRuntime | Not Started |
+| 3 | Implement `resolve_env` for LocalRuntime | Done |
 | 4 | Implement `resolve_env` for WslRuntime | Not Started |
 | 5 | Implement `resolve_env` for SshRuntime | Not Started |
 | 6 | Wire up `SshEnvCache` in Tauri state | Not Started |
