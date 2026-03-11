@@ -86,14 +86,14 @@ Core module with the snapshot function and parsing logic.
 - `SSH_DENYLIST = ["SSH_AUTH_SOCK", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]`
 
 **Checklist:**
-- [ ] Create `shell_env.rs` with `snapshot_shell_env` function
-- [ ] Implement marker-based stdout parsing
-- [ ] Implement null-delimited env var parsing
-- [ ] Implement denylist filtering
-- [ ] Add `mod shell_env;` to `runtime/mod.rs`
-- [ ] Add unit tests for parsing (mock stdout with markers, noise, null-delimited vars)
-- [ ] Add unit tests for denylist filtering
-- [ ] `cd src-tauri && cargo check`
+- [x] Create `shell_env.rs` with `snapshot_shell_env` function
+- [x] Implement marker-based stdout parsing
+- [x] Implement null-delimited env var parsing
+- [x] Implement denylist filtering
+- [x] Add `mod shell_env;` to `runtime/mod.rs`
+- [x] Add unit tests for parsing (mock stdout with markers, noise, null-delimited vars)
+- [x] Add unit tests for denylist filtering
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -280,7 +280,7 @@ Ensure MockRuntime and existing tests still pass, add new tests.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Create `shell_env.rs` module with snapshot logic | Not Started |
+| 1 | Create `shell_env.rs` module with snapshot logic | Done |
 | 2 | Add local env cache and `resolve_env` to trait | Not Started |
 | 3 | Implement `resolve_env` for LocalRuntime | Not Started |
 | 4 | Implement `resolve_env` for WslRuntime | Not Started |

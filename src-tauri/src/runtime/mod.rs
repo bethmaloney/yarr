@@ -1,5 +1,6 @@
 mod local;
 mod mock;
+pub mod shell_env;
 pub mod ssh;
 mod wsl;
 
