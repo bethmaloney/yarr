@@ -189,11 +189,11 @@ async fn run_session(
 
             let plan_path = {
                 let p = std::path::Path::new(&plan_file);
-                if !p.is_absolute() {
-                    app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
-                    return Err("Plan file must be an absolute path for SSH repos".to_string());
+                if p.is_relative() {
+                    PathBuf::from(remote_path).join(p)
+                } else {
+                    p.to_path_buf()
                 }
-                p.to_path_buf()
             };
 
             // We can't verify the plan file exists on remote, skip the check
