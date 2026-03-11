@@ -153,10 +153,23 @@ pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
 
 /// Thread-safe cache of SSH host environment snapshots.
 ///
-/// Wraps a `DashMap` mapping host identifiers to their captured environment
-/// variables. Implements `Deref` for ergonomic access to `DashMap` methods.
-#[derive(Default)]
-pub struct SshEnvCache(dashmap::DashMap<String, HashMap<String, String>>);
+/// Wraps an `Arc<DashMap>` mapping host identifiers to their captured environment
+/// variables. The `Arc` allows cloning a reference for `SshRuntime::new()` while
+/// keeping the cache in Tauri managed state.
+pub struct SshEnvCache(std::sync::Arc<dashmap::DashMap<String, HashMap<String, String>>>);
+
+impl SshEnvCache {
+    /// Returns a clone of the inner `Arc`, suitable for passing to `SshRuntime::new()`.
+    pub fn cache_ref(&self) -> std::sync::Arc<dashmap::DashMap<String, HashMap<String, String>>> {
+        self.0.clone()
+    }
+}
+
+impl Default for SshEnvCache {
+    fn default() -> Self {
+        Self(std::sync::Arc::new(dashmap::DashMap::new()))
+    }
+}
 
 impl std::ops::Deref for SshEnvCache {
     type Target = dashmap::DashMap<String, HashMap<String, String>>;
@@ -307,5 +320,125 @@ mod tests {
             std::ptr::eq(env1, env2),
             "repeated calls should return the same pointer (OnceCell caching)"
         );
+    }
+
+    // ---------------------------------------------------------------
+    // Tests for SshEnvCache with Arc-based inner and cache_ref()
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn ssh_env_cache_cache_ref_shares_state_insert_via_cache() {
+        // Inserting via the cache should be visible through the Arc
+        // returned by cache_ref().
+        let cache = SshEnvCache::default();
+        let arc = cache.cache_ref();
+
+        let env = HashMap::from([("HOME".to_string(), "/home/user".to_string())]);
+        cache.insert("host1".to_string(), env.clone());
+
+        let entry = arc.get("host1").expect("arc should see entry inserted via cache");
+        assert_eq!(*entry, env);
+    }
+
+    #[test]
+    fn ssh_env_cache_cache_ref_shares_state_insert_via_arc() {
+        // Inserting via the Arc should be visible through the cache's
+        // Deref (and vice versa), proving they share the same DashMap.
+        let cache = SshEnvCache::default();
+        let arc = cache.cache_ref();
+
+        let env = HashMap::from([("SHELL".to_string(), "/bin/zsh".to_string())]);
+        arc.insert("host2".to_string(), env.clone());
+
+        let entry = cache.get("host2").expect("cache should see entry inserted via arc");
+        assert_eq!(*entry, env);
+    }
+
+    #[test]
+    fn ssh_env_cache_cache_ref_returns_cloneable_arc() {
+        // cache_ref() should return an Arc that can be cloned and all
+        // clones share state.
+        let cache = SshEnvCache::default();
+        let arc1 = cache.cache_ref();
+        let arc2 = cache.cache_ref();
+
+        let env = HashMap::from([("K".to_string(), "V".to_string())]);
+        arc1.insert("host".to_string(), env.clone());
+
+        assert!(
+            arc2.contains_key("host"),
+            "second Arc clone should see insert from first"
+        );
+        assert_eq!(*arc2.get("host").unwrap(), env);
+    }
+
+    #[test]
+    fn ssh_env_cache_deref_still_works_after_arc_change() {
+        // After wrapping in Arc, the Deref-based API (insert, get,
+        // contains_key) should still work exactly as before.
+        let cache = SshEnvCache::default();
+
+        let env1 = HashMap::from([("A".to_string(), "1".to_string())]);
+        let env2 = HashMap::from([("B".to_string(), "2".to_string())]);
+
+        cache.insert("h1".to_string(), env1.clone());
+        cache.insert("h2".to_string(), env2.clone());
+
+        assert!(cache.contains_key("h1"));
+        assert!(cache.contains_key("h2"));
+        assert!(!cache.contains_key("h3"));
+        assert_eq!(*cache.get("h1").unwrap(), env1);
+        assert_eq!(*cache.get("h2").unwrap(), env2);
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn ssh_env_cache_cache_ref_type_is_arc_dashmap() {
+        // Verify the returned type is compatible with SshRuntime::new's
+        // env_cache parameter (Arc<DashMap<String, HashMap<String, String>>>).
+        let cache = SshEnvCache::default();
+        let arc: std::sync::Arc<dashmap::DashMap<String, HashMap<String, String>>> =
+            cache.cache_ref();
+
+        // Should be usable as the env_cache argument
+        let env = HashMap::from([("TEST".to_string(), "val".to_string())]);
+        arc.insert("ssh-host".to_string(), env.clone());
+        assert_eq!(*arc.get("ssh-host").unwrap(), env);
+    }
+
+    #[test]
+    fn ssh_env_cache_cache_ref_mutation_visible_bidirectionally() {
+        // Comprehensive bidirectional mutation test: interleave writes
+        // through cache and arc, verifying each sees the other's writes.
+        let cache = SshEnvCache::default();
+        let arc = cache.cache_ref();
+
+        // Write via cache, read via arc
+        cache.insert(
+            "host-a".to_string(),
+            HashMap::from([("X".to_string(), "1".to_string())]),
+        );
+        assert!(arc.contains_key("host-a"));
+
+        // Write via arc, read via cache
+        arc.insert(
+            "host-b".to_string(),
+            HashMap::from([("Y".to_string(), "2".to_string())]),
+        );
+        assert!(cache.contains_key("host-b"));
+
+        // Overwrite via arc, read via cache
+        arc.insert(
+            "host-a".to_string(),
+            HashMap::from([("X".to_string(), "overwritten".to_string())]),
+        );
+        assert_eq!(
+            cache.get("host-a").unwrap().get("X").unwrap(),
+            "overwritten"
+        );
+
+        // Remove via cache, verify gone in arc
+        cache.remove("host-b");
+        assert!(!arc.contains_key("host-b"));
     }
 }

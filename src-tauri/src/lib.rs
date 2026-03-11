@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use oneshot::OneShotRunner;
-use runtime::{default_runtime, ssh_command, ssh_command_raw, ssh_shell_escape, RuntimeProvider, SshRuntime};
+use runtime::{default_runtime, ssh_command, ssh_command_raw, ssh_shell_escape, RuntimeProvider, SshEnvCache, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use ssh_orchestrator::SshSessionOrchestrator;
 use tauri::{Emitter, Manager, RunEvent};
@@ -185,7 +185,7 @@ async fn run_session(
             result
         }
         RepoType::Ssh { ssh_host, remote_path } => {
-            let ssh_runtime = SshRuntime::new(ssh_host, remote_path, std::sync::Arc::new(dashmap::DashMap::new()));
+            let ssh_runtime = SshRuntime::new(ssh_host, remote_path, app.state::<SshEnvCache>().cache_ref());
 
             let plan_path = {
                 let p = std::path::Path::new(&plan_file);
@@ -490,11 +490,11 @@ fn parse_rev_list_output(output: &str) -> (Option<u32>, Option<u32>) {
     (None, None)
 }
 
-fn resolve_runtime(repo: &RepoType) -> (Box<dyn RuntimeProvider>, PathBuf) {
+fn resolve_runtime(repo: &RepoType, ssh_env_cache: &SshEnvCache) -> (Box<dyn RuntimeProvider>, PathBuf) {
     match repo {
         RepoType::Local { path } => (default_runtime(), PathBuf::from(path)),
         RepoType::Ssh { ssh_host, remote_path } => {
-            (Box::new(SshRuntime::new(ssh_host, remote_path, std::sync::Arc::new(dashmap::DashMap::new()))), PathBuf::from(remote_path))
+            (Box::new(SshRuntime::new(ssh_host, remote_path, ssh_env_cache.cache_ref())), PathBuf::from(remote_path))
         }
     }
 }
@@ -510,8 +510,8 @@ fn generate_branch_name(plan_file: &str) -> String {
 }
 
 #[tauri::command]
-async fn get_branch_info(repo: RepoType) -> Result<BranchInfo, String> {
-    let (rt, working_dir) = resolve_runtime(&repo);
+async fn get_branch_info(app: tauri::AppHandle, repo: RepoType) -> Result<BranchInfo, String> {
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let timeout = std::time::Duration::from_secs(30);
 
     let branch_output = rt
@@ -538,8 +538,8 @@ async fn get_branch_info(repo: RepoType) -> Result<BranchInfo, String> {
 }
 
 #[tauri::command]
-async fn list_local_branches(repo: RepoType) -> Result<Vec<String>, String> {
-    let (rt, working_dir) = resolve_runtime(&repo);
+async fn list_local_branches(app: tauri::AppHandle, repo: RepoType) -> Result<Vec<String>, String> {
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let timeout = std::time::Duration::from_secs(30);
 
     let output = rt
@@ -562,12 +562,12 @@ async fn list_local_branches(repo: RepoType) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-async fn switch_branch(repo: RepoType, branch: String) -> Result<(), String> {
+async fn switch_branch(app: tauri::AppHandle, repo: RepoType, branch: String) -> Result<(), String> {
     if !branch.chars().all(|c| c.is_alphanumeric() || "-_./".contains(c)) {
         return Err("Invalid branch name".to_string());
     }
 
-    let (rt, working_dir) = resolve_runtime(&repo);
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let timeout = std::time::Duration::from_secs(30);
 
     let output = rt
@@ -583,8 +583,8 @@ async fn switch_branch(repo: RepoType, branch: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn fast_forward_branch(repo: RepoType) -> Result<(), String> {
-    let (rt, working_dir) = resolve_runtime(&repo);
+async fn fast_forward_branch(app: tauri::AppHandle, repo: RepoType) -> Result<(), String> {
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let fetch_timeout = std::time::Duration::from_secs(60);
 
     let fetch_output = rt
@@ -658,13 +658,13 @@ pub(crate) async fn list_plans_impl(
 }
 
 #[tauri::command]
-async fn list_plans(repo: RepoType, plans_dir: String) -> Result<Vec<String>, String> {
+async fn list_plans(app: tauri::AppHandle, repo: RepoType, plans_dir: String) -> Result<Vec<String>, String> {
     tracing::info!(plans_dir = %plans_dir, repo = ?repo, "list_plans called");
     if plans_dir.contains("..") {
         tracing::warn!(plans_dir = %plans_dir, "list_plans rejected: path contains '..'");
         return Err("Invalid plans directory".to_string());
     }
-    let (rt, working_dir) = resolve_runtime(&repo);
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     tracing::info!(runtime = %rt.name(), working_dir = %working_dir.display(), "list_plans resolved runtime");
     match list_plans_impl(rt.as_ref(), &working_dir, &plans_dir).await {
         Ok(plans) => {
@@ -703,14 +703,14 @@ pub(crate) async fn move_plan_to_completed_impl(
 }
 
 #[tauri::command]
-async fn move_plan_to_completed(repo: RepoType, plans_dir: String, filename: String) -> Result<(), String> {
+async fn move_plan_to_completed(app: tauri::AppHandle, repo: RepoType, plans_dir: String, filename: String) -> Result<(), String> {
     if plans_dir.contains("..") {
         return Err("Invalid plans directory".to_string());
     }
     if filename.contains('/') || filename.contains("..") {
         return Err("Invalid filename".to_string());
     }
-    let (rt, working_dir) = resolve_runtime(&repo);
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     move_plan_to_completed_impl(rt.as_ref(), &working_dir, &plans_dir, &filename).await
 }
 
@@ -746,6 +746,7 @@ pub fn run() {
         .manage(GlobalAbortRegistry {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
+        .manage(SshEnvCache::default())
         .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
         .build(tauri::generate_context!())
         .expect("error building tauri application")

@@ -224,10 +224,10 @@ Thread the SSH env cache through app setup and all `SshRuntime::new()` call site
 - Update all `default_runtime()` call sites — no changes needed since local/WSL use static cache
 
 **Checklist:**
-- [ ] Register `SshEnvCache` in Tauri managed state
-- [ ] Update `resolve_runtime()` to pass cache to SshRuntime
-- [ ] Update all `SshRuntime::new()` call sites
-- [ ] `cd src-tauri && cargo check`
+- [x] Register `SshEnvCache` in Tauri managed state
+- [x] Update `resolve_runtime()` to pass cache to SshRuntime
+- [x] Update all `SshRuntime::new()` call sites
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -289,6 +289,6 @@ Ensure MockRuntime and existing tests still pass, add new tests.
 | 3 | Implement `resolve_env` for LocalRuntime | Done |
 | 4 | Implement `resolve_env` for WslRuntime | Done |
 | 5 | Implement `resolve_env` for SshRuntime | Done |
-| 6 | Wire up `SshEnvCache` in Tauri state | Not Started |
+| 6 | Wire up `SshEnvCache` in Tauri state | Done |
 | 7 | Surface warnings as toast notifications | Not Started |
 | 8 | Update tests | Not Started |
