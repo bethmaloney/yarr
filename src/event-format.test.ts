@@ -210,7 +210,7 @@ describe("eventLabel", () => {
       });
       const label = eventLabel(ev);
       expect(label).toContain("Iteration 1 complete");
-      expect(label).toContain("$0.4200");
+      expect(label).toContain("$0.42");
     });
 
     it("returns session complete label with outcome", () => {

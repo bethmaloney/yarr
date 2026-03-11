@@ -64,7 +64,8 @@ export function IterationGroupComponent({
         </span>
         <span className="iteration-title">Iteration {group.iteration}</span>
         <span className="iteration-stats text-muted-foreground">
-          — {group.events.length} events · ${group.cost.toFixed(4)}
+          — {group.events.length} events · ${group.cost.toFixed(2)}
+          {group.contextWindow > 0 ? <> · {percentage}% ctx</> : null}
           {group.inputTokens || group.outputTokens ? (
             <>
               {" "}
@@ -91,7 +92,7 @@ export function IterationGroupComponent({
           </div>
           <span className="context-bar-label text-xs text-muted-foreground font-mono whitespace-nowrap">
             {formatTokenCount(group.inputTokens)} /{" "}
-            {formatTokenCount(group.contextWindow)} ({percentage}%)
+            {formatTokenCount(group.contextWindow)}
           </span>
         </div>
       )}

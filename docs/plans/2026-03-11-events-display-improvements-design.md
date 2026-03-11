@@ -136,8 +136,8 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 - `event-format.ts` line 119: change `.toFixed(4)` → `.toFixed(2)`
 
 **Checklist:**
-- [ ] Update both `.toFixed(4)` → `.toFixed(2)`
-- [ ] Verify: `npm test`
+- [x] Update both `.toFixed(4)` → `.toFixed(2)`
+- [x] Verify: `npm test`
 
 ---
 
@@ -151,9 +151,9 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 - Remove `({percentage}%)` from the context bar label below (line 92) — keep bar visual + token counts only
 
 **Checklist:**
-- [ ] Add percentage to iteration header
-- [ ] Remove percentage from context bar label
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add percentage to iteration header
+- [x] Remove percentage from context bar label
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -168,9 +168,9 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 - Verify context bar label no longer shows percentage
 
 **Checklist:**
-- [ ] Update cost format assertions
-- [ ] Add percentage-in-title test
-- [ ] Verify: `npm test -- IterationGroup`
+- [x] Update cost format assertions
+- [x] Add percentage-in-title test
+- [x] Verify: `npm test -- IterationGroup`
 
 ---
 
@@ -183,6 +183,11 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 | 3 | Agent description in `toolSummary()` | Done |
 | 4 | Tests for Agent `toolSummary()` | Done |
 | 5 | Install `react-markdown` and render Agent prompt | Done |
-| 6 | Round cost to nearest cent | Not Started |
-| 7 | Add context percentage to iteration title | Not Started |
-| 8 | Tests for iteration title and cost changes | Not Started |
+| 6 | Round cost to nearest cent | Done |
+| 7 | Add context percentage to iteration title | Done |
+| 8 | Tests for iteration title and cost changes | Done |
+
+### Notes
+
+- Legacy `event-display.ts` still uses `.toFixed(4)` but is dead code (only imported by its own test). Consider deleting it.
+- Other pages (`RepoDetail`, `OneShotDetail`, `RunDetail`, `History`) still use `.toFixed(4)` for session-level cost — out of scope but worth aligning later.

@@ -122,6 +122,14 @@ describe("IterationGroupComponent", () => {
   it("shows the cost in the header", () => {
     renderComponent({ group: makeGroup({ cost: 0.1234 }) });
     expect(screen.getByText(/\$0\.12/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$0\.1234/)).not.toBeInTheDocument();
+  });
+
+  it("formats cost to two decimal places, not four", () => {
+    renderComponent({ group: makeGroup({ cost: 0.1 }) });
+    // Should render $0.10, not $0.1000
+    expect(screen.getByText(/\$0\.10/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$0\.1000/)).not.toBeInTheDocument();
   });
 
   // =========================================================================
@@ -244,12 +252,38 @@ describe("IterationGroupComponent", () => {
   // 8. Context bar percentage: Correct width and label
   // =========================================================================
 
-  it("shows correct percentage in the context bar label", () => {
+  it("shows correct percentage in the iteration header", () => {
     renderComponent({
       group: makeGroup({ contextWindow: 200000, inputTokens: 100000 }),
     });
     // 100000/200000 = 50%
     expect(screen.getByText(/50%/)).toBeInTheDocument();
+  });
+
+  it("shows context percentage in the iteration header", () => {
+    renderComponent({
+      group: makeGroup({ contextWindow: 200000, inputTokens: 60000 }),
+    });
+    // 60000/200000 = 30%
+    // Should show "30% ctx" in the header stats
+    expect(screen.getByText(/30% ctx/)).toBeInTheDocument();
+  });
+
+  it("does not show context percentage in header when contextWindow is 0", () => {
+    renderComponent({
+      group: makeGroup({ contextWindow: 0, inputTokens: 0 }),
+    });
+    expect(screen.queryByText(/% ctx/)).not.toBeInTheDocument();
+  });
+
+  it("does not show percentage in the context bar label", () => {
+    const { container } = renderComponent({
+      group: makeGroup({ contextWindow: 200000, inputTokens: 100000 }),
+    });
+    const barLabel = container.querySelector(".context-bar-label");
+    expect(barLabel).not.toBeNull();
+    // The bar label should NOT contain a percentage — it's now in the header
+    expect(barLabel!.textContent).not.toMatch(/\d+%/);
   });
 
   it("caps the context bar fill width at 100% when percentage exceeds 100", () => {

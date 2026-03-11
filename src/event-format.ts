@@ -158,7 +158,7 @@ export function eventLabel(ev: SessionEvent, repoPath?: string): string {
     case "assistant_text":
       return `[${ev.iteration}] ${ev.text}`;
     case "iteration_complete":
-      return `Iteration ${ev.iteration} complete (cost: $${(ev.result as Record<string, number> | undefined)?.total_cost_usd?.toFixed(4) ?? "?"})`;
+      return `Iteration ${ev.iteration} complete (cost: $${(ev.result as Record<string, number> | undefined)?.total_cost_usd?.toFixed(2) ?? "?"})`;
     case "session_complete":
       return `Session complete: ${ev.outcome}`;
     case "check_started":
