@@ -99,6 +99,9 @@ async function injectTauriMocks(page: Page, opts: TauriMockOptions = {}) {
         // Dialog plugin
         if (cmd === "plugin:dialog|open") return null;
 
+        // Log plugin
+        if (cmd.startsWith("plugin:log|")) return undefined;
+
         // Event plugin
         if (cmd === "plugin:event|listen") {
           const event = args.event as string;

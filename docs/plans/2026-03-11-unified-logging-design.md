@@ -84,10 +84,10 @@ Install the npm package and wire up `attachConsole()` so frontend `console.*` ca
 - `attachConsole()` returns a detach function — store it but no need to call it (app lifecycle)
 
 **Checklist:**
-- [ ] Install `@tauri-apps/plugin-log`
-- [ ] Call `attachConsole()` in `main.tsx`
-- [ ] Update browser mock if needed for dev/test environments
-- [ ] `npx tsc --noEmit`
+- [x] Install `@tauri-apps/plugin-log`
+- [x] Call `attachConsole()` in `main.tsx`
+- [x] Update browser mock if needed for dev/test environments
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -155,7 +155,7 @@ Manual verification that everything works together.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add tauri-plugin-log Rust dependency and initialize | Done |
-| 2 | Add frontend log plugin and attach console | Not Started |
+| 2 | Add frontend log plugin and attach console | Done |
 | 3 | Migrate println!/eprintln! in session.rs | Not Started |
 | 4 | Migrate println! in trace.rs | Not Started |
 | 5 | Verify end-to-end logging | Not Started |

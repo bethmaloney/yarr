@@ -386,6 +386,9 @@ if (!(window as any).__TAURI_INTERNALS__) {
       return;
     }
 
+    // Log plugin
+    if (cmd.startsWith("plugin:log|")) return undefined;
+
     // Dialog plugin
     if (cmd === "plugin:dialog|open") return null;
 
