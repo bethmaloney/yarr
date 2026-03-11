@@ -45,3 +45,11 @@ npm run test:e2e
 - **Unit tests** (`src/*.test.ts`): Vitest with `vi.mock` for `@tauri-apps/plugin-store`. Run with `npm test`.
 - **E2E tests** (`e2e/*.test.ts`): Playwright against the Vite dev server. Tauri IPC is mocked via `window.__TAURI_INTERNALS__` in `e2e/fixtures.ts`. Run with `npm run test:e2e`.
 - **Rust tests** (`src-tauri/`): `cargo test` in the `src-tauri` directory.
+
+## Cross-Platform
+
+Yarr runs on Windows (WSL), macOS, and Linux. Path handling, shell commands, and filesystem operations must be cross-platform compatible.
+
+## Error Handling
+
+Users are technical. Surface errors as Sonner toasts (`toast.error(...)` from `sonner`) with the actual error message so they can diagnose and resolve issues themselves. Don't swallow errors or show vague "something went wrong" messages.
