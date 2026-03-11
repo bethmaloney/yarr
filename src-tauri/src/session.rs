@@ -850,19 +850,12 @@ impl SessionRunner {
             None => self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
         };
 
-        println!(
-            "[harness] Starting Ralph loop on '{}' (max {} iterations)",
-            repo_str, self.config.max_iterations
-        );
-        println!("[harness] Runtime: {}", runtime.name());
-        println!(
-            "[harness] Completion signal: {}",
-            self.config.completion_signal
-        );
+        tracing::info!(repo = %repo_str, max_iterations = self.config.max_iterations, "starting Ralph loop");
+        tracing::info!(runtime = runtime.name(), "runtime selected");
+        tracing::info!(signal = %self.config.completion_signal, "completion signal");
         if let Some(ref model) = self.config.model {
-            println!("[harness] Model: {model}");
+            tracing::info!(model = %model, "model override");
         }
-        println!();
 
         *self.session_id.lock().unwrap() = Some(trace.session_id.clone());
 
@@ -880,7 +873,7 @@ impl SessionRunner {
             guard.clone()
         };
         let trace_path = self.collector.finalize(&mut trace, &events).await?;
-        println!("\n[harness] Trace saved to: {}", trace_path.display());
+        tracing::info!(path = %trace_path.display(), "trace saved");
 
         trace::print_trace_summary(&trace);
 
@@ -907,16 +900,13 @@ impl SessionRunner {
         for iteration in 1..=self.config.max_iterations {
             // Check cancellation before starting iteration
             if self.cancel_token.is_cancelled() {
-                println!("[harness] Session cancelled before iteration {iteration}.");
+                tracing::info!(iteration, "session cancelled before iteration");
                 state = SessionState::Cancelled { iteration };
                 break;
             }
 
             let _ = SessionState::Running { iteration };
-            println!(
-                "[harness] === Iteration {}/{} ===",
-                iteration, self.config.max_iterations
-            );
+            tracing::info!(iteration, max = self.config.max_iterations, "starting iteration");
 
             self.emit(SessionEvent::IterationStarted { iteration });
 
@@ -955,11 +945,7 @@ impl SessionRunner {
                         result: result.clone(),
                     });
 
-                    println!(
-                        "[harness] Iteration {iteration} complete: cost=${:.4}, turns={}, signal={has_signal}",
-                        result.total_cost_usd.unwrap_or(0.0),
-                        result.num_turns.unwrap_or(0),
-                    );
+                    tracing::info!(iteration, cost = result.total_cost_usd.unwrap_or(0.0), turns = result.num_turns.unwrap_or(0), signal = has_signal, "iteration complete");
 
                     state = SessionState::Evaluating { iteration };
 
@@ -967,13 +953,13 @@ impl SessionRunner {
                     self.git_sync(runtime, iteration).await;
 
                     if self.cancel_token.is_cancelled() {
-                        println!("[harness] Session cancelled after checks in iteration {iteration}.");
+                        tracing::info!(iteration, "session cancelled after checks");
                         state = SessionState::Cancelled { iteration };
                         break;
                     }
 
                     if has_signal {
-                        println!("[harness] Completion signal detected! Stopping loop.");
+                        tracing::info!("completion signal detected, stopping loop");
                         self.run_checks(runtime, iteration, &CheckWhen::PostCompletion, &self.config.checks).await;
                         self.git_sync(runtime, iteration).await;
                         state = SessionState::Completed {
@@ -983,7 +969,7 @@ impl SessionRunner {
                     }
 
                     if is_error {
-                        eprintln!("[harness] Error detected in iteration {iteration}");
+                        tracing::error!(iteration, "error detected in iteration");
                         state = SessionState::Failed {
                             iteration,
                             error: result_text,
@@ -998,7 +984,7 @@ impl SessionRunner {
                                 self.config.inter_iteration_delay_ms,
                             )) => {}
                             _ = self.cancel_token.cancelled() => {
-                                println!("[harness] Session cancelled during inter-iteration delay.");
+                                tracing::info!("session cancelled during inter-iteration delay");
                                 state = SessionState::Cancelled { iteration };
                                 break;
                             }
@@ -1008,13 +994,13 @@ impl SessionRunner {
                 Err(e) => {
                     // Check if this was a cancellation-induced error
                     if self.cancel_token.is_cancelled() {
-                        println!("[harness] Session cancelled during iteration {iteration}.");
+                        tracing::info!(iteration, "session cancelled during iteration");
                         state = SessionState::Cancelled { iteration };
                         break;
                     }
 
                     let iter_end = Utc::now();
-                    eprintln!("[harness] Process error on iteration {iteration}: {e}");
+                    tracing::error!(iteration, error = %e, "process error in iteration");
 
                     self.collector.record_iteration(
                         trace,
@@ -1049,10 +1035,7 @@ impl SessionRunner {
             state = SessionState::MaxIterations {
                 iterations: self.config.max_iterations,
             };
-            println!(
-                "[harness] Max iterations ({}) reached without completion signal.",
-                self.config.max_iterations
-            );
+            tracing::warn!(max_iterations = self.config.max_iterations, "max iterations reached without completion signal");
         }
 
         // Session-exit git_sync: push partial progress for non-completed outcomes
@@ -1117,7 +1100,7 @@ impl SessionRunner {
                             for block in &assistant.message.content {
                                 match block {
                                     ContentBlock::ToolUse { name, input, .. } => {
-                                        println!("  [{iteration}] tool: {name}");
+                                        tracing::debug!(iteration, name, "tool use");
                                         self.emit(SessionEvent::ToolUse {
                                             iteration,
                                             tool_name: name.clone(),
@@ -1131,7 +1114,7 @@ impl SessionRunner {
                                         } else {
                                             text.clone()
                                         };
-                                        println!("  [{iteration}] text: {preview}");
+                                        tracing::debug!(iteration, preview, "text output");
                                         self.emit(SessionEvent::AssistantText {
                                             iteration,
                                             text: text.clone(),

@@ -108,9 +108,9 @@ Replace all print statements in the session runner with structured tracing calls
 - `println!("  [{iteration}] text: {preview}")` → `tracing::debug!(iteration, preview, "text output")`
 
 **Checklist:**
-- [ ] Migrate all 18 println!/eprintln! calls in session.rs
-- [ ] `cd src-tauri && cargo check`
-- [ ] `cd src-tauri && cargo test`
+- [x] Migrate all 18 println!/eprintln! calls in session.rs
+- [x] `cd src-tauri && cargo check`
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -156,6 +156,6 @@ Manual verification that everything works together.
 |------|-------------|--------|
 | 1 | Add tauri-plugin-log Rust dependency and initialize | Done |
 | 2 | Add frontend log plugin and attach console | Done |
-| 3 | Migrate println!/eprintln! in session.rs | Not Started |
+| 3 | Migrate println!/eprintln! in session.rs | Done |
 | 4 | Migrate println! in trace.rs | Not Started |
 | 5 | Verify end-to-end logging | Not Started |
