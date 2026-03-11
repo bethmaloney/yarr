@@ -619,13 +619,25 @@ pub(crate) async fn list_plans_impl(
         "find {} -maxdepth 1 -name '*.md' -type f -printf '%f\\n' | sort",
         escaped_path
     );
+    tracing::debug!(cmd = %cmd, working_dir = %working_dir.display(), "list_plans_impl running command");
     let timeout = std::time::Duration::from_secs(30);
     let output = rt
         .run_command(&cmd, working_dir, timeout)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "list_plans_impl run_command error");
+            e.to_string()
+        })?;
+
+    tracing::debug!(
+        exit_code = output.exit_code,
+        stdout_len = output.stdout.len(),
+        stderr = %output.stderr,
+        "list_plans_impl command result"
+    );
 
     if output.exit_code != 0 {
+        tracing::warn!(exit_code = output.exit_code, stderr = %output.stderr, "list_plans_impl non-zero exit code, returning empty");
         return Ok(vec![]);
     }
 
@@ -636,16 +648,29 @@ pub(crate) async fn list_plans_impl(
         .filter(|l| !l.is_empty())
         .collect();
 
+    tracing::debug!(files = ?files, "list_plans_impl parsed files");
     Ok(files)
 }
 
 #[tauri::command]
 async fn list_plans(repo: RepoType, plans_dir: String) -> Result<Vec<String>, String> {
+    tracing::info!(plans_dir = %plans_dir, "list_plans called");
     if plans_dir.contains("..") {
+        tracing::warn!(plans_dir = %plans_dir, "list_plans rejected: path contains '..'");
         return Err("Invalid plans directory".to_string());
     }
     let (rt, working_dir) = resolve_runtime(&repo);
-    list_plans_impl(rt.as_ref(), &working_dir, &plans_dir).await
+    tracing::debug!(working_dir = %working_dir.display(), "list_plans resolving runtime");
+    match list_plans_impl(rt.as_ref(), &working_dir, &plans_dir).await {
+        Ok(plans) => {
+            tracing::info!(count = plans.len(), "list_plans succeeded");
+            Ok(plans)
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "list_plans failed");
+            Err(e)
+        }
+    }
 }
 
 pub(crate) async fn move_plan_to_completed_impl(

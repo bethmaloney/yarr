@@ -501,21 +501,29 @@ export default function RepoDetail() {
 
   async function fetchPlans() {
     const payload = buildRepoPayload();
-    if (!payload) return;
+    if (!payload) {
+      console.warn("[fetchPlans] buildRepoPayload returned null, aborting");
+      return;
+    }
+    const plansDir = (repo!.plansDir || "docs/plans/").replace(/\/?$/, "/");
+    console.info("[fetchPlans] requesting list_plans", { plansDir, payload });
     setPlansLoading(true);
     setPlansError(null);
     try {
       const result = await invoke<string[]>("list_plans", {
         repo: payload,
-        plansDir: (repo!.plansDir || "docs/plans/").replace(/\/?$/, "/"),
+        plansDir,
       });
+      console.info("[fetchPlans] received plans", { count: result.length, plans: result });
       setPlans(result);
     } catch (e) {
+      console.error("[fetchPlans] list_plans failed", e);
       setPlans([]);
       const msg = typeof e === "string" ? e : String(e);
       setPlansError(msg);
       toast.error(msg);
     } finally {
+      console.info("[fetchPlans] done, setting plansLoading=false");
       setPlansLoading(false);
     }
   }
