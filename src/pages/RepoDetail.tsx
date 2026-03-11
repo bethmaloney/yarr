@@ -92,6 +92,7 @@ export default function RepoDetail() {
   const stopSession = useAppStore((s) => s.stopSession);
   const reconnectSession = useAppStore((s) => s.reconnectSession);
   const updateRepo = useAppStore((s) => s.updateRepo);
+  const runOneShot = useAppStore((s) => s.runOneShot);
 
   const repo = repos.find((r) => r.id === repoId);
   const session: SessionState =
@@ -131,6 +132,14 @@ export default function RepoDetail() {
   const [plansLoading, setPlansLoading] = useState(false);
   const [plansError, setPlansError] = useState<string | null>(null);
 
+  // 1-shot form state
+  const [oneShotOpen, setOneShotOpen] = useState(false);
+  const [oneShotTitle, setOneShotTitle] = useState("");
+  const [oneShotPrompt, setOneShotPrompt] = useState("");
+  const [oneShotModel, setOneShotModel] = useState("");
+  const [oneShotMergeStrategy, setOneShotMergeStrategy] = useState("merge_to_main");
+  const [oneShotSubmitting, setOneShotSubmitting] = useState(false);
+
   // Connection test state
   const [connectionTest, setConnectionTest] = useState<ConnectionTest | null>(
     null,
@@ -161,6 +170,7 @@ export default function RepoDetail() {
     setGitSyncModel(repo.gitSync?.model ?? "");
     setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
     setGitSyncPrompt(repo.gitSync?.conflictPrompt ?? "");
+    setOneShotModel(repo.model);
   }, [repo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build repo payload for invoke calls
@@ -465,6 +475,27 @@ export default function RepoDetail() {
     } catch (e) {
       console.error("Failed to switch branch:", e);
       toast.error(`Failed to switch branch: ${e}`);
+    }
+  }
+
+  async function handleOneShotSubmit() {
+    if (!repoId || !oneShotTitle.trim() || !oneShotPrompt.trim()) return;
+    setOneShotSubmitting(true);
+    try {
+      const oneshotId = await runOneShot(
+        repoId,
+        oneShotTitle.trim(),
+        oneShotPrompt.trim(),
+        oneShotModel,
+        oneShotMergeStrategy,
+      );
+      if (oneshotId) {
+        navigate(`/oneshot/${oneshotId}`);
+      } else {
+        toast.error("Failed to launch 1-shot");
+      }
+    } finally {
+      setOneShotSubmitting(false);
     }
   }
 
@@ -1173,7 +1204,7 @@ export default function RepoDetail() {
                 type="button"
                 size="lg"
                 variant="secondary"
-                onClick={() => navigate(`/repo/${repoId}/oneshot`)}
+                onClick={() => setOneShotOpen(!oneShotOpen)}
                 disabled={session.running}
               >
                 1-Shot
@@ -1186,6 +1217,92 @@ export default function RepoDetail() {
             </>
           )}
         </div>
+        {oneShotOpen && !session.running && (
+          <div className="mt-4 pt-4 border-t border-border flex flex-col gap-3">
+            <div>
+              <Label htmlFor="oneshot-title" className="text-sm text-muted-foreground">
+                Title
+              </Label>
+              <Input
+                id="oneshot-title"
+                type="text"
+                value={oneShotTitle}
+                onChange={(e) => setOneShotTitle(e.target.value)}
+                disabled={oneShotSubmitting}
+              />
+            </div>
+            <div>
+              <Label htmlFor="oneshot-prompt" className="text-sm text-muted-foreground">
+                Prompt
+              </Label>
+              <Textarea
+                id="oneshot-prompt"
+                value={oneShotPrompt}
+                onChange={(e) => setOneShotPrompt(e.target.value)}
+                disabled={oneShotSubmitting}
+              />
+            </div>
+            <div>
+              <Label htmlFor="oneshot-model" className="text-sm text-muted-foreground">
+                Model
+              </Label>
+              <Input
+                id="oneshot-model"
+                type="text"
+                value={oneShotModel}
+                onChange={(e) => setOneShotModel(e.target.value)}
+                disabled={oneShotSubmitting}
+                className="font-mono"
+              />
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground">
+                Merge Strategy
+              </Label>
+              <div className="flex gap-6 mt-1">
+                <label className="flex flex-row items-center gap-2 cursor-pointer text-foreground text-sm">
+                  <input
+                    type="radio"
+                    name="oneShotMergeStrategy"
+                    value="merge_to_main"
+                    checked={oneShotMergeStrategy === "merge_to_main"}
+                    onChange={(e) => setOneShotMergeStrategy(e.target.value)}
+                    disabled={oneShotSubmitting}
+                  />
+                  Merge to main
+                </label>
+                <label className="flex flex-row items-center gap-2 cursor-pointer text-foreground text-sm">
+                  <input
+                    type="radio"
+                    name="oneShotMergeStrategy"
+                    value="branch"
+                    checked={oneShotMergeStrategy === "branch"}
+                    onChange={(e) => setOneShotMergeStrategy(e.target.value)}
+                    disabled={oneShotSubmitting}
+                  />
+                  Create branch
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                disabled={oneShotSubmitting || !oneShotTitle.trim() || !oneShotPrompt.trim()}
+                onClick={handleOneShotSubmit}
+              >
+                Launch
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setOneShotOpen(false)}
+                disabled={oneShotSubmitting}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Disconnected banner */}

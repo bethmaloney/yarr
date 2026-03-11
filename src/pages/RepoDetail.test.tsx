@@ -202,6 +202,7 @@ interface MockState {
   stopSession: ReturnType<typeof vi.fn>;
   reconnectSession: ReturnType<typeof vi.fn>;
   updateRepo: ReturnType<typeof vi.fn>;
+  runOneShot: ReturnType<typeof vi.fn>;
 }
 
 function setupMockState(overrides: Partial<MockState> = {}): MockState {
@@ -212,6 +213,7 @@ function setupMockState(overrides: Partial<MockState> = {}): MockState {
     stopSession: vi.fn(),
     reconnectSession: vi.fn(),
     updateRepo: vi.fn(),
+    runOneShot: vi.fn(),
     ...overrides,
   };
 
@@ -1380,16 +1382,6 @@ describe("RepoDetail", () => {
       ).toBeInTheDocument();
     });
 
-    it("1-Shot navigates to /repo/{repoId}/oneshot", () => {
-      setupMockState({ repos: [makeLocalRepo()] });
-      renderRepoDetail();
-
-      const oneshotButton = screen.getByRole("button", { name: /1-shot/i });
-      fireEvent.click(oneshotButton);
-
-      expect(mockNavigate).toHaveBeenCalledWith("/repo/test-repo/oneshot");
-    });
-
     it("shows Reconnect button when disconnected", () => {
       setupMockState({
         repos: [makeLocalRepo()],
@@ -1425,6 +1417,209 @@ describe("RepoDetail", () => {
       fireEvent.click(reconnectButton);
 
       expect(state.reconnectSession).toHaveBeenCalledWith("test-repo");
+    });
+  });
+
+  // =========================================================================
+  // 8b. 1-Shot form
+  // =========================================================================
+
+  describe("1-Shot form", () => {
+    it("shows 1-Shot button that toggles form open", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      renderRepoDetail();
+      const user = userEvent.setup();
+
+      // Form fields should not be visible initially
+      expect(screen.queryByLabelText(/title/i)).not.toBeInTheDocument();
+
+      // Click the 1-Shot button to open the form
+      const oneshotButton = screen.getByRole("button", { name: /1-shot/i });
+      await user.click(oneshotButton);
+
+      // Form fields should now be visible
+      expect(document.getElementById("oneshot-title")).toBeInTheDocument();
+      expect(document.getElementById("oneshot-prompt")).toBeInTheDocument();
+    });
+
+    it("form has title, prompt, model, and merge strategy fields", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      renderRepoDetail();
+      const user = userEvent.setup();
+
+      // Open the form
+      await user.click(screen.getByRole("button", { name: /1-shot/i }));
+
+      // Verify all form fields exist
+      expect(document.getElementById("oneshot-title")).toBeInTheDocument();
+      expect(document.getElementById("oneshot-prompt")).toBeInTheDocument();
+      expect(document.getElementById("oneshot-model")).toBeInTheDocument();
+
+      // Verify merge strategy radio buttons
+      const mergeToMain = screen.getByDisplayValue("merge_to_main");
+      const branch = screen.getByDisplayValue("branch");
+      expect(mergeToMain).toBeInTheDocument();
+      expect(branch).toBeInTheDocument();
+    });
+
+    it("model field is pre-filled with repo model", async () => {
+      setupMockState({ repos: [makeLocalRepo({ model: "sonnet" })] });
+      renderRepoDetail();
+      const user = userEvent.setup();
+
+      // Open the form
+      await user.click(screen.getByRole("button", { name: /1-shot/i }));
+
+      const modelInput = document.getElementById(
+        "oneshot-model",
+      ) as HTMLInputElement;
+      expect(modelInput.value).toBe("sonnet");
+    });
+
+    it("Launch button is disabled when title or prompt is empty", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      renderRepoDetail();
+      const user = userEvent.setup();
+
+      // Open the form
+      await user.click(screen.getByRole("button", { name: /1-shot/i }));
+
+      const launchButton = screen.getByRole("button", { name: /launch/i });
+
+      // Both empty — disabled
+      expect(launchButton).toBeDisabled();
+
+      // Fill title only — still disabled
+      const titleInput = document.getElementById(
+        "oneshot-title",
+      ) as HTMLInputElement;
+      await user.type(titleInput, "My task");
+      expect(launchButton).toBeDisabled();
+
+      // Clear title & fill prompt only — still disabled
+      await user.clear(titleInput);
+      const promptInput = document.getElementById(
+        "oneshot-prompt",
+      ) as HTMLTextAreaElement;
+      await user.type(promptInput, "Do the thing");
+      expect(launchButton).toBeDisabled();
+
+      // Fill both — enabled
+      await user.type(titleInput, "My task");
+      expect(launchButton).toBeEnabled();
+    });
+
+    it("submit calls store.runOneShot and navigates on success", async () => {
+      const state = setupMockState({ repos: [makeLocalRepo()] });
+      state.runOneShot.mockResolvedValue("oneshot-123");
+      renderRepoDetail();
+      const user = userEvent.setup();
+
+      // Open the form
+      await user.click(screen.getByRole("button", { name: /1-shot/i }));
+
+      // Fill in the form
+      const titleInput = document.getElementById(
+        "oneshot-title",
+      ) as HTMLInputElement;
+      const promptInput = document.getElementById(
+        "oneshot-prompt",
+      ) as HTMLTextAreaElement;
+      const modelInput = document.getElementById(
+        "oneshot-model",
+      ) as HTMLInputElement;
+
+      await user.type(titleInput, "Fix bug");
+      await user.type(promptInput, "Please fix the login bug");
+      // Model is pre-filled with "opus", leave as-is
+
+      // Submit
+      const launchButton = screen.getByRole("button", { name: /launch/i });
+      await user.click(launchButton);
+
+      await waitFor(() => {
+        expect(state.runOneShot).toHaveBeenCalledWith(
+          "test-repo",
+          "Fix bug",
+          "Please fix the login bug",
+          "opus",
+          "merge_to_main",
+        );
+      });
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith("/oneshot/oneshot-123");
+      });
+    });
+
+    it("form is hidden when session is running", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        sessions: new Map([["test-repo", makeSessionState({ running: true })]]),
+      });
+      renderRepoDetail();
+
+      // The 1-Shot button should not be present or the form should be hidden
+      // when a session is actively running
+      const oneshotButton = screen.queryByRole("button", { name: /1-shot/i });
+      if (oneshotButton) {
+        // If the button exists, clicking it should not reveal the form
+        fireEvent.click(oneshotButton);
+        expect(document.getElementById("oneshot-title")).not.toBeInTheDocument();
+      }
+      // Either the button is absent or clicking it does not open the form
+    });
+
+    it("Cancel button collapses the form", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      renderRepoDetail();
+      const user = userEvent.setup();
+
+      // Open the form
+      await user.click(screen.getByRole("button", { name: /1-shot/i }));
+
+      // Form should be visible
+      expect(document.getElementById("oneshot-title")).toBeInTheDocument();
+
+      // Click Cancel
+      const cancelButton = screen.getByRole("button", { name: /cancel/i });
+      await user.click(cancelButton);
+
+      // Form should be collapsed
+      expect(
+        document.getElementById("oneshot-title"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows error toast and does not navigate when runOneShot fails", async () => {
+      const state = setupMockState({ repos: [makeLocalRepo()] });
+      state.runOneShot.mockResolvedValue(undefined);
+      renderRepoDetail();
+      const user = userEvent.setup();
+
+      // Open form, fill it, submit
+      await user.click(screen.getByRole("button", { name: /1-shot/i }));
+      const titleInput = document.getElementById(
+        "oneshot-title",
+      ) as HTMLInputElement;
+      const promptInput = document.getElementById(
+        "oneshot-prompt",
+      ) as HTMLTextAreaElement;
+      await user.type(titleInput, "Fix bug");
+      await user.type(promptInput, "Please fix the login bug");
+      const launchButton = screen.getByRole("button", { name: /launch/i });
+      await user.click(launchButton);
+
+      await waitFor(() => {
+        expect(state.runOneShot).toHaveBeenCalled();
+      });
+
+      // Should show error toast
+      expect(mockToast.error).toHaveBeenCalledWith(
+        "Failed to launch 1-shot",
+      );
+      // Should NOT navigate
+      expect(mockNavigate).not.toHaveBeenCalled();
     });
   });
 

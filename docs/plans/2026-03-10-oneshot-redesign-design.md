@@ -521,13 +521,13 @@ Replace the simple "1-Shot" navigation button with an inline form that submits a
 - Disable form while any 1-shot from this repo is starting
 
 **Checklist:**
-- [ ] Inline form added
-- [ ] Submit calls `store.runOneShot()` with full config
-- [ ] Navigates to new detail page after launch
-- [ ] Add tests: form renders with required fields
-- [ ] Add tests: submit calls store action and navigates
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm test` passes
+- [x] Inline form added
+- [x] Submit calls `store.runOneShot()` with full config
+- [x] Navigates to new detail page after launch
+- [x] Add tests: form renders with required fields
+- [x] Add tests: submit calls store action and navigates
+- [x] `npx tsc --noEmit` passes
+- [x] `npm test` passes
 
 ---
 
@@ -583,6 +583,6 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | 7 | OneShotCard component | Done |
 | 8 | OneShotDetail page with active/read-only modes | Done |
 | 9 | Home page mixed cards | Done |
-| 10 | RepoDetail 1-shot launch form | Not Started |
+| 10 | RepoDetail 1-shot launch form | Done |
 | 11 | Delete old OneShot page | Not Started |
 | 12 | Update E2E tests | Not Started |
