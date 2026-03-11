@@ -113,13 +113,13 @@ Add the caching layer and trait method.
 - Add `SshEnvCache` newtype around `DashMap<String, HashMap<String, String>>` for Tauri managed state (add `dashmap` dependency)
 
 **Checklist:**
-- [ ] Add `resolve_env` to `RuntimeProvider` trait
-- [ ] Add `LOCAL_ENV_CACHE` static OnceCell
-- [ ] Add `get_or_init_local_env()` helper
-- [ ] Add `SshEnvCache` newtype struct
-- [ ] Add `dashmap` to `Cargo.toml` if not present
-- [ ] Update MockRuntime to implement `resolve_env` (return empty or process env)
-- [ ] `cd src-tauri && cargo check`
+- [x] Add `resolve_env` to `RuntimeProvider` trait
+- [x] Add `LOCAL_ENV_CACHE` static OnceCell
+- [x] Add `get_or_init_local_env()` helper
+- [x] Add `SshEnvCache` newtype struct
+- [x] Add `dashmap` to `Cargo.toml` if not present
+- [x] Update MockRuntime to implement `resolve_env` (return empty or process env)
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -281,7 +281,7 @@ Ensure MockRuntime and existing tests still pass, add new tests.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Create `shell_env.rs` module with snapshot logic | Done |
-| 2 | Add local env cache and `resolve_env` to trait | Not Started |
+| 2 | Add local env cache and `resolve_env` to trait | Done |
 | 3 | Implement `resolve_env` for LocalRuntime | Not Started |
 | 4 | Implement `resolve_env` for WslRuntime | Not Started |
 | 5 | Implement `resolve_env` for SshRuntime | Not Started |
