@@ -140,6 +140,8 @@ export function toolSummary(ev: SessionEvent, repoPath?: string): string {
     case "Grep":
     case "Glob":
       return input.pattern ? `${name}: ${input.pattern}` : name;
+    case "Agent":
+      return input.description ? `${name}: ${input.description}` : name;
     default:
       return name;
   }

@@ -87,8 +87,8 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 - Add `case "Agent":` that returns `Agent: ${input.description}` if description exists, else `"Agent"`
 
 **Checklist:**
-- [ ] Add Agent case to `toolSummary()`
-- [ ] Verify: `npm test -- event-format`
+- [x] Add Agent case to `toolSummary()`
+- [x] Verify: `npm test -- event-format`
 
 ---
 
@@ -102,8 +102,8 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 - Test Agent without description field
 
 **Checklist:**
-- [ ] Add Agent toolSummary tests
-- [ ] Verify: `npm test -- event-format`
+- [x] Add Agent toolSummary tests
+- [x] Verify: `npm test -- event-format`
 
 ---
 
@@ -180,8 +180,8 @@ Add percentage between cost and token counts in the iteration header. Format: `I
 |------|-------------|--------|
 | 1 | Add `toWslPath()` and fix `relativePath()` | Done |
 | 2 | Tests for `toWslPath()` and `relativePath()` | Done |
-| 3 | Agent description in `toolSummary()` | Not Started |
-| 4 | Tests for Agent `toolSummary()` | Not Started |
+| 3 | Agent description in `toolSummary()` | Done |
+| 4 | Tests for Agent `toolSummary()` | Done |
 | 5 | Install `react-markdown` and render Agent prompt | Not Started |
 | 6 | Round cost to nearest cent | Not Started |
 | 7 | Add context percentage to iteration title | Not Started |

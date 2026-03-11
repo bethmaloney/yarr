@@ -414,6 +414,35 @@ describe("toolSummary with repoPath", () => {
       ),
     ).toBe("Read: src/main.ts");
   });
+
+  it("returns Agent with description when description is present", () => {
+    const ev = makeEvent({
+      kind: "tool_use",
+      tool_name: "Agent",
+      tool_input: { description: "Review working_dir changes" },
+    });
+    expect(toolSummary(ev, "/home/user/repo")).toBe(
+      "Agent: Review working_dir changes",
+    );
+  });
+
+  it("returns bare Agent when description is absent", () => {
+    const ev = makeEvent({
+      kind: "tool_use",
+      tool_name: "Agent",
+      tool_input: { prompt: "Do something" },
+    });
+    expect(toolSummary(ev, "/home/user/repo")).toBe("Agent");
+  });
+
+  it("returns bare Agent when description is empty string", () => {
+    const ev = makeEvent({
+      kind: "tool_use",
+      tool_name: "Agent",
+      tool_input: { description: "" },
+    });
+    expect(toolSummary(ev, "/home/user/repo")).toBe("Agent");
+  });
 });
 
 describe("toWslPath", () => {
