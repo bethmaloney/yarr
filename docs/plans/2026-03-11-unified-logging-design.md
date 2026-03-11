@@ -60,10 +60,11 @@ Add the plugin crate and configure it in the Tauri builder with console + file t
 - Add `"log:default"` to the permissions array in `capabilities/default.json`
 
 **Checklist:**
-- [ ] Add `tauri-plugin-log` to Cargo.toml
-- [ ] Initialize plugin in `lib.rs` with console + file targets
-- [ ] Add `"log:default"` permission
-- [ ] `cd src-tauri && cargo check`
+- [x] Add `tauri-plugin-log` to Cargo.toml
+- [x] Initialize plugin in `lib.rs` with console + file targets
+- [x] Add `"log:default"` permission
+- [x] Enable `tracing` `log` feature for tracing→log bridge
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -153,7 +154,7 @@ Manual verification that everything works together.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add tauri-plugin-log Rust dependency and initialize | Not Started |
+| 1 | Add tauri-plugin-log Rust dependency and initialize | Done |
 | 2 | Add frontend log plugin and attach console | Not Started |
 | 3 | Migrate println!/eprintln! in session.rs | Not Started |
 | 4 | Migrate println! in trace.rs | Not Started |
