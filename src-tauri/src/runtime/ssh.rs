@@ -41,10 +41,12 @@ pub fn shell_escape(s: &str) -> String {
 /// (e.g. using `shell_escape()` for individual arguments within the command).
 pub fn ssh_command(host: &str, remote_cmd: &str) -> Command {
     if cfg!(target_os = "windows") {
+        // Double-escape: inner shell_escape quotes for the remote shell (so $SHELL -lc
+        // receives the full command as one argument), outer shell_escape quotes for WSL bash.
         let ssh_str = format!(
             "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} \\$SHELL -lc {}",
             shell_escape(host),
-            shell_escape(remote_cmd)
+            shell_escape(&shell_escape(remote_cmd))
         );
         let mut cmd = Command::new("wsl");
         cmd.arg("-e").arg("bash").arg("-lc").arg(ssh_str);

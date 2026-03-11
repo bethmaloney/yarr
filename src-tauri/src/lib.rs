@@ -618,10 +618,10 @@ pub(crate) async fn list_plans_impl(
     // Use -exec basename instead of -printf for macOS (BSD find) compatibility.
     // pipefail ensures find errors propagate through the pipe to sort.
     let cmd = format!(
-        "set -o pipefail; find {} -maxdepth 1 -name '*.md' -type f -exec basename {{}} \\; | sort",
+        "set -o pipefail && find {} -maxdepth 1 -name '*.md' -type f -exec basename {{}} \\; | sort",
         escaped_path
     );
-    tracing::debug!(cmd = %cmd, working_dir = %working_dir.display(), "list_plans_impl running command");
+    tracing::info!(cmd = %cmd, working_dir = %working_dir.display(), "list_plans_impl running command");
     let timeout = std::time::Duration::from_secs(30);
     let output = rt
         .run_command(&cmd, working_dir, timeout)
@@ -659,13 +659,13 @@ pub(crate) async fn list_plans_impl(
 
 #[tauri::command]
 async fn list_plans(repo: RepoType, plans_dir: String) -> Result<Vec<String>, String> {
-    tracing::info!(plans_dir = %plans_dir, "list_plans called");
+    tracing::info!(plans_dir = %plans_dir, repo = ?repo, "list_plans called");
     if plans_dir.contains("..") {
         tracing::warn!(plans_dir = %plans_dir, "list_plans rejected: path contains '..'");
         return Err("Invalid plans directory".to_string());
     }
     let (rt, working_dir) = resolve_runtime(&repo);
-    tracing::debug!(working_dir = %working_dir.display(), "list_plans resolving runtime");
+    tracing::info!(runtime = %rt.name(), working_dir = %working_dir.display(), "list_plans resolved runtime");
     match list_plans_impl(rt.as_ref(), &working_dir, &plans_dir).await {
         Ok(plans) => {
             tracing::info!(count = plans.len(), "list_plans succeeded");
