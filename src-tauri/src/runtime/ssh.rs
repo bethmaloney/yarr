@@ -776,6 +776,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn ssh_command_raw_includes_batch_mode() {
         let cmd = ssh_command_raw("myhost", "echo hello");

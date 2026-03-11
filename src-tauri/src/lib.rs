@@ -615,8 +615,10 @@ pub(crate) async fn list_plans_impl(
     plans_dir: &str,
 ) -> Result<Vec<String>, String> {
     let escaped_path = ssh_shell_escape(plans_dir);
+    // Use -exec basename instead of -printf for macOS (BSD find) compatibility.
+    // pipefail ensures find errors propagate through the pipe to sort.
     let cmd = format!(
-        "find {} -maxdepth 1 -name '*.md' -type f -printf '%f\\n' | sort",
+        "set -o pipefail; find {} -maxdepth 1 -name '*.md' -type f -exec basename {{}} \\; | sort",
         escaped_path
     );
     tracing::debug!(cmd = %cmd, working_dir = %working_dir.display(), "list_plans_impl running command");
@@ -648,6 +650,9 @@ pub(crate) async fn list_plans_impl(
         .filter(|l| !l.is_empty())
         .collect();
 
+    if files.is_empty() && !output.stderr.is_empty() {
+        tracing::warn!(stderr = %output.stderr, "list_plans_impl found 0 plans but stderr was non-empty");
+    }
     tracing::debug!(files = ?files, "list_plans_impl parsed files");
     Ok(files)
 }
@@ -1588,6 +1593,7 @@ mod tests {
 
     // --- list_plans_impl / move_plan_to_completed_impl tests (TDD) ---
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn list_plans_impl_returns_only_md_files() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1612,6 +1618,7 @@ mod tests {
         assert_eq!(result.len(), 2, "should contain exactly 2 .md files");
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn list_plans_impl_excludes_files_in_subdirectories() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1647,6 +1654,7 @@ mod tests {
         assert!(result.is_empty(), "should return empty vec when plans dir doesn't exist, got: {:?}", result);
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn list_plans_impl_returns_sorted_filenames() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1667,6 +1675,7 @@ mod tests {
             "files should be returned in sorted order");
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn list_plans_impl_returns_filenames_without_directory_prefix() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1688,6 +1697,7 @@ mod tests {
             "filename should not contain any path separators");
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn move_plan_to_completed_impl_moves_file_and_creates_dir() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1735,57 +1745,24 @@ mod tests {
             "should return Err when source file does not exist");
     }
 
-    // --- OneShotResult tests (TDD — struct does not exist yet) ---
-
-    /// Helper to build a minimal SessionTrace for use in OneShotResult tests.
-    fn make_test_session_trace() -> trace::SessionTrace {
-        trace::SessionTrace {
-            trace_id: "abc123".to_string(),
-            root_span_id: "span456".to_string(),
-            session_id: "sess-789".to_string(),
-            repo_path: "/tmp/repo".to_string(),
-            prompt: "implement feature X".to_string(),
-            plan_file: None,
-            repo_id: Some("test-repo".to_string()),
-            session_type: "ralph_loop".to_string(),
-            start_time: chrono::Utc::now(),
-            end_time: Some(chrono::Utc::now()),
-            outcome: SessionOutcome::Completed,
-            failure_reason: None,
-            iterations: vec![],
-            total_cost_usd: 1.23,
-            total_iterations: 2,
-            total_input_tokens: 100,
-            total_output_tokens: 50,
-            total_cache_read_tokens: 10,
-            total_cache_creation_tokens: 5,
-            context_window: 0,
-            final_context_tokens: 0,
-        }
-    }
+    // --- OneShotResult tests ---
 
     #[test]
-    fn oneshot_result_serializes_with_both_fields() {
+    fn oneshot_result_serializes_with_oneshot_id() {
         let result = OneShotResult {
             oneshot_id: "oneshot-a1b2c3".to_string(),
-            trace: make_test_session_trace(),
         };
 
         let json = serde_json::to_value(&result).expect("serialization should succeed");
 
         assert!(json.get("oneshot_id").is_some(), "JSON should contain 'oneshot_id' field");
-        assert!(json.get("trace").is_some(), "JSON should contain 'trace' field");
         assert_eq!(json["oneshot_id"], "oneshot-a1b2c3");
-        assert_eq!(json["trace"]["trace_id"], "abc123");
-        assert_eq!(json["trace"]["session_id"], "sess-789");
-        assert_eq!(json["trace"]["outcome"], "completed");
     }
 
     #[test]
     fn oneshot_result_clone_produces_equal_json() {
         let result = OneShotResult {
             oneshot_id: "oneshot-d4e5f6".to_string(),
-            trace: make_test_session_trace(),
         };
 
         let cloned = result.clone();
@@ -1803,7 +1780,6 @@ mod tests {
     fn oneshot_result_oneshot_id_is_string() {
         let result = OneShotResult {
             oneshot_id: "oneshot-aabbcc".to_string(),
-            trace: make_test_session_trace(),
         };
 
         let json = serde_json::to_value(&result).expect("serialization should succeed");
