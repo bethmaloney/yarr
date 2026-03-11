@@ -161,6 +161,7 @@ async fn run_session(
                 env_vars: env_vars.unwrap_or_default(),
                 checks: checks.unwrap_or_default(),
                 git_sync,
+                iteration_offset: 0,
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -211,6 +212,7 @@ async fn run_session(
                 env_vars: env_vars.unwrap_or_default(),
                 checks: checks.unwrap_or_default(),
                 git_sync,
+                iteration_offset: 0,
             };
 
             let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -256,7 +258,6 @@ async fn run_session(
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct OneShotResult {
     pub oneshot_id: String,
-    pub trace: trace::SessionTrace,
 }
 
 #[tauri::command]
@@ -285,7 +286,6 @@ async fn run_oneshot(
     match &repo {
         RepoType::Local { path } => {
             let repo_path_buf = PathBuf::from(path);
-            let runtime = default_runtime();
 
             let config = oneshot::OneShotConfig {
                 repo_id: repo_id.clone(),
@@ -323,9 +323,16 @@ async fn run_oneshot(
                 }))
                 .with_session_id(session_id);
 
-            let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
-            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
-            result.map(|trace| OneShotResult { oneshot_id, trace })
+            // Spawn as a background task so we return immediately
+            let app_bg = app.clone();
+            let oneshot_id_bg = oneshot_id.clone();
+            tokio::spawn(async move {
+                let runtime = default_runtime();
+                let _result = runner.run(runtime.as_ref()).await;
+                app_bg.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id_bg);
+            });
+
+            Ok(OneShotResult { oneshot_id })
         }
         RepoType::Ssh { .. } => {
             app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);

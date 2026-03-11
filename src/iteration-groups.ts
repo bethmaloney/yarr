@@ -105,6 +105,10 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
         : 0;
       currentGroup.endTs = ev._ts;
     }
+
+    if (ev.kind === "iteration_failed") {
+      currentGroup.endTs = ev._ts;
+    }
   }
 
   // Finalize any remaining open group

@@ -749,6 +749,7 @@ mod tests {
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(),
             git_sync: None,
+            iteration_offset: 0,
         }
     }
 

@@ -308,7 +308,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath,
               };
 
-        const result = await invoke<{ oneshot_id: string; trace: SessionTrace }>("run_oneshot", {
+        const result = await invoke<{ oneshot_id: string }>("run_oneshot", {
           repoId,
           repo: repoPayload,
           title,

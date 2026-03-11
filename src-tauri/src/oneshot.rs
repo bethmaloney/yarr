@@ -519,6 +519,8 @@ impl OneShotRunner {
             env_vars: self.config.env_vars.clone(),
             checks: self.config.checks.clone(),
             git_sync: self.config.git_sync.clone(),
+            // Offset by 1 so implementation iterations start at 2 (design is iteration 1)
+            iteration_offset: 1,
             ..SessionConfig::default()
         };
 

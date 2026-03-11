@@ -27,6 +27,7 @@ const eventKindColor: Record<string, string> = {
   tool_use: "text-[#a78bfa]",
   assistant_text: "text-[#e0e0e0]",
   iteration_complete: "text-[#34d399]",
+  iteration_failed: "text-[#f87171]",
   session_complete: "text-[#e8d44d] font-semibold",
   check_started: "text-[#60a5fa]",
   check_passed: "text-[#34d399]",

@@ -76,6 +76,8 @@ export function eventEmoji(kind: string): string {
       return "\u{1F4AC}";
     case "iteration_complete":
       return "\u2705";
+    case "iteration_failed":
+      return "\u274C";
     case "session_complete":
       return "\u{1F3C1}";
     case "check_started":
@@ -159,6 +161,8 @@ export function eventLabel(ev: SessionEvent, repoPath?: string): string {
       return `[${ev.iteration}] ${ev.text}`;
     case "iteration_complete":
       return `Iteration ${ev.iteration} complete (cost: $${(ev.result as Record<string, number> | undefined)?.total_cost_usd?.toFixed(2) ?? "?"})`;
+    case "iteration_failed":
+      return `Iteration ${ev.iteration} failed: ${ev.error ?? "unknown error"}`;
     case "session_complete":
       return `Session complete: ${ev.outcome}`;
     case "check_started":

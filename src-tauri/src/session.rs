@@ -70,6 +70,9 @@ pub struct SessionConfig {
     pub env_vars: std::collections::HashMap<String, String>,
     pub checks: Vec<Check>,
     pub git_sync: Option<GitSyncConfig>,
+    /// Offset added to iteration numbers in emitted events (default 0).
+    /// Used by 1-shot to avoid design/implementation phases colliding on iteration 1.
+    pub iteration_offset: u32,
 }
 
 impl Default for SessionConfig {
@@ -87,6 +90,7 @@ impl Default for SessionConfig {
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(),
             git_sync: None,
+            iteration_offset: 0,
         }
     }
 }
@@ -130,6 +134,8 @@ pub enum SessionEvent {
     AssistantText { iteration: u32, text: String },
     /// An iteration completed with its result
     IterationComplete { iteration: u32, result: ResultEvent },
+    /// An iteration failed with an error (process crash, etc.)
+    IterationFailed { iteration: u32, error: String },
     /// The entire session finished
     SessionComplete { outcome: SessionOutcome },
     /// SSH connection lost, session may still be running remotely
@@ -896,23 +902,26 @@ impl SessionRunner {
     ) -> Result<()> {
         let mut state = SessionState::Idle;
         let invocation = self.build_invocation();
+        let offset = self.config.iteration_offset;
 
         for iteration in 1..=self.config.max_iterations {
+            let display_iter = iteration + offset;
+
             // Check cancellation before starting iteration
             if self.cancel_token.is_cancelled() {
-                tracing::info!(iteration, "session cancelled before iteration");
+                tracing::info!(iteration = display_iter, "session cancelled before iteration");
                 state = SessionState::Cancelled { iteration };
                 break;
             }
 
             let _ = SessionState::Running { iteration };
-            tracing::info!(iteration, max = self.config.max_iterations, "starting iteration");
+            tracing::info!(iteration = display_iter, max = self.config.max_iterations + offset, "starting iteration");
 
-            self.emit(SessionEvent::IterationStarted { iteration });
+            self.emit(SessionEvent::IterationStarted { iteration: display_iter });
 
             let iter_start = Utc::now();
 
-            match self.run_iteration(runtime, &invocation, iteration).await {
+            match self.run_iteration(runtime, &invocation, display_iter).await {
                 Ok((result, last_context_tokens)) => {
                     let iter_end = Utc::now();
                     let has_signal =
@@ -925,7 +934,7 @@ impl SessionRunner {
                         iter_start,
                         iter_end,
                         SpanAttributes {
-                            iteration,
+                            iteration: display_iter,
                             claude_session_id: result.session_id.clone(),
                             cost_usd: result.total_cost_usd.unwrap_or(0.0),
                             num_turns: result.num_turns,
@@ -941,27 +950,27 @@ impl SessionRunner {
                     );
 
                     self.emit(SessionEvent::IterationComplete {
-                        iteration,
+                        iteration: display_iter,
                         result: result.clone(),
                     });
 
-                    tracing::info!(iteration, cost = result.total_cost_usd.unwrap_or(0.0), turns = result.num_turns.unwrap_or(0), signal = has_signal, "iteration complete");
+                    tracing::info!(iteration = display_iter, cost = result.total_cost_usd.unwrap_or(0.0), turns = result.num_turns.unwrap_or(0), signal = has_signal, "iteration complete");
 
                     state = SessionState::Evaluating { iteration };
 
-                    self.run_checks(runtime, iteration, &CheckWhen::EachIteration, &self.config.checks).await;
-                    self.git_sync(runtime, iteration).await;
+                    self.run_checks(runtime, display_iter, &CheckWhen::EachIteration, &self.config.checks).await;
+                    self.git_sync(runtime, display_iter).await;
 
                     if self.cancel_token.is_cancelled() {
-                        tracing::info!(iteration, "session cancelled after checks");
+                        tracing::info!(iteration = display_iter, "session cancelled after checks");
                         state = SessionState::Cancelled { iteration };
                         break;
                     }
 
                     if has_signal {
                         tracing::info!("completion signal detected, stopping loop");
-                        self.run_checks(runtime, iteration, &CheckWhen::PostCompletion, &self.config.checks).await;
-                        self.git_sync(runtime, iteration).await;
+                        self.run_checks(runtime, display_iter, &CheckWhen::PostCompletion, &self.config.checks).await;
+                        self.git_sync(runtime, display_iter).await;
                         state = SessionState::Completed {
                             iterations: iteration,
                         };
@@ -969,7 +978,7 @@ impl SessionRunner {
                     }
 
                     if is_error {
-                        tracing::error!(iteration, "error detected in iteration");
+                        tracing::error!(iteration = display_iter, "error detected in iteration");
                         state = SessionState::Failed {
                             iteration,
                             error: result_text,
@@ -994,20 +1003,20 @@ impl SessionRunner {
                 Err(e) => {
                     // Check if this was a cancellation-induced error
                     if self.cancel_token.is_cancelled() {
-                        tracing::info!(iteration, "session cancelled during iteration");
+                        tracing::info!(iteration = display_iter, "session cancelled during iteration");
                         state = SessionState::Cancelled { iteration };
                         break;
                     }
 
                     let iter_end = Utc::now();
-                    tracing::error!(iteration, error = %e, "process error in iteration");
+                    tracing::error!(iteration = display_iter, error = %e, "process error in iteration");
 
                     self.collector.record_iteration(
                         trace,
                         iter_start,
                         iter_end,
                         SpanAttributes {
-                            iteration,
+                            iteration: display_iter,
                             claude_session_id: None,
                             cost_usd: 0.0,
                             num_turns: None,
@@ -1021,6 +1030,11 @@ impl SessionRunner {
                         },
                         true,
                     );
+
+                    self.emit(SessionEvent::IterationFailed {
+                        iteration: display_iter,
+                        error: e.to_string(),
+                    });
 
                     state = SessionState::Failed {
                         iteration,
@@ -1200,6 +1214,7 @@ mod tests {
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(),
             git_sync: None,
+            iteration_offset: 0,
         };
 
         let collector = TraceCollector::new(base_dir, "test-repo");
@@ -1527,6 +1542,7 @@ mod tests {
             env_vars: std::collections::HashMap::new(),
             checks,
             git_sync: None,
+            iteration_offset: 0,
         };
         let collector = TraceCollector::new(tmp.path(), "test-repo");
         let cancel_token = tokio_util::sync::CancellationToken::new();
@@ -1766,6 +1782,7 @@ mod tests {
             env_vars: std::collections::HashMap::new(),
             checks: vec![check],
             git_sync: None,
+            iteration_offset: 0,
         };
 
         let collector = TraceCollector::new(tmp.path(), "test-repo");
@@ -1833,6 +1850,7 @@ mod tests {
             env_vars: std::collections::HashMap::new(),
             checks: vec![check],
             git_sync: None,
+            iteration_offset: 0,
         };
 
         let collector = TraceCollector::new(tmp.path(), "test-repo");
@@ -1909,6 +1927,7 @@ mod tests {
             env_vars: std::collections::HashMap::new(),
             checks: vec![check],
             git_sync: None,
+            iteration_offset: 0,
         };
 
         let collector = TraceCollector::new(tmp.path(), "test-repo");
@@ -2195,6 +2214,7 @@ mod tests {
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(), // No checks
             git_sync: None,
+            iteration_offset: 0,
         };
 
         let collector = TraceCollector::new(tmp.path(), "test-repo");
@@ -2246,6 +2266,7 @@ mod tests {
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(),
             git_sync,
+            iteration_offset: 0,
         };
         let collector = TraceCollector::new(tmp.path(), "test-repo");
         let cancel_token = tokio_util::sync::CancellationToken::new();
@@ -2573,6 +2594,7 @@ mod tests {
                 enabled: true,
                 ..Default::default()
             }),
+            iteration_offset: 0,
         };
         let collector = TraceCollector::new(tmp.path(), "test-repo");
         let cancel_token = tokio_util::sync::CancellationToken::new();
@@ -2733,6 +2755,7 @@ mod tests {
                 enabled: true,
                 ..Default::default()
             }),
+            iteration_offset: 0,
         };
 
         let collector = TraceCollector::new(tmp.path(), "test-repo");
@@ -3005,6 +3028,7 @@ mod tests {
             env_vars: std::collections::HashMap::new(),
             checks: Vec::new(),
             git_sync: None,
+            iteration_offset: 0,
         };
 
         let collector = TraceCollector::new(base_dir, "test-repo");
