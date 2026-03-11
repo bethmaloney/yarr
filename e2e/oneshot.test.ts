@@ -14,17 +14,23 @@ const repoStoreData = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// Helper: navigate to the RepoDetail page for "my-app"
+// ---------------------------------------------------------------------------
 async function navigateToRepoDetail(
   page: import("@playwright/test").Page,
   mockTauri: (opts?: TauriMockOptions) => Promise<void>,
-  invokeHandlers?: Record<string, unknown>,
+  extra?: {
+    invokeHandlers?: Record<string, unknown>;
+    storeData?: Record<string, unknown>;
+  },
 ) {
   await mockTauri({
-    storeData: repoStoreData,
+    storeData: { ...repoStoreData, ...extra?.storeData },
     invokeHandlers: {
       get_active_sessions: () => [],
-      run_oneshot: () => null,
-      ...invokeHandlers,
+      run_oneshot: () => new Promise(() => {}),
+      ...extra?.invokeHandlers,
     },
   });
   await page.goto("/");
@@ -32,204 +38,164 @@ async function navigateToRepoDetail(
   await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
 }
 
-test.describe("1-Shot navigation", () => {
-  test('"1-Shot" button is visible on repo detail page', async ({
-    page,
-    mockTauri,
-  }) => {
-    await navigateToRepoDetail(page, mockTauri);
-
-    await expect(page.getByRole("button", { name: "1-Shot" })).toBeVisible();
-  });
-
-  test('clicking "1-Shot" navigates to the OneShotView', async ({
-    page,
-    mockTauri,
-  }) => {
-    await navigateToRepoDetail(page, mockTauri);
-
-    await page.getByRole("button", { name: "1-Shot" }).click();
-
-    // OneShotView should show the h1 with "1-Shot" text
-    await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
-
-    // The form should have Title and Prompt inputs
-    await expect(page.getByText("Title")).toBeVisible();
-    await expect(page.getByText("Prompt")).toBeVisible();
-
-    // The "Run" button should be present
-    await expect(page.getByRole("button", { name: "Run" })).toBeVisible();
-  });
-
-  test("back navigation from OneShotView returns to home view", async ({
-    page,
-    mockTauri,
-  }) => {
-    await navigateToRepoDetail(page, mockTauri);
-
-    // Navigate to 1-Shot view
-    await page.getByRole("button", { name: "1-Shot" }).click();
-    await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
-
-    // Click the "Home" breadcrumb link to go back
-    await page.getByRole("button", { name: "Home" }).click();
-
-    // Should return to the home view
-    await expect(page.locator("h1", { hasText: "Yarr" })).toBeVisible();
-  });
-
-  test("OneShotView shows correct repo name", async ({ page, mockTauri }) => {
-    await navigateToRepoDetail(page, mockTauri);
-
-    await page.getByRole("button", { name: "1-Shot" }).click();
-
-    // The h1 should contain the repo name
-    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
-
-    // The full heading should be "{repo.name} — 1-Shot"
-    await expect(page.locator("h1")).toContainText("my-app");
-  });
-});
-
 // ---------------------------------------------------------------------------
-// Helper: navigate to the 1-Shot view from repo detail
+// Helper: open the inline 1-shot form on the RepoDetail page
 // ---------------------------------------------------------------------------
-async function navigateToOneShotView(
+async function openOneShotForm(
   page: import("@playwright/test").Page,
   mockTauri: (opts?: TauriMockOptions) => Promise<void>,
-  invokeHandlers?: Record<string, unknown>,
+  extra?: {
+    invokeHandlers?: Record<string, unknown>;
+    storeData?: Record<string, unknown>;
+  },
 ) {
-  await navigateToRepoDetail(page, mockTauri, invokeHandlers);
+  await navigateToRepoDetail(page, mockTauri, extra);
   await page.getByRole("button", { name: "1-Shot" }).click();
-  await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
+  await expect(page.locator("#oneshot-title")).toBeVisible();
 }
 
 // ---------------------------------------------------------------------------
-// 1-Shot form interaction
+// Helper: emit a session event via the Tauri mock
 // ---------------------------------------------------------------------------
-test.describe("1-Shot form interaction", () => {
-  test("form shows Title, Prompt, Model, and Merge Strategy fields", async ({
+async function emitSessionEvent(
+  page: import("@playwright/test").Page,
+  repoId: string,
+  eventData: Record<string, unknown>,
+) {
+  await page.evaluate(
+    ({ repoId, evt }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+        event: "session-event",
+        payload: { repo_id: repoId, event: evt },
+      });
+    },
+    { repoId, evt: eventData },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 1. 1-Shot form on RepoDetail
+// ---------------------------------------------------------------------------
+test.describe("1-Shot form on RepoDetail", () => {
+  test('"1-Shot" button is visible', async ({ page, mockTauri }) => {
+    await navigateToRepoDetail(page, mockTauri);
+    await expect(page.getByRole("button", { name: "1-Shot" })).toBeVisible();
+  });
+
+  test('clicking "1-Shot" opens the inline form', async ({
     page,
     mockTauri,
   }) => {
-    await navigateToOneShotView(page, mockTauri);
+    await navigateToRepoDetail(page, mockTauri);
+    await page.getByRole("button", { name: "1-Shot" }).click();
 
-    await expect(page.getByText("Title")).toBeVisible();
-    await expect(page.getByText("Prompt")).toBeVisible();
-    await expect(page.getByText("Model")).toBeVisible();
+    await expect(page.getByText("Title", { exact: true })).toBeVisible();
+    await expect(page.getByText("Prompt", { exact: true })).toBeVisible();
+    await expect(page.getByText("Model", { exact: true })).toBeVisible();
     await expect(page.getByText("Merge Strategy")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Launch" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
+  });
+
+  test("Cancel button closes the form", async ({ page, mockTauri }) => {
+    await openOneShotForm(page, mockTauri);
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await expect(page.locator("#oneshot-title")).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Launch" }),
+    ).not.toBeVisible();
   });
 
   test("Model field is pre-filled with repo default model", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToOneShotView(page, mockTauri);
+    await openOneShotForm(page, mockTauri);
 
-    // The repo's model is "opus" — the Model input should have that value
-    const modelInput = page.locator(".form-section #oneshot-model");
-    await expect(modelInput).toHaveValue("opus");
+    await expect(page.locator("#oneshot-model")).toHaveValue("opus");
   });
 
-  test("Run button is disabled when title is empty", async ({
+  test("Launch button disabled when title empty", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToOneShotView(page, mockTauri);
+    await openOneShotForm(page, mockTauri);
 
-    // Leave title empty, fill prompt
-    await page.locator(".form-section textarea").fill("Do something");
+    await page.locator("#oneshot-prompt").fill("Do something");
 
-    const runButton = page.getByRole("button", { name: "Run" });
-    await expect(runButton).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Launch" })).toBeDisabled();
   });
 
-  test("Run button is disabled when prompt is empty", async ({
+  test("Launch button disabled when prompt empty", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToOneShotView(page, mockTauri);
+    await openOneShotForm(page, mockTauri);
 
-    // Fill title, leave prompt empty
-    await page.locator(".form-section #oneshot-title").fill("My Task");
+    await page.locator("#oneshot-title").fill("My Task");
 
-    const runButton = page.getByRole("button", { name: "Run" });
-    await expect(runButton).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Launch" })).toBeDisabled();
   });
 
-  test("Run button is enabled when both title and prompt are filled", async ({
+  test("Launch button enabled when both title and prompt filled", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToOneShotView(page, mockTauri);
+    await openOneShotForm(page, mockTauri);
 
-    await page.locator(".form-section #oneshot-title").fill("My Task");
-    await page.locator(".form-section textarea").fill("Do something important");
+    await page.locator("#oneshot-title").fill("My Task");
+    await page.locator("#oneshot-prompt").fill("Do something important");
 
-    const runButton = page.getByRole("button", { name: "Run" });
-    await expect(runButton).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Launch" })).toBeEnabled();
   });
 
-  test("Merge strategy defaults to Merge to main", async ({
+  test("Merge strategy defaults to merge_to_main", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToOneShotView(page, mockTauri);
+    await openOneShotForm(page, mockTauri);
 
-    // The "Merge to main" radio should be checked by default
     const mergeToMainRadio = page.locator(
       'input[type="radio"][value="merge_to_main"]',
     );
     await expect(mergeToMainRadio).toBeChecked();
 
-    // The "Create branch" radio should not be checked
     const branchRadio = page.locator('input[type="radio"][value="branch"]');
     await expect(branchRadio).not.toBeChecked();
   });
 });
 
 // ---------------------------------------------------------------------------
-// 1-Shot launch flow
+// 2. 1-Shot launch from RepoDetail
 // ---------------------------------------------------------------------------
-test.describe("1-Shot launch flow", () => {
-  test("clicking Run invokes run_oneshot with correct arguments", async ({
+test.describe("1-Shot launch from RepoDetail", () => {
+  test("clicking Launch invokes run_oneshot with correct args", async ({
     page,
     mockTauri,
   }) => {
-    await mockTauri({
-      storeData: repoStoreData,
+    await openOneShotForm(page, mockTauri, {
       invokeHandlers: {
         get_active_sessions: () => [],
         run_oneshot: (args: Record<string, unknown>) => {
-          // Store the captured args on the window for later retrieval
-          (window as unknown as Record<string, unknown>).__capturedOneShotArgs =
-            args;
-          return new Promise(() => {}); // never resolves to keep session running
+          (window as unknown as Record<string, unknown>).__capturedArgs = args;
+          return { oneshot_id: "oneshot-abc123", trace: null };
         },
       },
     });
-    await page.goto("/");
-    await page.getByRole("button", { name: /my-app/ }).click();
-    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
-    await page.getByRole("button", { name: "1-Shot" }).click();
-    await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
-    // Fill the form
-    await page.locator(".form-section #oneshot-title").fill("Add auth");
-    await page.locator(".form-section textarea").fill("Implement OAuth2");
-    // Change model
-    await page.locator(".form-section #oneshot-model").fill("");
-    await page.locator(".form-section #oneshot-model").fill("sonnet");
-    // Select "Create branch" merge strategy
+    await page.locator("#oneshot-title").fill("Add auth");
+    await page.locator("#oneshot-prompt").fill("Implement OAuth2");
+    await page.locator("#oneshot-model").fill("");
+    await page.locator("#oneshot-model").fill("sonnet");
     await page.locator('input[type="radio"][value="branch"]').check();
 
-    // Click Run
-    await page.getByRole("button", { name: "Run" }).click();
+    await page.getByRole("button", { name: "Launch" }).click();
 
-    // Retrieve the captured args from the window object
     const captured = await page.evaluate(
-      () =>
-        (window as unknown as Record<string, unknown>).__capturedOneShotArgs,
+      () => (window as unknown as Record<string, unknown>).__capturedArgs,
     );
 
     expect(captured).toBeTruthy();
@@ -243,132 +209,409 @@ test.describe("1-Shot launch flow", () => {
       type: "local",
       path: "/home/user/projects/my-app",
     });
+    // Verify repo config is forwarded to the 1-shot backend
+    expect(args.maxIterations).toBe(40);
+    expect(args.completionSignal).toBe("ALL TODO ITEMS COMPLETE");
   });
 
-  test("after session starts running, form is hidden and Stop button appears", async ({
+  test("after launch, navigates to OneShotDetail page", async ({
     page,
     mockTauri,
   }) => {
-    await mockTauri({
-      storeData: repoStoreData,
+    await openOneShotForm(page, mockTauri, {
       invokeHandlers: {
         get_active_sessions: () => [],
-        run_oneshot: () => new Promise(() => {}), // never resolves
-      },
-    });
-    await page.goto("/");
-    await page.getByRole("button", { name: /my-app/ }).click();
-    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
-    await page.getByRole("button", { name: "1-Shot" }).click();
-    await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
-
-    // Verify form is visible before running
-    await expect(page.locator(".form-section")).toBeVisible();
-
-    // Fill and run
-    await page.locator(".form-section #oneshot-title").fill("Task");
-    await page.locator(".form-section textarea").fill("Do work");
-    await page.getByRole("button", { name: "Run" }).click();
-
-    // Emit a session event to trigger the running state in App.tsx
-    await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
-      (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
-        event: "session-event",
-        payload: {
-          repo_id: "repo-1",
-          event: {
-            kind: "one_shot_started",
-            title: "Task",
-            merge_strategy: "merge_to_main",
-          },
+        run_oneshot: () => {
+          return { oneshot_id: "oneshot-abc123", trace: null };
         },
-      });
+      },
     });
 
-    // The form section should be hidden when running
-    await expect(page.locator(".form-section")).not.toBeVisible();
+    await page.locator("#oneshot-title").fill("Add auth");
+    await page.locator("#oneshot-prompt").fill("Implement OAuth2");
 
-    // The Stop button should appear
-    await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+    await page.getByRole("button", { name: "Launch" }).click();
 
-    // The Run button should show "Running..." and be disabled
-    await expect(
-      page.getByRole("button", { name: "Running..." }),
-    ).toBeDisabled();
+    await page.waitForURL(/\/oneshot\/oneshot-abc123/);
+    await expect(page.locator("h1", { hasText: "Add auth" })).toBeVisible();
   });
+});
 
-  test("phase indicator updates as events are emitted", async ({
+// ---------------------------------------------------------------------------
+// 3. 1-Shot card on Home page
+// ---------------------------------------------------------------------------
+test.describe("1-Shot card on Home page", () => {
+  const oneshotEntry = {
+    id: "oneshot-xyz",
+    parentRepoId: "repo-1",
+    parentRepoName: "my-app",
+    title: "Fix the bug",
+    prompt: "Find and fix the null pointer bug",
+    model: "opus",
+    mergeStrategy: "merge_to_main",
+    status: "running" as const,
+    startedAt: Date.now(),
+  };
+
+  test("shows a 1-shot card with title and 1-Shot badge", async ({
     page,
     mockTauri,
   }) => {
     await mockTauri({
-      storeData: repoStoreData,
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [["oneshot-xyz", oneshotEntry]],
+      },
       invokeHandlers: {
         get_active_sessions: () => [],
-        run_oneshot: () => new Promise(() => {}),
       },
     });
     await page.goto("/");
-    await page.getByRole("button", { name: /my-app/ }).click();
-    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
-    await page.getByRole("button", { name: "1-Shot" }).click();
-    await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
 
-    // Fill and run
-    await page.locator(".form-section #oneshot-title").fill("Task");
-    await page.locator(".form-section textarea").fill("Do work");
-    await page.getByRole("button", { name: "Run" }).click();
+
+    const card = page.getByRole("button", {
+      name: "Fix the bug \u2014 1-Shot",
+    });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("1-Shot");
+  });
+
+  test("clicking 1-shot card navigates to OneShotDetail", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [["oneshot-xyz", oneshotEntry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+      },
+    });
+    await page.goto("/");
+
+
+    await page
+      .getByRole("button", { name: "Fix the bug \u2014 1-Shot" })
+      .click();
+
+    await page.waitForURL(/\/oneshot\/oneshot-xyz/);
+  });
+
+  test("failed entry card has a Dismiss button that removes the card", async ({
+    page,
+    mockTauri,
+  }) => {
+    const failedEntry = { ...oneshotEntry, status: "failed" as const };
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [["oneshot-xyz", failedEntry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+      },
+    });
+    await page.goto("/");
+
+
+    const card = page.getByRole("button", {
+      name: "Fix the bug \u2014 1-Shot",
+    });
+    await expect(card).toBeVisible();
+
+    const dismissBtn = page.getByRole("button", { name: "Dismiss" });
+    await expect(dismissBtn).toBeVisible();
+
+    await dismissBtn.click();
+
+    await expect(card).not.toBeVisible();
+  });
+
+  test("cards appear alongside repo cards", async ({ page, mockTauri }) => {
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [["oneshot-xyz", oneshotEntry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+      },
+    });
+    await page.goto("/");
+
+
+    await expect(page.getByRole("button", { name: /my-app/ })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Fix the bug \u2014 1-Shot" }),
+    ).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. OneShotDetail page - active mode
+// ---------------------------------------------------------------------------
+test.describe("OneShotDetail page - active mode", () => {
+  const oneshotId = "oneshot-abc123";
+  const oneshotEntry = {
+    id: oneshotId,
+    parentRepoId: "repo-1",
+    parentRepoName: "my-app",
+    title: "Add auth feature",
+    prompt: "Implement OAuth2 authentication flow",
+    model: "opus",
+    mergeStrategy: "merge_to_main",
+    status: "running" as const,
+    startedAt: Date.now(),
+  };
+
+  async function setupOneShotDetail(
+    page: import("@playwright/test").Page,
+    mockTauri: (opts?: TauriMockOptions) => Promise<void>,
+    invokeHandlers?: Record<string, unknown>,
+  ) {
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [[oneshotId, oneshotEntry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [[oneshotId, "session-123"]],
+        ...invokeHandlers,
+      },
+    });
+    await page.goto(`/oneshot/${oneshotId}`);
+
+  }
+
+  test("shows entry title, parent repo name, and prompt text", async ({
+    page,
+    mockTauri,
+  }) => {
+    await setupOneShotDetail(page, mockTauri);
+
+    await expect(
+      page.locator("h1", { hasText: "Add auth feature" }),
+    ).toBeVisible();
+    await expect(page.getByText("from my-app")).toBeVisible();
+    await expect(
+      page.getByText("Implement OAuth2 authentication flow"),
+    ).toBeVisible();
+  });
+
+  test("phase indicator updates as events arrive", async ({
+    page,
+    mockTauri,
+  }) => {
+    await setupOneShotDetail(page, mockTauri);
 
     const phaseIndicator = page.locator(".phase-indicator");
 
-    // Helper to emit a session event
-    async function emitEvent(eventData: Record<string, unknown>) {
-      await page.evaluate((evt) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
-        (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
-          event: "session-event",
-          payload: { repo_id: "repo-1", event: evt },
-        });
-      }, eventData);
-    }
-
     // 1. one_shot_started -> "Starting..."
-    await emitEvent({
+    await emitSessionEvent(page, oneshotId, {
       kind: "one_shot_started",
-      title: "Task",
+      title: "Add auth feature",
       merge_strategy: "merge_to_main",
     });
     await expect(phaseIndicator).toBeVisible();
     await expect(phaseIndicator).toContainText("Starting...");
 
     // 2. design_phase_started -> "Design Phase"
-    await emitEvent({ kind: "design_phase_started" });
+    await emitSessionEvent(page, oneshotId, { kind: "design_phase_started" });
     await expect(phaseIndicator).toContainText("Design Phase");
 
     // 3. design_phase_complete -> "Design Complete"
-    await emitEvent({ kind: "design_phase_complete" });
+    await emitSessionEvent(page, oneshotId, { kind: "design_phase_complete" });
     await expect(phaseIndicator).toContainText("Design Complete");
 
     // 4. implementation_phase_started -> "Implementation Phase"
-    await emitEvent({ kind: "implementation_phase_started" });
+    await emitSessionEvent(page, oneshotId, {
+      kind: "implementation_phase_started",
+    });
     await expect(phaseIndicator).toContainText("Implementation Phase");
 
     // 5. implementation_phase_complete -> "Implementation Complete"
-    await emitEvent({ kind: "implementation_phase_complete" });
+    await emitSessionEvent(page, oneshotId, {
+      kind: "implementation_phase_complete",
+    });
     await expect(phaseIndicator).toContainText("Implementation Complete");
 
     // 6. git_finalize_started -> "Finalizing..."
-    await emitEvent({ kind: "git_finalize_started" });
+    await emitSessionEvent(page, oneshotId, { kind: "git_finalize_started" });
     await expect(phaseIndicator).toContainText("Finalizing...");
 
     // 7. one_shot_complete -> "Complete"
-    await emitEvent({ kind: "one_shot_complete" });
+    await emitSessionEvent(page, oneshotId, { kind: "one_shot_complete" });
     await expect(phaseIndicator).toContainText("Complete");
     await expect(phaseIndicator).toHaveClass(/complete/);
   });
 
-  test("phase indicator shows Failed styling when one_shot_failed event arrives", async ({
+  test("phase indicator shows Failed styling on one_shot_failed", async ({
+    page,
+    mockTauri,
+  }) => {
+    await setupOneShotDetail(page, mockTauri);
+
+    const phaseIndicator = page.locator(".phase-indicator");
+
+    await emitSessionEvent(page, oneshotId, {
+      kind: "one_shot_started",
+      title: "Add auth feature",
+      merge_strategy: "merge_to_main",
+    });
+    await expect(phaseIndicator).toBeVisible();
+
+    await emitSessionEvent(page, oneshotId, { kind: "design_phase_started" });
+
+    await emitSessionEvent(page, oneshotId, {
+      kind: "one_shot_failed",
+      reason: "Design timed out",
+    });
+    await expect(phaseIndicator).toContainText("Failed");
+    await expect(phaseIndicator).toHaveClass(/failed/);
+  });
+
+  test("Stop button visible when running; calls stop_session with oneshotId", async ({
+    page,
+    mockTauri,
+  }) => {
+    await setupOneShotDetail(page, mockTauri, {
+      get_active_sessions: () => [[oneshotId, "session-123"]],
+      stop_session: (args: Record<string, unknown>) => {
+        (window as unknown as Record<string, unknown>).__stopSessionArgs = args;
+      },
+    });
+
+    // Emit an event so the session is recognized as running
+    await emitSessionEvent(page, oneshotId, {
+      kind: "one_shot_started",
+      title: "Add auth feature",
+      merge_strategy: "merge_to_main",
+    });
+
+    const stopButton = page.getByRole("button", { name: "Stop" });
+    await expect(stopButton).toBeVisible();
+
+    await stopButton.click();
+
+    const stopArgs = await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__stopSessionArgs,
+    );
+    expect(stopArgs).toBeTruthy();
+    expect((stopArgs as Record<string, unknown>).repoId).toBe(oneshotId);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. OneShotDetail page - completed/read-only mode
+// ---------------------------------------------------------------------------
+test.describe("OneShotDetail page - completed/read-only mode", () => {
+  const oneshotId = "oneshot-done456";
+  const completedEntry = {
+    id: oneshotId,
+    parentRepoId: "repo-1",
+    parentRepoName: "my-app",
+    title: "Completed task",
+    prompt: "This task is done",
+    model: "opus",
+    mergeStrategy: "merge_to_main",
+    status: "completed" as const,
+    startedAt: Date.now() - 60000,
+  };
+
+  test("shows completed phase and no Stop button", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [[oneshotId, completedEntry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+      },
+    });
+    await page.goto(`/oneshot/${oneshotId}`);
+
+
+    await expect(
+      page.locator("h1", { hasText: "Completed task" }),
+    ).toBeVisible();
+
+    // Emit events to simulate a completed session
+    await emitSessionEvent(page, oneshotId, {
+      kind: "one_shot_started",
+      title: "Completed task",
+      merge_strategy: "merge_to_main",
+    });
+    await emitSessionEvent(page, oneshotId, { kind: "design_phase_started" });
+    await emitSessionEvent(page, oneshotId, { kind: "design_phase_complete" });
+    await emitSessionEvent(page, oneshotId, {
+      kind: "implementation_phase_started",
+    });
+    await emitSessionEvent(page, oneshotId, {
+      kind: "implementation_phase_complete",
+    });
+    await emitSessionEvent(page, oneshotId, { kind: "one_shot_complete" });
+
+    // Mark session as no longer running
+    await emitSessionEvent(page, oneshotId, {
+      kind: "session_complete",
+      outcome: "completed",
+    });
+
+    const phaseIndicator = page.locator(".phase-indicator");
+    await expect(phaseIndicator).toContainText("Complete");
+    await expect(phaseIndicator).toHaveClass(/complete/);
+
+    // Stop button should NOT be visible (session stopped after session_complete)
+    await expect(page.getByRole("button", { name: "Stop" })).not.toBeVisible();
+  });
+
+  test("shows error section when session has an error", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [[oneshotId, completedEntry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+      },
+    });
+    await page.goto(`/oneshot/${oneshotId}`);
+
+
+    await expect(
+      page.locator("h1", { hasText: "Completed task" }),
+    ).toBeVisible();
+
+    // Emit events to trigger failure path
+    await emitSessionEvent(page, oneshotId, {
+      kind: "one_shot_started",
+      title: "Completed task",
+      merge_strategy: "merge_to_main",
+    });
+    await emitSessionEvent(page, oneshotId, {
+      kind: "one_shot_failed",
+      reason: "Something went wrong",
+    });
+
+    const phaseIndicator = page.locator(".phase-indicator");
+    await expect(phaseIndicator).toContainText("Failed");
+    await expect(phaseIndicator).toHaveClass(/failed/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. OneShotDetail - not found
+// ---------------------------------------------------------------------------
+test.describe("OneShotDetail - not found", () => {
+  test('shows "Not found" for nonexistent oneshotId', async ({
     page,
     mockTauri,
   }) => {
@@ -376,116 +619,10 @@ test.describe("1-Shot launch flow", () => {
       storeData: repoStoreData,
       invokeHandlers: {
         get_active_sessions: () => [],
-        run_oneshot: () => new Promise(() => {}),
       },
     });
-    await page.goto("/");
-    await page.getByRole("button", { name: /my-app/ }).click();
-    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
-    await page.getByRole("button", { name: "1-Shot" }).click();
-    await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
+    await page.goto("/oneshot/nonexistent");
 
-    // Fill and run
-    await page.locator(".form-section #oneshot-title").fill("Task");
-    await page.locator(".form-section textarea").fill("Do work");
-    await page.getByRole("button", { name: "Run" }).click();
-
-    const phaseIndicator = page.locator(".phase-indicator");
-
-    // Emit start then failure
-    await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
-      (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
-        event: "session-event",
-        payload: {
-          repo_id: "repo-1",
-          event: {
-            kind: "one_shot_started",
-            title: "Task",
-            merge_strategy: "merge_to_main",
-          },
-        },
-      });
-    });
-    await expect(phaseIndicator).toBeVisible();
-
-    await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
-      (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
-        event: "session-event",
-        payload: {
-          repo_id: "repo-1",
-          event: { kind: "design_phase_started" },
-        },
-      });
-    });
-
-    await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
-      (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
-        event: "session-event",
-        payload: {
-          repo_id: "repo-1",
-          event: { kind: "one_shot_failed", reason: "Design timed out" },
-        },
-      });
-    });
-
-    await expect(phaseIndicator).toContainText("Failed");
-    await expect(phaseIndicator).toHaveClass(/failed/);
-  });
-
-  test("Stop button calls stop_session", async ({ page, mockTauri }) => {
-    await mockTauri({
-      storeData: repoStoreData,
-      invokeHandlers: {
-        get_active_sessions: () => [],
-        run_oneshot: () => new Promise(() => {}),
-        stop_session: (args: Record<string, unknown>) => {
-          (window as unknown as Record<string, unknown>).__stopSessionArgs =
-            args;
-        },
-      },
-    });
-    await page.goto("/");
-    await page.getByRole("button", { name: /my-app/ }).click();
-    await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
-    await page.getByRole("button", { name: "1-Shot" }).click();
-    await expect(page.locator("h1", { hasText: "1-Shot" })).toBeVisible();
-
-    // Fill and run
-    await page.locator(".form-section #oneshot-title").fill("Task");
-    await page.locator(".form-section textarea").fill("Do work");
-    await page.getByRole("button", { name: "Run" }).click();
-
-    // Emit event to set running state
-    await page.evaluate(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri global mock
-      (window as any).__TAURI_INTERNALS__.invoke("plugin:event|emit", {
-        event: "session-event",
-        payload: {
-          repo_id: "repo-1",
-          event: {
-            kind: "one_shot_started",
-            title: "Task",
-            merge_strategy: "merge_to_main",
-          },
-        },
-      });
-    });
-
-    // Wait for the Stop button to appear
-    const stopButton = page.getByRole("button", { name: "Stop" });
-    await expect(stopButton).toBeVisible();
-
-    // Click Stop
-    await stopButton.click();
-
-    // Verify stop_session was called with the correct repo ID
-    const stopArgs = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__stopSessionArgs,
-    );
-    expect(stopArgs).toBeTruthy();
-    expect((stopArgs as Record<string, unknown>).repoId).toBe("repo-1");
+    await expect(page.getByText("Not found")).toBeVisible();
   });
 });

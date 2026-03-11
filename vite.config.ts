@@ -13,7 +13,7 @@ export default defineConfig({
   clearScreen: false,
   server: {
     strictPort: true,
-    port: 5199,
+    port: parseInt(process.env.YARR_PORT || "5199", 10),
   },
   test: {
     exclude: ["e2e/**", "node_modules/**"],

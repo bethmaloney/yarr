@@ -125,7 +125,10 @@ export const useAppStore = create<AppStore>((set, get) => {
         })
         .catch(() => {});
 
-      // 2. Load latest traces
+      // 2. Load 1-shot entries
+      get().loadOneShotEntries().catch(() => {});
+
+      // 3. Load latest traces
       invoke<Record<string, SessionTrace>>("list_latest_traces")
         .then((result) => {
           if (result) {
@@ -137,7 +140,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         })
         .catch(() => {});
 
-      // 3. Listen for session events
+      // 4. Listen for session events
       const listenPromise = listen<TaggedSessionEvent>(
         "session-event",
         (event) => {
@@ -237,12 +240,12 @@ export const useAppStore = create<AppStore>((set, get) => {
         },
       );
 
-      // 4. Start sync interval
+      // 5. Start sync interval
       const intervalId = setInterval(() => {
         syncActiveSession();
       }, 5000);
 
-      // 5. Return cleanup function
+      // 6. Return cleanup function
       return () => {
         listenPromise.then((fn) => fn());
         clearInterval(intervalId);

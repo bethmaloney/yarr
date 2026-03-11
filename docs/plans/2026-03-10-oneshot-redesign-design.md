@@ -565,8 +565,8 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 - Test active vs read-only modes
 
 **Checklist:**
-- [ ] E2E tests updated for new routing and flow
-- [ ] `npm run test:e2e` passes
+- [x] E2E tests updated for new routing and flow
+- [x] `npm run test:e2e` passes
 
 ---
 
@@ -585,4 +585,4 @@ Update Playwright E2E tests for the new 1-shot flow and routing.
 | 9 | Home page mixed cards | Done |
 | 10 | RepoDetail 1-shot launch form | Done |
 | 11 | Delete old OneShot page | Done |
-| 12 | Update E2E tests | Not Started |
+| 12 | Update E2E tests | Done |
