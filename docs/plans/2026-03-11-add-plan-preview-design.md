@@ -78,11 +78,11 @@ Show a short excerpt below the plan filename in the home page repo card.
 **Pattern reference:** Lines 68-72 in RepoCard.tsx — existing plan filename display.
 
 **Checklist:**
-- [ ] Add `planExcerpt?: string` to `RepoCardProps`
-- [ ] Below the existing plan filename span (line 68-72), add a `<span>` showing the excerpt:
+- [x] Add `planExcerpt?: string` to `RepoCardProps`
+- [x] Below the existing plan filename span (line 68-72), add a `<span>` showing the excerpt:
   - `text-xs text-muted-foreground truncate` (single line, truncated)
   - Only render if `planExcerpt` is non-empty
-- [ ] In `Home.tsx`, pass `planExcerpt` to `RepoCard`:
+- [x] In `Home.tsx`, pass `planExcerpt` to `RepoCard`:
   - Derive from `latestTraces` — but we need the preview content, not just the filename
   - Add state `planPreviews: Map<string, string>` in Home.tsx
   - Add `useEffect` that iterates `latestTraces`, calls `read_file_preview` for each trace with a `plan_file`, parses with `parsePlanPreview`, and stores the excerpt
@@ -136,6 +136,6 @@ Show the plan name and excerpt in the run detail summary.
 |------|--------|-------|
 | 1. Plan preview utility | Done | `src/plan-preview.ts` |
 | 2. RepoDetail plan banner | Done | Running + last session display |
-| 3. RepoCard plan excerpt | Not started | Home page cards |
+| 3. RepoCard plan excerpt | Done | Home page cards — `RepoCard.tsx`, `Home.tsx` |
 | 4. RunDetail plan preview | Not started | Historical run detail |
 | 5. Unit tests | Done | `src/plan-preview.test.ts` — 26 tests |

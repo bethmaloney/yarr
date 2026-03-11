@@ -36,6 +36,10 @@ const { mockUseBranchInfo } = vi.hoisted(() => ({
   mockUseBranchInfo: vi.fn(),
 }));
 
+const { mockInvoke } = vi.hoisted(() => ({
+  mockInvoke: vi.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // vi.mock declarations
 // ---------------------------------------------------------------------------
@@ -55,6 +59,10 @@ vi.mock("../store", () => ({
 
 vi.mock("../hooks/useBranchInfo", () => ({
   useBranchInfo: mockUseBranchInfo,
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: mockInvoke,
 }));
 
 // ---------------------------------------------------------------------------
@@ -1055,6 +1063,130 @@ describe("Home", () => {
 
       // "design" phase maps to "Design Phase" label
       expect(screen.getByText("Design Phase")).toBeInTheDocument();
+    });
+  });
+
+  // =========================================================================
+  // 17. Plan previews on repo cards
+  // =========================================================================
+
+  describe("Plan previews on repo cards", () => {
+    it("calls invoke('read_file_preview', ...) for each trace with a plan_file", async () => {
+      const repo1 = makeLocalRepo({
+        id: "r1",
+        name: "project-one",
+      } as Partial<RepoConfig>);
+      const repo2 = makeLocalRepo({
+        id: "r2",
+        name: "project-two",
+      } as Partial<RepoConfig>);
+      const trace1 = makeTrace({
+        plan_file: "/home/beth/plans/plan-one.md",
+      });
+      const trace2 = makeTrace({
+        plan_file: "/home/beth/plans/plan-two.md",
+      });
+
+      mockInvoke.mockResolvedValue("# Title\nSome excerpt text.");
+
+      setupMockState({
+        repos: [repo1, repo2],
+        latestTraces: new Map([
+          ["r1", trace1],
+          ["r2", trace2],
+        ]),
+      });
+      renderHome();
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("read_file_preview", {
+          path: "/home/beth/plans/plan-one.md",
+          maxLines: 8,
+        });
+        expect(mockInvoke).toHaveBeenCalledWith("read_file_preview", {
+          path: "/home/beth/plans/plan-two.md",
+          maxLines: 8,
+        });
+      });
+    });
+
+    it("shows plan excerpt text on the repo card when read_file_preview returns content", async () => {
+      const repo = makeLocalRepo({
+        id: "r1",
+        name: "project-one",
+      } as Partial<RepoConfig>);
+      const trace = makeTrace({
+        plan_file: "/home/beth/plans/deploy-fix.md",
+      });
+
+      mockInvoke.mockResolvedValue("# Plan Title\nThis is the excerpt text.");
+
+      setupMockState({
+        repos: [repo],
+        latestTraces: new Map([["r1", trace]]),
+      });
+      renderHome();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("This is the excerpt text."),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("does not call invoke for traces without a plan_file", async () => {
+      const repo = makeLocalRepo({
+        id: "r1",
+        name: "project-one",
+      } as Partial<RepoConfig>);
+      const trace = makeTrace({
+        plan_file: null,
+      });
+
+      setupMockState({
+        repos: [repo],
+        latestTraces: new Map([["r1", trace]]),
+      });
+      renderHome();
+
+      // Give time for any potential async calls
+      await waitFor(() => {
+        expect(screen.getByText("project-one")).toBeInTheDocument();
+      });
+
+      expect(mockInvoke).not.toHaveBeenCalledWith(
+        "read_file_preview",
+        expect.anything(),
+      );
+    });
+
+    it("does not show excerpt when read_file_preview rejects", async () => {
+      const repo = makeLocalRepo({
+        id: "r1",
+        name: "project-one",
+      } as Partial<RepoConfig>);
+      const trace = makeTrace({
+        plan_file: "/home/beth/plans/missing-plan.md",
+      });
+
+      mockInvoke.mockRejectedValue(new Error("File not found"));
+
+      setupMockState({
+        repos: [repo],
+        latestTraces: new Map([["r1", trace]]),
+      });
+      renderHome();
+
+      // Wait for the invoke to have been called and rejected
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("read_file_preview", {
+          path: "/home/beth/plans/missing-plan.md",
+          maxLines: 8,
+        });
+      });
+
+      // No excerpt text should appear — the plan filename is shown but no excerpt below it
+      expect(screen.queryByText(/excerpt/i)).not.toBeInTheDocument();
     });
   });
 });
