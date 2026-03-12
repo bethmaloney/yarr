@@ -284,11 +284,11 @@ Make the runner accept an optional resume state to skip completed phases.
   - Still emit all phase events so the frontend tracks progress
 
 **Checklist:**
-- [ ] Add `ResumeState` struct
-- [ ] Add field and builder method to `OneShotRunner`
-- [ ] Refactor `run()` with phase skip guards
-- [ ] Run `cd src-tauri && cargo check`
-- [ ] Run `cd src-tauri && cargo test`
+- [x] Add `ResumeState` struct
+- [x] Add field and builder method to `OneShotRunner`
+- [x] Refactor `run()` with phase skip guards
+- [x] Run `cd src-tauri && cargo check`
+- [x] Run `cd src-tauri && cargo test`
 
 ---
 
@@ -384,7 +384,7 @@ Update existing tests and add new ones for the changed behavior.
 | 5 | Reconcile one-shot entries in `syncActiveSession()` | Done |
 | 6 | Load one-shot events/traces on startup | Done |
 | 7 | Add empty state to `OneShotDetail` | Done |
-| 8 | Add `ResumeState` and refactor runner | Not Started |
+| 8 | Add `ResumeState` and refactor runner | Done |
 | 9 | Add `resume_oneshot` Tauri command | Not Started |
 | 10 | Add `resumeOneShot` store action and wire UI | Not Started |
 | 11 | Update tests | Not Started |
