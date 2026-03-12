@@ -1309,6 +1309,8 @@ mod tests {
                 parent_repo_id: "repo-1".to_string(),
                 prompt: "Add feature X".to_string(),
                 merge_strategy: "merge_to_main".to_string(),
+                worktree_path: "/tmp/worktrees/repo-1".to_string(),
+                branch: "yarr/add-feature-x-abc123".to_string(),
             },
         };
         let json = serde_json::to_value(&event).expect("serialization should succeed");
@@ -1316,6 +1318,8 @@ mod tests {
         assert_eq!(json["event"]["kind"], "one_shot_started");
         assert_eq!(json["event"]["title"], "Add feature X");
         assert_eq!(json["event"]["merge_strategy"], "merge_to_main");
+        assert_eq!(json["event"]["worktree_path"], "/tmp/worktrees/repo-1");
+        assert_eq!(json["event"]["branch"], "yarr/add-feature-x-abc123");
 
         // DesignPhaseStarted
         let event = TaggedSessionEvent {
@@ -1978,6 +1982,8 @@ mod tests {
                 parent_repo_id: "repo-original".to_string(),
                 prompt: "Fix the login bug".to_string(),
                 merge_strategy: "branch".to_string(),
+                worktree_path: "/tmp/worktrees/repo-original".to_string(),
+                branch: "yarr/fix-bug-x1y2z3".to_string(),
             },
         };
 
@@ -1990,6 +1996,8 @@ mod tests {
         assert_eq!(json["event"]["kind"], "one_shot_started");
         assert_eq!(json["event"]["title"], "Fix bug");
         assert_eq!(json["event"]["parent_repo_id"], "repo-original");
+        assert_eq!(json["event"]["worktree_path"], "/tmp/worktrees/repo-original");
+        assert_eq!(json["event"]["branch"], "yarr/fix-bug-x1y2z3");
     }
 
     // --- SessionHandle and ActiveSessions refactor tests ---

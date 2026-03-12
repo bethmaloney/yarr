@@ -154,7 +154,7 @@ pub enum SessionEvent {
     /// A fix agent has completed
     CheckFixComplete { iteration: u32, check_name: String, attempt: u32, success: bool },
     /// 1-shot session has started
-    OneShotStarted { title: String, parent_repo_id: String, prompt: String, merge_strategy: String },
+    OneShotStarted { title: String, parent_repo_id: String, prompt: String, merge_strategy: String, worktree_path: String, branch: String },
     /// Design phase has begun
     DesignPhaseStarted,
     /// Design phase completed, plan file written
@@ -1678,6 +1678,8 @@ mod tests {
             parent_repo_id: "test-repo".to_string(),
             prompt: "Implement auth".to_string(),
             merge_strategy: "squash".to_string(),
+            worktree_path: "/tmp/worktrees/test".to_string(),
+            branch: "yarr/implement-auth-module-abc123".to_string(),
         };
         let json = serde_json::to_value(&event).expect("serialize OneShotStarted");
         assert_eq!(json["kind"], "one_shot_started");
@@ -1685,6 +1687,8 @@ mod tests {
         assert_eq!(json["parent_repo_id"], "test-repo");
         assert_eq!(json["prompt"], "Implement auth");
         assert_eq!(json["merge_strategy"], "squash");
+        assert_eq!(json["worktree_path"], "/tmp/worktrees/test");
+        assert_eq!(json["branch"], "yarr/implement-auth-module-abc123");
 
         // 2. DesignPhaseStarted
         let event = SessionEvent::DesignPhaseStarted;

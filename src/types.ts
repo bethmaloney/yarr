@@ -37,6 +37,8 @@ export type SessionEvent = {
   success?: boolean;
   title?: string;
   merge_strategy?: string;
+  worktree_path?: string;
+  branch?: string;
   plan_file?: string;
   strategy?: string;
   reason?: string;

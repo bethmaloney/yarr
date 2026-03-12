@@ -294,6 +294,8 @@ impl OneShotRunner {
             parent_repo_id: self.config.repo_id.clone(),
             prompt: self.config.prompt.clone(),
             merge_strategy: self.strategy_string(),
+            worktree_path: wt_path.display().to_string(),
+            branch: branch.clone(),
         });
 
         // Check cancellation before worktree creation
@@ -1332,18 +1334,23 @@ mod tests {
         assert!(finalize_started_idx < finalize_complete_idx);
         assert!(finalize_complete_idx < complete_idx);
 
-        // Verify OneShotStarted contains the title, parent_repo_id, prompt, and strategy
+        // Verify OneShotStarted contains the title, parent_repo_id, prompt, strategy, worktree_path, and branch
         match &captured[started_idx] {
             SessionEvent::OneShotStarted {
                 title,
                 parent_repo_id,
                 prompt,
                 merge_strategy,
+                worktree_path,
+                branch,
             } => {
                 assert_eq!(title, "Add login feature");
                 assert_eq!(parent_repo_id, "test-repo");
                 assert_eq!(prompt, "Implement user login with email and password");
                 assert_eq!(merge_strategy, "merge_to_main");
+                assert!(!worktree_path.is_empty(), "worktree_path should be non-empty");
+                assert!(!branch.is_empty(), "branch should be non-empty");
+                assert!(branch.starts_with("oneshot/"), "branch should start with 'oneshot/', got: {}", branch);
             }
             _ => panic!("expected OneShotStarted"),
         }
@@ -1460,7 +1467,7 @@ mod tests {
             _ => unreachable!(),
         }
 
-        // Verify OneShotStarted shows "branch" strategy with parent_repo_id and prompt
+        // Verify OneShotStarted shows "branch" strategy with parent_repo_id, prompt, worktree_path, and branch
         let started_event = captured
             .iter()
             .find(|e| matches!(e, SessionEvent::OneShotStarted { .. }));
@@ -1474,11 +1481,16 @@ mod tests {
                 parent_repo_id,
                 prompt,
                 merge_strategy,
+                worktree_path,
+                branch,
             } => {
                 assert_eq!(title, "Add login feature");
                 assert_eq!(parent_repo_id, "test-repo");
                 assert_eq!(prompt, "Implement user login with email and password");
                 assert_eq!(merge_strategy, "branch");
+                assert!(!worktree_path.is_empty(), "worktree_path should be non-empty");
+                assert!(!branch.is_empty(), "branch should be non-empty");
+                assert!(branch.starts_with("oneshot/"), "branch should start with 'oneshot/', got: {}", branch);
             }
             _ => unreachable!(),
         }
@@ -1937,6 +1949,8 @@ mod tests {
                 parent_repo_id: "test-repo".to_string(),
                 prompt: "Implement user login with email and password".to_string(),
                 merge_strategy: "branch".to_string(),
+                worktree_path: "/tmp/worktrees/test-repo/abc123".to_string(),
+                branch: "oneshot/add-login-feature-abc123".to_string(),
             },
             SessionEvent::DesignPhaseStarted,
             SessionEvent::DesignPhaseComplete {

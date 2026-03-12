@@ -141,10 +141,10 @@ Add `worktree_path` and `branch` fields to the `OneShotStarted` event variant so
 - Update any frontend event format/display code that destructures this event
 
 **Checklist:**
-- [ ] Add fields to `OneShotStarted` in `session.rs`
-- [ ] Update emit in `oneshot.rs`
-- [ ] Update frontend event format if needed
-- [ ] Run `cd src-tauri && cargo check`
+- [x] Add fields to `OneShotStarted` in `session.rs`
+- [x] Update emit in `oneshot.rs`
+- [x] Update frontend event format if needed
+- [x] Run `cd src-tauri && cargo check`
 
 ---
 
@@ -378,7 +378,7 @@ Update existing tests and add new ones for the changed behavior.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add fields to `OneShotEntry` type | Done |
-| 2 | Extend `OneShotStarted` event with worktree/branch | Not Started |
+| 2 | Extend `OneShotStarted` event with worktree/branch | Done |
 | 3 | Persist `session_id` in entry on launch | Not Started |
 | 4 | Save `worktreePath`/`branch` from event | Not Started |
 | 5 | Reconcile one-shot entries in `syncActiveSession()` | Not Started |

@@ -268,7 +268,6 @@ test.describe("1-Shot card on Home page", () => {
     });
     await page.goto("/");
 
-
     const card = page.getByRole("button", {
       name: "Fix the bug \u2014 1-Shot",
     });
@@ -290,7 +289,6 @@ test.describe("1-Shot card on Home page", () => {
       },
     });
     await page.goto("/");
-
 
     await page
       .getByRole("button", { name: "Fix the bug \u2014 1-Shot" })
@@ -314,7 +312,6 @@ test.describe("1-Shot card on Home page", () => {
       },
     });
     await page.goto("/");
-
 
     const card = page.getByRole("button", {
       name: "Fix the bug \u2014 1-Shot",
@@ -340,7 +337,6 @@ test.describe("1-Shot card on Home page", () => {
       },
     });
     await page.goto("/");
-
 
     await expect(page.getByRole("button", { name: /my-app/ })).toBeVisible();
     await expect(
@@ -382,7 +378,6 @@ test.describe("OneShotDetail page - active mode", () => {
       },
     });
     await page.goto(`/oneshot/${oneshotId}`);
-
   }
 
   test("shows entry title, parent repo name, and prompt text", async ({
@@ -413,6 +408,8 @@ test.describe("OneShotDetail page - active mode", () => {
       kind: "one_shot_started",
       title: "Add auth feature",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
     await expect(phaseIndicator).toBeVisible();
     await expect(phaseIndicator).toContainText("Starting...");
@@ -459,6 +456,8 @@ test.describe("OneShotDetail page - active mode", () => {
       kind: "one_shot_started",
       title: "Add auth feature",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
     await expect(phaseIndicator).toBeVisible();
 
@@ -488,6 +487,8 @@ test.describe("OneShotDetail page - active mode", () => {
       kind: "one_shot_started",
       title: "Add auth feature",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
 
     const stopButton = page.getByRole("button", { name: "Stop" });
@@ -535,7 +536,6 @@ test.describe("OneShotDetail page - completed/read-only mode", () => {
     });
     await page.goto(`/oneshot/${oneshotId}`);
 
-
     await expect(
       page.locator("h1", { hasText: "Completed task" }),
     ).toBeVisible();
@@ -545,6 +545,8 @@ test.describe("OneShotDetail page - completed/read-only mode", () => {
       kind: "one_shot_started",
       title: "Completed task",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
     await emitSessionEvent(page, oneshotId, { kind: "design_phase_started" });
     await emitSessionEvent(page, oneshotId, { kind: "design_phase_complete" });
@@ -585,7 +587,6 @@ test.describe("OneShotDetail page - completed/read-only mode", () => {
     });
     await page.goto(`/oneshot/${oneshotId}`);
 
-
     await expect(
       page.locator("h1", { hasText: "Completed task" }),
     ).toBeVisible();
@@ -595,6 +596,8 @@ test.describe("OneShotDetail page - completed/read-only mode", () => {
       kind: "one_shot_started",
       title: "Completed task",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
     await emitSessionEvent(page, oneshotId, {
       kind: "one_shot_failed",
