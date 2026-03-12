@@ -85,11 +85,11 @@ This code is correct in structure but:
 **Pattern reference:** The `list_plans_impl` function at line 661 and `move_plan_to_completed` command at line 706 for the existing pattern.
 
 **Checklist:**
-- [ ] Add `tracing::info!` at the start of `move_plan_to_completed_impl` logging the `plans_dir` and `filename` parameters
-- [ ] Add `tracing::info!` on success ("plan moved to completed")
-- [ ] Add `tracing::error!` on failure with the command output (stderr)
-- [ ] Add `tracing::info!` at the start of the `move_plan_to_completed` Tauri command logging the repo type, plans_dir, and filename
-- [ ] Add `tracing::warn!` when input validation fails (path traversal rejection)
+- [x] Add `tracing::info!` at the start of `move_plan_to_completed_impl` logging the `plans_dir` and `filename` parameters
+- [x] Add `tracing::info!` on success ("plan moved to completed")
+- [x] Add `tracing::error!` on failure with the command output (stderr)
+- [x] Add `tracing::info!` at the start of the `move_plan_to_completed` Tauri command logging the repo type, plans_dir, and filename
+- [x] Add `tracing::warn!` when input validation fails (path traversal rejection)
 
 ### Task 4: Ensure WSL path handling works for `move_plan_to_completed`
 
@@ -164,7 +164,7 @@ This code is correct in structure but:
 |------|--------|-------|
 | 1. Add `plan_file` to `SessionComplete` | **Done** | Core Rust fix. Also updated ssh_orchestrator.rs emission site and trace.rs tests. |
 | 2. Handle plan move for 1-shot in frontend | **Done** | Added plan move on one_shot_complete via design_phase_complete event lookup. Added console.log for triggered/skipped in both session_complete and one_shot_complete paths. 7 new tests. |
-| 3. Add logging to `move_plan_to_completed_impl` | Not started | Observability |
+| 3. Add logging to `move_plan_to_completed_impl` | **Done** | Added tracing::info/error/warn to both move_plan_to_completed_impl and the Tauri command wrapper. |
 | 4. Verify WSL path handling | Not started | Cross-platform correctness |
 | 5. Update frontend TypeScript types | Not started | Type verification |
 | 6. Update tests | Not started | Rust + frontend tests |

@@ -684,6 +684,7 @@ pub(crate) async fn move_plan_to_completed_impl(
     plans_dir: &str,
     filename: &str,
 ) -> Result<(), String> {
+    tracing::info!(plans_dir = %plans_dir, filename = %filename, "move_plan_to_completed_impl called");
     let escaped_plans_dir = ssh_shell_escape(plans_dir);
     let escaped_filename = ssh_shell_escape(filename);
     let cmd = format!(
@@ -696,18 +697,23 @@ pub(crate) async fn move_plan_to_completed_impl(
         .map_err(|e| e.to_string())?;
 
     if output.exit_code != 0 {
+        tracing::error!(stderr = %output.stderr, plans_dir = %plans_dir, filename = %filename, "move_plan_to_completed_impl failed");
         return Err(output.stderr);
     }
 
+    tracing::info!(plans_dir = %plans_dir, filename = %filename, "plan moved to completed");
     Ok(())
 }
 
 #[tauri::command]
 async fn move_plan_to_completed(repo: RepoType, plans_dir: String, filename: String) -> Result<(), String> {
+    tracing::info!(repo = ?repo, plans_dir = %plans_dir, filename = %filename, "move_plan_to_completed called");
     if plans_dir.contains("..") {
+        tracing::warn!(plans_dir = %plans_dir, "move_plan_to_completed rejected: plans_dir contains '..'");
         return Err("Invalid plans directory".to_string());
     }
     if filename.contains('/') || filename.contains("..") {
+        tracing::warn!(filename = %filename, "move_plan_to_completed rejected: invalid filename");
         return Err("Invalid filename".to_string());
     }
     let (rt, working_dir) = resolve_runtime(&repo);
