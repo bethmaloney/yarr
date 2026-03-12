@@ -187,7 +187,7 @@ export const useAppStore = create<AppStore>((set, get) => {
               sessionEvent.plan_file
             ) {
               const repo = get().repos.find((r) => r.id === repo_id);
-              if (repo) {
+              if (repo && (repo.movePlansToCompleted ?? true)) {
                 const plansDir = repo.plansDir || "docs/plans/";
                 const filename =
                   sessionEvent.plan_file.split("/").pop() ||
@@ -210,7 +210,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                   plansDir,
                   filename,
                 }).catch((e) => console.warn("Failed to move plan:", e));
-              } else {
+              } else if (!repo) {
                 console.log("session plan move skipped: parent repo not found", { repo_id });
               }
             } else {
@@ -282,7 +282,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             const entry = get().oneShotEntries.get(repo_id);
             if (entry) {
               const repo = get().repos.find((r) => r.id === entry.parentRepoId);
-              if (repo) {
+              if (repo && (repo.movePlansToCompleted ?? true)) {
                 // Find the design_phase_complete event to get plan_file
                 const session = get().sessions.get(repo_id);
                 const designComplete = session?.events.find(
@@ -314,7 +314,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 } else {
                   console.log("1-shot plan move skipped: no design_phase_complete event with plan_file", { repo_id });
                 }
-              } else {
+              } else if (!repo) {
                 console.log("1-shot plan move skipped: parent repo not found", { repo_id, parentRepoId: entry.parentRepoId });
               }
             } else {

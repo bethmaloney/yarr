@@ -54,7 +54,7 @@ Add two per-repo configuration options for plan management:
 - 1-shot complete auto-move at `store.ts:251-294`
 
 **Checklist:**
-- [ ] In the `session_complete` handler (line 177-215): add a check for `repo.movePlansToCompleted !== false` before invoking `move_plan_to_completed`. The condition should be:
+- [x] In the `session_complete` handler (line 177-215): add a check for `repo.movePlansToCompleted !== false` before invoking `move_plan_to_completed`. The condition should be:
   ```typescript
   if (
     sessionEvent.outcome === "completed" &&
@@ -63,7 +63,7 @@ Add two per-repo configuration options for plan management:
   )
   ```
   Or more simply: `(repo.movePlansToCompleted ?? true)` as an additional condition.
-- [ ] In the `one_shot_complete` handler (line 251-294): add the same guard. After finding the parent repo (line 255), check `(repo.movePlansToCompleted ?? true)` before proceeding with the move.
+- [x] In the `one_shot_complete` handler (line 251-294): add the same guard. After finding the parent repo (line 255), check `(repo.movePlansToCompleted ?? true)` before proceeding with the move.
 
 ## Task 4: Pass `plansDir` to the design prompt so Claude writes plans to the configured directory
 
@@ -126,10 +126,10 @@ Add two per-repo configuration options for plan management:
 - [ ] Add test that `build_design_prompt` includes the custom plans_dir in output
 - [ ] Add test that `build_design_prompt` uses default `docs/plans/` when given that value
 - [ ] Update any `extract_plan_file_from_events` tests to pass `plans_dir` parameter
-- [ ] In `store.test.ts`: update the `session_complete` event tests to verify auto-move respects `movePlansToCompleted` config:
+- [x] In `store.test.ts`: update the `session_complete` event tests to verify auto-move respects `movePlansToCompleted` config:
   - Test that move IS called when `movePlansToCompleted` is `true` (or undefined/default)
   - Test that move is NOT called when `movePlansToCompleted` is `false`
-- [ ] In `store.test.ts`: same for `one_shot_complete` event handler
+- [x] In `store.test.ts`: same for `one_shot_complete` event handler
 - [x] In `RepoDetail.test.tsx`: verify the new checkbox renders and toggles correctly
 - [ ] Update `OneShotConfig` construction in any Rust tests to include `plans_dir`
 
@@ -139,6 +139,6 @@ Add two per-repo configuration options for plan management:
 |------|--------|-------|
 | 1. Add `movePlansToCompleted` to RepoConfig | Complete | Added to both LocalRepoConfig and SshRepoConfig |
 | 2. Settings UI toggle | Complete | Added state, useEffect init, saveSettings, and Checkbox UI |
-| 3. Gate auto-move on config | Not Started | Two locations in store.ts |
+| 3. Gate auto-move on config | Complete | Gated both session_complete and one_shot_complete handlers |
 | 4. Pass `plansDir` to design prompt | Not Started | Largest task — touches prompt.rs, oneshot.rs, lib.rs, store.ts |
 | 5. Update tests | Not Started | Prompt tests, store tests, UI tests |
