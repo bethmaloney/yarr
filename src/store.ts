@@ -220,6 +220,28 @@ export const useAppStore = create<AppStore>((set, get) => {
                 outcome: sessionEvent.outcome,
               });
             }
+
+            if (sessionEvent.plan_file) {
+              saveRecent("promptFiles", sessionEvent.plan_file);
+            }
+
+            const sessionId = session.session_id;
+            if (sessionId) {
+              invoke<SessionTrace>("get_trace", { repoId: repo_id, sessionId })
+                .then((trace) => {
+                  const s = new Map(get().sessions);
+                  const current = s.get(repo_id);
+                  if (current) {
+                    s.set(repo_id, { ...current, trace });
+                    const lt = new Map(get().latestTraces);
+                    lt.set(repo_id, trace);
+                    set({ sessions: s, latestTraces: lt });
+                  }
+                })
+                .catch((e) => {
+                  console.warn("Failed to fetch trace for", repo_id, e);
+                });
+            }
           } else if (session.disconnected || session.reconnecting) {
             updates.disconnected = false;
             updates.reconnecting = false;
@@ -505,7 +527,6 @@ export const useAppStore = create<AppStore>((set, get) => {
       const repo = get().repos.find((r) => r.id === repoId);
       if (!repo) return;
 
-      // Set initial running state
       const next = new Map(get().sessions);
       next.set(repoId, {
         running: true,
@@ -527,7 +548,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 remotePath: repo.remotePath,
               };
 
-        const trace = await invoke<SessionTrace>("run_session", {
+        const { session_id } = await invoke<{ session_id: string }>("run_session", {
           repoId,
           repo: repoPayload,
           planFile,
@@ -543,28 +564,18 @@ export const useAppStore = create<AppStore>((set, get) => {
         const s2 = new Map(get().sessions);
         const current = s2.get(repoId);
         if (!current) return;
-        s2.set(repoId, { ...current, trace });
-        const lt = new Map(get().latestTraces);
-        lt.set(repoId, trace);
-        set({ sessions: s2, latestTraces: lt });
-
-        await saveRecent("promptFiles", planFile);
+        s2.set(repoId, { ...current, session_id });
+        set({ sessions: s2 });
       } catch (e) {
         const s2 = new Map(get().sessions);
         const current = s2.get(repoId);
         if (!current) return;
         s2.set(repoId, {
           ...current,
+          running: false,
           error: e instanceof Error ? e.message : String(e),
         });
         set({ sessions: s2 });
-      } finally {
-        const s2 = new Map(get().sessions);
-        const current = s2.get(repoId);
-        if (current) {
-          s2.set(repoId, { ...current, running: false });
-          set({ sessions: s2 });
-        }
       }
     },
 

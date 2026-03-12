@@ -540,6 +540,141 @@ describe("session event handling", () => {
       );
     });
   });
+
+  // -------------------------------------------------------------------------
+  // session_complete: trace fetching and saveRecent
+  // -------------------------------------------------------------------------
+
+  it("session_complete: fetches trace when session has session_id", async () => {
+    const trace = makeTrace({ session_id: "sess-123" });
+
+    // Set up a session with session_id
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      sessions: new Map([
+        [
+          "repo-1",
+          {
+            running: true,
+            session_id: "sess-123",
+            events: [],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    emitSessionEvent("repo-1", { kind: "session_complete" });
+
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("get_trace", {
+        repoId: "repo-1",
+        sessionId: "sess-123",
+      });
+    });
+
+    await vi.waitFor(() => {
+      const session = useAppStore.getState().sessions.get("repo-1");
+      expect(session).toBeDefined();
+      expect(session!.trace).toEqual(trace);
+    });
+
+    const latestTraces = useAppStore.getState().latestTraces;
+    expect(latestTraces.get("repo-1")).toEqual(trace);
+  });
+
+  it("session_complete: does not fetch trace when session has no session_id", () => {
+    // Set up a session WITHOUT session_id
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      sessions: new Map([
+        [
+          "repo-1",
+          {
+            running: true,
+            events: [],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    emitSessionEvent("repo-1", { kind: "session_complete" });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "get_trace",
+      expect.anything(),
+    );
+  });
+
+  it("session_complete: trace fetch failure does not throw", async () => {
+    // Set up a session with session_id
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      sessions: new Map([
+        [
+          "repo-1",
+          {
+            running: true,
+            session_id: "sess-123",
+            events: [],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace") throw new Error("trace not found");
+      return undefined;
+    });
+
+    // Should not throw
+    expect(() => {
+      emitSessionEvent("repo-1", { kind: "session_complete" });
+    }).not.toThrow();
+
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("get_trace", {
+        repoId: "repo-1",
+        sessionId: "sess-123",
+      });
+    });
+  });
+
+  it("session_complete: calls saveRecent with plan_file from event", () => {
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+    });
+
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockSaveRecent).toHaveBeenCalledWith(
+      "promptFiles",
+      "docs/plans/my-plan.md",
+    );
+  });
+
+  it("session_complete: does not call saveRecent when no plan_file", () => {
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+    });
+
+    emitSessionEvent("repo-1", { kind: "session_complete" });
+
+    expect(mockSaveRecent).not.toHaveBeenCalled();
+  });
 });
 
 // ===========================================================================
@@ -840,7 +975,7 @@ describe("runSession", () => {
         expect(session!.events).toEqual([]);
         expect(session!.trace).toBeNull();
         expect(session!.error).toBeNull();
-        return makeTrace();
+        return { session_id: "test-session-id" };
       }
       return undefined;
     });
@@ -849,7 +984,7 @@ describe("runSession", () => {
   });
 
   it("calls invoke with run_session and correct payload", async () => {
-    mockInvoke.mockResolvedValue(makeTrace());
+    mockInvoke.mockResolvedValue({ session_id: "test-session-id" });
 
     await useAppStore.getState().runSession("repo-1", "plan.md");
 
@@ -863,7 +998,7 @@ describe("runSession", () => {
   });
 
   it("passes repo config fields in the invoke payload", async () => {
-    mockInvoke.mockResolvedValue(makeTrace());
+    mockInvoke.mockResolvedValue({ session_id: "test-session-id" });
 
     await useAppStore.getState().runSession("repo-1", "plan.md");
 
@@ -877,34 +1012,15 @@ describe("runSession", () => {
     );
   });
 
-  it("on success: updates session with trace", async () => {
-    const trace = makeTrace();
-    mockInvoke.mockResolvedValue(trace);
+  it("on success: stores session_id on session state", async () => {
+    mockInvoke.mockResolvedValue({ session_id: "test-session-id" });
 
     await useAppStore.getState().runSession("repo-1", "plan.md");
 
     const session = useAppStore.getState().sessions.get("repo-1");
     expect(session).toBeDefined();
-    expect(session!.trace).toEqual(trace);
-  });
-
-  it("on success: updates latestTraces map", async () => {
-    const trace = makeTrace();
-    mockInvoke.mockResolvedValue(trace);
-
-    await useAppStore.getState().runSession("repo-1", "plan.md");
-
-    const latestTraces = useAppStore.getState().latestTraces;
-    expect(latestTraces.get("repo-1")).toEqual(trace);
-  });
-
-  it("on success: calls saveRecent with promptFiles and planFile", async () => {
-    const trace = makeTrace();
-    mockInvoke.mockResolvedValue(trace);
-
-    await useAppStore.getState().runSession("repo-1", "plan.md");
-
-    expect(mockSaveRecent).toHaveBeenCalledWith("promptFiles", "plan.md");
+    expect(session!.session_id).toBe("test-session-id");
+    expect(session!.running).toBe(true);
   });
 
   it("on error: sets session error to the error string", async () => {
@@ -915,10 +1031,11 @@ describe("runSession", () => {
     const session = useAppStore.getState().sessions.get("repo-1");
     expect(session).toBeDefined();
     expect(session!.error).toBe("backend crashed");
+    expect(session!.running).toBe(false);
   });
 
-  it("in finally: sets running to false", async () => {
-    mockInvoke.mockResolvedValue(makeTrace());
+  it("on error: sets running to false", async () => {
+    mockInvoke.mockRejectedValue(new Error("fail"));
 
     await useAppStore.getState().runSession("repo-1", "plan.md");
 
@@ -927,13 +1044,16 @@ describe("runSession", () => {
     expect(session!.running).toBe(false);
   });
 
-  it("in finally: sets running to false even on error", async () => {
-    mockInvoke.mockRejectedValue(new Error("fail"));
+  it("on reject: sets error and running=false for Session already running", async () => {
+    mockInvoke.mockRejectedValue(
+      new Error("Session already running for this repo"),
+    );
 
     await useAppStore.getState().runSession("repo-1", "plan.md");
 
     const session = useAppStore.getState().sessions.get("repo-1");
     expect(session).toBeDefined();
+    expect(session!.error).toBe("Session already running for this repo");
     expect(session!.running).toBe(false);
   });
 });

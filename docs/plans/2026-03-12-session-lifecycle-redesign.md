@@ -259,11 +259,11 @@ Change `runSession` in the Zustand store to handle the new spawn-and-return resp
 - Remove the `saveRecent` call from `runSession` (move to event handler)
 
 **Checklist:**
-- [ ] Update invoke return type
-- [ ] Simplify success path to just store session_id
-- [ ] Remove finally block
-- [ ] Move `saveRecent` call (see Task 6)
-- [ ] `npx tsc --noEmit`
+- [x] Update invoke return type
+- [x] Simplify success path to just store session_id
+- [x] Remove finally block
+- [x] Move `saveRecent` call (see Task 6)
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -287,10 +287,10 @@ Add trace fetching and `saveRecent` to the event handler for `session_complete`.
 - Move the plan-to-completed logic (already in this handler, no change needed)
 
 **Checklist:**
-- [ ] Add trace fetch after `running: false`
-- [ ] Update `latestTraces` on fetch success
-- [ ] Move `saveRecent` from `runSession` to here
-- [ ] `npx tsc --noEmit`
+- [x] Add trace fetch after `running: false`
+- [x] Update `latestTraces` on fetch success
+- [x] Move `saveRecent` from `runSession` to here
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -396,8 +396,8 @@ Verify the full lifecycle works end-to-end.
 | 2 | Convert run_session local to spawn-and-return | Done |
 | 3 | Convert run_session SSH to spawn-and-return | Done |
 | 4 | Add scope guard to 1-shot spawn | Done |
-| 5 | Update frontend runSession to fire-and-forget | Not Started |
-| 6 | Update session_complete handler to fetch trace | Not Started |
+| 5 | Update frontend runSession to fire-and-forget | Done |
+| 6 | Update session_complete handler to fetch trace | Done |
 | 7 | Update Rust tests | Not Started |
 | 8 | Update frontend tests | Not Started |
 | 9 | Backend session_complete for error paths | Not Started |
