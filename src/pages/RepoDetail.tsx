@@ -737,7 +737,7 @@ export default function RepoDetail() {
           {/* Refresh button */}
           <button
             aria-label="Refresh git status"
-            className="inline-flex items-center justify-center size-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            className="inline-flex items-center justify-center size-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
             onClick={() => {
               if (repoId && repo) fetchGitStatus(repoId, repo, true);
             }}
