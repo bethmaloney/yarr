@@ -8,6 +8,7 @@ import type {
   TaggedSessionEvent,
   GitSyncConfig,
   BranchInfo,
+  RepoGitStatus,
 } from "./types";
 
 describe("SessionEvent", () => {
@@ -661,5 +662,67 @@ describe("BranchInfo", () => {
     expect(info.name).toBe("feature/behind-only");
     expect(info.ahead).toBeNull();
     expect(info.behind).toBe(7);
+  });
+});
+
+describe("RepoGitStatus", () => {
+  it("accepts a fully populated RepoGitStatus", () => {
+    const status: RepoGitStatus = {
+      branchName: "main",
+      dirtyCount: 3,
+      ahead: 2,
+      behind: 1,
+    };
+    expect(status.branchName).toBe("main");
+    expect(status.dirtyCount).toBe(3);
+    expect(status.ahead).toBe(2);
+    expect(status.behind).toBe(1);
+  });
+
+  it("accepts RepoGitStatus with ahead/behind as null (no upstream)", () => {
+    const status: RepoGitStatus = {
+      branchName: "feature/no-tracking",
+      dirtyCount: 5,
+      ahead: null,
+      behind: null,
+    };
+    expect(status.branchName).toBe("feature/no-tracking");
+    expect(status.dirtyCount).toBe(5);
+    expect(status.ahead).toBeNull();
+    expect(status.behind).toBeNull();
+  });
+
+  it("accepts with only ahead set and behind null", () => {
+    const status: RepoGitStatus = {
+      branchName: "feature/ahead-only",
+      dirtyCount: 1,
+      ahead: 4,
+      behind: null,
+    };
+    expect(status.branchName).toBe("feature/ahead-only");
+    expect(status.ahead).toBe(4);
+    expect(status.behind).toBeNull();
+  });
+
+  it("accepts with only behind set and ahead null", () => {
+    const status: RepoGitStatus = {
+      branchName: "feature/behind-only",
+      dirtyCount: 2,
+      ahead: null,
+      behind: 6,
+    };
+    expect(status.branchName).toBe("feature/behind-only");
+    expect(status.ahead).toBeNull();
+    expect(status.behind).toBe(6);
+  });
+
+  it("accepts dirtyCount of 0", () => {
+    const status: RepoGitStatus = {
+      branchName: "main",
+      dirtyCount: 0,
+      ahead: null,
+      behind: null,
+    };
+    expect(status.dirtyCount).toBe(0);
   });
 });

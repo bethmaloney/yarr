@@ -205,6 +205,7 @@ beforeEach(() => {
     sessions: new Map(),
     latestTraces: new Map(),
     oneShotEntries: new Map(),
+    gitStatus: {},
   });
 });
 
@@ -1673,5 +1674,205 @@ describe("env-warning listener", () => {
       "env-warning",
       expect.any(Function),
     );
+  });
+});
+
+// ===========================================================================
+// 14. gitStatus initial state
+// ===========================================================================
+
+describe("gitStatus initial state", () => {
+  it("gitStatus starts as empty object", () => {
+    const state = useAppStore.getState();
+    expect(state.gitStatus).toEqual({});
+  });
+});
+
+// ===========================================================================
+// 15. fetchGitStatus
+// ===========================================================================
+
+describe("fetchGitStatus", () => {
+  it("happy path — local repo", async () => {
+    const localRepo = makeLocalRepo();
+    const mockStatus = {
+      branchName: "main",
+      dirtyCount: 3,
+      ahead: 2,
+      behind: 1,
+    };
+    mockInvoke.mockResolvedValue(mockStatus);
+
+    useAppStore.getState().fetchGitStatus("repo-1", localRepo, true);
+
+    await vi.waitFor(() => {
+      const gs = useAppStore.getState().gitStatus["repo-1"];
+      expect(gs?.loading).toBe(false);
+      expect(gs?.status).toEqual(mockStatus);
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("get_repo_git_status", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      fetch: true,
+    });
+
+    const gs = useAppStore.getState().gitStatus["repo-1"];
+    expect(gs.status).toEqual(mockStatus);
+    expect(gs.lastChecked).toBeInstanceOf(Date);
+    expect(gs.loading).toBe(false);
+    expect(gs.error).toBeNull();
+  });
+
+  it("happy path — SSH repo", async () => {
+    const sshRepo = makeSshRepo();
+    const mockStatus = {
+      branchName: "develop",
+      dirtyCount: 0,
+      ahead: null,
+      behind: null,
+    };
+    mockInvoke.mockResolvedValue(mockStatus);
+
+    useAppStore.getState().fetchGitStatus("repo-2", sshRepo, false);
+
+    await vi.waitFor(() => {
+      const gs = useAppStore.getState().gitStatus["repo-2"];
+      expect(gs?.loading).toBe(false);
+      expect(gs?.status).toEqual(mockStatus);
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("get_repo_git_status", {
+      repo: {
+        type: "ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/other",
+      },
+      fetch: false,
+    });
+
+    const gs = useAppStore.getState().gitStatus["repo-2"];
+    expect(gs.status).toEqual(mockStatus);
+    expect(gs.lastChecked).toBeInstanceOf(Date);
+    expect(gs.loading).toBe(false);
+    expect(gs.error).toBeNull();
+  });
+
+  it("sets loading state while invoke is pending", async () => {
+    const localRepo = makeLocalRepo();
+    let resolve: (value: unknown) => void;
+    const pending = new Promise((r) => {
+      resolve = r;
+    });
+    mockInvoke.mockReturnValue(pending);
+
+    // Call the action (don't await it)
+    useAppStore.getState().fetchGitStatus("repo-1", localRepo, true);
+
+    // Check loading state immediately
+    await vi.waitFor(() => {
+      expect(
+        useAppStore.getState().gitStatus["repo-1"]?.loading,
+      ).toBe(true);
+    });
+
+    // Resolve the promise
+    resolve!({
+      branchName: "main",
+      dirtyCount: 0,
+      ahead: null,
+      behind: null,
+    });
+
+    // Wait for state to settle
+    await vi.waitFor(() => {
+      expect(
+        useAppStore.getState().gitStatus["repo-1"]?.loading,
+      ).toBe(false);
+    });
+  });
+
+  it("error handling — sets error and null status", async () => {
+    const localRepo = makeLocalRepo();
+    mockInvoke.mockRejectedValue(new Error("git not found"));
+
+    useAppStore.getState().fetchGitStatus("repo-1", localRepo, true);
+
+    await vi.waitFor(() => {
+      const gs = useAppStore.getState().gitStatus["repo-1"];
+      expect(gs?.loading).toBe(false);
+      expect(gs?.error).toBe("git not found");
+    });
+
+    const gs = useAppStore.getState().gitStatus["repo-1"];
+    expect(gs.status).toBeNull();
+    expect(gs.loading).toBe(false);
+  });
+
+  it("error preserves previous status", async () => {
+    const localRepo = makeLocalRepo();
+    const mockStatus = {
+      branchName: "main",
+      dirtyCount: 1,
+      ahead: 0,
+      behind: 0,
+    };
+
+    // First: successful fetch
+    mockInvoke.mockResolvedValue(mockStatus);
+    useAppStore.getState().fetchGitStatus("repo-1", localRepo, true);
+
+    await vi.waitFor(() => {
+      const gs = useAppStore.getState().gitStatus["repo-1"];
+      expect(gs?.loading).toBe(false);
+      expect(gs?.status).toEqual(mockStatus);
+    });
+
+    // Second: failed fetch
+    mockInvoke.mockRejectedValue(new Error("network timeout"));
+    useAppStore.getState().fetchGitStatus("repo-1", localRepo, true);
+
+    await vi.waitFor(() => {
+      const gs = useAppStore.getState().gitStatus["repo-1"];
+      expect(gs?.loading).toBe(false);
+      expect(gs?.error).toBe("network timeout");
+    });
+
+    // Previous status should be preserved
+    const gs = useAppStore.getState().gitStatus["repo-1"];
+    expect(gs.status).toEqual(mockStatus);
+  });
+});
+
+// ===========================================================================
+// 16. clearGitStatusError
+// ===========================================================================
+
+describe("clearGitStatusError", () => {
+  it("clears error for a repo", async () => {
+    // Set up state with an error
+    const localRepo = makeLocalRepo();
+    mockInvoke.mockRejectedValue(new Error("git not found"));
+    useAppStore.getState().fetchGitStatus("repo-1", localRepo, false);
+
+    await vi.waitFor(() => {
+      const gs = useAppStore.getState().gitStatus["repo-1"];
+      expect(gs?.error).toBe("git not found");
+    });
+
+    // Clear the error
+    useAppStore.getState().clearGitStatusError("repo-1");
+
+    const gs = useAppStore.getState().gitStatus["repo-1"];
+    expect(gs.error).toBeNull();
+    // Other fields should be unchanged
+    expect(gs.status).toBeNull();
+    expect(gs.loading).toBe(false);
+  });
+
+  it("is a no-op on non-existent repo", () => {
+    const before = { ...useAppStore.getState().gitStatus };
+    useAppStore.getState().clearGitStatusError("nonexistent");
+    const after = useAppStore.getState().gitStatus;
+    expect(after).toEqual(before);
   });
 });

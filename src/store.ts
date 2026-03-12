@@ -13,6 +13,7 @@ import {
 } from "./repos";
 import type {
   OneShotEntry,
+  RepoGitStatus,
   SessionEvent,
   SessionState,
   SessionTrace,
@@ -35,6 +36,11 @@ export interface AppStore {
   runSession: (repoId: string, planFile: string) => Promise<void>;
   stopSession: (repoId: string) => Promise<void>;
   reconnectSession: (repoId: string) => Promise<void>;
+
+  // --- Git Status ---
+  gitStatus: Record<string, { status: RepoGitStatus | null; lastChecked: Date | null; loading: boolean; error: string | null }>;
+  fetchGitStatus: (repoId: string, repo: RepoConfig, fetch: boolean) => Promise<void>;
+  clearGitStatusError: (repoId: string) => void;
 
   // --- 1-Shot ---
   oneShotEntries: Map<string, OneShotEntry>;
@@ -117,6 +123,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     sessions: new Map(),
     latestTraces: new Map(),
     oneShotEntries: new Map(),
+    gitStatus: {},
 
     initialize: () => {
       // 1. Load repos
@@ -311,6 +318,72 @@ export const useAppStore = create<AppStore>((set, get) => {
         envWarningPromise.then((fn) => fn());
         clearInterval(intervalId);
       };
+    },
+
+    fetchGitStatus: async (repoId: string, repo: RepoConfig, fetch: boolean) => {
+      const existing = get().gitStatus[repoId];
+      set({
+        gitStatus: {
+          ...get().gitStatus,
+          [repoId]: {
+            status: existing?.status ?? null,
+            lastChecked: existing?.lastChecked ?? null,
+            loading: true,
+            error: existing?.error ?? null,
+          },
+        },
+      });
+
+      const repoPayload =
+        repo.type === "local"
+          ? { type: "local" as const, path: repo.path }
+          : {
+              type: "ssh" as const,
+              sshHost: (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost,
+              remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath,
+            };
+
+      try {
+        const status = await invoke<RepoGitStatus>("get_repo_git_status", {
+          repo: repoPayload,
+          fetch,
+        });
+        set({
+          gitStatus: {
+            ...get().gitStatus,
+            [repoId]: {
+              status,
+              lastChecked: new Date(),
+              loading: false,
+              error: null,
+            },
+          },
+        });
+      } catch (e) {
+        const prev = get().gitStatus[repoId];
+        set({
+          gitStatus: {
+            ...get().gitStatus,
+            [repoId]: {
+              status: prev?.status ?? null,
+              lastChecked: prev?.lastChecked ?? null,
+              loading: false,
+              error: e instanceof Error ? e.message : String(e),
+            },
+          },
+        });
+      }
+    },
+
+    clearGitStatusError: (repoId: string) => {
+      const existing = get().gitStatus[repoId];
+      if (!existing) return;
+      set({
+        gitStatus: {
+          ...get().gitStatus,
+          [repoId]: { ...existing, error: null },
+        },
+      });
     },
 
     loadRepos: async () => {

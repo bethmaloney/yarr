@@ -149,11 +149,11 @@ Create the `get_repo_git_status` backend command that returns branch name, dirty
 **Pattern reference:** `src/types.ts` — `BranchInfo` type (lines 6-10)
 
 **Details:**
-- Add `RepoGitStatus` type matching the backend struct
+- Add `RepoGitStatus` type matching the backend struct (uses camelCase: `branchName`, `dirtyCount` — matching `#[serde(rename_all = "camelCase")]`)
 
 **Checklist:**
-- [ ] Add `RepoGitStatus` type
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `RepoGitStatus` type
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -172,10 +172,10 @@ Add `gitStatus` state, polling logic, and actions to the store.
 - Add `clearGitStatusError(repoId: string): void` action
 
 **Checklist:**
-- [ ] Add `gitStatus` state to AppStore
-- [ ] Add `fetchGitStatus` action
-- [ ] Add `clearGitStatusError` action
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `gitStatus` state to AppStore
+- [x] Add `fetchGitStatus` action
+- [x] Add `clearGitStatusError` action
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -356,8 +356,8 @@ Update existing branch display tests and add new tests for git status polling.
 |------|-------------|--------|
 | 1 | Add `autoFetch` to repo config types | Done |
 | 2 | Add `RepoGitStatus` type and new Tauri command | Done |
-| 3 | Add `RepoGitStatus` type to frontend types | Not Started |
-| 4 | Add git status state and actions to Zustand store | Not Started |
+| 3 | Add `RepoGitStatus` type to frontend types | Done |
+| 4 | Add git status state and actions to Zustand store | Done |
 | 5 | Create `useGitStatus` hook with polling | Not Started |
 | 6 | Update Home page repo cards | Not Started |
 | 7 | Update RepoDetail page branch chip | Not Started |

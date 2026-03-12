@@ -21,6 +21,13 @@ export type BranchInfo = {
   behind: number | null;
 };
 
+export type RepoGitStatus = {
+  branchName: string;
+  dirtyCount: number;
+  ahead: number | null;
+  behind: number | null;
+};
+
 export type SessionEvent = {
   kind: string;
   session_id?: string;
