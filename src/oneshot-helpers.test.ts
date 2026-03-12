@@ -74,6 +74,25 @@ describe("getPhaseFromEvents", () => {
     expect(getPhaseFromEvents(events)).toBe("finalizing");
   });
 
+  it("returns finalizing_conflict when git_finalize_started and git_sync_conflict present", () => {
+    const events = [
+      makeEvent({ kind: "one_shot_started" }),
+      makeEvent({ kind: "git_finalize_started" }),
+      makeEvent({ kind: "git_sync_conflict" }),
+    ];
+    expect(getPhaseFromEvents(events)).toBe("finalizing_conflict");
+  });
+
+  it("returns complete not finalizing_conflict when git_finalize_complete present with conflicts", () => {
+    const events = [
+      makeEvent({ kind: "one_shot_started" }),
+      makeEvent({ kind: "git_finalize_started" }),
+      makeEvent({ kind: "git_sync_conflict" }),
+      makeEvent({ kind: "git_finalize_complete" }),
+    ];
+    expect(getPhaseFromEvents(events)).toBe("complete");
+  });
+
   it("returns complete when git_finalize_complete is present", () => {
     const events = [
       makeEvent({ kind: "one_shot_started" }),
@@ -157,6 +176,10 @@ describe("phaseLabel", () => {
 
   it("returns Finalizing... for finalizing", () => {
     expect(phaseLabel("finalizing")).toBe("Finalizing...");
+  });
+
+  it("returns Resolving Conflicts... for finalizing_conflict", () => {
+    expect(phaseLabel("finalizing_conflict")).toBe("Resolving Conflicts...");
   });
 
   it("returns Complete for complete", () => {
