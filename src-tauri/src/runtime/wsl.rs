@@ -1,11 +1,12 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::{AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider};
+use super::{get_or_init_local_env, AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider};
 use crate::output::StreamEvent;
 
 /// Abort handle that kills the WSL child process tree before aborting the task.
@@ -50,31 +51,36 @@ impl WslRuntime {
     /// Build the shell command string for the Claude invocation.
     /// The prompt is piped via stdin, so it's not included in the command.
     /// Echoes `__PID__=<pid>` to stderr so we can kill the process tree inside WSL.
-    fn build_command(&self, invocation: &ClaudeInvocation) -> String {
+    fn build_command(&self, invocation: &ClaudeInvocation, resolved_env: &HashMap<String, String>) -> String {
         let wsl_dir = to_wsl_path(&invocation.working_dir);
 
-        let mut parts = vec![
-            format!("cd {}", shell_escape(&wsl_dir)),
-        ];
+        let mut parts: Vec<String> = Vec::new();
 
+        // Resolved env exports first (can be overridden by invocation env_vars)
+        parts.extend(env_export_parts(resolved_env));
+
+        // cd to working directory
+        parts.push(format!("cd {}", shell_escape(&wsl_dir)));
+
+        // Invocation-specific env vars (override resolved env)
         for (key, val) in &invocation.env_vars {
-            parts.push(format!("&& export {}={}", key, shell_escape(val)));
+            parts.push(format!("export {}={}", key, shell_escape(val)));
         }
 
-        parts.push(format!(
-            "&& echo __PID__=$$ >&2 && exec {} -p --output-format stream-json --verbose",
+        // Main command
+        let mut cmd_parts = vec![format!(
+            "echo __PID__=$$ >&2 && exec {} -p --output-format stream-json --verbose",
             shell_escape(&self.claude_bin)
-        ));
-
+        )];
         if let Some(ref model) = invocation.model {
-            parts.push(format!("--model {}", shell_escape(model)));
+            cmd_parts.push(format!("--model {}", shell_escape(model)));
         }
-
         for arg in &invocation.extra_args {
-            parts.push(shell_escape(arg));
+            cmd_parts.push(shell_escape(arg));
         }
+        parts.push(cmd_parts.join(" "));
 
-        parts.join(" ")
+        parts.join(" && ")
     }
 }
 
@@ -85,12 +91,13 @@ impl RuntimeProvider for WslRuntime {
     }
 
     async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess> {
-        let cmd_str = self.build_command(invocation);
+        let env = self.resolve_env().await?;
+        let cmd_str = self.build_command(invocation, &env);
         let prompt = invocation.prompt.clone();
         let start = std::time::Instant::now();
 
         let mut child = Command::new("wsl")
-            .args(["-e", "bash", "-lc", &cmd_str])
+            .args(["-e", "bash", "-c", &cmd_str])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -181,8 +188,13 @@ impl RuntimeProvider for WslRuntime {
     }
 
     async fn health_check(&self) -> Result<()> {
+        let env = self.resolve_env().await?;
+        let mut parts = env_export_parts(&env);
+        parts.push(format!("which {}", shell_escape(&self.claude_bin)));
+        let cmd_str = parts.join(" && ");
+
         let output = Command::new("wsl")
-            .args(["-e", "bash", "-lc", &format!("which {}", shell_escape(&self.claude_bin))])
+            .args(["-e", "bash", "-c", &cmd_str])
             .output()
             .await?;
 
@@ -201,11 +213,15 @@ impl RuntimeProvider for WslRuntime {
         working_dir: &std::path::Path,
         timeout: std::time::Duration,
     ) -> Result<CommandOutput> {
+        let env = self.resolve_env().await?;
         let wsl_dir = to_wsl_path(working_dir);
-        let cmd_str = format!("cd {} && {}", shell_escape(&wsl_dir), command);
+        let mut parts = env_export_parts(&env);
+        parts.push(format!("cd {}", shell_escape(&wsl_dir)));
+        parts.push(command.to_string());
+        let cmd_str = parts.join(" && ");
 
         let child = Command::new("wsl")
-            .args(["-e", "bash", "-lc", &cmd_str])
+            .args(["-e", "bash", "-c", &cmd_str])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
@@ -224,6 +240,14 @@ impl RuntimeProvider for WslRuntime {
                 anyhow::bail!("Command timed out after {:?}", timeout)
             }
         }
+    }
+
+    async fn resolve_env(&self) -> Result<HashMap<String, String>> {
+        Ok(get_or_init_local_env().await.clone())
+    }
+
+    fn env_warning(&self) -> Option<String> {
+        super::get_local_env_warning()
     }
 }
 
@@ -260,10 +284,19 @@ fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+fn env_export_parts(env: &HashMap<String, String>) -> Vec<String> {
+    env.iter()
+        .map(|(key, val)| format!("export {}={}", key, shell_escape(val)))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::path::Path;
+
+    use crate::runtime::RuntimeProvider;
 
     #[test]
     fn test_to_wsl_path_unc_wsl_localhost() {
@@ -287,5 +320,164 @@ mod tests {
     fn test_to_wsl_path_unix() {
         let path = Path::new("/home/beth/repos/yarr");
         assert_eq!(to_wsl_path(path), "/home/beth/repos/yarr");
+    }
+
+    // ---------------------------------------------------------------
+    // Tests for env_export_parts helper function
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_env_export_parts_basic() {
+        let mut map = HashMap::new();
+        map.insert("HOME".to_string(), "/home/user".to_string());
+        map.insert("PATH".to_string(), "/usr/bin".to_string());
+
+        let parts = env_export_parts(&map);
+
+        assert_eq!(parts.len(), 2, "should produce one export per entry");
+
+        // Each entry should be a valid export statement
+        for part in parts.iter() {
+            assert!(
+                part.starts_with("export "),
+                "each part should start with 'export ', got: {part}"
+            );
+        }
+
+        // Check that both entries are present (order is not guaranteed for HashMap)
+        let joined = parts.join("\n");
+        assert!(
+            joined.contains("export HOME='/home/user'"),
+            "should contain HOME export, got: {joined}"
+        );
+        assert!(
+            joined.contains("export PATH='/usr/bin'"),
+            "should contain PATH export, got: {joined}"
+        );
+    }
+
+    #[test]
+    fn test_env_export_parts_empty() {
+        let map = HashMap::new();
+        let parts = env_export_parts(&map);
+        assert!(
+            parts.is_empty(),
+            "empty HashMap should produce empty Vec, got: {parts:?}"
+        );
+    }
+
+    #[test]
+    fn test_env_export_parts_escapes_special_chars() {
+        let mut map = HashMap::new();
+        map.insert("GREETING".to_string(), "it's a test".to_string());
+
+        let parts = env_export_parts(&map);
+
+        assert_eq!(parts.len(), 1);
+        // shell_escape wraps in single quotes and escapes inner single quotes as '\''
+        // So "it's a test" becomes 'it'\''s a test'
+        let expected = "export GREETING='it'\\''s a test'";
+        assert_eq!(
+            parts[0], expected,
+            "single quotes in values should be properly escaped"
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // Tests for build_command with resolved env parameter
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_build_command_includes_resolved_env() {
+        let runtime = WslRuntime::new();
+        let invocation = ClaudeInvocation {
+            prompt: "test prompt".to_string(),
+            working_dir: "/home/beth/project".into(),
+            model: None,
+            extra_args: vec![],
+            env_vars: HashMap::new(),
+        };
+        let mut resolved_env = HashMap::new();
+        resolved_env.insert("HOME".to_string(), "/home/beth".to_string());
+        resolved_env.insert("PATH".to_string(), "/usr/bin:/bin".to_string());
+
+        let cmd = runtime.build_command(&invocation, &resolved_env);
+
+        // The command should contain the resolved env exports
+        assert!(
+            cmd.contains("export HOME='/home/beth'"),
+            "command should contain resolved HOME export, got: {cmd}"
+        );
+        assert!(
+            cmd.contains("export PATH='/usr/bin:/bin'"),
+            "command should contain resolved PATH export, got: {cmd}"
+        );
+    }
+
+    #[test]
+    fn test_build_command_resolved_env_before_invocation_vars() {
+        let runtime = WslRuntime::new();
+        let mut inv_env = HashMap::new();
+        inv_env.insert("OVERRIDE".to_string(), "new".to_string());
+
+        let invocation = ClaudeInvocation {
+            prompt: "test prompt".to_string(),
+            working_dir: "/home/beth/project".into(),
+            model: None,
+            extra_args: vec![],
+            env_vars: inv_env,
+        };
+
+        let mut resolved_env = HashMap::new();
+        resolved_env.insert("OVERRIDE".to_string(), "old".to_string());
+        resolved_env.insert("OTHER".to_string(), "val".to_string());
+
+        let cmd = runtime.build_command(&invocation, &resolved_env);
+
+        // Find positions of the resolved env export for OVERRIDE and the
+        // invocation env export for OVERRIDE. The resolved env should come
+        // first so that the invocation vars can override them.
+        let resolved_pos = cmd
+            .find("export OVERRIDE='old'")
+            .expect("command should contain resolved OVERRIDE export");
+        let invocation_pos = cmd
+            .find("export OVERRIDE='new'")
+            .expect("command should contain invocation OVERRIDE export");
+
+        assert!(
+            resolved_pos < invocation_pos,
+            "resolved env exports (pos={resolved_pos}) should appear before \
+             invocation env exports (pos={invocation_pos}) in the command: {cmd}"
+        );
+
+        // OTHER from resolved env should also be present
+        assert!(
+            cmd.contains("export OTHER='val'"),
+            "command should contain resolved OTHER export, got: {cmd}"
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // Test for WslRuntime::resolve_env
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_wsl_resolve_env_returns_non_empty() {
+        let runtime = WslRuntime::new();
+        let env = runtime
+            .resolve_env()
+            .await
+            .expect("resolve_env should succeed");
+
+        assert!(
+            !env.is_empty(),
+            "resolved env should not be empty"
+        );
+
+        assert!(
+            env.contains_key("PATH") || env.contains_key("Path"),
+            "resolved env should contain PATH, got keys: {:?}",
+            env.keys().take(10).collect::<Vec<_>>()
+        );
     }
 }

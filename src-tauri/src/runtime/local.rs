@@ -1,10 +1,14 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::{ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
+use super::{
+    get_or_init_local_env, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess,
+    RuntimeProvider, TaskAbortHandle,
+};
 use crate::output::StreamEvent;
 
 pub struct LocalRuntime {
@@ -25,7 +29,16 @@ impl RuntimeProvider for LocalRuntime {
         "local"
     }
 
+    async fn resolve_env(&self) -> Result<HashMap<String, String>> {
+        Ok(get_or_init_local_env().await.clone())
+    }
+
+    fn env_warning(&self) -> Option<String> {
+        super::get_local_env_warning()
+    }
+
     async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess> {
+        let env = self.resolve_env().await?;
         let prompt = invocation.prompt.clone();
         let start = std::time::Instant::now();
 
@@ -50,6 +63,7 @@ impl RuntimeProvider for LocalRuntime {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        cmd.envs(&env);
         cmd.envs(&invocation.env_vars);
         let mut child = cmd.spawn()?;
 
@@ -121,8 +135,10 @@ impl RuntimeProvider for LocalRuntime {
     }
 
     async fn health_check(&self) -> Result<()> {
+        let env = self.resolve_env().await?;
         let output = Command::new("which")
             .arg(&self.claude_bin)
+            .envs(&env)
             .output()
             .await?;
 
@@ -141,10 +157,12 @@ impl RuntimeProvider for LocalRuntime {
         working_dir: &std::path::Path,
         timeout: std::time::Duration,
     ) -> Result<CommandOutput> {
+        let env = self.resolve_env().await?;
         let child = Command::new("bash")
             .arg("-c")
             .arg(command)
             .current_dir(working_dir)
+            .envs(&env)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
@@ -163,5 +181,70 @@ impl RuntimeProvider for LocalRuntime {
                 anyhow::bail!("Command timed out after {:?}", timeout)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RuntimeProvider;
+
+    #[tokio::test]
+    async fn local_runtime_resolve_env_returns_non_empty() {
+        let runtime = LocalRuntime::new();
+        let env = runtime
+            .resolve_env()
+            .await
+            .expect("resolve_env should succeed");
+
+        assert!(
+            !env.is_empty(),
+            "resolved env should not be empty"
+        );
+
+        assert!(
+            env.contains_key("PATH") || env.contains_key("Path"),
+            "resolved env should contain PATH, got keys: {:?}",
+            env.keys().take(10).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
+    async fn local_runtime_resolve_env_is_cached() {
+        let runtime = LocalRuntime::new();
+        let env1 = runtime
+            .resolve_env()
+            .await
+            .expect("first resolve_env should succeed");
+        let env2 = runtime
+            .resolve_env()
+            .await
+            .expect("second resolve_env should succeed");
+
+        assert_eq!(
+            env1, env2,
+            "two calls to resolve_env should return identical data"
+        );
+    }
+
+    #[tokio::test]
+    async fn local_runtime_resolve_env_contains_home() {
+        // Only meaningful when HOME is set in the process env (Linux/macOS).
+        // The resolved env — whether from snapshot or fallback — should include it.
+        if std::env::var("HOME").is_err() {
+            // Skip on platforms where HOME is not set (e.g. Windows without WSL).
+            return;
+        }
+
+        let runtime = LocalRuntime::new();
+        let env = runtime
+            .resolve_env()
+            .await
+            .expect("resolve_env should succeed");
+
+        assert!(
+            env.contains_key("HOME"),
+            "resolved env should contain HOME when it is set in the process env"
+        );
     }
 }

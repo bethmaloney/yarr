@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use oneshot::OneShotRunner;
-use runtime::{default_runtime, ssh_command, ssh_command_raw, ssh_shell_escape, RuntimeProvider, SshRuntime};
+use runtime::{default_runtime, ssh_command, ssh_command_raw, ssh_shell_escape, RuntimeProvider, SshEnvCache, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use ssh_orchestrator::SshSessionOrchestrator;
 use tauri::{Emitter, Manager, RunEvent};
@@ -91,6 +91,12 @@ async fn run_session(
         RepoType::Local { path } => {
             let repo_path_buf = PathBuf::from(path);
             let runtime = default_runtime();
+
+            // Pre-warm env cache and emit warning if snapshot failed
+            let _ = runtime.resolve_env().await;
+            if let Some(warning) = runtime.env_warning() {
+                let _ = app.emit("env-warning", &warning);
+            }
 
             // Resolve plan file to absolute path for the @file reference
             let plan_path = {
@@ -185,15 +191,21 @@ async fn run_session(
             result
         }
         RepoType::Ssh { ssh_host, remote_path } => {
-            let ssh_runtime = SshRuntime::new(ssh_host, remote_path);
+            let ssh_runtime = SshRuntime::new(ssh_host, remote_path, app.state::<SshEnvCache>().cache_ref());
+
+            // Pre-warm env cache and emit warning if snapshot failed
+            let _ = ssh_runtime.resolve_env().await;
+            if let Some(warning) = ssh_runtime.env_warning() {
+                let _ = app.emit("env-warning", &warning);
+            }
 
             let plan_path = {
                 let p = std::path::Path::new(&plan_file);
-                if !p.is_absolute() {
-                    app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
-                    return Err("Plan file must be an absolute path for SSH repos".to_string());
+                if p.is_relative() {
+                    PathBuf::from(remote_path).join(p)
+                } else {
+                    p.to_path_buf()
                 }
-                p.to_path_buf()
             };
 
             // We can't verify the plan file exists on remote, skip the check
@@ -286,6 +298,13 @@ async fn run_oneshot(
     match &repo {
         RepoType::Local { path } => {
             let repo_path_buf = PathBuf::from(path);
+
+            // Pre-warm env cache and emit warning if snapshot failed
+            let runtime = default_runtime();
+            let _ = runtime.resolve_env().await;
+            if let Some(warning) = runtime.env_warning() {
+                let _ = app.emit("env-warning", &warning);
+            }
 
             let config = oneshot::OneShotConfig {
                 repo_id: repo_id.clone(),
@@ -490,11 +509,11 @@ fn parse_rev_list_output(output: &str) -> (Option<u32>, Option<u32>) {
     (None, None)
 }
 
-fn resolve_runtime(repo: &RepoType) -> (Box<dyn RuntimeProvider>, PathBuf) {
+fn resolve_runtime(repo: &RepoType, ssh_env_cache: &SshEnvCache) -> (Box<dyn RuntimeProvider>, PathBuf) {
     match repo {
         RepoType::Local { path } => (default_runtime(), PathBuf::from(path)),
         RepoType::Ssh { ssh_host, remote_path } => {
-            (Box::new(SshRuntime::new(ssh_host, remote_path)), PathBuf::from(remote_path))
+            (Box::new(SshRuntime::new(ssh_host, remote_path, ssh_env_cache.cache_ref())), PathBuf::from(remote_path))
         }
     }
 }
@@ -510,8 +529,8 @@ fn generate_branch_name(plan_file: &str) -> String {
 }
 
 #[tauri::command]
-async fn get_branch_info(repo: RepoType) -> Result<BranchInfo, String> {
-    let (rt, working_dir) = resolve_runtime(&repo);
+async fn get_branch_info(app: tauri::AppHandle, repo: RepoType) -> Result<BranchInfo, String> {
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let timeout = std::time::Duration::from_secs(30);
 
     let branch_output = rt
@@ -538,8 +557,8 @@ async fn get_branch_info(repo: RepoType) -> Result<BranchInfo, String> {
 }
 
 #[tauri::command]
-async fn list_local_branches(repo: RepoType) -> Result<Vec<String>, String> {
-    let (rt, working_dir) = resolve_runtime(&repo);
+async fn list_local_branches(app: tauri::AppHandle, repo: RepoType) -> Result<Vec<String>, String> {
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let timeout = std::time::Duration::from_secs(30);
 
     let output = rt
@@ -562,12 +581,12 @@ async fn list_local_branches(repo: RepoType) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-async fn switch_branch(repo: RepoType, branch: String) -> Result<(), String> {
+async fn switch_branch(app: tauri::AppHandle, repo: RepoType, branch: String) -> Result<(), String> {
     if !branch.chars().all(|c| c.is_alphanumeric() || "-_./".contains(c)) {
         return Err("Invalid branch name".to_string());
     }
 
-    let (rt, working_dir) = resolve_runtime(&repo);
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let timeout = std::time::Duration::from_secs(30);
 
     let output = rt
@@ -583,8 +602,8 @@ async fn switch_branch(repo: RepoType, branch: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn fast_forward_branch(repo: RepoType) -> Result<(), String> {
-    let (rt, working_dir) = resolve_runtime(&repo);
+async fn fast_forward_branch(app: tauri::AppHandle, repo: RepoType) -> Result<(), String> {
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let fetch_timeout = std::time::Duration::from_secs(60);
 
     let fetch_output = rt
@@ -615,11 +634,13 @@ pub(crate) async fn list_plans_impl(
     plans_dir: &str,
 ) -> Result<Vec<String>, String> {
     let escaped_path = ssh_shell_escape(plans_dir);
+    // Use -exec basename instead of -printf for macOS (BSD find) compatibility.
+    // pipefail ensures find errors propagate through the pipe to sort.
     let cmd = format!(
-        "find {} -maxdepth 1 -name '*.md' -type f -printf '%f\\n' | sort",
+        "set -o pipefail && find {} -maxdepth 1 -name '*.md' -type f -exec basename {{}} \\; | sort",
         escaped_path
     );
-    tracing::debug!(cmd = %cmd, working_dir = %working_dir.display(), "list_plans_impl running command");
+    tracing::info!(cmd = %cmd, working_dir = %working_dir.display(), "list_plans_impl running command");
     let timeout = std::time::Duration::from_secs(30);
     let output = rt
         .run_command(&cmd, working_dir, timeout)
@@ -648,19 +669,22 @@ pub(crate) async fn list_plans_impl(
         .filter(|l| !l.is_empty())
         .collect();
 
+    if files.is_empty() && !output.stderr.is_empty() {
+        tracing::warn!(stderr = %output.stderr, "list_plans_impl found 0 plans but stderr was non-empty");
+    }
     tracing::debug!(files = ?files, "list_plans_impl parsed files");
     Ok(files)
 }
 
 #[tauri::command]
-async fn list_plans(repo: RepoType, plans_dir: String) -> Result<Vec<String>, String> {
-    tracing::info!(plans_dir = %plans_dir, "list_plans called");
+async fn list_plans(app: tauri::AppHandle, repo: RepoType, plans_dir: String) -> Result<Vec<String>, String> {
+    tracing::info!(plans_dir = %plans_dir, repo = ?repo, "list_plans called");
     if plans_dir.contains("..") {
         tracing::warn!(plans_dir = %plans_dir, "list_plans rejected: path contains '..'");
         return Err("Invalid plans directory".to_string());
     }
-    let (rt, working_dir) = resolve_runtime(&repo);
-    tracing::debug!(working_dir = %working_dir.display(), "list_plans resolving runtime");
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
+    tracing::info!(runtime = %rt.name(), working_dir = %working_dir.display(), "list_plans resolved runtime");
     match list_plans_impl(rt.as_ref(), &working_dir, &plans_dir).await {
         Ok(plans) => {
             tracing::info!(count = plans.len(), "list_plans succeeded");
@@ -698,14 +722,14 @@ pub(crate) async fn move_plan_to_completed_impl(
 }
 
 #[tauri::command]
-async fn move_plan_to_completed(repo: RepoType, plans_dir: String, filename: String) -> Result<(), String> {
+async fn move_plan_to_completed(app: tauri::AppHandle, repo: RepoType, plans_dir: String, filename: String) -> Result<(), String> {
     if plans_dir.contains("..") {
         return Err("Invalid plans directory".to_string());
     }
     if filename.contains('/') || filename.contains("..") {
         return Err("Invalid filename".to_string());
     }
-    let (rt, working_dir) = resolve_runtime(&repo);
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     move_plan_to_completed_impl(rt.as_ref(), &working_dir, &plans_dir, &filename).await
 }
 
@@ -741,6 +765,7 @@ pub fn run() {
         .manage(GlobalAbortRegistry {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
+        .manage(SshEnvCache::default())
         .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
@@ -1588,6 +1613,7 @@ mod tests {
 
     // --- list_plans_impl / move_plan_to_completed_impl tests (TDD) ---
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn list_plans_impl_returns_only_md_files() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1612,6 +1638,7 @@ mod tests {
         assert_eq!(result.len(), 2, "should contain exactly 2 .md files");
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn list_plans_impl_excludes_files_in_subdirectories() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1647,6 +1674,7 @@ mod tests {
         assert!(result.is_empty(), "should return empty vec when plans dir doesn't exist, got: {:?}", result);
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn list_plans_impl_returns_sorted_filenames() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1667,6 +1695,7 @@ mod tests {
             "files should be returned in sorted order");
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn list_plans_impl_returns_filenames_without_directory_prefix() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1688,6 +1717,7 @@ mod tests {
             "filename should not contain any path separators");
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn move_plan_to_completed_impl_moves_file_and_creates_dir() {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -1735,57 +1765,24 @@ mod tests {
             "should return Err when source file does not exist");
     }
 
-    // --- OneShotResult tests (TDD — struct does not exist yet) ---
-
-    /// Helper to build a minimal SessionTrace for use in OneShotResult tests.
-    fn make_test_session_trace() -> trace::SessionTrace {
-        trace::SessionTrace {
-            trace_id: "abc123".to_string(),
-            root_span_id: "span456".to_string(),
-            session_id: "sess-789".to_string(),
-            repo_path: "/tmp/repo".to_string(),
-            prompt: "implement feature X".to_string(),
-            plan_file: None,
-            repo_id: Some("test-repo".to_string()),
-            session_type: "ralph_loop".to_string(),
-            start_time: chrono::Utc::now(),
-            end_time: Some(chrono::Utc::now()),
-            outcome: SessionOutcome::Completed,
-            failure_reason: None,
-            iterations: vec![],
-            total_cost_usd: 1.23,
-            total_iterations: 2,
-            total_input_tokens: 100,
-            total_output_tokens: 50,
-            total_cache_read_tokens: 10,
-            total_cache_creation_tokens: 5,
-            context_window: 0,
-            final_context_tokens: 0,
-        }
-    }
+    // --- OneShotResult tests ---
 
     #[test]
-    fn oneshot_result_serializes_with_both_fields() {
+    fn oneshot_result_serializes_with_oneshot_id() {
         let result = OneShotResult {
             oneshot_id: "oneshot-a1b2c3".to_string(),
-            trace: make_test_session_trace(),
         };
 
         let json = serde_json::to_value(&result).expect("serialization should succeed");
 
         assert!(json.get("oneshot_id").is_some(), "JSON should contain 'oneshot_id' field");
-        assert!(json.get("trace").is_some(), "JSON should contain 'trace' field");
         assert_eq!(json["oneshot_id"], "oneshot-a1b2c3");
-        assert_eq!(json["trace"]["trace_id"], "abc123");
-        assert_eq!(json["trace"]["session_id"], "sess-789");
-        assert_eq!(json["trace"]["outcome"], "completed");
     }
 
     #[test]
     fn oneshot_result_clone_produces_equal_json() {
         let result = OneShotResult {
             oneshot_id: "oneshot-d4e5f6".to_string(),
-            trace: make_test_session_trace(),
         };
 
         let cloned = result.clone();
@@ -1803,7 +1800,6 @@ mod tests {
     fn oneshot_result_oneshot_id_is_string() {
         let result = OneShotResult {
             oneshot_id: "oneshot-aabbcc".to_string(),
-            trace: make_test_session_trace(),
         };
 
         let json = serde_json::to_value(&result).expect("serialization should succeed");

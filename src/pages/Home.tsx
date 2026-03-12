@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../store";
 import { useBranchInfo } from "../hooks/useBranchInfo";
 import { getPhaseFromEvents } from "../oneshot-helpers";
+import { parsePlanPreview } from "../plan-preview";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { OneShotCard } from "@/components/OneShotCard";
 import { RepoCard } from "@/components/RepoCard";
@@ -25,8 +27,35 @@ export default function Home() {
   const [sshHost, setSshHost] = useState("");
   const [sshRemotePath, setSshRemotePath] = useState("");
 
+  const [planPreviews, setPlanPreviews] = useState<Map<string, string>>(
+    new Map(),
+  );
+
   const branchInfos = useBranchInfo(repos);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchPreviews = async () => {
+      const newMap = new Map<string, string>();
+      for (const [repoId, trace] of latestTraces) {
+        if (!trace.plan_file) continue;
+        try {
+          const result = await invoke("read_file_preview", {
+            path: trace.plan_file,
+            maxLines: 8,
+          });
+          const parsed = parsePlanPreview(result as string);
+          if (parsed.excerpt) {
+            newMap.set(repoId, parsed.excerpt);
+          }
+        } catch {
+          // Skip entries that fail to read
+        }
+      }
+      setPlanPreviews(newMap);
+    };
+    fetchPreviews();
+  }, [latestTraces]);
 
   function deriveStatus(repoId: string): RepoStatus {
     const session = sessions.get(repoId);
@@ -188,6 +217,7 @@ export default function Home() {
                 status={item.status}
                 lastTrace={latestTraces.get(item.repo.id)}
                 branchName={branchInfos.get(item.repo.id)?.name}
+                planExcerpt={planPreviews.get(item.repo.id)}
                 onClick={() => navigate(`/repo/${item.repo.id}`)}
               />
             ) : (

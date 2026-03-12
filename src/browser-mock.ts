@@ -29,6 +29,47 @@ if (!(window as any).__TAURI_INTERNALS__) {
     },
   ];
 
+  const SAMPLE_ONESHOT_ENTRIES: [string, {
+    id: string;
+    parentRepoId: string;
+    parentRepoName: string;
+    title: string;
+    prompt: string;
+    model: string;
+    mergeStrategy: string;
+    status: "running" | "completed" | "failed";
+    startedAt: number;
+  }][] = [
+    [
+      "oneshot-abc-001",
+      {
+        id: "oneshot-abc-001",
+        parentRepoId: "repo-alpha",
+        parentRepoName: "my-project",
+        title: "Add dark mode support",
+        prompt: "Add a dark mode toggle to the settings page. Use CSS custom properties for theming and persist the preference in localStorage.",
+        model: "opus",
+        mergeStrategy: "branch",
+        status: "completed",
+        startedAt: 1741422600000, // 2026-03-08T10:30:00Z
+      },
+    ],
+    [
+      "oneshot-abc-002",
+      {
+        id: "oneshot-abc-002",
+        parentRepoId: "repo-alpha",
+        parentRepoName: "my-project",
+        title: "Fix CSV export encoding",
+        prompt: "The CSV export is producing garbled output for non-ASCII characters. Fix the encoding to use UTF-8 with BOM.",
+        model: "sonnet",
+        mergeStrategy: "direct",
+        status: "running",
+        startedAt: 1741509000000, // 2026-03-09T10:30:00Z
+      },
+    ],
+  ];
+
   const SAMPLE_TRACES = [
     {
       session_id: "sess-abc-123",
@@ -77,6 +118,40 @@ if (!(window as any).__TAURI_INTERNALS__) {
       total_output_tokens: 35000,
       total_cache_read_tokens: 20000,
       total_cache_creation_tokens: 8000,
+    },
+    {
+      session_id: "oneshot-abc-001",
+      repo_path: "/home/user/repos/my-project",
+      repo_id: "repo-alpha",
+      prompt: "Add a dark mode toggle to the settings page.",
+      plan_file: null,
+      session_type: "one_shot",
+      start_time: "2026-03-08T10:30:00Z",
+      end_time: "2026-03-08T10:52:30Z",
+      outcome: "completed",
+      total_iterations: 4,
+      total_cost_usd: 0.6234,
+      total_input_tokens: 68000,
+      total_output_tokens: 18500,
+      total_cache_read_tokens: 12000,
+      total_cache_creation_tokens: 4500,
+    },
+    {
+      session_id: "oneshot-abc-002",
+      repo_path: "/home/user/repos/my-project",
+      repo_id: "repo-alpha",
+      prompt: "Fix the CSV export encoding to use UTF-8 with BOM.",
+      plan_file: null,
+      session_type: "one_shot",
+      start_time: "2026-03-09T10:30:00Z",
+      end_time: null,
+      outcome: "running",
+      total_iterations: 2,
+      total_cost_usd: 0.2815,
+      total_input_tokens: 35000,
+      total_output_tokens: 8200,
+      total_cache_read_tokens: 6000,
+      total_cache_creation_tokens: 2200,
     },
   ];
 
@@ -349,11 +424,210 @@ if (!(window as any).__TAURI_INTERNALS__) {
         _ts: 1741169925000,
       },
     ],
+    "oneshot-abc-001": [
+      {
+        kind: "one_shot_started",
+        title: "Add dark mode support",
+        merge_strategy: "branch",
+        _ts: 1741422600000,
+      },
+      {
+        kind: "design_phase_started",
+        _ts: 1741422602000,
+      },
+      { kind: "iteration_started", iteration: 1, _ts: 1741422603000 },
+      {
+        kind: "assistant_text",
+        iteration: 1,
+        text: "Analyzing the current theme setup and planning the dark mode implementation...",
+        _ts: 1741422610000,
+      },
+      { kind: "tool_use", iteration: 1, tool_name: "Read", _ts: 1741422615000 },
+      { kind: "tool_use", iteration: 1, tool_name: "Grep", _ts: 1741422620000 },
+      {
+        kind: "iteration_complete",
+        iteration: 1,
+        result: {
+          total_cost_usd: 0.12,
+          input_tokens: 22000,
+          output_tokens: 3500,
+          cache_read_input_tokens: 4000,
+          cache_creation_input_tokens: 1500,
+          context_window: 200000,
+        },
+        _ts: 1741422630000,
+      },
+      {
+        kind: "design_phase_complete",
+        _ts: 1741422631000,
+      },
+      {
+        kind: "implementation_phase_started",
+        _ts: 1741422632000,
+      },
+      { kind: "iteration_started", iteration: 2, _ts: 1741422633000 },
+      {
+        kind: "assistant_text",
+        iteration: 2,
+        text: "Creating CSS custom properties for light and dark themes...",
+        _ts: 1741422640000,
+      },
+      { kind: "tool_use", iteration: 2, tool_name: "Edit", _ts: 1741422645000 },
+      { kind: "tool_use", iteration: 2, tool_name: "Write", _ts: 1741422650000 },
+      {
+        kind: "iteration_complete",
+        iteration: 2,
+        result: {
+          total_cost_usd: 0.18,
+          input_tokens: 48000,
+          output_tokens: 6200,
+          cache_read_input_tokens: 12000,
+          cache_creation_input_tokens: 2500,
+          context_window: 200000,
+        },
+        _ts: 1741422660000,
+      },
+      { kind: "iteration_started", iteration: 3, _ts: 1741422661000 },
+      {
+        kind: "assistant_text",
+        iteration: 3,
+        text: "Adding the toggle component and localStorage persistence...",
+        _ts: 1741422665000,
+      },
+      { kind: "tool_use", iteration: 3, tool_name: "Write", _ts: 1741422670000 },
+      { kind: "tool_use", iteration: 3, tool_name: "Edit", _ts: 1741422675000 },
+      { kind: "tool_use", iteration: 3, tool_name: "Bash", _ts: 1741422680000 },
+      {
+        kind: "assistant_text",
+        iteration: 3,
+        text: "All tests passing. Dark mode toggle works correctly.",
+        _ts: 1741422685000,
+      },
+      {
+        kind: "iteration_complete",
+        iteration: 3,
+        result: {
+          total_cost_usd: 0.19,
+          input_tokens: 72000,
+          output_tokens: 7800,
+          cache_read_input_tokens: 22000,
+          cache_creation_input_tokens: 3500,
+          context_window: 200000,
+        },
+        _ts: 1741422690000,
+      },
+      {
+        kind: "implementation_phase_complete",
+        _ts: 1741422691000,
+      },
+      {
+        kind: "git_finalize_started",
+        _ts: 1741422692000,
+      },
+      { kind: "iteration_started", iteration: 4, _ts: 1741422693000 },
+      {
+        kind: "assistant_text",
+        iteration: 4,
+        text: "Creating branch and committing changes...",
+        _ts: 1741422695000,
+      },
+      { kind: "tool_use", iteration: 4, tool_name: "Bash", _ts: 1741422698000 },
+      {
+        kind: "iteration_complete",
+        iteration: 4,
+        result: {
+          total_cost_usd: 0.1334,
+          input_tokens: 95000,
+          output_tokens: 4200,
+          cache_read_input_tokens: 35000,
+          cache_creation_input_tokens: 4000,
+          context_window: 200000,
+        },
+        _ts: 1741422700000,
+      },
+      {
+        kind: "git_finalize_complete",
+        _ts: 1741422701000,
+      },
+      { kind: "one_shot_complete", _ts: 1741422750000 },
+    ],
+    "oneshot-abc-002": [
+      {
+        kind: "one_shot_started",
+        title: "Fix CSV export encoding",
+        merge_strategy: "direct",
+        _ts: 1741509000000,
+      },
+      {
+        kind: "design_phase_started",
+        _ts: 1741509002000,
+      },
+      { kind: "iteration_started", iteration: 1, _ts: 1741509003000 },
+      {
+        kind: "assistant_text",
+        iteration: 1,
+        text: "Investigating the CSV export code to find the encoding issue...",
+        _ts: 1741509010000,
+      },
+      { kind: "tool_use", iteration: 1, tool_name: "Grep", _ts: 1741509015000 },
+      { kind: "tool_use", iteration: 1, tool_name: "Read", _ts: 1741509020000 },
+      {
+        kind: "assistant_text",
+        iteration: 1,
+        text: "Found it — the export uses plain TextEncoder without BOM prefix.",
+        _ts: 1741509025000,
+      },
+      {
+        kind: "iteration_complete",
+        iteration: 1,
+        result: {
+          total_cost_usd: 0.1315,
+          input_tokens: 18000,
+          output_tokens: 3200,
+          cache_read_input_tokens: 3000,
+          cache_creation_input_tokens: 1200,
+          context_window: 200000,
+        },
+        _ts: 1741509030000,
+      },
+      {
+        kind: "design_phase_complete",
+        _ts: 1741509031000,
+      },
+      {
+        kind: "implementation_phase_started",
+        _ts: 1741509032000,
+      },
+      { kind: "iteration_started", iteration: 2, _ts: 1741509033000 },
+      {
+        kind: "assistant_text",
+        iteration: 2,
+        text: "Adding UTF-8 BOM to the CSV export output...",
+        _ts: 1741509040000,
+      },
+      { kind: "tool_use", iteration: 2, tool_name: "Edit", _ts: 1741509045000 },
+      {
+        kind: "iteration_complete",
+        iteration: 2,
+        result: {
+          total_cost_usd: 0.15,
+          input_tokens: 42000,
+          output_tokens: 5000,
+          cache_read_input_tokens: 10000,
+          cache_creation_input_tokens: 2000,
+          context_window: 200000,
+        },
+        _ts: 1741509050000,
+      },
+    ],
   };
 
   // -- Mock infrastructure --
 
-  const store = new Map<string, unknown>([["repos", SAMPLE_REPOS]]);
+  const store = new Map<string, unknown>([
+    ["repos", SAMPLE_REPOS],
+    ["oneshot-entries", SAMPLE_ONESHOT_ENTRIES],
+  ]);
   type Callback = (...args: unknown[]) => void;
   const callbacks = new Map<number, Callback>();
 
@@ -440,6 +714,10 @@ if (!(window as any).__TAURI_INTERNALS__) {
     if (cmd === "read_file_preview")
       return "# Sample Plan\n\nThis is a stub preview for browser dev mode.\n\n## Steps\n";
     if (cmd === "stop_session") return;
+    if (cmd === "get_active_sessions") return [];
+    if (cmd === "run_oneshot") {
+      return { oneshot_id: `oneshot-mock-${Date.now()}` };
+    }
 
     console.warn(`[browser-mock] unhandled invoke: ${cmd}`, args);
   }

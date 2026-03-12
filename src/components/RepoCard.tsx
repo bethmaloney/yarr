@@ -8,6 +8,7 @@ interface RepoCardProps {
   status: RepoStatus;
   lastTrace?: SessionTrace;
   branchName?: string;
+  planExcerpt?: string;
   onClick: () => void;
 }
 
@@ -32,6 +33,7 @@ export function RepoCard({
   status,
   lastTrace,
   branchName,
+  planExcerpt,
   onClick,
 }: RepoCardProps) {
   const repoFullPath =
@@ -69,6 +71,9 @@ export function RepoCard({
         <span className="text-xs text-muted-foreground font-mono truncate min-w-0">
           {lastTrace.plan_file.split(/[\\/]/).pop()}
         </span>
+      )}
+      {planExcerpt && (
+        <span className="text-xs text-muted-foreground truncate">{planExcerpt}</span>
       )}
 
       <div className="flex-1" />

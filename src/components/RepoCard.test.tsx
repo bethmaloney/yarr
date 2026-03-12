@@ -380,4 +380,90 @@ describe("RepoCard", () => {
     render(<RepoCard repo={makeLocalRepo()} status="idle" onClick={vi.fn()} />);
     expect(screen.queryByText(/\.md$/)).not.toBeInTheDocument();
   });
+
+  // =========================================================================
+  // 14. Plan excerpt
+  // =========================================================================
+
+  it("shows plan excerpt text when planExcerpt is provided with a plan_file trace", () => {
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        planExcerpt="This is the excerpt text."
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("This is the excerpt text.")).toBeInTheDocument();
+  });
+
+  it("does not show excerpt span when planExcerpt is undefined", () => {
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        onClick={vi.fn()}
+      />,
+    );
+    // Only the plan filename should be present, no excerpt
+    expect(screen.getByText("deploy-fix.md")).toBeInTheDocument();
+    // The excerpt span has exactly this className (no font-mono, no min-w-0, etc.)
+    const allSpans = document.querySelectorAll("span");
+    const excerptSpans = Array.from(allSpans).filter(
+      (span) =>
+        span.className === "text-xs text-muted-foreground truncate",
+    );
+    expect(excerptSpans.length).toBe(0);
+  });
+
+  it("does not show excerpt span when planExcerpt is an empty string", () => {
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        planExcerpt=""
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("deploy-fix.md")).toBeInTheDocument();
+    // The excerpt span has exactly this className (no font-mono, no min-w-0, etc.)
+    const allSpans = document.querySelectorAll("span");
+    const excerptSpans = Array.from(allSpans).filter(
+      (span) =>
+        span.className === "text-xs text-muted-foreground truncate",
+    );
+    expect(excerptSpans.length).toBe(0);
+  });
+
+  it("renders a truncated element with long excerpt text", () => {
+    const longText =
+      "This is a very long excerpt that should be truncated by CSS. ".repeat(5).trim();
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        planExcerpt={longText}
+        onClick={vi.fn()}
+      />,
+    );
+    const excerptEl = screen.getByText(longText);
+    expect(excerptEl).toBeInTheDocument();
+    expect(excerptEl.classList.contains("truncate")).toBe(true);
+  });
 });

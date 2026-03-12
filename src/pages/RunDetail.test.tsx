@@ -229,12 +229,12 @@ describe("RunDetail", () => {
       });
     });
 
-    it("shows plan filename (last segment of plan_file path)", async () => {
+    it("shows plan display name (filename without .md extension)", async () => {
       setupDefaultInvoke({ plan_file: "/home/beth/plans/fix-bug.md" });
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("fix-bug.md")).toBeInTheDocument();
+        expect(screen.getByText("fix-bug")).toBeInTheDocument();
       });
     });
 
