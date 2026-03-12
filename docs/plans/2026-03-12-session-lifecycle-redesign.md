@@ -309,9 +309,9 @@ Update existing tests that depend on `run_session` returning `SessionTrace` or o
 - If there are integration tests calling `run_session` directly, update expected return type
 
 **Checklist:**
-- [ ] Update tests for `SessionHandle` struct
-- [ ] Update tests for new `run_session` return type
-- [ ] `cd src-tauri && cargo test`
+- [x] Update tests for `SessionHandle` struct
+- [x] Update tests for new `run_session` return type
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -335,11 +335,11 @@ Update `store.test.ts` tests for `runSession` to match new behavior.
 - Keep: "calls invoke with run_session and correct payload"
 
 **Checklist:**
-- [ ] Update mock return values
-- [ ] Remove/rewrite trace-on-return tests
-- [ ] Remove finally test
-- [ ] Add reject guard test
-- [ ] `npm test`
+- [x] Update mock return values
+- [x] Remove/rewrite trace-on-return tests
+- [x] Remove finally test
+- [x] Add reject guard test
+- [x] `npm test`
 
 ---
 
@@ -359,10 +359,10 @@ Ensure that when the spawned task fails before `runner.run()` is called (or if `
 - Include `plan_file` in the event so the frontend can do `saveRecent`
 
 **Checklist:**
-- [ ] Add error-path `SessionComplete` emission in local spawn block
-- [ ] Add error-path `SessionComplete` emission in SSH spawn block
-- [ ] Verify `plan_file` is included in the event payload
-- [ ] `cd src-tauri && cargo check`
+- [x] Add error-path `SessionComplete` emission in local spawn block
+- [x] Add error-path `SessionComplete` emission in SSH spawn block
+- [x] Verify `plan_file` is included in the event payload
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -398,7 +398,7 @@ Verify the full lifecycle works end-to-end.
 | 4 | Add scope guard to 1-shot spawn | Done |
 | 5 | Update frontend runSession to fire-and-forget | Done |
 | 6 | Update session_complete handler to fetch trace | Done |
-| 7 | Update Rust tests | Not Started |
-| 8 | Update frontend tests | Not Started |
-| 9 | Backend session_complete for error paths | Not Started |
+| 7 | Update Rust tests | Done |
+| 8 | Update frontend tests | Done |
+| 9 | Backend session_complete for error paths | Done |
 | 10 | E2E smoke test | Not Started |

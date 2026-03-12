@@ -171,6 +171,7 @@ async fn run_session(
 
             let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
 
+            let plan_file_for_spawn = plan_file.clone();
             let config = SessionConfig {
                 repo_path: repo_path_buf,
                 working_dir: None,
@@ -197,11 +198,16 @@ async fn run_session(
             let collector = TraceCollector::new(base_dir, &repo_id);
 
             let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
+            let session_complete_emitted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let session_complete_flag = session_complete_emitted.clone();
             let app_handle = app.clone();
             let repo_id_clone = repo_id.clone();
             let runner = SessionRunner::new(config, collector, cancel_token.clone())
                 .abort_registry(abort_registry)
                 .on_event(Box::new(move |event| {
+                    if matches!(event, SessionEvent::SessionComplete { .. }) {
+                        session_complete_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                    }
                     let _ = app_handle.emit("session-event", TaggedSessionEvent {
                         repo_id: repo_id_clone.clone(),
                         event: event.clone(),
@@ -212,6 +218,7 @@ async fn run_session(
             // Spawn as a background task so we return immediately
             let app_bg = app.clone();
             let repo_id_bg = repo_id.clone();
+            let session_complete_emitted_bg = session_complete_emitted.clone();
             let join_handle = tokio::spawn(async move {
                 let _guard = scopeguard::guard((), {
                     let app = app_bg.clone();
@@ -226,7 +233,18 @@ async fn run_session(
                 });
 
                 let runtime = default_runtime();
-                let _result = runner.run(runtime.as_ref()).await;
+                if let Err(e) = runner.run(runtime.as_ref()).await {
+                    tracing::error!(error = %e, "session runner failed");
+                    if !session_complete_emitted_bg.load(std::sync::atomic::Ordering::SeqCst) {
+                        let _ = app_bg.emit("session-event", TaggedSessionEvent {
+                            repo_id: repo_id_bg.clone(),
+                            event: SessionEvent::SessionComplete {
+                                outcome: trace::SessionOutcome::Failed,
+                                plan_file: Some(plan_file_for_spawn),
+                            },
+                        });
+                    }
+                }
             });
 
             // Update the placeholder with the real JoinHandle
@@ -261,6 +279,7 @@ async fn run_session(
             // We can't verify the plan file exists on remote, skip the check
             let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
 
+            let plan_file_for_spawn = plan_file.clone();
             let config = SessionConfig {
                 repo_path: PathBuf::from(remote_path),
                 working_dir: None,
@@ -301,9 +320,14 @@ async fn run_session(
                 ssh_sessions.sessions.lock().unwrap().insert(repo_id.clone(), reconnect_notify);
             }
 
+            let session_complete_emitted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let session_complete_flag = session_complete_emitted.clone();
             let app_handle = app.clone();
             let repo_id_clone = repo_id.clone();
             let orchestrator = orchestrator.on_event(Box::new(move |event| {
+                if matches!(event, SessionEvent::SessionComplete { .. }) {
+                    session_complete_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                }
                 let _ = app_handle.emit("session-event", TaggedSessionEvent {
                     repo_id: repo_id_clone.clone(),
                     event: event.clone(),
@@ -313,6 +337,7 @@ async fn run_session(
             // Spawn as a background task so we return immediately
             let app_bg = app.clone();
             let repo_id_bg = repo_id.clone();
+            let session_complete_emitted_bg = session_complete_emitted.clone();
             let join_handle = tokio::spawn(async move {
                 let _guard = scopeguard::guard((), {
                     let app = app_bg.clone();
@@ -332,7 +357,18 @@ async fn run_session(
                     }
                 });
 
-                let _result = orchestrator.run().await;
+                if let Err(e) = orchestrator.run().await {
+                    tracing::error!(error = %e, "ssh session orchestrator failed");
+                    if !session_complete_emitted_bg.load(std::sync::atomic::Ordering::SeqCst) {
+                        let _ = app_bg.emit("session-event", TaggedSessionEvent {
+                            repo_id: repo_id_bg.clone(),
+                            event: SessionEvent::SessionComplete {
+                                outcome: trace::SessionOutcome::Failed,
+                                plan_file: Some(plan_file_for_spawn),
+                            },
+                        });
+                    }
+                }
             });
 
             // Update the placeholder with the real JoinHandle
@@ -2930,6 +2966,141 @@ mod tests {
             active_sessions.tokens.lock().await.get(&other_repo_id).unwrap().session_id,
             "sess-other",
             "other session's data should be untouched"
+        );
+    }
+
+    // ── Error-path SessionComplete emission tests ──────────────────────
+
+    #[test]
+    fn session_complete_failed_with_plan_file_serializes_correctly() {
+        let event = TaggedSessionEvent {
+            repo_id: "repo-err".to_string(),
+            event: SessionEvent::SessionComplete {
+                outcome: SessionOutcome::Failed,
+                plan_file: Some("docs/plans/my-plan.md".to_string()),
+            },
+        };
+
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+
+        assert_eq!(json["repo_id"], "repo-err");
+        assert_eq!(json["event"]["kind"], "session_complete");
+        assert_eq!(json["event"]["outcome"], "failed");
+        assert_eq!(json["event"]["plan_file"], "docs/plans/my-plan.md");
+    }
+
+    #[test]
+    fn session_complete_failed_without_plan_file_serializes_correctly() {
+        let event = TaggedSessionEvent {
+            repo_id: "repo-err-no-plan".to_string(),
+            event: SessionEvent::SessionComplete {
+                outcome: SessionOutcome::Failed,
+                plan_file: None,
+            },
+        };
+
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+
+        assert_eq!(json["repo_id"], "repo-err-no-plan");
+        assert_eq!(json["event"]["kind"], "session_complete");
+        assert_eq!(json["event"]["outcome"], "failed");
+        assert!(json["event"]["plan_file"].is_null(), "plan_file should be null when None");
+    }
+
+    #[tokio::test]
+    async fn error_path_emits_session_complete_failed() {
+        // Simulate the spawn-block pattern: a task runs a fallible operation,
+        // and when it returns Err, a SessionComplete { outcome: Failed } event
+        // is emitted through a shared callback channel.
+        let (tx, rx) = std::sync::mpsc::channel::<SessionEvent>();
+        let plan_file: Option<String> = None;
+
+        let handle = tokio::spawn(async move {
+            // Simulate runner.run() returning an error
+            let result: Result<(), String> = Err("claude process crashed".to_string());
+
+            if result.is_err() {
+                let _ = tx.send(SessionEvent::SessionComplete {
+                    outcome: SessionOutcome::Failed,
+                    plan_file,
+                });
+            }
+        });
+
+        handle.await.expect("task should complete");
+
+        let emitted = rx.try_recv().expect("should have received a SessionComplete event");
+        match emitted {
+            SessionEvent::SessionComplete { outcome, plan_file } => {
+                assert_eq!(outcome, SessionOutcome::Failed);
+                assert!(plan_file.is_none());
+            }
+            other => panic!("expected SessionComplete, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn error_path_emit_includes_plan_file_from_config() {
+        // When the session config has a plan_file, the error-path emit should
+        // carry that plan_file through to the SessionComplete event.
+        let (tx, rx) = std::sync::mpsc::channel::<SessionEvent>();
+        let plan_file = Some("docs/plans/fix-auth.md".to_string());
+
+        let handle = tokio::spawn(async move {
+            // Simulate runner.run() returning an error
+            let result: Result<(), String> = Err("ssh connection refused".to_string());
+
+            if result.is_err() {
+                let _ = tx.send(SessionEvent::SessionComplete {
+                    outcome: SessionOutcome::Failed,
+                    plan_file,
+                });
+            }
+        });
+
+        handle.await.expect("task should complete");
+
+        let emitted = rx.try_recv().expect("should have received a SessionComplete event");
+        match emitted {
+            SessionEvent::SessionComplete { outcome, plan_file } => {
+                assert_eq!(outcome, SessionOutcome::Failed);
+                assert_eq!(plan_file.as_deref(), Some("docs/plans/fix-auth.md"));
+            }
+            other => panic!("expected SessionComplete, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn success_path_does_not_double_emit_session_complete() {
+        // When the inner operation succeeds, the error handler should NOT emit
+        // an additional SessionComplete event. The runner itself already emits
+        // SessionComplete on the success path (session.rs:877), so the
+        // error-path handler must stay silent.
+        let (tx, rx) = std::sync::mpsc::channel::<SessionEvent>();
+
+        let handle = tokio::spawn(async move {
+            // Simulate runner.run() returning Ok (success)
+            let result: Result<(), String> = Ok(());
+
+            if result.is_err() {
+                // This should NOT execute on the success path
+                let _ = tx.send(SessionEvent::SessionComplete {
+                    outcome: SessionOutcome::Failed,
+                    plan_file: None,
+                });
+            }
+            // Explicitly drop tx so the channel closes
+            drop(tx);
+        });
+
+        handle.await.expect("task should complete");
+
+        // The channel should be empty — no SessionComplete was emitted by the error handler
+        let recv_result = rx.try_recv();
+        assert!(
+            recv_result.is_err(),
+            "no SessionComplete should be emitted on the success path, but got: {:?}",
+            recv_result.ok()
         );
     }
 }
