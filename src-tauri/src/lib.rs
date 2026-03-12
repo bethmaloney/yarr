@@ -1,3 +1,4 @@
+pub mod git_merge;
 pub mod oneshot;
 pub mod output;
 pub mod prompt;
