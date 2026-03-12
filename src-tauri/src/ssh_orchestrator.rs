@@ -468,7 +468,8 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         };
 
         let outcome = trace.outcome.clone();
-        self.emit(SessionEvent::SessionComplete { outcome });
+        let plan_file = trace.plan_file.clone();
+        self.emit(SessionEvent::SessionComplete { outcome, plan_file });
 
         let events: Vec<SessionEvent> = {
             let guard = self.accumulated_events.lock().unwrap();

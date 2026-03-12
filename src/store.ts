@@ -197,12 +197,21 @@ export const useAppStore = create<AppStore>((set, get) => {
                           repo as Extract<RepoConfig, { type: "ssh" }>
                         ).remotePath,
                       };
+                console.log("session plan move triggered:", { repo_id, filename, plansDir });
                 invoke("move_plan_to_completed", {
                   repo: repoPayload,
                   plansDir,
                   filename,
                 }).catch((e) => console.warn("Failed to move plan:", e));
+              } else {
+                console.log("session plan move skipped: parent repo not found", { repo_id });
               }
+            } else {
+              console.log("session plan move skipped:", {
+                repo_id,
+                reason: !sessionEvent.plan_file ? "no plan_file" : "outcome is not completed",
+                outcome: sessionEvent.outcome,
+              });
             }
           } else if (session.disconnected || session.reconnecting) {
             updates.disconnected = false;
@@ -236,6 +245,51 @@ export const useAppStore = create<AppStore>((set, get) => {
 
               set({ oneShotEntries: oneshotEntries });
               oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch(() => {});
+            }
+          }
+
+          // Auto-move plan to completed directory on successful 1-shot completion
+          if (sessionEvent.kind === "one_shot_complete") {
+            const entry = get().oneShotEntries.get(repo_id);
+            if (entry) {
+              const repo = get().repos.find((r) => r.id === entry.parentRepoId);
+              if (repo) {
+                // Find the design_phase_complete event to get plan_file
+                const session = get().sessions.get(repo_id);
+                const designComplete = session?.events.find(
+                  (e) => e.kind === "design_phase_complete" && e.plan_file,
+                );
+                if (designComplete?.plan_file) {
+                  const plansDir = repo.plansDir || "docs/plans/";
+                  const filename =
+                    designComplete.plan_file.split("/").pop() ||
+                    designComplete.plan_file;
+                  const repoPayload =
+                    repo.type === "local"
+                      ? { type: "local" as const, path: repo.path }
+                      : {
+                          type: "ssh" as const,
+                          sshHost: (
+                            repo as Extract<RepoConfig, { type: "ssh" }>
+                          ).sshHost,
+                          remotePath: (
+                            repo as Extract<RepoConfig, { type: "ssh" }>
+                          ).remotePath,
+                        };
+                  console.log("1-shot plan move triggered:", { repo_id, filename, plansDir });
+                  invoke("move_plan_to_completed", {
+                    repo: repoPayload,
+                    plansDir,
+                    filename,
+                  }).catch((e) => console.warn("Failed to move 1-shot plan:", e));
+                } else {
+                  console.log("1-shot plan move skipped: no design_phase_complete event with plan_file", { repo_id });
+                }
+              } else {
+                console.log("1-shot plan move skipped: parent repo not found", { repo_id, parentRepoId: entry.parentRepoId });
+              }
+            } else {
+              console.log("1-shot plan move skipped: oneshot entry not found", { repo_id });
             }
           }
         },

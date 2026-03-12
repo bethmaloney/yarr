@@ -1421,6 +1421,210 @@ describe("1-shot event listener", () => {
 });
 
 // ===========================================================================
+// 12b. 1-shot auto-move plan on completion
+// ===========================================================================
+
+describe("1-shot auto-move plan on completion", () => {
+  beforeEach(() => {
+    useAppStore.getState().initialize();
+  });
+
+  it("auto-move: invokes move_plan_to_completed on one_shot_complete when design_phase_complete event exists", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+        } as Partial<RepoConfig>),
+      ],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    // First emit design_phase_complete so plan_file is in session events
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    // Then emit one_shot_complete to trigger the auto-move
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
+
+  it("auto-move: uses default plansDir when parent repo has no plansDir", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
+
+  it("auto-move: NOT invoked on one_shot_complete when no design_phase_complete event exists", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    // Emit one_shot_complete without any prior design_phase_complete
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "move_plan_to_completed",
+      expect.anything(),
+    );
+  });
+
+  it("auto-move: NOT invoked on one_shot_failed", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_failed" });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "move_plan_to_completed",
+      expect.anything(),
+    );
+  });
+
+  it("auto-move: NOT invoked when parent repo is not found", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-nonexistent",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "move_plan_to_completed",
+      expect.anything(),
+    );
+  });
+
+  it("auto-move: failure is logged but does not throw", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "move_plan_to_completed") {
+        throw new Error("filesystem error");
+      }
+      return undefined;
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    // Should not throw — fire-and-forget
+    expect(() => {
+      emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+    }).not.toThrow();
+
+    // Let the rejected promise settle
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "move_plan_to_completed",
+        expect.anything(),
+      );
+    });
+  });
+
+  it("auto-move: works with SSH repos", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-2",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [
+        makeSshRepo({
+          plansDir: "docs/plans/",
+        } as Partial<RepoConfig>),
+      ],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: {
+        type: "ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/other",
+      },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
+});
+
+// ===========================================================================
 // 13. 1-shot persistence
 // ===========================================================================
 

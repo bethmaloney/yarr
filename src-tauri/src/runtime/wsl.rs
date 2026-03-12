@@ -215,6 +215,12 @@ impl RuntimeProvider for WslRuntime {
     ) -> Result<CommandOutput> {
         let env = self.resolve_env().await?;
         let wsl_dir = to_wsl_path(working_dir);
+        tracing::debug!(
+            working_dir = %working_dir.display(),
+            wsl_dir = %wsl_dir,
+            command = %command,
+            "WslRuntime::run_command starting"
+        );
         let mut parts = env_export_parts(&env);
         parts.push(format!("cd {}", shell_escape(&wsl_dir)));
         parts.push(command.to_string());
@@ -229,13 +235,23 @@ impl RuntimeProvider for WslRuntime {
 
         let result = tokio::time::timeout(timeout, child.wait_with_output()).await;
         match result {
-            Ok(Ok(output)) => Ok(CommandOutput {
-                exit_code: output.status.code().unwrap_or(-1),
-                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-            }),
+            Ok(Ok(output)) => {
+                let exit_code = output.status.code().unwrap_or(-1);
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                if exit_code == 0 {
+                    tracing::debug!(exit_code, "WslRuntime::run_command succeeded");
+                } else {
+                    tracing::warn!(exit_code, stderr = %stderr, command = %command, "WslRuntime::run_command failed");
+                }
+                Ok(CommandOutput {
+                    exit_code,
+                    stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                    stderr,
+                })
+            }
             Ok(Err(e)) => Err(e.into()),
             Err(_) => {
+                tracing::warn!(command = %command, timeout = ?timeout, "WslRuntime::run_command timed out");
                 // child is dropped here, kill_on_drop(true) ensures cleanup
                 anyhow::bail!("Command timed out after {:?}", timeout)
             }

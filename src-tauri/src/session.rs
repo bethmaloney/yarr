@@ -137,7 +137,7 @@ pub enum SessionEvent {
     /// An iteration failed with an error (process crash, etc.)
     IterationFailed { iteration: u32, error: String },
     /// The entire session finished
-    SessionComplete { outcome: SessionOutcome },
+    SessionComplete { outcome: SessionOutcome, plan_file: Option<String> },
     /// SSH connection lost, session may still be running remotely
     Disconnected { iteration: u32, reason: Option<String> },
     /// Attempting to reconnect to remote session
@@ -872,7 +872,9 @@ impl SessionRunner {
         self.run_with_trace(runtime, &mut trace).await?;
 
         let outcome = trace.outcome.clone();
-        self.emit(SessionEvent::SessionComplete { outcome });
+        let plan_file = trace.plan_file.clone();
+        tracing::info!(outcome = ?outcome, plan_file = ?plan_file, "session complete, emitting SessionComplete");
+        self.emit(SessionEvent::SessionComplete { outcome, plan_file });
 
         let events: Vec<SessionEvent> = {
             let guard = self.accumulated_events.lock().unwrap();
@@ -1243,8 +1245,9 @@ mod tests {
 
         // Should end with SessionComplete
         match events.last().unwrap() {
-            SessionEvent::SessionComplete { outcome } => {
+            SessionEvent::SessionComplete { outcome, plan_file } => {
                 assert_eq!(*outcome, SessionOutcome::Completed);
+                assert_eq!(*plan_file, None, "plan_file should be None when not set in config");
             }
             other => panic!("expected SessionComplete as last event, got {:?}", other),
         }
@@ -3058,8 +3061,9 @@ mod tests {
 
         // run() should emit SessionComplete as last event
         match events.last().unwrap() {
-            SessionEvent::SessionComplete { outcome } => {
+            SessionEvent::SessionComplete { outcome, plan_file } => {
                 assert_eq!(*outcome, SessionOutcome::Completed);
+                assert_eq!(*plan_file, None, "plan_file should be None when not set in config");
             }
             other => panic!("expected SessionComplete as last event, got {:?}", other),
         }
@@ -3084,5 +3088,100 @@ mod tests {
             "run() should write events file to disk at {:?}",
             events_file
         );
+    }
+
+    #[tokio::test]
+    async fn test_session_complete_carries_plan_file() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: Some("docs/plans/my-plan.md".to_string()),
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let _trace = runner.run(&runtime).await.expect("run should succeed");
+        let events = get_events(&runner);
+
+        // Find the SessionComplete event and verify plan_file is carried through
+        let complete_event = events
+            .iter()
+            .find(|e| matches!(e, SessionEvent::SessionComplete { .. }))
+            .expect("should have SessionComplete event");
+
+        match complete_event {
+            SessionEvent::SessionComplete { outcome, plan_file } => {
+                assert_eq!(*outcome, SessionOutcome::Completed);
+                assert_eq!(
+                    *plan_file,
+                    Some("docs/plans/my-plan.md".to_string()),
+                    "SessionComplete should carry the plan_file from config"
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_session_complete_plan_file_none_when_not_set() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let _trace = runner.run(&runtime).await.expect("run should succeed");
+        let events = get_events(&runner);
+
+        // Find the SessionComplete event and verify plan_file is None
+        let complete_event = events
+            .iter()
+            .find(|e| matches!(e, SessionEvent::SessionComplete { .. }))
+            .expect("should have SessionComplete event");
+
+        match complete_event {
+            SessionEvent::SessionComplete { outcome, plan_file } => {
+                assert_eq!(*outcome, SessionOutcome::Completed);
+                assert_eq!(
+                    *plan_file, None,
+                    "SessionComplete should have plan_file None when not set in config"
+                );
+            }
+            _ => unreachable!(),
+        }
     }
 }
