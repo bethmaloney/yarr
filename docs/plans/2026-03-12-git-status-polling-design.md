@@ -201,12 +201,12 @@ Replace `useBranchInfo` with a new hook that polls eligible repos every 30 secon
 - Use `useRef` for the interval to avoid stale closures
 
 **Checklist:**
-- [ ] Create `useGitStatus` hook
-- [ ] Implement 30-second polling for eligible repos
-- [ ] Implement session-aware pause/resume
-- [ ] Expose `refresh` function for manual triggers
-- [ ] Immediate fetch on session completion
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Create `useGitStatus` hook
+- [x] Implement 30-second polling for eligible repos
+- [x] Implement session-aware pause/resume
+- [x] Expose `refresh` function for manual triggers
+- [x] Immediate fetch on session completion
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -358,7 +358,7 @@ Update existing branch display tests and add new tests for git status polling.
 | 2 | Add `RepoGitStatus` type and new Tauri command | Done |
 | 3 | Add `RepoGitStatus` type to frontend types | Done |
 | 4 | Add git status state and actions to Zustand store | Done |
-| 5 | Create `useGitStatus` hook with polling | Not Started |
+| 5 | Create `useGitStatus` hook with polling | Done |
 | 6 | Update Home page repo cards | Not Started |
 | 7 | Update RepoDetail page branch chip | Not Started |
 | 8 | Add auto-fetch toggle to repo config sheet | Not Started |
