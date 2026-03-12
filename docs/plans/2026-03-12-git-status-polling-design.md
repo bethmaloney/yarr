@@ -105,9 +105,9 @@ Add `autoFetch?: boolean` field to both `LocalRepoConfig` and `SshRepoConfig`.
 - Existing repos without the field will be treated as `undefined`, which the frontend interprets using defaults (true for local, false for SSH)
 
 **Checklist:**
-- [ ] Add `autoFetch?: boolean` to `LocalRepoConfig`
-- [ ] Add `autoFetch?: boolean` to `SshRepoConfig`
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `autoFetch?: boolean` to `LocalRepoConfig`
+- [x] Add `autoFetch?: boolean` to `SshRepoConfig`
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -354,7 +354,7 @@ Update existing branch display tests and add new tests for git status polling.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add `autoFetch` to repo config types | Not Started |
+| 1 | Add `autoFetch` to repo config types | Done |
 | 2 | Add `RepoGitStatus` type and new Tauri command | Not Started |
 | 3 | Add `RepoGitStatus` type to frontend types | Not Started |
 | 4 | Add git status state and actions to Zustand store | Not Started |

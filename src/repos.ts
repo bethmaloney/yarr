@@ -15,6 +15,7 @@ type LocalRepoConfig = {
   checks?: Check[];
   gitSync?: GitSyncConfig;
   createBranch?: boolean;
+  autoFetch?: boolean;
   plansDir?: string;
 };
 
@@ -31,6 +32,7 @@ type SshRepoConfig = {
   checks?: Check[];
   gitSync?: GitSyncConfig;
   createBranch?: boolean;
+  autoFetch?: boolean;
   plansDir?: string;
 };
 

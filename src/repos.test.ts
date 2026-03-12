@@ -935,3 +935,176 @@ describe("updateRepo preserves createBranch", () => {
     }
   });
 });
+
+describe("RepoConfig with autoFetch field", () => {
+  it("local RepoConfig with autoFetch: true is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-af-1",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      autoFetch: true,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.autoFetch).toBe(true);
+  });
+
+  it("local RepoConfig with autoFetch: false is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-af-2",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      autoFetch: false,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.autoFetch).toBe(false);
+  });
+
+  it("local RepoConfig without autoFetch (undefined) is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-no-af",
+      path: "/home/beth/repos/other",
+      name: "other",
+      model: "opus",
+      maxIterations: 20,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(
+      (repo as RepoConfig & { autoFetch?: boolean }).autoFetch,
+    ).toBeUndefined();
+  });
+
+  it("SSH RepoConfig with autoFetch is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-af-1",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      autoFetch: true,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(repo.autoFetch).toBe(true);
+  });
+});
+
+describe("autoFetch round-trip through loadRepos", () => {
+  it("local repo with autoFetch round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-af-rt-1",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        autoFetch: true,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].autoFetch).toBe(true);
+    }
+  });
+
+  it("local repo without autoFetch loads fine (undefined)", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-no-af",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].autoFetch).toBeUndefined();
+    }
+  });
+
+  it("ssh repo with autoFetch round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "ssh",
+        id: "repo-af-ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        autoFetch: false,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "ssh") {
+      expect(result[0].autoFetch).toBe(false);
+    }
+  });
+});
+
+describe("updateRepo preserves autoFetch", () => {
+  it("updateRepo preserves autoFetch config", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-update-af",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        autoFetch: true,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const updated: RepoConfig = {
+      type: "local",
+      id: "repo-update-af",
+      path: "/home/beth/repos/yarr",
+      name: "yarr",
+      model: "sonnet",
+      maxIterations: 20,
+      completionSignal: "DONE",
+      autoFetch: true,
+    };
+    await updateRepo(updated);
+
+    const stored = mockData.get("repos") as RepoConfig[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].model).toBe("sonnet");
+    if (stored[0].type === "local") {
+      expect(stored[0].autoFetch).toBe(true);
+    }
+  });
+});
