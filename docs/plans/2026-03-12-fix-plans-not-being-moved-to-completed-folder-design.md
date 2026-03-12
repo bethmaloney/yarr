@@ -67,15 +67,15 @@ This code is correct in structure but:
 **Pattern reference:** The existing `session_complete` handler at lines 170–205. The 1-shot status update handler at lines 217–239 already handles `one_shot_complete`.
 
 **Checklist:**
-- [ ] In the `session_complete` handler, the `plan_file` field will now be populated from the backend — no frontend changes needed for Ralph loop sessions
-- [ ] Add plan move logic to the `one_shot_complete` handling section (lines 217–239). When `sessionEvent.kind === "one_shot_complete"`:
+- [x] In the `session_complete` handler, the `plan_file` field will now be populated from the backend — no frontend changes needed for Ralph loop sessions
+- [x] Add plan move logic to the `one_shot_complete` handling section (lines 217–239). When `sessionEvent.kind === "one_shot_complete"`:
   - Look up the `OneShotEntry` to get the `parentRepoId`
   - Look up the parent repo to get `plansDir`
   - Look through the session events for a `DesignPhaseComplete` event to extract the `plan_file`
   - Invoke `move_plan_to_completed` with the parent repo's runtime info and plansDir
   - Fire-and-forget with `.catch()` logging, same pattern as the existing session_complete handler
-- [ ] Add `console.log` when plan move is triggered (both session_complete and one_shot_complete) including repo_id, filename, and plansDir
-- [ ] Add `console.log` when plan move is skipped (no plan_file found, or non-completed outcome) including the reason
+- [x] Add `console.log` when plan move is triggered (both session_complete and one_shot_complete) including repo_id, filename, and plansDir
+- [x] Add `console.log` when plan move is skipped (no plan_file found, or non-completed outcome) including the reason
 
 ### Task 3: Add logging to `move_plan_to_completed_impl` in the Rust backend
 
@@ -163,7 +163,7 @@ This code is correct in structure but:
 | Task | Status | Notes |
 |------|--------|-------|
 | 1. Add `plan_file` to `SessionComplete` | **Done** | Core Rust fix. Also updated ssh_orchestrator.rs emission site and trace.rs tests. |
-| 2. Handle plan move for 1-shot in frontend | Not started | Frontend fix for 1-shot flow |
+| 2. Handle plan move for 1-shot in frontend | **Done** | Added plan move on one_shot_complete via design_phase_complete event lookup. Added console.log for triggered/skipped in both session_complete and one_shot_complete paths. 7 new tests. |
 | 3. Add logging to `move_plan_to_completed_impl` | Not started | Observability |
 | 4. Verify WSL path handling | Not started | Cross-platform correctness |
 | 5. Update frontend TypeScript types | Not started | Type verification |
