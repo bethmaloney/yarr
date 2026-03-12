@@ -935,3 +935,177 @@ describe("updateRepo preserves createBranch", () => {
     }
   });
 });
+
+describe("RepoConfig with movePlansToCompleted field", () => {
+  it("local RepoConfig with movePlansToCompleted: true is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-mpc-1",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      movePlansToCompleted: true,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.movePlansToCompleted).toBe(true);
+  });
+
+  it("local RepoConfig with movePlansToCompleted: false is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-mpc-2",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      movePlansToCompleted: false,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.movePlansToCompleted).toBe(false);
+  });
+
+  it("local RepoConfig without movePlansToCompleted (undefined) is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-no-mpc",
+      path: "/home/beth/repos/other",
+      name: "other",
+      model: "opus",
+      maxIterations: 20,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(
+      (repo as RepoConfig & { movePlansToCompleted?: boolean })
+        .movePlansToCompleted,
+    ).toBeUndefined();
+  });
+
+  it("SSH RepoConfig with movePlansToCompleted is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-mpc-1",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      movePlansToCompleted: true,
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(repo.movePlansToCompleted).toBe(true);
+  });
+});
+
+describe("movePlansToCompleted round-trip through loadRepos", () => {
+  it("local repo with movePlansToCompleted round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-mpc-rt-1",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        movePlansToCompleted: true,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].movePlansToCompleted).toBe(true);
+    }
+  });
+
+  it("local repo without movePlansToCompleted loads fine", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-no-mpc",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].movePlansToCompleted).toBeUndefined();
+    }
+  });
+
+  it("ssh repo with movePlansToCompleted round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "ssh",
+        id: "repo-mpc-ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        movePlansToCompleted: false,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "ssh") {
+      expect(result[0].movePlansToCompleted).toBe(false);
+    }
+  });
+});
+
+describe("updateRepo preserves movePlansToCompleted", () => {
+  it("updateRepo preserves movePlansToCompleted config", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-update-mpc",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        movePlansToCompleted: true,
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const updated: RepoConfig = {
+      type: "local",
+      id: "repo-update-mpc",
+      path: "/home/beth/repos/yarr",
+      name: "yarr",
+      model: "sonnet",
+      maxIterations: 20,
+      completionSignal: "DONE",
+      movePlansToCompleted: true,
+    };
+    await updateRepo(updated);
+
+    const stored = mockData.get("repos") as RepoConfig[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].model).toBe("sonnet");
+    if (stored[0].type === "local") {
+      expect(stored[0].movePlansToCompleted).toBe(true);
+    }
+  });
+});

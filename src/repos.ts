@@ -16,6 +16,7 @@ type LocalRepoConfig = {
   gitSync?: GitSyncConfig;
   createBranch?: boolean;
   plansDir?: string;
+  movePlansToCompleted?: boolean;
 };
 
 type SshRepoConfig = {
@@ -32,6 +33,7 @@ type SshRepoConfig = {
   gitSync?: GitSyncConfig;
   createBranch?: boolean;
   plansDir?: string;
+  movePlansToCompleted?: boolean;
 };
 
 export type RepoConfig = LocalRepoConfig | SshRepoConfig;
