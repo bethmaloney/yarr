@@ -79,9 +79,9 @@ Add two per-repo configuration options for plan management:
 - `run_oneshot` command handler at `lib.rs:276-355`
 
 **Checklist:**
-- [ ] Add `plans_dir: String` field to `OneShotConfig` struct
-- [ ] Update `build_design_prompt()` signature to accept `plans_dir: &str` parameter
-- [ ] Modify the `DESIGN_PROMPT` constant's Step 4 section to use a `{plans_dir}` placeholder instead of hardcoded `docs/plans/`. Change:
+- [x] Add `plans_dir: String` field to `OneShotConfig` struct
+- [x] Update `build_design_prompt()` signature to accept `plans_dir: &str` parameter
+- [x] Modify the `DESIGN_PROMPT` constant's Step 4 section to use a `{plans_dir}` placeholder instead of hardcoded `docs/plans/`. Change:
   ```
   Write the plan to `docs/plans/<date>-<slug>-design.md`
   ```
@@ -97,17 +97,17 @@ Add two per-repo configuration options for plan management:
   ```
   Create the `{plans_dir}` directory if it does not exist.
   ```
-- [ ] In `build_design_prompt()`, replace `{plans_dir}` in the prompt text with the actual value (similar to how `build_conflict_prompt` replaces `{conflict_files}`)
-- [ ] Update the default plan file fallback in `oneshot.rs` (line 478-481) to use `self.config.plans_dir` instead of hardcoded `"docs/plans/"`:
+- [x] In `build_design_prompt()`, replace `{plans_dir}` in the prompt text with the actual value (similar to how `build_conflict_prompt` replaces `{conflict_files}`)
+- [x] Update the default plan file fallback in `oneshot.rs` (line 478-481) to use `self.config.plans_dir` instead of hardcoded `"docs/plans/"`:
   ```rust
   let default_path = format!("{}{}-{}-design.md", self.config.plans_dir, date, slug);
   ```
   Ensure the plans_dir has a trailing slash (normalize in config or at use site).
-- [ ] Update `extract_plan_file_from_events()` to accept a `plans_dir` parameter and check against that instead of hardcoded `"docs/plans/"`. The function should check `file_path.contains(plans_dir)` in addition to (or instead of) `file_path.contains("docs/plans/")`. Keep the `-design.md` suffix fallback.
-- [ ] Update `extract_plan_file_from_output()` similarly — replace hardcoded `"docs/plans/"` with the configured plans_dir.
-- [ ] Pass `plans_dir` when calling `extract_plan_file_from_events()` and `extract_plan_file_from_output()` in the `run()` method.
-- [ ] In `run_oneshot` command handler (`lib.rs:276-355`): read `plansDir` from the repo config (it's not currently passed to the backend — will need to be added as a parameter or derived from the frontend). Add `plans_dir` parameter to `run_oneshot` and pass it through to `OneShotConfig`.
-- [ ] In `runOneShot` in `store.ts`: pass `plansDir` (from repo config, defaulting to `"docs/plans/"`) to the `run_oneshot` invoke call.
+- [x] Update `extract_plan_file_from_events()` to accept a `plans_dir` parameter and check against that instead of hardcoded `"docs/plans/"`. The function should check `file_path.contains(plans_dir)` in addition to (or instead of) `file_path.contains("docs/plans/")`. Keep the `-design.md` suffix fallback.
+- [x] Update `extract_plan_file_from_output()` similarly — replace hardcoded `"docs/plans/"` with the configured plans_dir.
+- [x] Pass `plans_dir` when calling `extract_plan_file_from_events()` and `extract_plan_file_from_output()` in the `run()` method.
+- [x] In `run_oneshot` command handler (`lib.rs:276-355`): read `plansDir` from the repo config (it's not currently passed to the backend — will need to be added as a parameter or derived from the frontend). Add `plans_dir` parameter to `run_oneshot` and pass it through to `OneShotConfig`.
+- [x] In `runOneShot` in `store.ts`: pass `plansDir` (from repo config, defaulting to `"docs/plans/"`) to the `run_oneshot` invoke call.
 
 ## Task 5: Update existing tests
 
@@ -122,16 +122,16 @@ Add two per-repo configuration options for plan management:
 - Prompt tests at `prompt.rs:232-350`
 
 **Checklist:**
-- [ ] Update `build_design_prompt` tests in `prompt.rs` to pass the new `plans_dir` parameter
-- [ ] Add test that `build_design_prompt` includes the custom plans_dir in output
-- [ ] Add test that `build_design_prompt` uses default `docs/plans/` when given that value
-- [ ] Update any `extract_plan_file_from_events` tests to pass `plans_dir` parameter
+- [x] Update `build_design_prompt` tests in `prompt.rs` to pass the new `plans_dir` parameter
+- [x] Add test that `build_design_prompt` includes the custom plans_dir in output
+- [x] Add test that `build_design_prompt` uses default `docs/plans/` when given that value
+- [x] Update any `extract_plan_file_from_events` tests to pass `plans_dir` parameter
 - [x] In `store.test.ts`: update the `session_complete` event tests to verify auto-move respects `movePlansToCompleted` config:
   - Test that move IS called when `movePlansToCompleted` is `true` (or undefined/default)
   - Test that move is NOT called when `movePlansToCompleted` is `false`
 - [x] In `store.test.ts`: same for `one_shot_complete` event handler
 - [x] In `RepoDetail.test.tsx`: verify the new checkbox renders and toggles correctly
-- [ ] Update `OneShotConfig` construction in any Rust tests to include `plans_dir`
+- [x] Update `OneShotConfig` construction in any Rust tests to include `plans_dir`
 
 ## Progress Tracking
 
@@ -140,5 +140,5 @@ Add two per-repo configuration options for plan management:
 | 1. Add `movePlansToCompleted` to RepoConfig | Complete | Added to both LocalRepoConfig and SshRepoConfig |
 | 2. Settings UI toggle | Complete | Added state, useEffect init, saveSettings, and Checkbox UI |
 | 3. Gate auto-move on config | Complete | Gated both session_complete and one_shot_complete handlers |
-| 4. Pass `plansDir` to design prompt | Not Started | Largest task — touches prompt.rs, oneshot.rs, lib.rs, store.ts |
-| 5. Update tests | Not Started | Prompt tests, store tests, UI tests |
+| 4. Pass `plansDir` to design prompt | Complete | Added plans_dir to OneShotConfig, prompt template, extraction functions, lib.rs command, store.ts invoke |
+| 5. Update tests | Complete | Updated prompt.rs tests, oneshot.rs tests (extract + config), store.test.ts plansDir tests |

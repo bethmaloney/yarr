@@ -381,6 +381,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           completionSignal: repo.completionSignal,
           checks: repo.checks ?? [],
           gitSync: repo.gitSync,
+          plansDir: repo.plansDir || "docs/plans/",
         });
 
         // Replace temp entry with real oneshot_id

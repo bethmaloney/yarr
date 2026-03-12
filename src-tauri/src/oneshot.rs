@@ -34,6 +34,7 @@ pub struct OneShotConfig {
     pub completion_signal: String,
     pub checks: Vec<crate::session::Check>,
     pub git_sync: Option<crate::session::GitSyncConfig>,
+    pub plans_dir: String,
 }
 
 /// Convert a title into a URL-safe slug.
@@ -92,13 +93,13 @@ pub fn generate_oneshot_id() -> String {
 
 /// Extract a plan file path from a list of SessionEvents.
 /// Looks for ToolUse events with Write/Edit tools that target docs/plans/*.md or *-design.md paths.
-pub fn extract_plan_file_from_events(events: &[SessionEvent]) -> Option<String> {
+pub fn extract_plan_file_from_events(events: &[SessionEvent], plans_dir: &str) -> Option<String> {
     for event in events {
         if let SessionEvent::ToolUse { tool_name, tool_input, .. } = event {
             if tool_name == "Write" || tool_name == "Edit" {
                 if let Some(input) = tool_input {
                     if let Some(file_path) = input.get("file_path").and_then(|v| v.as_str()) {
-                        if (file_path.contains("docs/plans/") && file_path.ends_with(".md"))
+                        if (file_path.contains(plans_dir) && file_path.ends_with(".md"))
                             || file_path.ends_with("-design.md")
                         {
                             return Some(file_path.to_string());
@@ -254,18 +255,18 @@ impl OneShotRunner {
 
     /// Extract a plan file path from the design phase output text.
     /// Looks for references to `docs/plans/*.md` in the text.
-    fn extract_plan_file_from_output(&self, text: &str) -> Option<String> {
+    fn extract_plan_file_from_output(&self, text: &str, plans_dir: &str) -> Option<String> {
         // Look for a path like docs/plans/something.md
         for word in text.split_whitespace() {
             let cleaned = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '-' && c != '_' && c != '.');
-            if cleaned.contains("docs/plans/") && cleaned.ends_with(".md") {
+            if cleaned.contains(plans_dir) && cleaned.ends_with(".md") {
                 return Some(cleaned.to_string());
             }
         }
         // Also try to find it with backtick-wrapped paths
         for segment in text.split('`') {
             let trimmed = segment.trim();
-            if trimmed.contains("docs/plans/") && trimmed.ends_with(".md") {
+            if trimmed.contains(plans_dir) && trimmed.ends_with(".md") {
                 return Some(trimmed.to_string());
             }
         }
@@ -359,7 +360,7 @@ impl OneShotRunner {
         // 2. Design phase
         self.emit(SessionEvent::DesignPhaseStarted);
 
-        let design_prompt = prompt::build_design_prompt(&self.config.prompt, &self.config.title);
+        let design_prompt = prompt::build_design_prompt(&self.config.prompt, &self.config.title, &self.config.plans_dir);
 
         // Collect design events separately so we can extract plan file from them
         let design_events: Arc<std::sync::Mutex<Vec<SessionEvent>>> =
@@ -430,7 +431,7 @@ impl OneShotRunner {
 
         // Extract plan file from design events
         let design_evts = design_events.lock().unwrap().clone();
-        let plan_file_from_events = extract_plan_file_from_events(&design_evts);
+        let plan_file_from_events = extract_plan_file_from_events(&design_evts, &self.config.plans_dir);
         tracing::debug!("Plan file from events extraction: {:?}", plan_file_from_events);
 
         // Also try text-based extraction as fallback
@@ -440,7 +441,7 @@ impl OneShotRunner {
                 collected_text.push_str(text);
             }
         }
-        let plan_file_from_text = self.extract_plan_file_from_output(&collected_text);
+        let plan_file_from_text = self.extract_plan_file_from_output(&collected_text, &self.config.plans_dir);
         tracing::debug!("Plan file from text extraction: {:?}", plan_file_from_text);
 
         // Determine the plan file path
@@ -476,7 +477,7 @@ impl OneShotRunner {
             return Err(anyhow::anyhow!("Design phase did not produce a plan file"));
         } else {
             let date = Utc::now().format("%Y-%m-%d").to_string();
-            let default_path = format!("docs/plans/{}-{}-design.md", date, slug);
+            let default_path = format!("{}{}-{}-design.md", self.config.plans_dir, date, slug);
             tracing::info!("No plan file found in output, using default: {}", default_path);
             default_path
         };
@@ -759,6 +760,7 @@ mod tests {
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             checks: Vec::new(),
             git_sync: None,
+            plans_dir: "docs/plans/".to_string(),
         }
     }
 
@@ -982,6 +984,7 @@ mod tests {
                 model: None,
                 max_push_retries: 3,
             }),
+            plans_dir: "docs/plans/".to_string(),
         };
 
         assert_eq!(config.repo_id, "repo-123");
@@ -997,6 +1000,7 @@ mod tests {
         assert_eq!(config.checks[0].name, "lint");
         assert!(config.git_sync.is_some());
         assert!(config.git_sync.as_ref().unwrap().enabled);
+        assert_eq!(config.plans_dir, "docs/plans/");
     }
 
     #[test]
@@ -1013,6 +1017,7 @@ mod tests {
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             checks: Vec::new(),
             git_sync: None,
+            plans_dir: "docs/plans/".to_string(),
         };
 
         assert_eq!(config.merge_strategy, MergeStrategy::Branch);
@@ -1021,6 +1026,7 @@ mod tests {
         assert_eq!(config.completion_signal, "<promise>COMPLETE</promise>");
         assert!(config.checks.is_empty());
         assert!(config.git_sync.is_none());
+        assert_eq!(config.plans_dir, "docs/plans/");
     }
 
     // =========================================================================
@@ -1989,7 +1995,7 @@ mod tests {
                 },
             },
         ];
-        let plan_file = extract_plan_file_from_events(&events);
+        let plan_file = extract_plan_file_from_events(&events, "docs/plans/");
         assert_eq!(
             plan_file,
             Some("docs/plans/2026-03-10-feature-design.md".to_string()),
@@ -2010,7 +2016,7 @@ mod tests {
                 })),
             },
         ];
-        let plan_file = extract_plan_file_from_events(&events);
+        let plan_file = extract_plan_file_from_events(&events, "docs/plans/");
         assert_eq!(
             plan_file,
             Some("my-feature-design.md".to_string()),
@@ -2030,7 +2036,7 @@ mod tests {
                 })),
             },
         ];
-        let plan_file = extract_plan_file_from_events(&events);
+        let plan_file = extract_plan_file_from_events(&events, "docs/plans/");
         assert!(
             plan_file.is_none(),
             "should return None for unrelated file paths, got: {:?}",
@@ -2069,11 +2075,51 @@ mod tests {
                 text: "Done writing the plan.".to_string(),
             },
         ];
-        let plan_file = extract_plan_file_from_events(&events);
+        let plan_file = extract_plan_file_from_events(&events, "docs/plans/");
         assert_eq!(
             plan_file,
             Some("docs/plans/2026-03-10-login-design.md".to_string()),
             "should extract the plan file path from among multiple ToolUse events"
+        );
+    }
+
+    #[test]
+    fn test_extract_plan_file_from_events_custom_plans_dir_matches() {
+        let events = vec![
+            SessionEvent::ToolUse {
+                iteration: 1,
+                tool_name: "Write".to_string(),
+                tool_input: Some(serde_json::json!({
+                    "file_path": "plans/2026-01-01-foo.md",
+                    "content": "# Foo Plan"
+                })),
+            },
+        ];
+        let plan_file = extract_plan_file_from_events(&events, "plans/");
+        assert_eq!(
+            plan_file,
+            Some("plans/2026-01-01-foo.md".to_string()),
+            "should match plan file when using custom plans_dir 'plans/'"
+        );
+    }
+
+    #[test]
+    fn test_extract_plan_file_from_events_custom_plans_dir_no_match_wrong_dir() {
+        let events = vec![
+            SessionEvent::ToolUse {
+                iteration: 1,
+                tool_name: "Write".to_string(),
+                tool_input: Some(serde_json::json!({
+                    "file_path": "docs/plans/2026-01-01-bar.md",
+                    "content": "# Bar Plan"
+                })),
+            },
+        ];
+        let plan_file = extract_plan_file_from_events(&events, "other/plans/");
+        assert!(
+            plan_file.is_none(),
+            "should not match files in docs/plans/ when plans_dir is 'other/plans/', got: {:?}",
+            plan_file
         );
     }
 
@@ -2119,6 +2165,7 @@ mod tests {
                 model: Some("claude-sonnet".to_string()),
                 max_push_retries: 5,
             }),
+            plans_dir: "custom/plans/".to_string(),
         };
 
         assert_eq!(config.max_iterations, 20);
@@ -2127,6 +2174,7 @@ mod tests {
         assert_eq!(config.checks[0].name, "lint");
         assert_eq!(config.checks[1].name, "test");
         assert_eq!(config.checks[1].max_retries, 5);
+        assert_eq!(config.plans_dir, "custom/plans/");
 
         let git_sync = config.git_sync.as_ref().unwrap();
         assert!(git_sync.enabled);
