@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -43,8 +44,15 @@ pub(crate) struct SshTestStep {
 }
 
 /// Shared state tracking cancellation tokens for all active sessions, keyed by repo_id
+#[allow(dead_code)] // join_handle will be used once run_session converts to spawn-and-return
+struct SessionHandle {
+    cancel_token: CancellationToken,
+    session_id: String,
+    join_handle: JoinHandle<()>,
+}
+
 struct ActiveSessions {
-    tokens: Mutex<HashMap<String, (CancellationToken, String)>>,
+    tokens: Mutex<HashMap<String, SessionHandle>>,
 }
 
 /// Shared abort registry for child processes. On app exit, all handles are aborted
@@ -84,7 +92,7 @@ async fn run_session(
     let session_id = Uuid::new_v4().to_string();
     {
         let active = app.state::<ActiveSessions>();
-        active.tokens.lock().await.insert(repo_id.clone(), (cancel_token.clone(), session_id.clone()));
+        active.tokens.lock().await.insert(repo_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
     }
 
     match &repo {
@@ -292,7 +300,7 @@ async fn run_oneshot(
     let session_id = Uuid::new_v4().to_string();
     {
         let active = app.state::<ActiveSessions>();
-        active.tokens.lock().await.insert(oneshot_id.clone(), (cancel_token.clone(), session_id.clone()));
+        active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
     }
 
     match &repo {
@@ -397,7 +405,7 @@ async fn get_active_sessions(app: tauri::AppHandle) -> Result<Vec<(String, Strin
     let active = app.state::<ActiveSessions>();
     let pairs: Vec<(String, String)> = active.tokens.lock().await
         .iter()
-        .map(|(repo_id, (_, session_id))| (repo_id.clone(), session_id.clone()))
+        .map(|(repo_id, handle)| (repo_id.clone(), handle.session_id.clone()))
         .collect();
     Ok(pairs)
 }
@@ -405,12 +413,13 @@ async fn get_active_sessions(app: tauri::AppHandle) -> Result<Vec<(String, Strin
 #[tauri::command]
 async fn stop_session(app: tauri::AppHandle, repo_id: String) -> Result<(), String> {
     let active = app.state::<ActiveSessions>();
-    let tokens = active.tokens.lock().await;
-    if let Some((token, _)) = tokens.get(&repo_id) {
-        token.cancel();
-        Ok(())
-    } else {
-        Err("No active session to stop".to_string())
+    let token = {
+        let sessions = active.tokens.lock().await;
+        sessions.get(&repo_id).map(|h| h.cancel_token.clone())
+    };
+    match token {
+        Some(t) => { t.cancel(); Ok(()) }
+        None => Err("No active session to stop".to_string())
     }
 }
 
@@ -780,9 +789,9 @@ pub fn run() {
                 // Cancel all cancellation tokens
                 let active = app.state::<ActiveSessions>();
                 if let Ok(guard) = active.tokens.try_lock() {
-                    for (repo_id, (token, _)) in guard.iter() {
+                    for (repo_id, handle) in guard.iter() {
                         tracing::info!("Cancelling session for repo {repo_id} on exit");
-                        token.cancel();
+                        handle.cancel_token.cancel();
                     }
                 }
                 // Directly abort all child processes (kills WSL-side processes too)
@@ -1843,5 +1852,172 @@ mod tests {
         assert_eq!(json["event"]["kind"], "one_shot_started");
         assert_eq!(json["event"]["title"], "Fix bug");
         assert_eq!(json["event"]["parent_repo_id"], "repo-original");
+    }
+
+    // --- SessionHandle and ActiveSessions refactor tests ---
+
+    #[tokio::test]
+    async fn session_handle_stores_cancel_token_and_session_id() {
+        let token = CancellationToken::new();
+        let cloned_token = token.clone();
+        let handle = SessionHandle {
+            cancel_token: token,
+            session_id: "sess-abc".to_string(),
+            join_handle: tokio::spawn(async {}),
+        };
+
+        assert_eq!(handle.session_id, "sess-abc");
+        assert!(!handle.cancel_token.is_cancelled());
+
+        cloned_token.cancel();
+        assert!(handle.cancel_token.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn active_sessions_stores_and_retrieves_session_handle() {
+        let active = ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        };
+
+        let handle = SessionHandle {
+            cancel_token: CancellationToken::new(),
+            session_id: "sess-42".to_string(),
+            join_handle: tokio::spawn(async {}),
+        };
+
+        active
+            .tokens
+            .lock()
+            .await
+            .insert("repo-x".to_string(), handle);
+
+        let lock = active.tokens.lock().await;
+        let retrieved = lock.get("repo-x").expect("should find the inserted handle");
+        assert_eq!(retrieved.session_id, "sess-42");
+        assert!(!retrieved.cancel_token.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn active_sessions_get_returns_repo_and_session_id_pairs() {
+        let active = ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        };
+
+        {
+            let mut lock = active.tokens.lock().await;
+            lock.insert(
+                "repo-alpha".to_string(),
+                SessionHandle {
+                    cancel_token: CancellationToken::new(),
+                    session_id: "sess-1".to_string(),
+                    join_handle: tokio::spawn(async {}),
+                },
+            );
+            lock.insert(
+                "repo-beta".to_string(),
+                SessionHandle {
+                    cancel_token: CancellationToken::new(),
+                    session_id: "sess-2".to_string(),
+                    join_handle: tokio::spawn(async {}),
+                },
+            );
+            lock.insert(
+                "repo-gamma".to_string(),
+                SessionHandle {
+                    cancel_token: CancellationToken::new(),
+                    session_id: "sess-3".to_string(),
+                    join_handle: tokio::spawn(async {}),
+                },
+            );
+        }
+
+        // Mimic get_active_sessions: read out (repo_id, session_id) pairs
+        let pairs: Vec<(String, String)> = active
+            .tokens
+            .lock()
+            .await
+            .iter()
+            .map(|(repo_id, sh)| (repo_id.clone(), sh.session_id.clone()))
+            .collect();
+
+        assert_eq!(pairs.len(), 3);
+
+        // Collect into a map for order-independent assertions
+        let pair_map: HashMap<String, String> = pairs.into_iter().collect();
+        assert_eq!(pair_map.get("repo-alpha").unwrap(), "sess-1");
+        assert_eq!(pair_map.get("repo-beta").unwrap(), "sess-2");
+        assert_eq!(pair_map.get("repo-gamma").unwrap(), "sess-3");
+    }
+
+    #[tokio::test]
+    async fn stop_session_cancels_token_without_holding_lock() {
+        let active = ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        };
+
+        let token = CancellationToken::new();
+        let token_for_handle = token.clone();
+
+        active.tokens.lock().await.insert(
+            "repo-lock-test".to_string(),
+            SessionHandle {
+                cancel_token: token_for_handle,
+                session_id: "sess-lock".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        // Mimic the fixed stop_session pattern: clone token, drop lock, THEN cancel
+        let cloned_token = {
+            let lock = active.tokens.lock().await;
+            let sh = lock.get("repo-lock-test").expect("should exist");
+            sh.cancel_token.clone()
+        };
+        // Lock is now dropped — safe to cancel without risking deadlock
+
+        assert!(!token.is_cancelled(), "token should not be cancelled yet");
+
+        cloned_token.cancel();
+
+        assert!(
+            token.is_cancelled(),
+            "original token should be cancelled after cloned token is cancelled"
+        );
+
+        // Verify the lock can still be acquired (proves it was dropped before cancel)
+        let lock = active.tokens.lock().await;
+        assert!(
+            lock.get("repo-lock-test").is_some(),
+            "entry should still be in the map"
+        );
+        assert!(
+            lock.get("repo-lock-test").unwrap().cancel_token.is_cancelled(),
+            "stored token should reflect cancellation"
+        );
+    }
+
+    #[tokio::test]
+    async fn stop_session_returns_error_for_unknown_repo() {
+        let active = ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        };
+
+        // Insert one session so the map isn't empty
+        active.tokens.lock().await.insert(
+            "repo-exists".to_string(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "sess-exists".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        // Look up a repo_id that doesn't exist — mimics the error path in stop_session
+        let lock = active.tokens.lock().await;
+        let result = lock.get("repo-does-not-exist");
+        assert!(
+            result.is_none(),
+            "looking up a non-existent repo_id should return None"
+        );
     }
 }

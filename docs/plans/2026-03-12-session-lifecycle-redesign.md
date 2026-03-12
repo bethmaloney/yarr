@@ -158,12 +158,12 @@ Add the `scopeguard` crate and replace the `(CancellationToken, String)` tuple w
 - Update `stop_session` to read `cancel_token` from `SessionHandle`, drop the lock before calling `cancel()`
 
 **Checklist:**
-- [ ] Add `scopeguard` to Cargo.toml
-- [ ] Define `SessionHandle` struct
-- [ ] Update `ActiveSessions` type alias
-- [ ] Update `get_active_sessions` to destructure `SessionHandle`
-- [ ] Update `stop_session` to clone token, drop lock, then cancel
-- [ ] `cd src-tauri && cargo check`
+- [x] Add `scopeguard` to Cargo.toml
+- [x] Define `SessionHandle` struct
+- [x] Update `ActiveSessions` type alias
+- [x] Update `get_active_sessions` to destructure `SessionHandle`
+- [x] Update `stop_session` to clone token, drop lock, then cancel
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -392,7 +392,7 @@ Verify the full lifecycle works end-to-end.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add scopeguard + SessionHandle struct | Not Started |
+| 1 | Add scopeguard + SessionHandle struct | Done |
 | 2 | Convert run_session local to spawn-and-return | Not Started |
 | 3 | Convert run_session SSH to spawn-and-return | Not Started |
 | 4 | Add scope guard to 1-shot spawn | Not Started |

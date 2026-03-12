@@ -5194,6 +5194,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "log",
+ "scopeguard",
  "serde",
  "serde_json",
  "tauri",
