@@ -301,25 +301,40 @@ async fn run_session(
                 });
             }));
 
-            let _result = match orchestrator.run().await {
-                Ok(r) => r,
-                Err(e) => {
-                    // Clean up on error
-                    {
-                        let ssh_sessions = app.state::<ActiveSshSessions>();
-                        ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
+            // Spawn as a background task so we return immediately
+            let app_bg = app.clone();
+            let repo_id_bg = repo_id.clone();
+            let join_handle = tokio::spawn(async move {
+                let _guard = scopeguard::guard((), {
+                    let app = app_bg.clone();
+                    let repo_id = repo_id_bg.clone();
+                    move |_| {
+                        // Clean up ActiveSshSessions (std::sync::Mutex — synchronous)
+                        {
+                            let ssh_sessions = app.state::<ActiveSshSessions>();
+                            ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
+                        }
+                        // Clean up ActiveSessions (tokio::sync::Mutex — must spawn)
+                        let app = app.clone();
+                        let repo_id = repo_id.clone();
+                        tokio::spawn(async move {
+                            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                        });
                     }
-                    app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
-                    return Err(e.to_string());
-                }
-            };
+                });
 
-            // Clean up
+                let _result = orchestrator.run().await;
+            });
+
+            // Update the placeholder with the real JoinHandle
             {
-                let ssh_sessions = app.state::<ActiveSshSessions>();
-                ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
+                let active = app.state::<ActiveSessions>();
+                let mut sessions = active.tokens.lock().await;
+                if let Some(handle) = sessions.get_mut(&repo_id) {
+                    handle.join_handle = join_handle;
+                }
             }
-            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+
             Ok(SessionResult { session_id })
         }
     }
@@ -2202,6 +2217,158 @@ mod tests {
         assert!(
             !map.lock().await.contains_key("repo-cleanup"),
             "entry should be removed after scope guard cleanup"
+        );
+    }
+
+    // --- SSH scope guard cleanup tests (spawn-and-return pattern) ---
+
+    #[tokio::test]
+    async fn test_ssh_scope_guard_cleans_up_both_registries() {
+        use std::sync::Arc;
+
+        let active_sessions = Arc::new(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        });
+        let active_ssh_sessions = Arc::new(ActiveSshSessions {
+            sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
+        });
+
+        let repo_id = "ssh-repo-cleanup".to_string();
+
+        // Insert entries into both registries (mimics run_session SSH branch setup)
+        active_sessions.tokens.lock().await.insert(
+            repo_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "sess-ssh-1".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+        active_ssh_sessions
+            .sessions
+            .lock()
+            .unwrap()
+            .insert(repo_id.clone(), Arc::new(tokio::sync::Notify::new()));
+
+        // Verify both registries have the entry
+        assert!(active_sessions.tokens.lock().await.contains_key(&repo_id));
+        assert!(active_ssh_sessions.sessions.lock().unwrap().contains_key(&repo_id));
+
+        // Spawn a task with a scopeguard that cleans up both registries on exit
+        let sessions_clone = Arc::clone(&active_sessions);
+        let ssh_sessions_clone = Arc::clone(&active_ssh_sessions);
+        let repo_id_clone = repo_id.clone();
+
+        let handle = tokio::spawn(async move {
+            let _guard = scopeguard::guard((), {
+                let sessions = sessions_clone;
+                let ssh_sessions = ssh_sessions_clone;
+                let repo_id = repo_id_clone;
+                move |_| {
+                    ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
+                    // For ActiveSessions (tokio Mutex), we spawn a task since
+                    // scopeguard closures are sync
+                    let sessions = sessions;
+                    let repo_id_inner = repo_id.clone();
+                    tokio::spawn(async move {
+                        sessions.tokens.lock().await.remove(&repo_id_inner);
+                    });
+                }
+            });
+
+            // Simulate some work inside the spawned task
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            // Task completes normally — guard fires on drop
+        });
+
+        // Wait for the spawned task to complete
+        handle.await.expect("spawned task should complete without error");
+
+        // Give the inner tokio::spawn (for ActiveSessions cleanup) a moment to run
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Verify both registries are cleaned up
+        assert!(
+            !active_ssh_sessions.sessions.lock().unwrap().contains_key(&repo_id),
+            "ActiveSshSessions should be cleaned up after task completes"
+        );
+        assert!(
+            !active_sessions.tokens.lock().await.contains_key(&repo_id),
+            "ActiveSessions should be cleaned up after task completes"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ssh_scope_guard_cleans_up_on_panic() {
+        use std::sync::Arc;
+
+        let active_sessions = Arc::new(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        });
+        let active_ssh_sessions = Arc::new(ActiveSshSessions {
+            sessions: std::sync::Mutex::new(std::collections::HashMap::new()),
+        });
+
+        let repo_id = "ssh-repo-panic".to_string();
+
+        // Insert entries into both registries
+        active_sessions.tokens.lock().await.insert(
+            repo_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "sess-ssh-panic".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+        active_ssh_sessions
+            .sessions
+            .lock()
+            .unwrap()
+            .insert(repo_id.clone(), Arc::new(tokio::sync::Notify::new()));
+
+        // Verify both registries have the entry
+        assert!(active_sessions.tokens.lock().await.contains_key(&repo_id));
+        assert!(active_ssh_sessions.sessions.lock().unwrap().contains_key(&repo_id));
+
+        // Spawn a task that panics — scopeguard should still fire during unwind
+        let sessions_clone = Arc::clone(&active_sessions);
+        let ssh_sessions_clone = Arc::clone(&active_ssh_sessions);
+        let repo_id_clone = repo_id.clone();
+
+        let handle = tokio::spawn(async move {
+            let _guard = scopeguard::guard((), {
+                let sessions = sessions_clone;
+                let ssh_sessions = ssh_sessions_clone;
+                let repo_id = repo_id_clone;
+                move |_| {
+                    ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
+                    let sessions = sessions;
+                    let repo_id_inner = repo_id.clone();
+                    tokio::spawn(async move {
+                        sessions.tokens.lock().await.remove(&repo_id_inner);
+                    });
+                }
+            });
+
+            // Panic! The scope guard should still clean up.
+            panic!("simulated SSH orchestrator failure");
+        });
+
+        // The JoinHandle returns Err because the task panicked
+        let result = handle.await;
+        assert!(result.is_err(), "task should have panicked");
+
+        // Give the inner tokio::spawn (for ActiveSessions cleanup) a moment to run
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Verify both registries are cleaned up despite the panic
+        assert!(
+            !active_ssh_sessions.sessions.lock().unwrap().contains_key(&repo_id),
+            "ActiveSshSessions should be cleaned up even after panic"
+        );
+        assert!(
+            !active_sessions.tokens.lock().await.contains_key(&repo_id),
+            "ActiveSessions should be cleaned up even after panic"
         );
     }
 }

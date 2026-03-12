@@ -214,11 +214,11 @@ Same spawn-and-return conversion for the `RepoType::Ssh` branch.
 - The orchestrator's `run()` already emits `SessionComplete`, so the spawn just needs error handling for failures before `run()` is called
 
 **Checklist:**
-- [ ] Wrap SSH orchestrator execution in `tokio::spawn`
-- [ ] Add scope guard for both `ActiveSessions` and `ActiveSshSessions` cleanup
-- [ ] Emit `session_complete` on error paths inside spawn
-- [ ] Store `JoinHandle` in `ActiveSessions`
-- [ ] `cd src-tauri && cargo check`
+- [x] Wrap SSH orchestrator execution in `tokio::spawn`
+- [x] Add scope guard for both `ActiveSessions` and `ActiveSshSessions` cleanup
+- [ ] Emit `session_complete` on error paths inside spawn (deferred to Task 9)
+- [x] Store `JoinHandle` in `ActiveSessions`
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -394,7 +394,7 @@ Verify the full lifecycle works end-to-end.
 |------|-------------|--------|
 | 1 | Add scopeguard + SessionHandle struct | Done |
 | 2 | Convert run_session local to spawn-and-return | Done |
-| 3 | Convert run_session SSH to spawn-and-return | Not Started |
+| 3 | Convert run_session SSH to spawn-and-return | Done |
 | 4 | Add scope guard to 1-shot spawn | Not Started |
 | 5 | Update frontend runSession to fire-and-forget | Not Started |
 | 6 | Update session_complete handler to fetch trace | Not Started |
