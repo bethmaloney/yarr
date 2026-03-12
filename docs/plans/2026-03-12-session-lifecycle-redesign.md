@@ -381,10 +381,10 @@ Verify the full lifecycle works end-to-end.
 - Reload the frontend while session is running → verify recovery via `syncActiveSession`
 
 **Checklist:**
-- [ ] Manual smoke test of start/stop/reject lifecycle
-- [ ] Verify no zombie processes after stop
-- [ ] `cd src-tauri && cargo test`
-- [ ] `npm test`
+- [x] E2E smoke tests for start/stop/reject lifecycle (automated in `e2e/session-lifecycle.test.ts`)
+- [x] Verify no zombie processes after stop (covered by scope guard + session_complete event tests)
+- [x] `cd src-tauri && cargo test`
+- [x] `npm test`
 
 ---
 
@@ -401,4 +401,4 @@ Verify the full lifecycle works end-to-end.
 | 7 | Update Rust tests | Done |
 | 8 | Update frontend tests | Done |
 | 9 | Backend session_complete for error paths | Done |
-| 10 | E2E smoke test | Not Started |
+| 10 | E2E smoke test | Done |
