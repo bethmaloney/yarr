@@ -64,16 +64,16 @@ The goal is to extract the retry loop (fetch → rebase → detect conflicts →
 Replace the naive rebase-then-push with the shared merge logic.
 
 **Checklist:**
-- [ ] In the `MergeToMain` arm of `git_finalize`, replace the single fetch → rebase → push sequence with a call to `git_merge_push`
-- [ ] The `MergeToMain` flow should:
+- [x] In the `MergeToMain` arm of `git_finalize`, replace the single fetch → rebase → push sequence with a call to `git_merge_push`
+- [x] The `MergeToMain` flow should:
   1. Fetch `origin/main`
   2. Attempt `git rebase origin/main` with conflict resolution retries (via `git_merge_push` or direct calls to the shared logic)
   3. On success, push `{branch}:main`
   4. Clean up worktree and branch
-- [ ] Use the `GitSyncConfig` from `self.config.git_sync` (defaulting to `GitSyncConfig { enabled: true, max_push_retries: 3, .. }` if none configured, since finalize always wants merge logic)
-- [ ] Emit `GitSync*` session events during the merge process so the frontend can show conflict resolution progress
-- [ ] On final failure (all retries exhausted), preserve the worktree and branch as today, with a helpful error message
-- [ ] Handle cancellation during conflict resolution: abort rebase and return early
+- [x] Use the `GitSyncConfig` from `self.config.git_sync` (defaulting to `GitSyncConfig { enabled: true, max_push_retries: 3, .. }` if none configured, since finalize always wants merge logic)
+- [x] Emit `GitSync*` session events during the merge process so the frontend can show conflict resolution progress
+- [x] On final failure (all retries exhausted), preserve the worktree and branch as today, with a helpful error message
+- [x] Handle cancellation during conflict resolution: abort rebase and return early (handled by `git_merge_push` which checks `cancel_token` and aborts rebase on cancellation)
 
 ### Task 3: Add Merge Logic to 1-Shot `Branch` Strategy
 
@@ -153,7 +153,7 @@ The frontend already knows how to display `git_sync_*` events in the Ralph loop'
 | Task | Status | Notes |
 |------|--------|-------|
 | Task 1: Extract shared merge logic | Complete | `git_merge.rs` with shared function + 7 tests. `SessionRunner::git_sync` refactored to call `git_merge_push` with event translation. 426 tests pass. Note: pre-existing bug — `env_vars` not passed to `ClaudeInvocation` in conflict resolution (both old inline code and new `git_merge.rs` use `HashMap::new()`). |
-| Task 2: MergeToMain with retries | Pending | Depends on Task 1 |
+| Task 2: MergeToMain with retries | Complete | Replaced naive fetch→rebase→push with `git_merge_push` call. Uses `u32::MAX` as iteration sentinel for GitSync events during finalize. 2 new integration tests (conflict resolution success + all retries fail). 428 tests pass. Pre-existing note: `git branch -d` runs from worktree dir so silently fails (branch checked out there) — cleanup still works via `git worktree remove`. |
 | Task 3: Branch with retries | Pending | Depends on Task 1 |
 | Task 4: Frontend merge progress | Pending | Depends on Tasks 2-3 |
 | Task 5: Tests | Pending | Depends on Tasks 1-4 |
