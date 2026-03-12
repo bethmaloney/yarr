@@ -236,9 +236,9 @@ The existing 1-shot spawn at `lib.rs:348-352` has the same vulnerability — if 
 - Remove the explicit `app_bg.state::<ActiveSessions>().tokens.lock().await.remove(...)` line (the guard replaces it)
 
 **Checklist:**
-- [ ] Add scope guard to 1-shot spawn block
-- [ ] Remove manual cleanup line
-- [ ] `cd src-tauri && cargo check`
+- [x] Add scope guard to 1-shot spawn block
+- [x] Remove manual cleanup line
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -395,7 +395,7 @@ Verify the full lifecycle works end-to-end.
 | 1 | Add scopeguard + SessionHandle struct | Done |
 | 2 | Convert run_session local to spawn-and-return | Done |
 | 3 | Convert run_session SSH to spawn-and-return | Done |
-| 4 | Add scope guard to 1-shot spawn | Not Started |
+| 4 | Add scope guard to 1-shot spawn | Done |
 | 5 | Update frontend runSession to fire-and-forget | Not Started |
 | 6 | Update session_complete handler to fetch trace | Not Started |
 | 7 | Update Rust tests | Not Started |

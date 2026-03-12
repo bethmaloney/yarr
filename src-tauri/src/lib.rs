@@ -432,11 +432,31 @@ async fn run_oneshot(
             // Spawn as a background task so we return immediately
             let app_bg = app.clone();
             let oneshot_id_bg = oneshot_id.clone();
-            tokio::spawn(async move {
+            let join_handle = tokio::spawn(async move {
+                let _guard = scopeguard::guard((), {
+                    let app = app_bg.clone();
+                    let oneshot_id = oneshot_id_bg.clone();
+                    move |_| {
+                        let app = app.clone();
+                        let oneshot_id = oneshot_id.clone();
+                        tokio::spawn(async move {
+                            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                        });
+                    }
+                });
+
                 let runtime = default_runtime();
                 let _result = runner.run(runtime.as_ref()).await;
-                app_bg.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id_bg);
             });
+
+            // Update the placeholder with the real JoinHandle
+            {
+                let active = app.state::<ActiveSessions>();
+                let mut sessions = active.tokens.lock().await;
+                if let Some(handle) = sessions.get_mut(&oneshot_id) {
+                    handle.join_handle = join_handle;
+                }
+            }
 
             Ok(OneShotResult { oneshot_id })
         }
@@ -2564,5 +2584,352 @@ mod tests {
         let count = count_porcelain_lines(output);
         assert_eq!(count, 1,
             "whitespace-only and empty lines should not be counted");
+    }
+
+    // --- 1-shot scope guard cleanup tests (Task 4) ---
+    //
+    // These tests validate that the scopeguard pattern correctly cleans up
+    // ActiveSessions for the 1-shot spawn block. The 1-shot path only uses
+    // ActiveSessions (unlike the SSH path which also uses ActiveSshSessions),
+    // so cleanup must remove the oneshot_id from ActiveSessions on normal
+    // completion, panic, and task abort.
+
+    #[tokio::test]
+    async fn test_oneshot_scope_guard_cleans_up_on_normal_completion() {
+        use std::sync::Arc;
+
+        let active_sessions = Arc::new(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        });
+
+        let oneshot_id = "oneshot-normal-completion".to_string();
+
+        // Insert a placeholder SessionHandle (mimics run_oneshot setup)
+        active_sessions.tokens.lock().await.insert(
+            oneshot_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "sess-oneshot-1".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        // Verify entry exists before spawn
+        assert!(
+            active_sessions.tokens.lock().await.contains_key(&oneshot_id),
+            "oneshot entry should exist before the task runs"
+        );
+
+        // Spawn a task with the scope guard pattern matching the 1-shot block
+        let sessions_clone = Arc::clone(&active_sessions);
+        let oneshot_id_bg = oneshot_id.clone();
+
+        let join_handle = tokio::spawn(async move {
+            let _guard = scopeguard::guard((), {
+                let sessions = sessions_clone.clone();
+                let id = oneshot_id_bg.clone();
+                move |_| {
+                    let sessions = sessions.clone();
+                    let id = id.clone();
+                    tokio::spawn(async move {
+                        sessions.tokens.lock().await.remove(&id);
+                    });
+                }
+            });
+
+            // Simulate the runner doing work and completing normally
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        });
+
+        // Wait for the task to finish
+        join_handle.await.expect("task should complete without error");
+
+        // Give the inner tokio::spawn (cleanup) a moment to run
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Verify the entry was cleaned up
+        assert!(
+            !active_sessions.tokens.lock().await.contains_key(&oneshot_id),
+            "oneshot entry should be removed from ActiveSessions after normal completion"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_scope_guard_cleans_up_on_panic() {
+        use std::sync::Arc;
+
+        let active_sessions = Arc::new(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        });
+
+        let oneshot_id = "oneshot-panic-cleanup".to_string();
+
+        // Insert a placeholder SessionHandle
+        active_sessions.tokens.lock().await.insert(
+            oneshot_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "sess-oneshot-panic".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        assert!(
+            active_sessions.tokens.lock().await.contains_key(&oneshot_id),
+            "oneshot entry should exist before the task runs"
+        );
+
+        // Spawn a task that panics — the scope guard should still fire
+        let sessions_clone = Arc::clone(&active_sessions);
+        let oneshot_id_bg = oneshot_id.clone();
+
+        let handle = tokio::spawn(async move {
+            let _guard = scopeguard::guard((), {
+                let sessions = sessions_clone.clone();
+                let id = oneshot_id_bg.clone();
+                move |_| {
+                    let sessions = sessions.clone();
+                    let id = id.clone();
+                    tokio::spawn(async move {
+                        sessions.tokens.lock().await.remove(&id);
+                    });
+                }
+            });
+
+            // Panic! Without scopeguard, the manual cleanup line would never execute.
+            panic!("simulated oneshot runner failure");
+        });
+
+        // The JoinHandle returns Err because the task panicked
+        let result = handle.await;
+        assert!(result.is_err(), "task should have panicked");
+
+        // Give the inner tokio::spawn (cleanup) a moment to run
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Verify the entry was still cleaned up despite the panic
+        assert!(
+            !active_sessions.tokens.lock().await.contains_key(&oneshot_id),
+            "oneshot entry should be removed from ActiveSessions even after panic"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_scope_guard_cleans_up_on_task_abort() {
+        use std::sync::Arc;
+
+        let active_sessions = Arc::new(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        });
+
+        let oneshot_id = "oneshot-abort-cleanup".to_string();
+
+        // Insert a placeholder SessionHandle
+        active_sessions.tokens.lock().await.insert(
+            oneshot_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "sess-oneshot-abort".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        assert!(
+            active_sessions.tokens.lock().await.contains_key(&oneshot_id),
+            "oneshot entry should exist before the task runs"
+        );
+
+        // Spawn a long-running task with the scope guard, then abort it
+        let sessions_clone = Arc::clone(&active_sessions);
+        let oneshot_id_bg = oneshot_id.clone();
+
+        let handle = tokio::spawn(async move {
+            let _guard = scopeguard::guard((), {
+                let sessions = sessions_clone.clone();
+                let id = oneshot_id_bg.clone();
+                move |_| {
+                    let sessions = sessions.clone();
+                    let id = id.clone();
+                    tokio::spawn(async move {
+                        sessions.tokens.lock().await.remove(&id);
+                    });
+                }
+            });
+
+            // Simulate a long-running oneshot task that will be aborted
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        });
+
+        // Let the task start running
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        // Abort the task (simulates what would happen if a user cancels)
+        handle.abort();
+
+        // Wait for the abort to take effect
+        let result = handle.await;
+        assert!(result.is_err(), "task should have been aborted");
+        assert!(result.unwrap_err().is_cancelled(), "error should indicate cancellation");
+
+        // Give the inner tokio::spawn (cleanup) a moment to run
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Verify the entry was cleaned up despite the abort
+        assert!(
+            !active_sessions.tokens.lock().await.contains_key(&oneshot_id),
+            "oneshot entry should be removed from ActiveSessions even after task abort"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_join_handle_stored_back_into_active_sessions() {
+        use std::sync::Arc;
+
+        let active_sessions = Arc::new(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        });
+
+        let oneshot_id = "oneshot-handle-update".to_string();
+        let cancel_token = CancellationToken::new();
+
+        // Insert a placeholder with a dummy join_handle (mimics the initial insert)
+        active_sessions.tokens.lock().await.insert(
+            oneshot_id.clone(),
+            SessionHandle {
+                cancel_token: cancel_token.clone(),
+                session_id: "sess-oneshot-handle".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        // Spawn the "real" background task (simulates the 1-shot runner task)
+        let sessions_clone = Arc::clone(&active_sessions);
+        let oneshot_id_bg = oneshot_id.clone();
+
+        let join_handle = tokio::spawn(async move {
+            let _guard = scopeguard::guard((), {
+                let sessions = sessions_clone.clone();
+                let id = oneshot_id_bg.clone();
+                move |_| {
+                    let sessions = sessions.clone();
+                    let id = id.clone();
+                    tokio::spawn(async move {
+                        sessions.tokens.lock().await.remove(&id);
+                    });
+                }
+            });
+
+            // Simulate waiting for cancellation (like a real runner would)
+            cancel_token.cancelled().await;
+        });
+
+        // Update the placeholder with the real JoinHandle
+        // (this is the pattern that 1-shot should adopt from local/SSH paths)
+        {
+            let mut lock = active_sessions.tokens.lock().await;
+            if let Some(handle) = lock.get_mut(&oneshot_id) {
+                handle.join_handle = join_handle;
+            }
+        }
+
+        // Verify the entry still exists and the session_id is preserved
+        {
+            let lock = active_sessions.tokens.lock().await;
+            let handle = lock.get(&oneshot_id).expect("entry should still exist after update");
+            assert_eq!(handle.session_id, "sess-oneshot-handle",
+                "session_id should be preserved after JoinHandle update");
+            assert!(!handle.join_handle.is_finished(),
+                "real join_handle should still be running (waiting for cancellation)");
+        }
+
+        // Now cancel the token to let the task complete, which triggers the scope guard
+        {
+            let lock = active_sessions.tokens.lock().await;
+            lock.get(&oneshot_id).unwrap().cancel_token.cancel();
+        }
+
+        // Give the task and cleanup spawn time to complete
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // Verify cleanup happened
+        assert!(
+            !active_sessions.tokens.lock().await.contains_key(&oneshot_id),
+            "oneshot entry should be cleaned up after cancellation triggers scope guard"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_scope_guard_only_removes_its_own_entry() {
+        use std::sync::Arc;
+
+        let active_sessions = Arc::new(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        });
+
+        let oneshot_id = "oneshot-target".to_string();
+        let other_repo_id = "repo-other-session".to_string();
+
+        // Insert two entries: one for the 1-shot, one for a regular session
+        active_sessions.tokens.lock().await.insert(
+            oneshot_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "sess-oneshot-target".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+        active_sessions.tokens.lock().await.insert(
+            other_repo_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "sess-other".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        assert_eq!(active_sessions.tokens.lock().await.len(), 2,
+            "should have two entries before the task runs");
+
+        // Spawn a task with scope guard that only cleans up oneshot_id
+        let sessions_clone = Arc::clone(&active_sessions);
+        let oneshot_id_bg = oneshot_id.clone();
+
+        let handle = tokio::spawn(async move {
+            let _guard = scopeguard::guard((), {
+                let sessions = sessions_clone.clone();
+                let id = oneshot_id_bg.clone();
+                move |_| {
+                    let sessions = sessions.clone();
+                    let id = id.clone();
+                    tokio::spawn(async move {
+                        sessions.tokens.lock().await.remove(&id);
+                    });
+                }
+            });
+
+            // Task completes immediately
+        });
+
+        handle.await.expect("task should complete without error");
+
+        // Give the cleanup spawn a moment to run
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // The oneshot entry should be removed
+        assert!(
+            !active_sessions.tokens.lock().await.contains_key(&oneshot_id),
+            "oneshot entry should be removed"
+        );
+
+        // The other session should be untouched
+        assert!(
+            active_sessions.tokens.lock().await.contains_key(&other_repo_id),
+            "other repo entry should remain in ActiveSessions"
+        );
+        assert_eq!(
+            active_sessions.tokens.lock().await.get(&other_repo_id).unwrap().session_id,
+            "sess-other",
+            "other session's data should be untouched"
+        );
     }
 }
