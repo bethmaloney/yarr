@@ -148,8 +148,73 @@ export const useAppStore = create<AppStore>((set, get) => {
         })
         .catch(() => {});
 
-      // 2. Load 1-shot entries
-      get().loadOneShotEntries().catch(() => {});
+      // 2. Load 1-shot entries, then recover events for entries with session_id
+      get().loadOneShotEntries().then(() => {
+        const entries = get().oneShotEntries;
+        for (const [entryId, entry] of entries) {
+          if (!entry.session_id || recoveryInFlight.has(entryId)) continue;
+          const sessionId = entry.session_id;
+          recoveryInFlight.add(entryId);
+
+          // Recover events
+          invoke<SessionEvent[]>("get_trace_events", { repoId: entryId, sessionId })
+            .then((events) => {
+              if (events && events.length > 0) {
+                const s = new Map(get().sessions);
+                const current = s.get(entryId) ?? {
+                  running: false,
+                  session_id: sessionId,
+                  disconnected: false,
+                  reconnecting: false,
+                  events: [],
+                  trace: null,
+                  error: null,
+                };
+                s.set(entryId, { ...current, events });
+                set({ sessions: s });
+              }
+            })
+            .catch((e) => {
+              console.warn("Failed to load one-shot trace events for", entryId, e);
+            })
+            .finally(() => {
+              recoveryInFlight.delete(entryId);
+            });
+
+          // Recover trace (separate call, runs in parallel)
+          invoke<SessionTrace>("get_trace", { repoId: entryId, sessionId })
+            .then((trace) => {
+              if (trace) {
+                const s = new Map(get().sessions);
+                const current = s.get(entryId) ?? {
+                  running: false,
+                  session_id: sessionId,
+                  disconnected: false,
+                  reconnecting: false,
+                  events: [],
+                  trace: null,
+                  error: null,
+                };
+                s.set(entryId, { ...current, trace });
+                set({ sessions: s });
+
+                // Update entry status if trace outcome indicates completed or failed
+                if (trace.outcome === "completed" || trace.outcome === "failed") {
+                  const oneshotEntries = new Map(get().oneShotEntries);
+                  const currentEntry = oneshotEntries.get(entryId);
+                  if (currentEntry && currentEntry.status !== trace.outcome) {
+                    oneshotEntries.set(entryId, { ...currentEntry, status: trace.outcome as "completed" | "failed" });
+                    set({ oneShotEntries: oneshotEntries });
+                    oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch(() => {});
+                  }
+                }
+              }
+            })
+            .catch((e) => {
+              console.warn("Failed to load one-shot trace for", entryId, e);
+            });
+        }
+      }).catch(() => {});
 
       // 3. Load latest traces
       invoke<Record<string, SessionTrace>>("list_latest_traces")

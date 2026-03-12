@@ -541,7 +541,6 @@ describe("session event handling", () => {
     });
   });
 
-<<<<<<< HEAD
   // -------------------------------------------------------------------------
   // session_complete: trace fetching and saveRecent
   // -------------------------------------------------------------------------
@@ -2214,6 +2213,259 @@ describe("one_shot_started event", () => {
     const existing = entries.get("oneshot-abc")!;
     expect(existing.worktreePath).toBeUndefined();
     expect(existing.branch).toBeUndefined();
+  });
+});
+
+// ===========================================================================
+// 13c. One-shot event recovery on startup
+// ===========================================================================
+
+describe("one-shot event recovery on startup", () => {
+  it("recovers events for one-shot entries with session_id on initialize", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "completed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    const recoveredEvents: SessionEvent[] = [
+      { kind: "iteration_start", iteration: 1 },
+      { kind: "tool_use", tool_name: "Bash" },
+    ];
+
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "get_trace_events") {
+        const typedArgs = args as { repoId: string; sessionId: string };
+        expect(typedArgs.repoId).toBe("oneshot-abc");
+        expect(typedArgs.sessionId).toBe("sess-123");
+        return recoveredEvents;
+      }
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const session = useAppStore.getState().sessions.get("oneshot-abc");
+      expect(session).toBeDefined();
+      expect(session!.events).toEqual(recoveredEvents);
+    });
+  });
+
+  it("recovers trace for one-shot entries with session_id on initialize", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "completed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    const trace = makeTrace({
+      session_id: "sess-123",
+      repo_id: "oneshot-abc",
+      outcome: "completed",
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const session = useAppStore.getState().sessions.get("oneshot-abc");
+      expect(session).toBeDefined();
+      expect(session!.trace).toEqual(trace);
+    });
+  });
+
+  it("updates entry status to completed when trace outcome is completed", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    const trace = makeTrace({
+      session_id: "sess-123",
+      repo_id: "oneshot-abc",
+      outcome: "completed",
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      const updated = entries.get("oneshot-abc");
+      expect(updated).toBeDefined();
+      expect(updated!.status).toBe("completed");
+    });
+  });
+
+  it("updates entry status to failed when trace outcome is failed", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    const trace = makeTrace({
+      session_id: "sess-123",
+      repo_id: "oneshot-abc",
+      outcome: "failed",
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      const updated = entries.get("oneshot-abc");
+      expect(updated).toBeDefined();
+      expect(updated!.status).toBe("failed");
+    });
+  });
+
+  it("skips entries without session_id", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+      // no session_id
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") {
+        throw new Error("get_trace_events should not have been called");
+      }
+      if (cmd === "get_trace") {
+        throw new Error("get_trace should not have been called");
+      }
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    // Wait for loadOneShotEntries to complete
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-abc")).toBe(true);
+    });
+
+    // Verify get_trace_events was never called for this entry
+    const traceEventCalls = mockInvoke.mock.calls.filter(
+      (c) => c[0] === "get_trace_events",
+    );
+    expect(traceEventCalls).toHaveLength(0);
+
+    const traceCalls = mockInvoke.mock.calls.filter(
+      (c) => c[0] === "get_trace",
+    );
+    expect(traceCalls).toHaveLength(0);
+  });
+
+  it("handles get_trace_events failure gracefully", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "completed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") {
+        throw new Error("disk read failed");
+      }
+      if (cmd === "get_trace") return null;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    // Wait for loadOneShotEntries to complete
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-abc")).toBe(true);
+    });
+
+    // Entry should remain unchanged — no crash
+    const entries = useAppStore.getState().oneShotEntries;
+    const unchanged = entries.get("oneshot-abc")!;
+    expect(unchanged.status).toBe("completed");
+  });
+
+  it("handles get_trace failure gracefully", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "completed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") {
+        throw new Error("trace not found");
+      }
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    // Wait for loadOneShotEntries to complete
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-abc")).toBe(true);
+    });
+
+    // Entry should remain unchanged — no crash
+    const entries = useAppStore.getState().oneShotEntries;
+    const unchanged = entries.get("oneshot-abc")!;
+    expect(unchanged.status).toBe("completed");
+  });
+
+  it("does not update entry status when trace has no outcome", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") return null;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    // Wait for loadOneShotEntries to complete and recovery to run
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-abc")).toBe(true);
+    });
+
+    // Status should remain unchanged since trace was null
+    const entries = useAppStore.getState().oneShotEntries;
+    const unchanged = entries.get("oneshot-abc")!;
+    expect(unchanged.status).toBe("running");
   });
 });
 

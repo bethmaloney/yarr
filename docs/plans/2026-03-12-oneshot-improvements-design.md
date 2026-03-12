@@ -233,9 +233,9 @@ Recover event history for one-shot entries that have a `session_id`.
 - Use same `recoveryInFlight` guard pattern to avoid duplicate requests
 
 **Checklist:**
-- [ ] Add one-shot event recovery in `initialize()`
-- [ ] Recover traces and reconcile entry status
-- [ ] Run `npx tsc --noEmit`
+- [x] Add one-shot event recovery in `initialize()`
+- [x] Recover traces and reconcile entry status
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -382,7 +382,7 @@ Update existing tests and add new ones for the changed behavior.
 | 3 | Persist `session_id` in entry on launch | Done |
 | 4 | Save `worktreePath`/`branch` from event | Done |
 | 5 | Reconcile one-shot entries in `syncActiveSession()` | Done |
-| 6 | Load one-shot events/traces on startup | Not Started |
+| 6 | Load one-shot events/traces on startup | Done |
 | 7 | Add empty state to `OneShotDetail` | Not Started |
 | 8 | Add `ResumeState` and refactor runner | Not Started |
 | 9 | Add `resume_oneshot` Tauri command | Not Started |
