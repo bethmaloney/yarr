@@ -115,28 +115,36 @@ struct SshAbortHandle {
 
 impl AbortHandle for SshAbortHandle {
     fn abort(&self) {
-        let kill_cmd = format!("tmux kill-session -t yarr-{}", self.session_id);
-        tracing::info!("Killing remote tmux session yarr-{}", self.session_id);
-        if cfg!(target_os = "windows") {
-            let ssh_str = format!(
-                "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} \\$SHELL -lc {}",
-                shell_escape(&self.ssh_host),
-                shell_escape(&kill_cmd)
-            );
-            let _ = std::process::Command::new("wsl")
-                .args(["-e", "bash", "-lc", &ssh_str])
-                .output();
-        } else {
-            let _ = std::process::Command::new("ssh")
-                .arg("-o")
-                .arg("BatchMode=yes")
-                .arg("-o")
-                .arg("StrictHostKeyChecking=accept-new")
-                .arg(&self.ssh_host)
-                .arg(format!("$SHELL -lc {}", shell_escape(&kill_cmd)))
-                .output();
-        }
+        // Abort the tokio task immediately — don't wait for SSH/WSL kill commands
         self.task_handle.abort();
+
+        // Fire-and-forget the kill commands in a background thread so they
+        // can't block the runtime if WSL/SSH is unresponsive.
+        let ssh_host = self.ssh_host.clone();
+        let session_id = self.session_id.clone();
+        std::thread::spawn(move || {
+            let kill_cmd = format!("tmux kill-session -t yarr-{}", session_id);
+            tracing::info!("Killing remote tmux session yarr-{}", session_id);
+            if cfg!(target_os = "windows") {
+                let ssh_str = format!(
+                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} \\$SHELL -lc {}",
+                    shell_escape(&ssh_host),
+                    shell_escape(&kill_cmd)
+                );
+                let _ = std::process::Command::new("wsl")
+                    .args(["-e", "bash", "-lc", &ssh_str])
+                    .output();
+            } else {
+                let _ = std::process::Command::new("ssh")
+                    .arg("-o")
+                    .arg("BatchMode=yes")
+                    .arg("-o")
+                    .arg("StrictHostKeyChecking=accept-new")
+                    .arg(&ssh_host)
+                    .arg(format!("$SHELL -lc {}", shell_escape(&kill_cmd)))
+                    .output();
+            }
+        });
     }
 }
 
