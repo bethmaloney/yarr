@@ -229,12 +229,12 @@ Add compact git status indicators to repo cards.
 - Show loading spinner when `loading` is true
 
 **Checklist:**
-- [ ] Switch Home.tsx from `useBranchInfo` to `useGitStatus`
-- [ ] Update RepoCard props to accept git status data
-- [ ] Render dirty/ahead/behind indicators
-- [ ] Add warning styling for behind count
-- [ ] Add "last checked" label for non-auto-fetch repos
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Switch Home.tsx from `useBranchInfo` to `useGitStatus`
+- [x] Update RepoCard props to accept git status data
+- [x] Render dirty/ahead/behind indicators
+- [x] Add warning styling for behind count
+- [x] Add "last checked" label for non-auto-fetch repos
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -359,7 +359,7 @@ Update existing branch display tests and add new tests for git status polling.
 | 3 | Add `RepoGitStatus` type to frontend types | Done |
 | 4 | Add git status state and actions to Zustand store | Done |
 | 5 | Create `useGitStatus` hook with polling | Done |
-| 6 | Update Home page repo cards | Not Started |
+| 6 | Update Home page repo cards | Done |
 | 7 | Update RepoDetail page branch chip | Not Started |
 | 8 | Add auto-fetch toggle to repo config sheet | Not Started |
 | 9 | Remove `useBranchInfo` and `get_branch_info` | Not Started |

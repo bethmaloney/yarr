@@ -1,17 +1,13 @@
 import { vi, describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
-import { RepoCard } from "./RepoCard";
+import { RepoCard, type GitStatusInfo } from "./RepoCard";
 import type { RepoConfig } from "../repos";
-import type { SessionTrace, RepoStatus } from "../types";
+import type { SessionTrace, RepoStatus, RepoGitStatus } from "../types";
 
 afterEach(() => {
   cleanup();
 });
-
-// ===========================================================================
-// Test helpers
-// ===========================================================================
 
 function makeLocalRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
   return {
@@ -58,6 +54,30 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
     total_output_tokens: 5000,
     total_cache_read_tokens: 0,
     total_cache_creation_tokens: 0,
+    ...overrides,
+  };
+}
+
+function makeGitStatus(
+  overrides: Partial<RepoGitStatus> = {},
+): RepoGitStatus {
+  return {
+    branchName: "main",
+    dirtyCount: 0,
+    ahead: 0,
+    behind: 0,
+    ...overrides,
+  };
+}
+
+function makeGitStatusInfo(
+  overrides: Partial<GitStatusInfo> = {},
+): GitStatusInfo {
+  return {
+    status: makeGitStatus(),
+    lastChecked: new Date(),
+    loading: false,
+    error: null,
     ...overrides,
   };
 }
@@ -109,25 +129,304 @@ describe("RepoCard", () => {
   });
 
   // =========================================================================
-  // 4. Branch name
+  // 4. Git status — branch name
   // =========================================================================
 
-  it("shows branch name when provided", () => {
+  it("shows branch name from gitStatus.status.branchName", () => {
     render(
       <RepoCard
         repo={makeLocalRepo()}
         status="idle"
-        branchName="feat/cool-feature"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ branchName: "feat/cool-feature" }),
+        })}
         onClick={vi.fn()}
       />,
     );
     expect(screen.getByText("feat/cool-feature")).toBeInTheDocument();
   });
 
-  it("does not show branch name when not provided", () => {
+  it("does not show branch name when gitStatus is undefined", () => {
     render(<RepoCard repo={makeLocalRepo()} status="idle" onClick={vi.fn()} />);
     // No branch text should be present — query should return null
     expect(screen.queryByText(/feat\//)).not.toBeInTheDocument();
+  });
+
+  it("does not show branch name when gitStatus.status is null", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({ status: null })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/main/)).not.toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 4b. Git status — dirty count
+  // =========================================================================
+
+  it("shows dirty count when dirtyCount > 0", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ dirtyCount: 3 }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/3 dirty/)).toBeInTheDocument();
+  });
+
+  it("does not show dirty indicator when dirtyCount is 0", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ dirtyCount: 0 }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/dirty/)).not.toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 4c. Git status — ahead count
+  // =========================================================================
+
+  it("shows ahead count when ahead > 0", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ ahead: 2 }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/2↑/)).toBeInTheDocument();
+  });
+
+  it("does not show ahead indicator when ahead is 0", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ ahead: 0 }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/↑/)).not.toBeInTheDocument();
+  });
+
+  it("does not show ahead indicator when ahead is null", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ ahead: null }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/↑/)).not.toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 4d. Git status — behind count
+  // =========================================================================
+
+  it("shows behind count when behind > 0", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ behind: 1 }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/1↓/)).toBeInTheDocument();
+  });
+
+  it("shows behind count with yellow/warning text color", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ behind: 1 }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    const behindEl = screen.getByText(/1↓/);
+    expect(behindEl.classList.contains("text-yellow-500")).toBe(true);
+  });
+
+  it("does not show behind indicator when behind is 0", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ behind: 0 }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/↓/)).not.toBeInTheDocument();
+  });
+
+  it("does not show behind indicator when behind is null", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({ behind: null }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/↓/)).not.toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 4e. Git status — no indicators when all zero
+  // =========================================================================
+
+  it("shows only branch name with no indicators when all counts are zero", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({
+            branchName: "main",
+            dirtyCount: 0,
+            ahead: 0,
+            behind: 0,
+          }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("main")).toBeInTheDocument();
+    expect(screen.queryByText(/dirty/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/↑/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/↓/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/·/)).not.toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 4f. Git status — multiple indicators with separator
+  // =========================================================================
+
+  it("shows all non-zero indicators separated by ' · '", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          status: makeGitStatus({
+            branchName: "feat/multi",
+            dirtyCount: 3,
+            ahead: 2,
+            behind: 1,
+          }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("feat/multi")).toBeInTheDocument();
+    expect(screen.getByText(/3 dirty/)).toBeInTheDocument();
+    expect(screen.getByText(/2↑/)).toBeInTheDocument();
+    expect(screen.getByText(/1↓/)).toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 4g. Git status — loading state
+  // =========================================================================
+
+  it("shows loading indicator when loading is true", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          loading: true,
+          status: null,
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 4h. Git status — error state
+  // =========================================================================
+
+  it("shows warning icon when error is truthy", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          error: "Failed to fetch git status",
+          status: null,
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("⚠")).toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 4i. Git status — last checked for non-auto-fetch repos
+  // =========================================================================
+
+  it("shows 'last checked' text for SSH repos without autoFetch", () => {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    render(
+      <RepoCard
+        repo={makeSshRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          lastChecked: fiveMinAgo,
+          status: makeGitStatus({ branchName: "main" }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/last checked/i)).toBeInTheDocument();
+  });
+
+  it("does not show 'last checked' for local repos (auto-fetch enabled by default)", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="idle"
+        gitStatus={makeGitStatusInfo({
+          lastChecked: new Date(),
+          status: makeGitStatus({ branchName: "main" }),
+        })}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/last checked/i)).not.toBeInTheDocument();
   });
 
   // =========================================================================

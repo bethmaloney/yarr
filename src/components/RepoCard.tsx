@@ -1,13 +1,20 @@
 import { timeAgo } from "../time";
 import { sessionContextColor } from "../context-bar";
 import type { RepoConfig } from "../repos";
-import type { RepoStatus, SessionTrace } from "../types";
+import type { RepoGitStatus, RepoStatus, SessionTrace } from "../types";
+
+export interface GitStatusInfo {
+  status: RepoGitStatus | null;
+  lastChecked: Date | null;
+  loading: boolean;
+  error: string | null;
+}
 
 interface RepoCardProps {
   repo: RepoConfig;
   status: RepoStatus;
   lastTrace?: SessionTrace;
-  branchName?: string;
+  gitStatus?: GitStatusInfo;
   planExcerpt?: string;
   onClick: () => void;
 }
@@ -28,11 +35,18 @@ const statusLabels: Record<RepoStatus, string> = {
   disconnected: "DISCONNECTED",
 };
 
+function shouldShowLastChecked(repo: RepoConfig): boolean {
+  return (
+    repo.autoFetch === false ||
+    (repo.autoFetch === undefined && repo.type === "ssh")
+  );
+}
+
 export function RepoCard({
   repo,
   status,
   lastTrace,
-  branchName,
+  gitStatus,
   planExcerpt,
   onClick,
 }: RepoCardProps) {
@@ -47,6 +61,30 @@ export function RepoCard({
     .filter(Boolean)
     .join(" ");
 
+  const gs = gitStatus?.status;
+  const indicators: React.ReactNode[] = [];
+  if (gs) {
+    if (gs.dirtyCount > 0) {
+      indicators.push(
+        <span key="dirty">{gs.dirtyCount} dirty</span>,
+      );
+    }
+    if (gs.ahead != null && gs.ahead > 0) {
+      indicators.push(
+        <span key="ahead">
+          {gs.ahead}&#x2191;
+        </span>,
+      );
+    }
+    if (gs.behind != null && gs.behind > 0) {
+      indicators.push(
+        <span key="behind" className="text-yellow-500">
+          {gs.behind}&#x2193;
+        </span>,
+      );
+    }
+  }
+
   return (
     <button
       className="flex flex-col gap-1.5 p-4 px-5 bg-card border border-border rounded-md cursor-pointer text-left w-full h-full transition-colors hover:border-primary hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
@@ -60,9 +98,35 @@ export function RepoCard({
         <span className="text-xs text-muted-foreground font-mono truncate">
           {repoFullPath}
         </span>
-        {branchName && (
+        {gitStatus?.loading && !gs && (
           <span className="text-xs text-gray-500 font-mono truncate">
-            {branchName}
+            Loading...
+          </span>
+        )}
+        {gitStatus?.error && !gs && (
+          <span className="text-xs text-gray-500 font-mono truncate">
+            &#x26A0;
+          </span>
+        )}
+        {gs && (
+          <span className="text-xs text-gray-500 font-mono truncate">
+            {gs.branchName}
+            {indicators.length > 0 && (
+              <>
+                {" "}
+                {indicators.map((ind, i) => (
+                  <span key={i}>
+                    {i > 0 && <span> &middot; </span>}
+                    {ind}
+                  </span>
+                ))}
+              </>
+            )}
+          </span>
+        )}
+        {gitStatus && shouldShowLastChecked(repo) && gitStatus.lastChecked && (
+          <span className="text-xs text-gray-500 font-mono truncate">
+            last checked: {timeAgo(gitStatus.lastChecked.toISOString())}
           </span>
         )}
       </div>

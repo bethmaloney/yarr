@@ -13,7 +13,7 @@ import type {
   OneShotEntry,
   SessionState,
   SessionTrace,
-  BranchInfo,
+  RepoGitStatus,
 } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -32,8 +32,8 @@ const { mockUseAppStore } = vi.hoisted(() => ({
   mockUseAppStore: vi.fn(),
 }));
 
-const { mockUseBranchInfo } = vi.hoisted(() => ({
-  mockUseBranchInfo: vi.fn(),
+const { mockUseGitStatus } = vi.hoisted(() => ({
+  mockUseGitStatus: vi.fn(),
 }));
 
 const { mockInvoke } = vi.hoisted(() => ({
@@ -57,8 +57,8 @@ vi.mock("../store", () => ({
   useAppStore: mockUseAppStore,
 }));
 
-vi.mock("../hooks/useBranchInfo", () => ({
-  useBranchInfo: mockUseBranchInfo,
+vi.mock("../hooks/useGitStatus", () => ({
+  useGitStatus: mockUseGitStatus,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -151,6 +151,13 @@ function makeOneShotEntry(
   };
 }
 
+type GitStatusEntry = {
+  status: RepoGitStatus | null;
+  lastChecked: Date | null;
+  loading: boolean;
+  error: string | null;
+};
+
 interface MockState {
   repos: RepoConfig[];
   sessions: Map<string, SessionState>;
@@ -159,6 +166,7 @@ interface MockState {
   addSshRepo: ReturnType<typeof vi.fn>;
   oneShotEntries: Map<string, OneShotEntry>;
   dismissOneShot: ReturnType<typeof vi.fn>;
+  gitStatus: Record<string, GitStatusEntry>;
 }
 
 function setupMockState(overrides: Partial<MockState> = {}): MockState {
@@ -170,6 +178,7 @@ function setupMockState(overrides: Partial<MockState> = {}): MockState {
     addSshRepo: vi.fn(),
     oneShotEntries: new Map(),
     dismissOneShot: vi.fn(),
+    gitStatus: {},
     ...overrides,
   };
 
@@ -197,7 +206,7 @@ function renderHome() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockUseBranchInfo.mockReturnValue(new Map<string, BranchInfo>());
+  mockUseGitStatus.mockReturnValue({ refresh: vi.fn() });
   mockOpen.mockResolvedValue(null);
   setupMockState();
 });
@@ -630,21 +639,56 @@ describe("Home", () => {
   });
 
   // =========================================================================
-  // 14. Branch info is passed to RepoCard
+  // 14. Git status is passed to RepoCard
   // =========================================================================
 
-  it("passes branch name from useBranchInfo to RepoCard", () => {
+  it("passes git status from store to RepoCard", () => {
     const repo = makeLocalRepo({ id: "r1" } as Partial<RepoConfig>);
-    setupMockState({ repos: [repo] });
-
-    const branchMap = new Map<string, BranchInfo>([
-      ["r1", { name: "feat/awesome", ahead: 1, behind: 0 }],
-    ]);
-    mockUseBranchInfo.mockReturnValue(branchMap);
+    setupMockState({
+      repos: [repo],
+      gitStatus: {
+        r1: {
+          status: {
+            branchName: "feat/awesome",
+            dirtyCount: 2,
+            ahead: 1,
+            behind: 0,
+          },
+          lastChecked: new Date(),
+          loading: false,
+          error: null,
+        },
+      },
+    });
 
     renderHome();
 
     expect(screen.getByText("feat/awesome")).toBeInTheDocument();
+  });
+
+  it("shows git status indicators (dirty, ahead) on repo card", () => {
+    const repo = makeLocalRepo({ id: "r1" } as Partial<RepoConfig>);
+    setupMockState({
+      repos: [repo],
+      gitStatus: {
+        r1: {
+          status: {
+            branchName: "feat/awesome",
+            dirtyCount: 3,
+            ahead: 2,
+            behind: 0,
+          },
+          lastChecked: new Date(),
+          loading: false,
+          error: null,
+        },
+      },
+    });
+
+    renderHome();
+
+    expect(screen.getByText(/3 dirty/)).toBeInTheDocument();
+    expect(screen.getByText(/2↑/)).toBeInTheDocument();
   });
 
   // =========================================================================
@@ -837,23 +881,6 @@ describe("Home", () => {
         ]),
       });
       renderHome();
-
-      // Collect all card buttons in DOM order
-      const allCards = screen.getAllByRole("button").filter(
-        (btn) =>
-          btn.getAttribute("aria-label")?.includes("1-Shot") ||
-          btn.closest("[class*='grid']"),
-      );
-
-      // Running items should appear before non-running ones.
-      // We check that the running repo and running 1-shot precede the older items.
-      const runningRepoCard = screen.getByText("running-repo");
-      const running1ShotCard = screen.getByRole("button", {
-        name: /Running 1-Shot — 1-Shot/i,
-      });
-      const older1ShotCard = screen.getByRole("button", {
-        name: /Older 1-Shot — 1-Shot/i,
-      });
 
       // Running items should come before the oldest non-running card in DOM order
       const body = document.body.innerHTML;

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../store";
-import { useBranchInfo } from "../hooks/useBranchInfo";
+import { useGitStatus } from "../hooks/useGitStatus";
 import { getPhaseFromEvents } from "../oneshot-helpers";
 import { parsePlanPreview } from "../plan-preview";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -31,7 +31,8 @@ export default function Home() {
     new Map(),
   );
 
-  const branchInfos = useBranchInfo(repos);
+  useGitStatus(repos, sessions);
+  const gitStatus = useAppStore((s) => s.gitStatus);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -216,7 +217,7 @@ export default function Home() {
                 repo={item.repo}
                 status={item.status}
                 lastTrace={latestTraces.get(item.repo.id)}
-                branchName={branchInfos.get(item.repo.id)?.name}
+                gitStatus={gitStatus[item.repo.id]}
                 planExcerpt={planPreviews.get(item.repo.id)}
                 onClick={() => navigate(`/repo/${item.repo.id}`)}
               />
