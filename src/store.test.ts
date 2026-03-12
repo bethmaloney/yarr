@@ -1407,6 +1407,47 @@ describe("runOneShot", () => {
     );
   });
 
+  it("passes custom plansDir from repo config to invoke", async () => {
+    const repoWithPlansDir = makeLocalRepo({
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
+      gitSync: { enabled: true, conflictPrompt: undefined, model: undefined, maxPushRetries: 3 },
+      envVars: { MY_VAR: "hello" },
+      plansDir: "custom/plans/",
+    });
+    useAppStore.setState({ repos: [repoWithPlansDir] });
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_oneshot",
+      expect.objectContaining({
+        plansDir: "custom/plans/",
+      }),
+    );
+  });
+
+  it("defaults plansDir to docs/plans/ when repo config has no plansDir", async () => {
+    const repoWithoutPlansDir = makeLocalRepo({
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
+    });
+    useAppStore.setState({ repos: [repoWithoutPlansDir] });
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_oneshot",
+      expect.objectContaining({
+        plansDir: "docs/plans/",
+      }),
+    );
+  });
+
   it("on success: stores entry with returned oneshot_id and updates status", async () => {
     mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
 

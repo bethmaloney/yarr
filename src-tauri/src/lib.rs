@@ -403,6 +403,7 @@ async fn run_oneshot(
     completion_signal: String,
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
+    plans_dir: Option<String>,
 ) -> Result<OneShotResult, String> {
     let oneshot_id = oneshot::generate_oneshot_id();
     let cancel_token = CancellationToken::new();
@@ -435,6 +436,7 @@ async fn run_oneshot(
                 completion_signal,
                 checks: checks.unwrap_or_default(),
                 git_sync,
+                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
             };
 
             let base_dir = match app.path().app_data_dir() {
@@ -1335,6 +1337,7 @@ mod tests {
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             checks: vec![],
             git_sync: None,
+            plans_dir: "docs/plans/".to_string(),
         };
 
         assert_eq!(config.repo_id, "repo-123");

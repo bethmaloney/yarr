@@ -176,11 +176,11 @@ Create a comprehensive implementation plan that includes:
 
 ### Step 4: Write the Plan
 
-Write the plan to `docs/plans/<date>-<slug>-design.md` where:
+Write the plan to `{plans_dir}<date>-<slug>-design.md` where:
 - `<date>` is today's date in `YYYY-MM-DD` format
 - `<slug>` is a kebab-case version of the provided Title (e.g., if the title is "Login Feature", use `login-feature`)
 
-Create the `docs/plans/` directory if it does not exist.
+Create the `{plans_dir}` directory if it does not exist.
 
 ### Step 5: Signal Completion
 
@@ -199,8 +199,9 @@ When the plan is fully written to disk, output exactly:
 - **Do NOT implement anything** — this phase is design only. Do not write code, tests, or make changes beyond the plan document."#;
 
 /// Build the full design prompt by combining DESIGN_PROMPT with the user's task and title.
-pub fn build_design_prompt(user_prompt: &str, title: &str) -> String {
-    format!("{DESIGN_PROMPT}\n\n---\n\n**Title:** {title}\n\n**Task:** {user_prompt}")
+pub fn build_design_prompt(user_prompt: &str, title: &str, plans_dir: &str) -> String {
+    let prompt = DESIGN_PROMPT.replace("{plans_dir}", plans_dir);
+    format!("{prompt}\n\n---\n\n**Title:** {title}\n\n**Task:** {user_prompt}")
 }
 
 /// Default prompt for resolving merge conflicts during git sync.
@@ -264,7 +265,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_includes_user_prompt() {
-        let result = build_design_prompt("Add a login page", "Login Feature");
+        let result = build_design_prompt("Add a login page", "Login Feature", "docs/plans/");
         assert!(
             result.contains("Add a login page"),
             "Result should contain the user prompt text"
@@ -273,7 +274,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_includes_title() {
-        let result = build_design_prompt("Add a login page", "Login Feature");
+        let result = build_design_prompt("Add a login page", "Login Feature", "docs/plans/");
         assert!(
             result.contains("Login Feature"),
             "Result should contain the title"
@@ -282,7 +283,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_includes_design_prompt_content() {
-        let result = build_design_prompt("Add a login page", "Login Feature");
+        let result = build_design_prompt("Add a login page", "Login Feature", "docs/plans/");
         assert!(
             result.contains("implementation plan"),
             "Result should include content from DESIGN_PROMPT"
@@ -291,10 +292,37 @@ mod tests {
 
     #[test]
     fn build_design_prompt_handles_empty_inputs() {
-        let result = build_design_prompt("", "");
+        let result = build_design_prompt("", "", "docs/plans/");
         assert!(
             !result.is_empty(),
             "Result should be non-empty even with empty inputs"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_includes_custom_plans_dir() {
+        let result = build_design_prompt("task", "title", "custom/path/");
+        assert!(
+            result.contains("custom/path/"),
+            "Result should contain the custom plans_dir, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_includes_default_plans_dir() {
+        let result = build_design_prompt("task", "title", "docs/plans/");
+        assert!(
+            result.contains("docs/plans/"),
+            "Result should contain the default plans_dir, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_replaces_plans_dir_placeholder() {
+        let result = build_design_prompt("task", "title", "my/plans/");
+        assert!(
+            !result.contains("{plans_dir}"),
+            "Result should not contain the literal '{{plans_dir}}' placeholder — it should be replaced, got: {result}"
         );
     }
 
