@@ -84,14 +84,14 @@ Replace the naive rebase-then-push with the shared merge logic.
 The `Branch` strategy currently does a single `git push -u origin {branch}`. If that fails (e.g., because the implementation phase's `git_sync` pushed some iterations but the final push was rejected due to a race), it should retry with the same fetch/rebase/push logic.
 
 **Checklist:**
-- [ ] In the `Branch` arm of `git_finalize`, replace the single push with a call to `git_merge_push`
-- [ ] The `Branch` flow should:
-  1. Try `git push -u origin {branch}`
-  2. If that fails, enter the retry loop: fetch `origin/{branch}` → rebase → resolve conflicts → push
+- [x] In the `Branch` arm of `git_finalize`, replace the single push with a call to `git_merge_push`
+- [x] The `Branch` flow should:
+  1. Try `git push origin {branch}` (optimistic), then `git push -u origin {branch}` (fallback)
+  2. If both fail, enter the retry loop: fetch `origin/{branch}` → `git pull --rebase origin {branch}` → resolve conflicts → push
   3. On success, clean up worktree
-- [ ] Use the same `GitSyncConfig` default as `MergeToMain` (Task 2)
-- [ ] Emit `GitSync*` session events during the merge process
-- [ ] On final failure, preserve the worktree as today with a helpful error message
+- [x] Use the same `GitSyncConfig` default as `MergeToMain` (Task 2)
+- [x] Emit `GitSync*` session events during the merge process
+- [x] On final failure, preserve the worktree as today with a helpful error message
 
 ### Task 4: Frontend — Display Merge Progress During Finalize
 
@@ -154,6 +154,6 @@ The frontend already knows how to display `git_sync_*` events in the Ralph loop'
 |------|--------|-------|
 | Task 1: Extract shared merge logic | Complete | `git_merge.rs` with shared function + 7 tests. `SessionRunner::git_sync` refactored to call `git_merge_push` with event translation. 426 tests pass. Note: pre-existing bug — `env_vars` not passed to `ClaudeInvocation` in conflict resolution (both old inline code and new `git_merge.rs` use `HashMap::new()`). |
 | Task 2: MergeToMain with retries | Complete | Replaced naive fetch→rebase→push with `git_merge_push` call. Uses `u32::MAX` as iteration sentinel for GitSync events during finalize. 2 new integration tests (conflict resolution success + all retries fail). 428 tests pass. Pre-existing note: `git branch -d` runs from worktree dir so silently fails (branch checked out there) — cleanup still works via `git worktree remove`. |
-| Task 3: Branch with retries | Pending | Depends on Task 1 |
+| Task 3: Branch with retries | Complete | Replaced naive single push with `git_merge_push` call. Uses `push_command: "git push origin {branch}"`, `push_u_command: Some("git push -u origin {branch}")`, `fetch_command: "git fetch origin {branch}"`, `rebase_command: "git pull --rebase origin {branch}"`. Same event translation and `GitSyncConfig` default as MergeToMain. 2 new integration tests (retry succeeds + all retries fail). 430 tests pass. |
 | Task 4: Frontend merge progress | Pending | Depends on Tasks 2-3 |
 | Task 5: Tests | Pending | Depends on Tasks 1-4 |
