@@ -11,6 +11,17 @@ const localRepo = {
   completionSignal: "ALL TODO ITEMS COMPLETE",
 };
 
+const sshRepo = {
+  type: "ssh" as const,
+  id: "ssh-repo-1",
+  sshHost: "dev-server",
+  remotePath: "/home/user/projects/my-app",
+  name: "my-app",
+  model: "opus",
+  maxIterations: 40,
+  completionSignal: "ALL TODO ITEMS COMPLETE",
+};
+
 async function navigateToRepo(
   page: import("@playwright/test").Page,
   mockTauri: (opts?: TauriMockOptions) => Promise<void>,
@@ -35,7 +46,12 @@ async function startRunningSession(
     storeData: { repos: [localRepo] },
     invokeHandlers: {
       run_session: () => new Promise(() => {}),
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
       ...extraInvokeHandlers,
     },
@@ -54,12 +70,17 @@ async function startRunningSession(
 }
 
 test.describe("Branch display chip", () => {
-  test("shows branch name when get_branch_info succeeds", async ({
+  test("shows branch name when get_repo_git_status succeeds", async ({
     page,
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
     });
 
     const chip = page.locator("button.branch-chip");
@@ -67,12 +88,12 @@ test.describe("Branch display chip", () => {
     await expect(chip).toContainText("main");
   });
 
-  test("hides branch chip when get_branch_info fails", async ({
+  test("hides branch chip when get_repo_git_status fails", async ({
     page,
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => {
+      get_repo_git_status: () => {
         throw new Error("not a git repo");
       },
     });
@@ -83,7 +104,12 @@ test.describe("Branch display chip", () => {
 
   test("shows ahead indicator", async ({ page, mockTauri }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "feature/foo", ahead: 3, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "feature/foo",
+        dirtyCount: 0,
+        ahead: 3,
+        behind: 0,
+      }),
     });
 
     const chip = page.locator("button.branch-chip");
@@ -97,7 +123,12 @@ test.describe("Branch display chip", () => {
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 5 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 5,
+      }),
     });
 
     const chip = page.locator("button.branch-chip");
@@ -111,7 +142,12 @@ test.describe("Branch display chip", () => {
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "develop", ahead: 2, behind: 3 }),
+      get_repo_git_status: () => ({
+        branchName: "develop",
+        dirtyCount: 0,
+        ahead: 2,
+        behind: 3,
+      }),
     });
 
     const chip = page.locator("button.branch-chip");
@@ -126,7 +162,12 @@ test.describe("Branch display chip", () => {
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
     });
 
@@ -156,7 +197,12 @@ test.describe("Branch display chip", () => {
 
   test("shows fast-forward button when behind", async ({ page, mockTauri }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 2 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 2,
+      }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
     });
 
@@ -177,7 +223,12 @@ test.describe("Branch display chip", () => {
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
     });
 
@@ -198,14 +249,19 @@ test.describe("Branch display chip", () => {
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => {
+      get_repo_git_status: () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const w = window as any;
-        w.__branchInfoCallCount = (w.__branchInfoCallCount ?? 0) + 1;
-        if (w.__branchInfoCallCount <= 2) {
-          return { name: "main", ahead: 0, behind: 0 };
+        w.__gitStatusCallCount = (w.__gitStatusCallCount ?? 0) + 1;
+        if (w.__gitStatusCallCount <= 2) {
+          return { branchName: "main", dirtyCount: 0, ahead: 0, behind: 0 };
         }
-        return { name: "feature/foo", ahead: 1, behind: 0 };
+        return {
+          branchName: "feature/foo",
+          dirtyCount: 0,
+          ahead: 1,
+          behind: 0,
+        };
       },
       list_local_branches: () => ["main", "feature/foo", "develop"],
       switch_branch: (args: Record<string, unknown>) => {
@@ -262,7 +318,12 @@ test.describe("Branch display chip", () => {
 
   test("click outside closes dropdown", async ({ page, mockTauri }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
     });
 
@@ -285,15 +346,15 @@ test.describe("Branch display chip", () => {
     await mockTauri({
       storeData: { repos: [localRepo] },
       invokeHandlers: {
-        get_branch_info: () => {
+        get_repo_git_status: () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const w = window as any;
-          w.__branchInfoCallCount = (w.__branchInfoCallCount ?? 0) + 1;
-          if (w.__branchInfoCallCount <= 1) {
-            return { name: "main", ahead: 0, behind: 0 };
+          w.__gitStatusCallCount = (w.__gitStatusCallCount ?? 0) + 1;
+          if (w.__gitStatusCallCount <= 1) {
+            return { branchName: "main", dirtyCount: 0, ahead: 0, behind: 0 };
           }
           // After session completes, simulate that we are now ahead by 3
-          return { name: "main", ahead: 3, behind: 0 };
+          return { branchName: "main", dirtyCount: 0, ahead: 3, behind: 0 };
         },
         list_local_branches: () => ["main", "feature/foo", "develop"],
         run_session: () =>
@@ -335,7 +396,12 @@ test.describe("Branch display chip", () => {
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
     });
 
@@ -352,7 +418,12 @@ test.describe("Branch display chip", () => {
 
   test("search filters branches by substring", async ({ page, mockTauri }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => [
         "main",
         "feature/login",
@@ -385,7 +456,12 @@ test.describe("Branch display chip", () => {
 
   test("search is case-insensitive", async ({ page, mockTauri }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => ["main", "Feature/Login"],
     });
 
@@ -408,7 +484,12 @@ test.describe("Branch display chip", () => {
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
     });
 
@@ -431,14 +512,19 @@ test.describe("Branch display chip", () => {
 
   test("Enter selects first matching branch", async ({ page, mockTauri }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => {
+      get_repo_git_status: () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const w = window as any;
-        w.__branchInfoCallCount = (w.__branchInfoCallCount ?? 0) + 1;
-        if (w.__branchInfoCallCount <= 1) {
-          return { name: "main", ahead: 0, behind: 0 };
+        w.__gitStatusCallCount = (w.__gitStatusCallCount ?? 0) + 1;
+        if (w.__gitStatusCallCount <= 1) {
+          return { branchName: "main", dirtyCount: 0, ahead: 0, behind: 0 };
         }
-        return { name: "feature/login", ahead: 0, behind: 0 };
+        return {
+          branchName: "feature/login",
+          dirtyCount: 0,
+          ahead: 0,
+          behind: 0,
+        };
       },
       list_local_branches: () => [
         "main",
@@ -480,7 +566,12 @@ test.describe("Branch display chip", () => {
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
     });
 
@@ -510,7 +601,12 @@ test.describe("Branch display chip", () => {
     mockTauri,
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
-      get_branch_info: () => ({ name: "main", ahead: 0, behind: 0 }),
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+      }),
       list_local_branches: () => ["main", "feature/foo", "develop"],
       switch_branch: () => null,
     });
@@ -536,5 +632,95 @@ test.describe("Branch display chip", () => {
 
     // Search input should be empty
     await expect(page.locator("input.branch-search")).toHaveValue("");
+  });
+
+  // --- Home page repo card tests ---
+
+  test("Home page repo card shows dirty count", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: { repos: [localRepo] },
+      invokeHandlers: {
+        get_repo_git_status: () => ({
+          branchName: "main",
+          dirtyCount: 5,
+          ahead: 0,
+          behind: 0,
+        }),
+      },
+    });
+    await page.goto("/");
+
+    const card = page.getByRole("button", { name: /my-app/ });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("5 dirty");
+  });
+
+  test("Home page repo card shows behind indicator", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: { repos: [localRepo] },
+      invokeHandlers: {
+        get_repo_git_status: () => ({
+          branchName: "main",
+          dirtyCount: 0,
+          ahead: 0,
+          behind: 3,
+        }),
+      },
+    });
+    await page.goto("/");
+
+    const card = page.getByRole("button", { name: /my-app/ });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("3\u2193");
+  });
+
+  test("Home page repo card shows last checked for SSH repo", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: { repos: [sshRepo] },
+      invokeHandlers: {
+        get_repo_git_status: () => ({
+          branchName: "main",
+          dirtyCount: 0,
+          ahead: 0,
+          behind: 0,
+        }),
+      },
+    });
+    await page.goto("/");
+
+    const card = page.getByRole("button", { name: /my-app/ });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("last checked");
+  });
+
+  test("branch chip renders correctly when ahead/behind are null", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_repo_git_status: () => ({
+        branchName: "main",
+        dirtyCount: 2,
+        ahead: null,
+        behind: null,
+      }),
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await expect(chip).toBeVisible();
+    await expect(chip).toContainText("main");
+    await expect(chip).toContainText("2 dirty");
+    // Should NOT show any ahead/behind indicators
+    await expect(chip).not.toContainText("\u2191");
+    await expect(chip).not.toContainText("\u2193");
   });
 });

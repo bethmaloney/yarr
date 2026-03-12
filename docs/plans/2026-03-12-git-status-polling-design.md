@@ -339,14 +339,14 @@ Update existing branch display tests and add new tests for git status polling.
 - Existing tests for ahead/behind/branch switching should still pass with updated mocks
 
 **Checklist:**
-- [ ] Update all mocks from `get_branch_info` to `get_repo_git_status`
-- [ ] Update response shapes to include `dirty_count`
-- [ ] Add dirty count display tests
-- [ ] Add "last checked" timestamp tests
-- [ ] Add refresh button tests
-- [ ] Add error state tests
-- [ ] Add auto-fetch toggle tests
-- [ ] Verify: `npm run test:e2e`
+- [x] Update all mocks from `get_branch_info` to `get_repo_git_status`
+- [x] Update response shapes to include `dirty_count`
+- [x] Add dirty count display tests
+- [x] Add "last checked" timestamp tests
+- [x] Add refresh button tests (covered in `e2e/repo-detail-git-status.test.ts`)
+- [x] Add error state tests (covered in `e2e/repo-detail-git-status.test.ts`)
+- [x] Add auto-fetch toggle tests (covered in `e2e/auto-fetch-toggle.test.ts`)
+- [x] Verify: `npm run test:e2e` (all git-status-related tests pass; pre-existing failures in `checks.test.ts` unrelated)
 
 ---
 
@@ -363,4 +363,4 @@ Update existing branch display tests and add new tests for git status polling.
 | 7 | Update RepoDetail page branch chip | Done |
 | 8 | Add auto-fetch toggle to repo config sheet | Done |
 | 9 | Remove `useBranchInfo` and `get_branch_info` | Done |
-| 10 | Update E2E tests | Not Started |
+| 10 | Update E2E tests | Done |
