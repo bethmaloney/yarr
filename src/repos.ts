@@ -17,6 +17,7 @@ type LocalRepoConfig = {
   createBranch?: boolean;
   autoFetch?: boolean;
   plansDir?: string;
+  movePlansToCompleted?: boolean;
 };
 
 type SshRepoConfig = {
@@ -34,6 +35,7 @@ type SshRepoConfig = {
   createBranch?: boolean;
   autoFetch?: boolean;
   plansDir?: string;
+  movePlansToCompleted?: boolean;
 };
 
 export type RepoConfig = LocalRepoConfig | SshRepoConfig;
