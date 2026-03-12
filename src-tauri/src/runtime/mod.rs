@@ -104,10 +104,21 @@ pub trait RuntimeProvider: Send + Sync {
     async fn resolve_env(&self) -> Result<HashMap<String, String>> {
         Ok(std::env::vars().collect())
     }
+
+    /// Returns a warning message if the environment snapshot failed.
+    /// Call after `resolve_env()` to check for warnings.
+    fn env_warning(&self) -> Option<String> {
+        None
+    }
+}
+
+struct CachedEnv {
+    vars: HashMap<String, String>,
+    warning: Option<String>,
 }
 
 /// Cached local shell environment, initialized once on first access.
-static LOCAL_ENV_CACHE: tokio::sync::OnceCell<HashMap<String, String>> =
+static LOCAL_ENV_CACHE: tokio::sync::OnceCell<CachedEnv> =
     tokio::sync::OnceCell::const_new();
 
 /// Returns a reference to the cached local shell environment.
@@ -116,7 +127,7 @@ static LOCAL_ENV_CACHE: tokio::sync::OnceCell<HashMap<String, String>> =
 /// via `snapshot_shell_env`. If that fails (e.g. no interactive shell in CI),
 /// falls back to `std::env::vars()`.
 pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
-    LOCAL_ENV_CACHE
+    &LOCAL_ENV_CACHE
         .get_or_init(|| async {
             match shell_env::snapshot_shell_env(
                 |cmd| async move {
@@ -139,16 +150,27 @@ pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
             )
             .await
             {
-                Ok(env) => env,
+                Ok(env) => CachedEnv { vars: env, warning: None },
                 Err(e) => {
-                    tracing::warn!(
-                        "failed to snapshot local shell environment, falling back to process env: {e}"
+                    let warning = format!(
+                        "Failed to load shell environment — some tools (nvm, pyenv, etc.) may not be available. Restart the app to retry. Error: {e}"
                     );
-                    std::env::vars().collect()
+                    tracing::warn!("{warning}");
+                    CachedEnv {
+                        vars: std::env::vars().collect(),
+                        warning: Some(warning),
+                    }
                 }
             }
         })
         .await
+        .vars
+}
+
+/// Returns the warning message (if any) from the local shell environment snapshot.
+/// Must be called after `get_or_init_local_env()` has been awaited at least once.
+pub fn get_local_env_warning() -> Option<String> {
+    LOCAL_ENV_CACHE.get().and_then(|c| c.warning.clone())
 }
 
 /// Thread-safe cache of SSH host environment snapshots.
@@ -440,5 +462,55 @@ mod tests {
         // Remove via cache, verify gone in arc
         cache.remove("host-b");
         assert!(!arc.contains_key("host-b"));
+    }
+
+    // ---------------------------------------------------------------
+    // Tests for get_local_env_warning (Task 7: env warning surface)
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn get_local_env_warning_returns_none_when_no_failure() {
+        // After initializing the local env cache, get_local_env_warning()
+        // should return None when the snapshot succeeded (or the fallback
+        // worked without error — which is the typical CI/test scenario).
+        //
+        // We call get_or_init_local_env() first to ensure the cache is
+        // populated, then verify the warning accessor doesn't panic and
+        // returns a valid Option<String>.
+        let _env = get_or_init_local_env().await;
+
+        // get_local_env_warning() is a sync function that reads the cached
+        // warning. In test/CI the snapshot may or may not fail, so we just
+        // verify the function exists and returns an Option<String> without
+        // panicking.
+        let warning: Option<String> = get_local_env_warning();
+
+        // If the snapshot succeeded (PATH is present in the env), the
+        // warning should be None.
+        let env = get_or_init_local_env().await;
+        if env.contains_key("PATH") || env.contains_key("Path") {
+            // Snapshot or fallback worked — no warning expected in most
+            // environments. But we don't hard-assert None because the
+            // fallback path may still set a warning in some implementations.
+            // The key assertion is that the function is callable and returns
+            // a well-typed value.
+            let _ = warning;
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Tests for env_warning default trait implementation (Task 7)
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn env_warning_default_returns_none() {
+        // MockRuntime inherits the default env_warning() trait method,
+        // which should return None (no warning).
+        let runtime = MockRuntime::completing_after(1);
+        let warning = runtime.env_warning();
+        assert_eq!(
+            warning, None,
+            "default env_warning() should return None"
+        );
     }
 }

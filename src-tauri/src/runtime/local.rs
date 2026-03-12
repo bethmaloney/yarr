@@ -33,6 +33,10 @@ impl RuntimeProvider for LocalRuntime {
         Ok(get_or_init_local_env().await.clone())
     }
 
+    fn env_warning(&self) -> Option<String> {
+        super::get_local_env_warning()
+    }
+
     async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess> {
         let env = self.resolve_env().await?;
         let prompt = invocation.prompt.clone();

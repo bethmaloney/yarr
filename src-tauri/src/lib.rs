@@ -92,6 +92,12 @@ async fn run_session(
             let repo_path_buf = PathBuf::from(path);
             let runtime = default_runtime();
 
+            // Pre-warm env cache and emit warning if snapshot failed
+            let _ = runtime.resolve_env().await;
+            if let Some(warning) = runtime.env_warning() {
+                let _ = app.emit("env-warning", &warning);
+            }
+
             // Resolve plan file to absolute path for the @file reference
             let plan_path = {
                 let p = Path::new(&plan_file);
@@ -186,6 +192,12 @@ async fn run_session(
         }
         RepoType::Ssh { ssh_host, remote_path } => {
             let ssh_runtime = SshRuntime::new(ssh_host, remote_path, app.state::<SshEnvCache>().cache_ref());
+
+            // Pre-warm env cache and emit warning if snapshot failed
+            let _ = ssh_runtime.resolve_env().await;
+            if let Some(warning) = ssh_runtime.env_warning() {
+                let _ = app.emit("env-warning", &warning);
+            }
 
             let plan_path = {
                 let p = std::path::Path::new(&plan_file);
@@ -286,6 +298,13 @@ async fn run_oneshot(
     match &repo {
         RepoType::Local { path } => {
             let repo_path_buf = PathBuf::from(path);
+
+            // Pre-warm env cache and emit warning if snapshot failed
+            let runtime = default_runtime();
+            let _ = runtime.resolve_env().await;
+            if let Some(warning) = runtime.env_warning() {
+                let _ = app.emit("env-warning", &warning);
+            }
 
             let config = oneshot::OneShotConfig {
                 repo_id: repo_id.clone(),

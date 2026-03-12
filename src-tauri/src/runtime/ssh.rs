@@ -103,6 +103,7 @@ pub struct SshRuntime {
     pub ssh_host: String,
     pub remote_path: String,
     pub(crate) env_cache: Arc<dashmap::DashMap<String, HashMap<String, String>>>,
+    env_warning: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 /// Abort handle that kills the remote tmux session before aborting the task.
@@ -145,6 +146,7 @@ impl SshRuntime {
             ssh_host: host.to_string(),
             remote_path: remote_path.to_string(),
             env_cache,
+            env_warning: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -522,13 +524,19 @@ impl RuntimeProvider for SshRuntime {
                 Ok(env)
             }
             Err(e) => {
-                tracing::warn!(
-                    "failed to snapshot SSH shell environment for {}, falling back to empty env: {e}",
+                let warning = format!(
+                    "Failed to load shell environment for {} — some tools (nvm, pyenv, etc.) may not be available. Restart the app to retry. Error: {e}",
                     self.ssh_host
                 );
+                tracing::warn!("{warning}");
+                *self.env_warning.lock().unwrap() = Some(warning);
                 Ok(HashMap::new())
             }
         }
+    }
+
+    fn env_warning(&self) -> Option<String> {
+        self.env_warning.lock().unwrap().clone()
     }
 }
 
@@ -2578,5 +2586,72 @@ mod tests {
         let rt = SshRuntime::new("devbox", "/path", cache);
         let result = rt.resolve_env().await.unwrap();
         assert_eq!(result, expected, "resolve_env should return cached value");
+    }
+
+    // ── env_warning tests (Task 7: env warning surface) ─────────────
+
+    #[tokio::test]
+    async fn env_warning_returns_none_when_cached() {
+        // When the cache already contains an entry for the host,
+        // resolve_env() returns the cached value without attempting a
+        // snapshot. Therefore env_warning() should return None — no
+        // failure occurred.
+        let cache = test_cache();
+        cache.insert(
+            "devbox".to_string(),
+            HashMap::from([("PATH".to_string(), "/usr/bin".to_string())]),
+        );
+        let rt = SshRuntime::new("devbox", "/home/user/project", cache);
+
+        let result = rt.resolve_env().await.unwrap();
+        assert!(
+            !result.is_empty(),
+            "resolve_env should return cached (non-empty) env"
+        );
+
+        let warning = rt.env_warning();
+        assert_eq!(
+            warning, None,
+            "env_warning() should be None when env was served from cache"
+        );
+    }
+
+    #[tokio::test]
+    async fn env_warning_returns_message_on_snapshot_failure() {
+        // When the cache is empty and the SSH host is unreachable,
+        // resolve_env() should gracefully fall back to an empty map
+        // and set a warning message accessible via env_warning().
+        //
+        // In cargo test there is no SSH server, so ssh_command_raw
+        // to a nonexistent host will fail, triggering the fallback path.
+        let cache = test_cache();
+        let rt = SshRuntime::new(
+            "nonexistent-host-that-will-never-resolve-test",
+            "/fake/path",
+            cache,
+        );
+
+        let result = rt.resolve_env().await;
+        assert!(
+            result.is_ok(),
+            "resolve_env should return Ok even on snapshot failure (graceful fallback)"
+        );
+
+        let env = result.unwrap();
+        assert!(
+            env.is_empty(),
+            "on snapshot failure the fallback should return an empty map"
+        );
+
+        let warning = rt.env_warning();
+        assert!(
+            warning.is_some(),
+            "env_warning() should return Some(...) after a snapshot failure"
+        );
+        let msg = warning.unwrap();
+        assert!(
+            !msg.is_empty(),
+            "warning message should not be empty"
+        );
     }
 }

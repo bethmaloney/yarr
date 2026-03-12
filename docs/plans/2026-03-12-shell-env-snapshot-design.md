@@ -247,12 +247,14 @@ Return warning from Tauri commands when snapshot fails, show toast on frontend.
 - Option A: Add an optional `warning` field to command return types
 - Option B: Emit a Tauri event `"env-warning"` from the runtime — but we decided against threading app_handle
 - Go with Option A: modify `run_session` and `run_oneshot` to call `runtime.resolve_env()` early, catch errors, and return warning alongside the normal result
-- Frontend: check for warning in response, call `toast.warning(...)` if present
+- Frontend: listen for `"env-warning"` Tauri events, call `toast.warning(...)` with dedup via `id: "env-warning"`
+
+**Implementation note:** Used Tauri events (`app.emit("env-warning", ...)`) instead of modifying return types, since `run_session` blocks until completion (warning in the result would arrive too late). Added `CachedEnv` struct to track warnings alongside cached env vars. Added `env_warning()` trait method to `RuntimeProvider` for runtime-agnostic warning access.
 
 **Checklist:**
-- [ ] Add warning propagation from `resolve_env` failures in Tauri commands
-- [ ] Frontend: show `toast.warning(...)` on env snapshot failure
-- [ ] `cd src-tauri && cargo check && npx tsc --noEmit`
+- [x] Add warning propagation from `resolve_env` failures in Tauri commands
+- [x] Frontend: show `toast.warning(...)` on env snapshot failure
+- [x] `cd src-tauri && cargo check && npx tsc --noEmit`
 
 ---
 
@@ -290,5 +292,5 @@ Ensure MockRuntime and existing tests still pass, add new tests.
 | 4 | Implement `resolve_env` for WslRuntime | Done |
 | 5 | Implement `resolve_env` for SshRuntime | Done |
 | 6 | Wire up `SshEnvCache` in Tauri state | Done |
-| 7 | Surface warnings as toast notifications | Not Started |
+| 7 | Surface warnings as toast notifications | Done |
 | 8 | Update tests | Not Started |

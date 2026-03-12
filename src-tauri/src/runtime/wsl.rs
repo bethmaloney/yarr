@@ -245,6 +245,10 @@ impl RuntimeProvider for WslRuntime {
     async fn resolve_env(&self) -> Result<HashMap<String, String>> {
         Ok(get_or_init_local_env().await.clone())
     }
+
+    fn env_warning(&self) -> Option<String> {
+        super::get_local_env_warning()
+    }
 }
 
 /// Convert a Windows-style path to a WSL path if needed

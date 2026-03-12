@@ -1455,3 +1455,17 @@ describe("1-shot persistence", () => {
     expect(entries.get("oneshot-abc")!.status).toBe("completed");
   });
 });
+
+// ===========================================================================
+// Env warning listener (Task 7: surface shell env snapshot warnings)
+// ===========================================================================
+
+describe("env-warning listener", () => {
+  it("initialize sets up a listener for env-warning events", () => {
+    useAppStore.getState().initialize();
+    expect(mockListen).toHaveBeenCalledWith(
+      "env-warning",
+      expect.any(Function),
+    );
+  });
+});

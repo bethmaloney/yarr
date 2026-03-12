@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { toast } from "sonner";
 import { saveRecent } from "./recents";
 import {
   loadRepos as reposLoadRepos,
@@ -240,6 +241,11 @@ export const useAppStore = create<AppStore>((set, get) => {
         },
       );
 
+      // 4b. Listen for env warning events
+      const envWarningPromise = listen<string>("env-warning", (event) => {
+        toast.warning(event.payload, { id: "env-warning" });
+      });
+
       // 5. Start sync interval
       const intervalId = setInterval(() => {
         syncActiveSession();
@@ -248,6 +254,7 @@ export const useAppStore = create<AppStore>((set, get) => {
       // 6. Return cleanup function
       return () => {
         listenPromise.then((fn) => fn());
+        envWarningPromise.then((fn) => fn());
         clearInterval(intervalId);
       };
     },
