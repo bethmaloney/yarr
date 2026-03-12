@@ -114,8 +114,8 @@ This code is correct in structure but:
 **Pattern reference:** The existing `SessionEvent` type at line 24.
 
 **Checklist:**
-- [ ] The `SessionEvent` type already has `plan_file?: string` at line 39 — no changes needed, but verify this is correct and matches what the backend now sends
-- [ ] Verify `SessionOutcome` type covers all Rust variants (line 80 in trace.rs)
+- [x] The `SessionEvent` type already has `plan_file?: string` at line 39 — no changes needed, but verify this is correct and matches what the backend now sends
+- [x] Verify `SessionOutcome` type covers all Rust variants (line 80 in trace.rs) — frontend uses `string` (no dedicated union type), which is compatible. Rust enum has 5 variants: Running, Completed, MaxIterationsReached, Failed, Cancelled.
 
 ### Task 6: Update tests
 
@@ -128,23 +128,23 @@ This code is correct in structure but:
 **Checklist:**
 
 #### Rust tests (`session.rs`):
-- [ ] Update `test_session_runner_basic_loop` to verify `SessionComplete` now carries `plan_file` from config
-- [ ] Update all `SessionComplete` pattern matches in tests to use `SessionComplete { outcome, plan_file }` or `SessionComplete { outcome, .. }`
-- [ ] Add a test that verifies `SessionComplete` has `plan_file: None` when `SessionConfig.plan_file` is `None`
-- [ ] Add a test that verifies `SessionComplete` has `plan_file: Some(...)` when `SessionConfig.plan_file` is set
+- [x] Update `test_session_runner_basic_loop` to verify `SessionComplete` now carries `plan_file` from config — done in `run_accumulates_events_to_disk` and `run_still_works_unchanged` tests
+- [x] Update all `SessionComplete` pattern matches in tests to use `SessionComplete { outcome, plan_file }` or `SessionComplete { outcome, .. }`
+- [x] Add a test that verifies `SessionComplete` has `plan_file: None` when `SessionConfig.plan_file` is `None` — `test_session_complete_plan_file_none_when_not_set` (line 3141)
+- [x] Add a test that verifies `SessionComplete` has `plan_file: Some(...)` when `SessionConfig.plan_file` is set — `test_session_complete_carries_plan_file` (line 3093)
 
 #### Rust tests (serialization in `lib.rs`):
-- [ ] Update `SessionComplete` serialization test to include `plan_file` and verify it serializes to `"plan_file": "some/path.md"` in JSON
+- [x] Update `SessionComplete` serialization test to include `plan_file` and verify it serializes to `"plan_file": "some/path.md"` in JSON — `tagged_session_event_clone_produces_equal_json` (line 823)
 
 #### Frontend tests (`store.test.ts`):
-- [ ] Existing tests for `session_complete` plan move should continue passing (they already set `plan_file` on the event)
-- [ ] Add test for `one_shot_complete` triggering plan move:
+- [x] Existing tests for `session_complete` plan move should continue passing (they already set `plan_file` on the event) — verified, 776/776 tests pass
+- [x] Add test for `one_shot_complete` triggering plan move:
   - Set up `oneShotEntries` map with an entry that has a `parentRepoId`
   - Set up `repos` with the parent repo
   - Set up `sessions` with events that include `DesignPhaseComplete { plan_file: "docs/plans/my-plan.md" }`
   - Fire `one_shot_complete` event
   - Assert `move_plan_to_completed` was invoked with correct repo, plansDir, and filename
-- [ ] Add test for `one_shot_complete` NOT triggering plan move when no `DesignPhaseComplete` event exists
+- [x] Add test for `one_shot_complete` NOT triggering plan move when no `DesignPhaseComplete` event exists
 
 ### Task 7: Add logging to `WslRuntime::run_command`
 
@@ -166,6 +166,6 @@ This code is correct in structure but:
 | 2. Handle plan move for 1-shot in frontend | **Done** | Added plan move on one_shot_complete via design_phase_complete event lookup. Added console.log for triggered/skipped in both session_complete and one_shot_complete paths. 7 new tests. |
 | 3. Add logging to `move_plan_to_completed_impl` | **Done** | Added tracing::info/error/warn to both move_plan_to_completed_impl and the Tauri command wrapper. |
 | 4. Verify WSL path handling | **Done** | Verified resolve_runtime, to_wsl_path, and relative plans_dir all correct. Added debug/warn logging to WslRuntime::run_command. Manual test pending. |
-| 5. Update frontend TypeScript types | Not started | Type verification |
-| 6. Update tests | Not started | Rust + frontend tests |
+| 5. Update frontend TypeScript types | **Done** | Verified: SessionEvent.plan_file correct, SessionOutcome uses string (compatible with all 5 Rust variants). |
+| 6. Update tests | **Done** | All Rust tests updated in Task 1. Frontend 1-shot tests added in Task 2. 392 Rust tests + 776 frontend tests pass. |
 | 7. Add logging to `WslRuntime::run_command` | **Done** | Added debug at start (working_dir, wsl_dir, command), debug on success, warn on failure/timeout. |
