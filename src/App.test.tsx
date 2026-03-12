@@ -26,6 +26,8 @@ const { mockInitialize, mockCleanup, stableStore } = vi.hoisted(() => {
     reconnectSession: vi.fn(),
     updateRepo: vi.fn(),
     runOneShot: vi.fn(),
+    gitStatus: {},
+    fetchGitStatus: vi.fn(),
   };
   return { mockInitialize, mockCleanup, stableStore };
 });

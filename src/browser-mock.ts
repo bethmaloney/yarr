@@ -700,6 +700,9 @@ if (!(window as any).__TAURI_INTERNALS__) {
     if (cmd === "get_branch_info") {
       return { name: "main", ahead: 0, behind: 2 };
     }
+    if (cmd === "get_repo_git_status") {
+      return { branchName: "main", dirtyCount: 0, ahead: 0, behind: 2 };
+    }
     if (cmd === "list_local_branches") {
       return [
         "main",

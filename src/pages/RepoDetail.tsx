@@ -19,12 +19,7 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Accordion,
   AccordionItem,
@@ -65,9 +60,11 @@ import {
   Play,
   Square,
   Terminal,
+  RefreshCw,
 } from "lucide-react";
-import type { BranchInfo, Check, SessionState } from "../types";
+import type { Check, SessionState } from "../types";
 import type { RepoConfig } from "../repos";
+import { timeAgo } from "../time";
 
 type ConnectionTestStep = {
   name: string;
@@ -94,6 +91,8 @@ export default function RepoDetail() {
   const reconnectSession = useAppStore((s) => s.reconnectSession);
   const updateRepo = useAppStore((s) => s.updateRepo);
   const runOneShot = useAppStore((s) => s.runOneShot);
+  const gitStatusMap = useAppStore((s) => s.gitStatus);
+  const fetchGitStatus = useAppStore((s) => s.fetchGitStatus);
 
   const repo = repos.find((r) => r.id === repoId);
   const session: SessionState =
@@ -117,8 +116,9 @@ export default function RepoDetail() {
   // Config sheet state
   const [configOpen, setConfigOpen] = useState(false);
 
-  // Branch state
-  const [branchInfo, setBranchInfo] = useState<BranchInfo | null>(null);
+  // Branch state (derived from store git status)
+  const gitStatusEntry = repoId ? gitStatusMap[repoId] : undefined;
+  const gitStatus = gitStatusEntry?.status ?? null;
   const [branches, setBranches] = useState<string[]>([]);
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
   const [branchSearch, setBranchSearch] = useState("");
@@ -144,7 +144,8 @@ export default function RepoDetail() {
   const [oneShotTitle, setOneShotTitle] = useState("");
   const [oneShotPrompt, setOneShotPrompt] = useState("");
   const [oneShotModel, setOneShotModel] = useState("");
-  const [oneShotMergeStrategy, setOneShotMergeStrategy] = useState("merge_to_main");
+  const [oneShotMergeStrategy, setOneShotMergeStrategy] =
+    useState("merge_to_main");
   const [oneShotSubmitting, setOneShotSubmitting] = useState(false);
 
   // Connection test state
@@ -192,24 +193,17 @@ export default function RepoDetail() {
         };
   }
 
-  // Fetch branch info on mount and when repo changes
+  // Fetch git status on mount and when repo changes
   useEffect(() => {
-    if (!repo) return;
-    const payload = buildRepoPayload();
-    if (!payload) return;
-    invoke<BranchInfo>("get_branch_info", { repo: payload })
-      .then((info) => setBranchInfo(info))
-      .catch(() => setBranchInfo(null));
+    if (!repo || !repoId) return;
+    fetchGitStatus(repoId, repo, true);
   }, [repo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Refresh branch info after session completes
+  // Refresh git status after session completes
   useEffect(() => {
     if (wasRunningRef.current && !session.running) {
-      const payload = buildRepoPayload();
-      if (payload) {
-        invoke<BranchInfo>("get_branch_info", { repo: payload })
-          .then((info) => setBranchInfo(info))
-          .catch(() => setBranchInfo(null));
+      if (repo && repoId) {
+        fetchGitStatus(repoId, repo, true);
       }
 
       // Clear plan selector after successful completion with a plan file.
@@ -492,10 +486,7 @@ export default function RepoDetail() {
       await invoke("fast_forward_branch", { repo: payload });
       setBranchDropdownOpen(false);
       setBranchSearch("");
-      const info = await invoke<BranchInfo>("get_branch_info", {
-        repo: payload,
-      });
-      setBranchInfo(info);
+      if (repoId && repo) fetchGitStatus(repoId, repo, true);
       toast.success("Branch fast-forwarded");
     } catch (e) {
       console.error("Failed to fast-forward:", e);
@@ -510,10 +501,7 @@ export default function RepoDetail() {
       await invoke("switch_branch", { repo: payload, branch: branchName });
       setBranchDropdownOpen(false);
       setBranchSearch("");
-      const info = await invoke<BranchInfo>("get_branch_info", {
-        repo: payload,
-      });
-      setBranchInfo(info);
+      if (repoId && repo) fetchGitStatus(repoId, repo, true);
       toast.success(`Switched to ${branchName}`);
     } catch (e) {
       console.error("Failed to switch branch:", e);
@@ -557,7 +545,10 @@ export default function RepoDetail() {
         repo: payload,
         plansDir,
       });
-      console.info("[fetchPlans] received plans", { count: result.length, plans: result });
+      console.info("[fetchPlans] received plans", {
+        count: result.length,
+        plans: result,
+      });
       setPlans(result);
     } catch (e) {
       console.error("[fetchPlans] list_plans failed", e);
@@ -620,99 +611,145 @@ export default function RepoDetail() {
         <p className="text-sm text-muted-foreground mt-1">{repoDisplayPath}</p>
       </header>
 
-      {/* Branch selector */}
-      {branchInfo && (
-        <div className="mb-6">
-          {session.running ? (
-            <button
-              className={`branch-chip inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground${branchInfo.behind && branchInfo.behind > 0 ? " warning border border-warning" : ""}`}
-              disabled
-            >
-              {branchInfo.name}
-              {branchInfo.ahead != null && branchInfo.ahead > 0 && (
-                <span className="text-xs opacity-70">
-                  {"\u2191"}
-                  {branchInfo.ahead}
-                </span>
-              )}
-              {branchInfo.behind != null && branchInfo.behind > 0 && (
-                <span className="text-xs opacity-70">
-                  {"\u2193"}
-                  {branchInfo.behind}
-                </span>
-              )}
-            </button>
-          ) : (
-            <Popover
-              open={branchDropdownOpen}
-              onOpenChange={setBranchDropdownOpen}
-            >
-              <PopoverTrigger asChild>
+      {/* Branch selector + git status */}
+      {(gitStatus || gitStatusEntry?.error) && (
+        <div className="flex items-center gap-2 mb-6">
+          {gitStatus && (
+            <>
+              {session.running ? (
                 <button
-                  className={`branch-chip inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer${branchInfo.behind && branchInfo.behind > 0 ? " warning border border-warning" : ""}`}
-                  onClick={() => {
-                    if (!branchDropdownOpen) fetchBranches();
-                  }}
+                  className={`branch-chip inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground${gitStatus.behind && gitStatus.behind > 0 ? " warning border border-warning" : ""}`}
+                  disabled
                 >
-                  {branchInfo.name}
-                  {branchInfo.ahead != null && branchInfo.ahead > 0 && (
+                  {gitStatus.branchName}
+                  {gitStatus.dirtyCount != null && gitStatus.dirtyCount > 0 && (
                     <span className="text-xs opacity-70">
-                      {"\u2191"}
-                      {branchInfo.ahead}
+                      {gitStatus.dirtyCount} dirty
                     </span>
                   )}
-                  {branchInfo.behind != null && branchInfo.behind > 0 && (
+                  {gitStatus.ahead != null && gitStatus.ahead > 0 && (
+                    <span className="text-xs opacity-70">
+                      {"\u2191"}
+                      {gitStatus.ahead}
+                    </span>
+                  )}
+                  {gitStatus.behind != null && gitStatus.behind > 0 && (
                     <span className="text-xs opacity-70">
                       {"\u2193"}
-                      {branchInfo.behind}
+                      {gitStatus.behind}
                     </span>
                   )}
                 </button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="branch-dropdown w-64 p-0"
-                onEscapeKeyDown={() => {
-                  setBranchSearch("");
-                }}
-              >
-                {branchInfo.behind != null && branchInfo.behind > 0 && (
-                  <div className="p-2 border-b border-border">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="w-full"
-                      onClick={handleFastForward}
+              ) : (
+                <Popover
+                  open={branchDropdownOpen}
+                  onOpenChange={setBranchDropdownOpen}
+                >
+                  <PopoverTrigger asChild>
+                    <button
+                      className={`branch-chip inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer${gitStatus.behind && gitStatus.behind > 0 ? " warning border border-warning" : ""}`}
+                      onClick={() => {
+                        if (!branchDropdownOpen) fetchBranches();
+                      }}
                     >
-                      Fast-forward
-                    </Button>
-                  </div>
-                )}
-                <Command shouldFilter={false}>
-                  <CommandInput
-                    className="branch-search"
-                    placeholder="Search branches..."
-                    value={branchSearch}
-                    onValueChange={setBranchSearch}
-                  />
-                  <CommandList>
-                    <CommandEmpty className="branch-empty">
-                      No matching branches
-                    </CommandEmpty>
-                    {filteredBranches.map((branch) => (
-                      <CommandItem
-                        key={branch}
-                        value={branch}
-                        className={`branch-item${branch === branchInfo?.name ? " active font-bold" : ""}`}
-                        onSelect={() => handleSwitchBranch(branch)}
-                      >
-                        {branch}
-                      </CommandItem>
-                    ))}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+                      {gitStatus.branchName}
+                      {gitStatus.dirtyCount != null &&
+                        gitStatus.dirtyCount > 0 && (
+                          <span className="text-xs opacity-70">
+                            {gitStatus.dirtyCount} dirty
+                          </span>
+                        )}
+                      {gitStatus.ahead != null && gitStatus.ahead > 0 && (
+                        <span className="text-xs opacity-70">
+                          {"\u2191"}
+                          {gitStatus.ahead}
+                        </span>
+                      )}
+                      {gitStatus.behind != null && gitStatus.behind > 0 && (
+                        <span className="text-xs opacity-70">
+                          {"\u2193"}
+                          {gitStatus.behind}
+                        </span>
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="branch-dropdown w-64 p-0"
+                    onEscapeKeyDown={() => {
+                      setBranchSearch("");
+                    }}
+                  >
+                    {gitStatus.behind != null && gitStatus.behind > 0 && (
+                      <div className="p-2 border-b border-border">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="w-full"
+                          onClick={handleFastForward}
+                        >
+                          Fast-forward
+                        </Button>
+                      </div>
+                    )}
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        className="branch-search"
+                        placeholder="Search branches..."
+                        value={branchSearch}
+                        onValueChange={setBranchSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty className="branch-empty">
+                          No matching branches
+                        </CommandEmpty>
+                        {filteredBranches.map((branch) => (
+                          <CommandItem
+                            key={branch}
+                            value={branch}
+                            className={`branch-item${branch === gitStatus?.branchName ? " active font-bold" : ""}`}
+                            onSelect={() => handleSwitchBranch(branch)}
+                          >
+                            {branch}
+                          </CommandItem>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </>
+          )}
+
+          {/* Error indicator - shown when error and no status */}
+          {gitStatusEntry?.error && !gitStatus && (
+            <span
+              className="text-xs text-yellow-500"
+              title={gitStatusEntry.error}
+            >
+              {"\u26A0"}
+            </span>
+          )}
+
+          {/* Refresh button */}
+          <button
+            aria-label="Refresh git status"
+            className="inline-flex items-center justify-center size-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            onClick={() => {
+              if (repoId && repo) fetchGitStatus(repoId, repo, true);
+            }}
+            disabled={gitStatusEntry?.loading}
+          >
+            <RefreshCw
+              className={`size-3.5 ${gitStatusEntry?.loading ? "animate-spin" : ""}`}
+            />
+          </button>
+
+          {/* Last checked timestamp */}
+          {gitStatusEntry?.lastChecked && (
+            <span className="text-xs text-muted-foreground">
+              last checked: {timeAgo(gitStatusEntry.lastChecked.toISOString())}
+            </span>
           )}
         </div>
       )}
@@ -761,7 +798,10 @@ export default function RepoDetail() {
 
       {/* Config Sheet */}
       <Sheet open={configOpen} onOpenChange={setConfigOpen}>
-        <SheetContent side="right" className="overflow-y-auto border-l border-border bg-card">
+        <SheetContent
+          side="right"
+          className="overflow-y-auto border-l border-border bg-card"
+        >
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
               <Settings className="size-4 text-primary" />
@@ -799,7 +839,8 @@ export default function RepoDetail() {
                       <Input
                         type="text"
                         value={
-                          (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath
+                          (repo as Extract<RepoConfig, { type: "ssh" }>)
+                            .remotePath
                         }
                         readOnly
                         disabled
@@ -848,7 +889,10 @@ export default function RepoDetail() {
                     disabled={session.running}
                   />
                 </Label>
-                <Label htmlFor="create-branch" className="flex items-center gap-2 text-sm font-normal">
+                <Label
+                  htmlFor="create-branch"
+                  className="flex items-center gap-2 text-sm font-normal"
+                >
                   <Checkbox
                     id="create-branch"
                     checked={createBranch}
@@ -857,8 +901,13 @@ export default function RepoDetail() {
                   />
                   Create branch on run
                 </Label>
-                <fieldset disabled={session.running} className="flex flex-col gap-3">
-                  <legend className="text-sm font-medium mb-2">Environment Variables</legend>
+                <fieldset
+                  disabled={session.running}
+                  className="flex flex-col gap-3"
+                >
+                  <legend className="text-sm font-medium mb-2">
+                    Environment Variables
+                  </legend>
                   {envVars.map((envVar, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <Input
@@ -900,16 +949,32 @@ export default function RepoDetail() {
                     type="button"
                     variant="secondary"
                     size="sm"
-                    onClick={() => setEnvVars([...envVars, { key: "", value: "" }])}
+                    onClick={() =>
+                      setEnvVars([...envVars, { key: "", value: "" }])
+                    }
                   >
                     + Add Variable
                   </Button>
                 </fieldset>
                 {connectionTest && (
-                  <div data-testid="connection-checklist" className="flex flex-col gap-2 mt-2">
+                  <div
+                    data-testid="connection-checklist"
+                    className="flex flex-col gap-2 mt-2"
+                  >
                     {connectionTest.steps.map((step) => (
-                      <div key={step.name} className={`step-${step.status} flex items-center gap-2 text-sm`}>
-                        <span className={step.status === "pass" ? "text-success" : step.status === "fail" ? "text-destructive" : "text-muted-foreground"}>
+                      <div
+                        key={step.name}
+                        className={`step-${step.status} flex items-center gap-2 text-sm`}
+                      >
+                        <span
+                          className={
+                            step.status === "pass"
+                              ? "text-success"
+                              : step.status === "fail"
+                                ? "text-destructive"
+                                : "text-muted-foreground"
+                          }
+                        >
                           {step.status === "running"
                             ? "..."
                             : step.status === "pass"
@@ -919,7 +984,11 @@ export default function RepoDetail() {
                                 : "\u00B7"}
                         </span>
                         <span>{step.name}</span>
-                        {step.error && <span className="text-destructive text-xs">{step.error}</span>}
+                        {step.error && (
+                          <span className="text-destructive text-xs">
+                            {step.error}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -962,7 +1031,10 @@ export default function RepoDetail() {
                               value={check.name}
                               onChange={(e) => {
                                 const updated = [...checks];
-                                updated[i] = { ...updated[i], name: e.target.value };
+                                updated[i] = {
+                                  ...updated[i],
+                                  name: e.target.value,
+                                };
                                 setChecks(updated);
                               }}
                               disabled={session.running}
@@ -1002,8 +1074,12 @@ export default function RepoDetail() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="each_iteration">each_iteration</SelectItem>
-                                <SelectItem value="post_completion">post_completion</SelectItem>
+                                <SelectItem value="each_iteration">
+                                  each_iteration
+                                </SelectItem>
+                                <SelectItem value="post_completion">
+                                  post_completion
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                           </Label>
@@ -1074,7 +1150,10 @@ export default function RepoDetail() {
             {/* ── Git Sync tab ── */}
             <TabsContent value="git-sync">
               <div className="flex flex-col gap-4 pt-4">
-                <Label htmlFor="git-sync-enabled" className="flex items-center gap-2 text-sm font-normal">
+                <Label
+                  htmlFor="git-sync-enabled"
+                  className="flex items-center gap-2 text-sm font-normal"
+                >
                   <Checkbox
                     id="git-sync-enabled"
                     checked={gitSyncEnabled}
@@ -1100,7 +1179,9 @@ export default function RepoDetail() {
                     <Input
                       type="number"
                       value={gitSyncMaxRetries}
-                      onChange={(e) => setGitSyncMaxRetries(Number(e.target.value))}
+                      onChange={(e) =>
+                        setGitSyncMaxRetries(Number(e.target.value))
+                      }
                       min={1}
                       disabled={session.running || !gitSyncEnabled}
                     />
@@ -1184,9 +1265,13 @@ export default function RepoDetail() {
                   onValueChange={setPlanSearch}
                 />
                 <CommandList>
-                  <CommandEmpty>{plansError ? "Failed to load plans" : "No plans found"}</CommandEmpty>
+                  <CommandEmpty>
+                    {plansError ? "Failed to load plans" : "No plans found"}
+                  </CommandEmpty>
                   {plansLoading ? (
-                    <CommandItem disabled value="loading">Loading...</CommandItem>
+                    <CommandItem disabled value="loading">
+                      Loading...
+                    </CommandItem>
                   ) : (
                     filteredPlans.map((plan) => (
                       <CommandItem
@@ -1212,9 +1297,13 @@ export default function RepoDetail() {
             Browse
           </Button>
         </div>
-        {previewLoading && <p className="text-sm text-muted-foreground mt-2">Loading...</p>}
+        {previewLoading && (
+          <p className="text-sm text-muted-foreground mt-2">Loading...</p>
+        )}
         {!previewLoading && previewContent && (
-          <pre className="mt-3 p-3 bg-card border border-border rounded-md text-xs text-foreground overflow-x-auto max-h-48 overflow-y-auto">{previewContent}</pre>
+          <pre className="mt-3 p-3 bg-card border border-border rounded-md text-xs text-foreground overflow-x-auto max-h-48 overflow-y-auto">
+            {previewContent}
+          </pre>
         )}
 
         {/* Action buttons */}
@@ -1271,7 +1360,10 @@ export default function RepoDetail() {
         {oneShotOpen && !session.running && (
           <div className="mt-4 pt-4 border-t border-border flex flex-col gap-3">
             <div>
-              <Label htmlFor="oneshot-title" className="text-sm text-muted-foreground">
+              <Label
+                htmlFor="oneshot-title"
+                className="text-sm text-muted-foreground"
+              >
                 Title
               </Label>
               <Input
@@ -1283,7 +1375,10 @@ export default function RepoDetail() {
               />
             </div>
             <div>
-              <Label htmlFor="oneshot-prompt" className="text-sm text-muted-foreground">
+              <Label
+                htmlFor="oneshot-prompt"
+                className="text-sm text-muted-foreground"
+              >
                 Prompt
               </Label>
               <Textarea
@@ -1294,7 +1389,10 @@ export default function RepoDetail() {
               />
             </div>
             <div>
-              <Label htmlFor="oneshot-model" className="text-sm text-muted-foreground">
+              <Label
+                htmlFor="oneshot-model"
+                className="text-sm text-muted-foreground"
+              >
                 Model
               </Label>
               <Input
@@ -1338,7 +1436,11 @@ export default function RepoDetail() {
             <div className="flex gap-2">
               <Button
                 type="button"
-                disabled={oneShotSubmitting || !oneShotTitle.trim() || !oneShotPrompt.trim()}
+                disabled={
+                  oneShotSubmitting ||
+                  !oneShotTitle.trim() ||
+                  !oneShotPrompt.trim()
+                }
                 onClick={handleOneShotSubmit}
               >
                 Launch
@@ -1359,7 +1461,10 @@ export default function RepoDetail() {
       {/* Session plan preview banner */}
       {(() => {
         const showSessionPlanBanner =
-          sessionPlanFile && !planFile && (session.running || session.trace) && sessionPlanParsed;
+          sessionPlanFile &&
+          !planFile &&
+          (session.running || session.trace) &&
+          sessionPlanParsed;
         if (!showSessionPlanBanner) return null;
         return (
           <div className="bg-muted/50 border border-border rounded-md p-3 mb-4">
@@ -1383,12 +1488,17 @@ export default function RepoDetail() {
               ? `Connection lost: ${session.disconnectReason}`
               : "Connection lost"}
           </p>
-          <p className="text-sm text-muted-foreground mt-1">The remote session may still be running.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            The remote session may still be running.
+          </p>
         </section>
       )}
 
       {/* Events list or empty state */}
-      {session.events.length === 0 && !session.running && !session.error && !session.trace ? (
+      {session.events.length === 0 &&
+      !session.running &&
+      !session.error &&
+      !session.trace ? (
         <div className="flex flex-col items-center justify-center py-16 rounded-md border border-dashed border-border text-center">
           <Terminal className="size-8 text-muted-foreground mb-3" />
           <p className="text-sm font-medium">No sessions yet</p>
@@ -1408,7 +1518,9 @@ export default function RepoDetail() {
       {session.error && (
         <section className="bg-destructive/10 border border-destructive/30 rounded-md p-4 mt-4">
           <h2 className="text-lg font-semibold text-destructive mb-2">Error</h2>
-          <pre className="text-sm text-destructive whitespace-pre-wrap">{session.error}</pre>
+          <pre className="text-sm text-destructive whitespace-pre-wrap">
+            {session.error}
+          </pre>
         </section>
       )}
 
@@ -1422,7 +1534,9 @@ export default function RepoDetail() {
             {session.trace.failure_reason && (
               <>
                 <dt className="text-muted-foreground">Reason</dt>
-                <dd className="text-destructive">{session.trace.failure_reason}</dd>
+                <dd className="text-destructive">
+                  {session.trace.failure_reason}
+                </dd>
               </>
             )}
             <dt className="text-muted-foreground">Iterations</dt>

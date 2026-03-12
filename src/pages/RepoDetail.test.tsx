@@ -203,6 +203,21 @@ interface MockState {
   reconnectSession: ReturnType<typeof vi.fn>;
   updateRepo: ReturnType<typeof vi.fn>;
   runOneShot: ReturnType<typeof vi.fn>;
+  gitStatus: Record<
+    string,
+    {
+      status: {
+        branchName: string;
+        dirtyCount: number;
+        ahead: number | null;
+        behind: number | null;
+      } | null;
+      lastChecked: Date | null;
+      loading: boolean;
+      error: string | null;
+    }
+  >;
+  fetchGitStatus: ReturnType<typeof vi.fn>;
 }
 
 function setupMockState(overrides: Partial<MockState> = {}): MockState {
@@ -214,6 +229,8 @@ function setupMockState(overrides: Partial<MockState> = {}): MockState {
     reconnectSession: vi.fn(),
     updateRepo: vi.fn(),
     runOneShot: vi.fn(),
+    gitStatus: {},
+    fetchGitStatus: vi.fn(),
     ...overrides,
   };
 
@@ -387,13 +404,22 @@ describe("RepoDetail", () => {
   // =========================================================================
 
   describe("branch selector", () => {
-    it("shows branch chip when branchInfo is available", async () => {
-      setupMockState({ repos: [makeLocalRepo()] });
-      mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "get_branch_info") {
-          return Promise.resolve({ name: "main", ahead: 0, behind: 0 });
-        }
-        return Promise.resolve(null);
+    it("shows branch chip when git status is available", async () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        gitStatus: {
+          "test-repo": {
+            status: {
+              branchName: "main",
+              dirtyCount: 0,
+              ahead: 0,
+              behind: 0,
+            },
+            lastChecked: new Date(),
+            loading: false,
+            error: null,
+          },
+        },
       });
 
       renderRepoDetail();
@@ -404,12 +430,21 @@ describe("RepoDetail", () => {
     });
 
     it("shows ahead/behind counts", async () => {
-      setupMockState({ repos: [makeLocalRepo()] });
-      mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "get_branch_info") {
-          return Promise.resolve({ name: "feat/branch", ahead: 3, behind: 2 });
-        }
-        return Promise.resolve(null);
+      setupMockState({
+        repos: [makeLocalRepo()],
+        gitStatus: {
+          "test-repo": {
+            status: {
+              branchName: "feat/branch",
+              dirtyCount: 0,
+              ahead: 3,
+              behind: 2,
+            },
+            lastChecked: new Date(),
+            loading: false,
+            error: null,
+          },
+        },
       });
 
       renderRepoDetail();
@@ -424,12 +459,19 @@ describe("RepoDetail", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         sessions: new Map([["test-repo", makeSessionState({ running: true })]]),
-      });
-      mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "get_branch_info") {
-          return Promise.resolve({ name: "main", ahead: 0, behind: 0 });
-        }
-        return Promise.resolve(null);
+        gitStatus: {
+          "test-repo": {
+            status: {
+              branchName: "main",
+              dirtyCount: 0,
+              ahead: 0,
+              behind: 0,
+            },
+            lastChecked: new Date(),
+            loading: false,
+            error: null,
+          },
+        },
       });
 
       renderRepoDetail();
@@ -441,10 +483,23 @@ describe("RepoDetail", () => {
     });
 
     it("shows success toast when branch switch succeeds", async () => {
-      setupMockState({ repos: [makeLocalRepo()] });
+      setupMockState({
+        repos: [makeLocalRepo()],
+        gitStatus: {
+          "test-repo": {
+            status: {
+              branchName: "main",
+              dirtyCount: 0,
+              ahead: 0,
+              behind: 0,
+            },
+            lastChecked: new Date(),
+            loading: false,
+            error: null,
+          },
+        },
+      });
       mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "get_branch_info")
-          return Promise.resolve({ name: "main", ahead: 0, behind: 0 });
         if (cmd === "list_local_branches")
           return Promise.resolve(["main", "develop"]);
         if (cmd === "switch_branch") return Promise.resolve(null);
@@ -474,10 +529,23 @@ describe("RepoDetail", () => {
     });
 
     it("shows error toast when branch switch fails", async () => {
-      setupMockState({ repos: [makeLocalRepo()] });
+      setupMockState({
+        repos: [makeLocalRepo()],
+        gitStatus: {
+          "test-repo": {
+            status: {
+              branchName: "main",
+              dirtyCount: 0,
+              ahead: 0,
+              behind: 0,
+            },
+            lastChecked: new Date(),
+            loading: false,
+            error: null,
+          },
+        },
+      });
       mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "get_branch_info")
-          return Promise.resolve({ name: "main", ahead: 0, behind: 0 });
         if (cmd === "list_local_branches")
           return Promise.resolve(["main", "develop"]);
         if (cmd === "switch_branch")
@@ -504,10 +572,23 @@ describe("RepoDetail", () => {
     });
 
     it("shows success toast when fast-forward succeeds", async () => {
-      setupMockState({ repos: [makeLocalRepo()] });
+      setupMockState({
+        repos: [makeLocalRepo()],
+        gitStatus: {
+          "test-repo": {
+            status: {
+              branchName: "main",
+              dirtyCount: 0,
+              ahead: 0,
+              behind: 5,
+            },
+            lastChecked: new Date(),
+            loading: false,
+            error: null,
+          },
+        },
+      });
       mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "get_branch_info")
-          return Promise.resolve({ name: "main", ahead: 0, behind: 5 });
         if (cmd === "list_local_branches")
           return Promise.resolve(["main"]);
         if (cmd === "fast_forward_branch") return Promise.resolve(null);
@@ -537,10 +618,23 @@ describe("RepoDetail", () => {
     });
 
     it("shows error toast when fast-forward fails", async () => {
-      setupMockState({ repos: [makeLocalRepo()] });
+      setupMockState({
+        repos: [makeLocalRepo()],
+        gitStatus: {
+          "test-repo": {
+            status: {
+              branchName: "main",
+              dirtyCount: 0,
+              ahead: 0,
+              behind: 5,
+            },
+            lastChecked: new Date(),
+            loading: false,
+            error: null,
+          },
+        },
+      });
       mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "get_branch_info")
-          return Promise.resolve({ name: "main", ahead: 0, behind: 5 });
         if (cmd === "list_local_branches")
           return Promise.resolve(["main"]);
         if (cmd === "fast_forward_branch")

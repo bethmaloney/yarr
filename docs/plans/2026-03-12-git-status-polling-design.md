@@ -258,12 +258,12 @@ Enhance the branch chip with dirty count, refresh button, and last-checked times
 - Keep existing fast-forward button (visible when behind > 0)
 
 **Checklist:**
-- [ ] Replace local branch info state with store git status
-- [ ] Add dirty count to branch chip
-- [ ] Add "last checked" timestamp
-- [ ] Add refresh button with loading state
-- [ ] Add error warning icon with tooltip
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Replace local branch info state with store git status
+- [x] Add dirty count to branch chip
+- [x] Add "last checked" timestamp
+- [x] Add refresh button with loading state
+- [x] Add error warning icon with tooltip
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -360,7 +360,7 @@ Update existing branch display tests and add new tests for git status polling.
 | 4 | Add git status state and actions to Zustand store | Done |
 | 5 | Create `useGitStatus` hook with polling | Done |
 | 6 | Update Home page repo cards | Done |
-| 7 | Update RepoDetail page branch chip | Not Started |
+| 7 | Update RepoDetail page branch chip | Done |
 | 8 | Add auto-fetch toggle to repo config sheet | Not Started |
 | 9 | Remove `useBranchInfo` and `get_branch_info` | Not Started |
 | 10 | Update E2E tests | Not Started |
