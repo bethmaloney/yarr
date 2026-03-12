@@ -26,6 +26,8 @@ const { mockUseAppStore } = vi.hoisted(() => ({
   mockUseAppStore: vi.fn(),
 }));
 
+const mockResumeOneShot = vi.fn();
+
 // ---------------------------------------------------------------------------
 // vi.mock declarations
 // ---------------------------------------------------------------------------
@@ -157,6 +159,7 @@ interface MockState {
   repos: RepoConfig[];
   sessions: Map<string, SessionState>;
   oneShotEntries: Map<string, OneShotEntry>;
+  resumeOneShot?: ReturnType<typeof vi.fn>;
 }
 
 function setupMockState(overrides: Partial<MockState> = {}): MockState {
@@ -164,6 +167,7 @@ function setupMockState(overrides: Partial<MockState> = {}): MockState {
     repos: [],
     sessions: new Map(),
     oneShotEntries: new Map(),
+    resumeOneShot: mockResumeOneShot,
     ...overrides,
   };
 
@@ -393,7 +397,7 @@ describe("OneShotDetail", () => {
         sessions: new Map([
           [
             "oneshot-abc123",
-            makeSessionState({ running: true, events: [] }),
+            makeSessionState({ running: true, events: [{ kind: "one_shot_started" }] }),
           ],
         ]),
       });
@@ -496,7 +500,7 @@ describe("OneShotDetail", () => {
         sessions: new Map([
           [
             "oneshot-abc123",
-            makeSessionState({ running: false, events: [] }),
+            makeSessionState({ running: false, events: [{ kind: "one_shot_started" }] }),
           ],
         ]),
       });
@@ -649,7 +653,7 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [] })],
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
         ]),
       });
       renderOneShotDetail();
@@ -671,7 +675,7 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [] })],
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
         ]),
       });
       renderOneShotDetail();
@@ -723,6 +727,162 @@ describe("OneShotDetail", () => {
       const errorText = screen.getByText("Process crashed with signal SIGKILL");
       expect(errorText).toBeInTheDocument();
       expect(errorText.tagName).toBe("PRE");
+    });
+  });
+
+  // =========================================================================
+  // Empty state
+  // =========================================================================
+
+  describe("empty state", () => {
+    it("shows 'Session starting...' when running with no events", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "running" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: true, events: [] }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(screen.getByText(/Session starting/)).toBeInTheDocument();
+      expect(screen.queryByTestId("events-list")).not.toBeInTheDocument();
+    });
+
+    it("shows 'Session was interrupted' with Resume button when failed with worktreePath", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              status: "failed",
+              worktreePath: "/tmp/worktrees/oneshot-abc123",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: false, events: [] }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.getByText(/Session was interrupted/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /resume/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("events-list")).not.toBeInTheDocument();
+    });
+
+    it("Resume button calls resumeOneShot with oneshotId", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              status: "failed",
+              worktreePath: "/tmp/worktrees/oneshot-abc123",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: false, events: [] }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const resumeButton = screen.getByRole("button", { name: /resume/i });
+      fireEvent.click(resumeButton);
+
+      expect(mockResumeOneShot).toHaveBeenCalledWith("oneshot-abc123");
+    });
+
+    it("shows 'Session failed before starting' when failed without worktreePath", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "failed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: false, events: [] }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.getByText(/Session failed before starting/),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("events-list")).not.toBeInTheDocument();
+    });
+
+    it("shows 'No events recorded' for non-running session with no events and no trace", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: false, events: [], trace: null }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(screen.getByText(/No events recorded/)).toBeInTheDocument();
+      expect(screen.queryByTestId("events-list")).not.toBeInTheDocument();
+    });
+
+    it("shows EventsList when events exist (no empty state)", () => {
+      const events: SessionEvent[] = [
+        { kind: "one_shot_started" },
+        { kind: "design_phase_started" },
+      ];
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "running" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: true, events }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(screen.getByTestId("events-list")).toBeInTheDocument();
+      expect(
+        screen.queryByText(/Session starting/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Session was interrupted/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Session failed before starting/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/No events recorded/),
+      ).not.toBeInTheDocument();
     });
   });
 

@@ -48,6 +48,7 @@ export interface AppStore {
   dismissOneShot: (oneshotId: string) => Promise<void>;
   saveOneShotEntries: () => Promise<void>;
   loadOneShotEntries: () => Promise<void>;
+  resumeOneShot: (oneshotId: string) => Promise<void>;
 
   // --- Init ---
   initialize: () => () => void;
@@ -617,6 +618,12 @@ export const useAppStore = create<AppStore>((set, get) => {
       if (raw) {
         set({ oneShotEntries: new Map(raw) });
       }
+    },
+
+    async resumeOneShot(oneshotId: string) {
+      // TODO: Task 10 — wire to resume_oneshot backend command
+      toast.info("Resume is not yet implemented");
+      console.warn("resumeOneShot not yet implemented", oneshotId);
     },
 
     runSession: async (repoId: string, planFile: string) => {

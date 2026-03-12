@@ -6,6 +6,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { EventsList } from "@/components/EventsList";
 import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
+import { Loader2, AlertTriangle, Terminal } from "lucide-react";
 import type { SessionState } from "../types";
 
 const defaultSession: SessionState = {
@@ -22,6 +23,7 @@ export default function OneShotDetail() {
   const entries = useAppStore((s) => s.oneShotEntries);
   const sessions = useAppStore((s) => s.sessions);
   const repos = useAppStore((s) => s.repos);
+  const resumeOneShot = useAppStore((s) => s.resumeOneShot);
 
   const entry = oneshotId ? entries.get(oneshotId) : undefined;
   const session =
@@ -100,11 +102,45 @@ export default function OneShotDetail() {
         </div>
       )}
 
-      <EventsList
-        events={session.events}
-        isLive={session.running}
-        repoPath={repoPath}
-      />
+      {session.events.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 rounded-md border border-dashed border-border text-center mt-4">
+          {entry.status === "running" ? (
+            <>
+              <Loader2 className="size-8 text-muted-foreground mb-3 animate-spin" />
+              <p className="text-sm font-medium animate-pulse">Session starting...</p>
+            </>
+          ) : entry.status === "failed" && entry.worktreePath ? (
+            <>
+              <AlertTriangle className="size-8 text-muted-foreground mb-3" />
+              <p className="text-sm font-medium">Session was interrupted</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => resumeOneShot(oneshotId!)}
+              >
+                Resume
+              </Button>
+            </>
+          ) : entry.status === "failed" ? (
+            <>
+              <AlertTriangle className="size-8 text-muted-foreground mb-3" />
+              <p className="text-sm font-medium">Session failed before starting</p>
+            </>
+          ) : (
+            <>
+              <Terminal className="size-8 text-muted-foreground mb-3" />
+              <p className="text-sm font-medium">No events recorded</p>
+            </>
+          )}
+        </div>
+      ) : (
+        <EventsList
+          events={session.events}
+          isLive={session.running}
+          repoPath={repoPath}
+        />
+      )}
 
       {session.error && (
         <section>

@@ -258,9 +258,9 @@ Show appropriate placeholder when no events are available.
 - Resume button wires to `resumeOneShot()` store action (Task 10)
 
 **Checklist:**
-- [ ] Add conditional empty state rendering
-- [ ] Style consistently with loop empty state
-- [ ] Run `npx tsc --noEmit`
+- [x] Add conditional empty state rendering
+- [x] Style consistently with loop empty state
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -383,7 +383,7 @@ Update existing tests and add new ones for the changed behavior.
 | 4 | Save `worktreePath`/`branch` from event | Done |
 | 5 | Reconcile one-shot entries in `syncActiveSession()` | Done |
 | 6 | Load one-shot events/traces on startup | Done |
-| 7 | Add empty state to `OneShotDetail` | Not Started |
+| 7 | Add empty state to `OneShotDetail` | Done |
 | 8 | Add `ResumeState` and refactor runner | Not Started |
 | 9 | Add `resume_oneshot` Tauri command | Not Started |
 | 10 | Add `resumeOneShot` store action and wire UI | Not Started |
