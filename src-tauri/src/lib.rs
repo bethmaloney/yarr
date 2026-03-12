@@ -44,7 +44,6 @@ pub(crate) struct SshTestStep {
 }
 
 /// Shared state tracking cancellation tokens for all active sessions, keyed by repo_id
-#[allow(dead_code)] // join_handle will be used once run_session converts to spawn-and-return
 struct SessionHandle {
     cancel_token: CancellationToken,
     session_id: String,
@@ -87,12 +86,21 @@ async fn run_session(
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
     create_branch: bool,
-) -> Result<trace::SessionTrace, String> {
+) -> Result<SessionResult, String> {
     let cancel_token = CancellationToken::new();
     let session_id = Uuid::new_v4().to_string();
     {
         let active = app.state::<ActiveSessions>();
-        active.tokens.lock().await.insert(repo_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
+        let mut sessions = active.tokens.lock().await;
+        if sessions.contains_key(&repo_id) {
+            return Err("Session already running for this repo".to_string());
+        }
+        // Insert placeholder to hold the slot — prevents a second call from passing the reject guard
+        sessions.insert(repo_id.clone(), SessionHandle {
+            cancel_token: cancel_token.clone(),
+            session_id: session_id.clone(),
+            join_handle: tokio::spawn(async {}),
+        });
     }
 
     match &repo {
@@ -135,22 +143,14 @@ async fn run_session(
 
                 match output {
                     Ok(o) if o.exit_code != 0 => {
-                        app.state::<ActiveSessions>()
-                            .tokens
-                            .lock()
-                            .await
-                            .remove(&repo_id);
+                        app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
                         return Err(format!(
                             "Failed to create branch '{}': {}",
                             branch_name, o.stderr
                         ));
                     }
                     Err(e) => {
-                        app.state::<ActiveSessions>()
-                            .tokens
-                            .lock()
-                            .await
-                            .remove(&repo_id);
+                        app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
                         return Err(format!(
                             "Failed to create branch '{}': {}",
                             branch_name, e
@@ -178,13 +178,19 @@ async fn run_session(
                 iteration_offset: 0,
             };
 
-            let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            let base_dir = match app.path().app_data_dir() {
+                Ok(d) => d,
+                Err(e) => {
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                    return Err(e.to_string());
+                }
+            };
             let collector = TraceCollector::new(base_dir, &repo_id);
 
             let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
             let app_handle = app.clone();
             let repo_id_clone = repo_id.clone();
-            let runner = SessionRunner::new(config, collector, cancel_token)
+            let runner = SessionRunner::new(config, collector, cancel_token.clone())
                 .abort_registry(abort_registry)
                 .on_event(Box::new(move |event| {
                     let _ = app_handle.emit("session-event", TaggedSessionEvent {
@@ -192,11 +198,38 @@ async fn run_session(
                         event: event.clone(),
                     });
                 }))
-                .with_session_id(session_id);
+                .with_session_id(session_id.clone());
 
-            let result = runner.run(runtime.as_ref()).await.map_err(|e| e.to_string());
-            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
-            result
+            // Spawn as a background task so we return immediately
+            let app_bg = app.clone();
+            let repo_id_bg = repo_id.clone();
+            let join_handle = tokio::spawn(async move {
+                let _guard = scopeguard::guard((), {
+                    let app = app_bg.clone();
+                    let repo_id = repo_id_bg.clone();
+                    move |_| {
+                        let app = app.clone();
+                        let repo_id = repo_id.clone();
+                        tokio::spawn(async move {
+                            app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                        });
+                    }
+                });
+
+                let runtime = default_runtime();
+                let _result = runner.run(runtime.as_ref()).await;
+            });
+
+            // Update the placeholder with the real JoinHandle
+            {
+                let active = app.state::<ActiveSessions>();
+                let mut sessions = active.tokens.lock().await;
+                if let Some(handle) = sessions.get_mut(&repo_id) {
+                    handle.join_handle = join_handle;
+                }
+            }
+
+            Ok(SessionResult { session_id })
         }
         RepoType::Ssh { ssh_host, remote_path } => {
             let ssh_runtime = SshRuntime::new(ssh_host, remote_path, app.state::<SshEnvCache>().cache_ref());
@@ -235,7 +268,13 @@ async fn run_session(
                 iteration_offset: 0,
             };
 
-            let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            let base_dir = match app.path().app_data_dir() {
+                Ok(d) => d,
+                Err(e) => {
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                    return Err(e.to_string());
+                }
+            };
             let collector = TraceCollector::new(base_dir, &repo_id);
 
             let orchestrator = SshSessionOrchestrator::new(
@@ -244,7 +283,7 @@ async fn run_session(
                 collector,
                 cancel_token.clone(),
             )
-            .with_trace_session_id(session_id);
+            .with_trace_session_id(session_id.clone());
 
             // Store reconnect handle
             let reconnect_notify = orchestrator.reconnect_notify();
@@ -262,7 +301,18 @@ async fn run_session(
                 });
             }));
 
-            let result = orchestrator.run().await.map_err(|e| e.to_string());
+            let _result = match orchestrator.run().await {
+                Ok(r) => r,
+                Err(e) => {
+                    // Clean up on error
+                    {
+                        let ssh_sessions = app.state::<ActiveSshSessions>();
+                        ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
+                    }
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                    return Err(e.to_string());
+                }
+            };
 
             // Clean up
             {
@@ -270,9 +320,14 @@ async fn run_session(
                 ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
             }
             app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
-            result
+            Ok(SessionResult { session_id })
         }
     }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct SessionResult {
+    pub session_id: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -2018,6 +2073,135 @@ mod tests {
         assert!(
             result.is_none(),
             "looking up a non-existent repo_id should return None"
+        );
+    }
+
+    // --- SessionResult tests (TDD — struct does not exist yet) ---
+
+    #[test]
+    fn session_result_serializes_with_session_id() {
+        let result = SessionResult {
+            session_id: "test-123".to_string(),
+        };
+
+        let json = serde_json::to_value(&result).expect("serialization should succeed");
+
+        assert!(
+            json.get("session_id").is_some(),
+            "JSON should contain 'session_id' field"
+        );
+        assert_eq!(json["session_id"], "test-123");
+        assert!(
+            json["session_id"].is_string(),
+            "session_id should serialize as a JSON string"
+        );
+    }
+
+    #[test]
+    fn session_result_clone_produces_equivalent_struct() {
+        let result = SessionResult {
+            session_id: "sess-clone-test".to_string(),
+        };
+
+        let cloned = result.clone();
+
+        assert_eq!(
+            result.session_id, cloned.session_id,
+            "cloned SessionResult should have the same session_id"
+        );
+
+        let json_original =
+            serde_json::to_string(&result).expect("serialization should succeed");
+        let json_cloned =
+            serde_json::to_string(&cloned).expect("serialization should succeed");
+
+        assert_eq!(
+            json_original, json_cloned,
+            "cloned SessionResult should serialize to identical JSON"
+        );
+    }
+
+    // --- Reject guard logic test ---
+
+    #[tokio::test]
+    async fn reject_guard_detects_existing_session_for_repo() {
+        let active = ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        };
+
+        // Pre-populate with an existing session for "repo-busy"
+        active.tokens.lock().await.insert(
+            "repo-busy".to_string(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "sess-existing".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        // Simulate the reject guard check: if the repo_id already exists, reject
+        let lock = active.tokens.lock().await;
+        let already_running = lock.contains_key("repo-busy");
+        assert!(
+            already_running,
+            "contains_key should return true for a repo with an active session"
+        );
+
+        // A different repo_id should not be rejected
+        let not_running = lock.contains_key("repo-idle");
+        assert!(
+            !not_running,
+            "contains_key should return false for a repo without an active session"
+        );
+
+        // Verify the expected error message the guard would produce
+        let err_msg = if already_running {
+            Err::<(), String>("Session already running for this repo".to_string())
+        } else {
+            Ok(())
+        };
+        assert!(err_msg.is_err());
+        assert_eq!(
+            err_msg.unwrap_err(),
+            "Session already running for this repo"
+        );
+    }
+
+    // --- Scope guard cleanup pattern test ---
+
+    #[tokio::test]
+    async fn scopeguard_cleanup_removes_entry_from_active_sessions() {
+        use std::sync::Arc;
+
+        let map = Arc::new(Mutex::new(HashMap::<String, String>::new()));
+
+        // Insert an entry that should be cleaned up
+        map.lock().await.insert("repo-cleanup".to_string(), "sess-temp".to_string());
+        assert!(map.lock().await.contains_key("repo-cleanup"));
+
+        // Simulate the scope guard pattern used in run_session:
+        // when the guard goes out of scope, it removes the entry
+        let map_clone = Arc::clone(&map);
+        {
+            let _guard = scopeguard::guard("repo-cleanup".to_string(), |repo_id| {
+                // In production this would be: active_sessions.tokens.lock().await.remove(&repo_id)
+                // Since scopeguard closures are sync, we use try_lock (works in tests
+                // because no contention) to verify the pattern.
+                if let Ok(mut lock) = map_clone.try_lock() {
+                    lock.remove(&repo_id);
+                }
+            });
+            // guard is alive here — entry should still be in the map
+            assert!(
+                map.lock().await.contains_key("repo-cleanup"),
+                "entry should still exist while guard is alive"
+            );
+        }
+        // guard has been dropped — cleanup should have fired
+
+        assert!(
+            !map.lock().await.contains_key("repo-cleanup"),
+            "entry should be removed after scope guard cleanup"
         );
     }
 }

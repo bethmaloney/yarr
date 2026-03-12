@@ -188,14 +188,14 @@ Convert the `RepoType::Local` branch of `run_session` from blocking to spawn-and
 - Note: the reject guard insert and the JoinHandle registration are two separate steps. Insert a placeholder first (with a dummy JoinHandle or use a two-phase approach), or insert after spawn. Since spawn happens synchronously (it returns the handle immediately), insert after spawn is safe.
 
 **Checklist:**
-- [ ] Define `SessionResult` struct
-- [ ] Add reject guard before any setup
-- [ ] Wrap runner execution in `tokio::spawn`
-- [ ] Add scope guard inside spawn for `ActiveSessions` cleanup
-- [ ] Emit `session_complete` on error paths inside spawn
-- [ ] Store `JoinHandle` in `ActiveSessions`
-- [ ] Return `SessionResult { session_id }` immediately
-- [ ] `cd src-tauri && cargo check`
+- [x] Define `SessionResult` struct
+- [x] Add reject guard before any setup
+- [x] Wrap runner execution in `tokio::spawn`
+- [x] Add scope guard inside spawn for `ActiveSessions` cleanup
+- [ ] Emit `session_complete` on error paths inside spawn (deferred to Task 9)
+- [x] Store `JoinHandle` in `ActiveSessions`
+- [x] Return `SessionResult { session_id }` immediately
+- [x] `cd src-tauri && cargo check`
 
 ---
 
@@ -393,7 +393,7 @@ Verify the full lifecycle works end-to-end.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add scopeguard + SessionHandle struct | Done |
-| 2 | Convert run_session local to spawn-and-return | Not Started |
+| 2 | Convert run_session local to spawn-and-return | Done |
 | 3 | Convert run_session SSH to spawn-and-return | Not Started |
 | 4 | Add scope guard to 1-shot spawn | Not Started |
 | 5 | Update frontend runSession to fire-and-forget | Not Started |
