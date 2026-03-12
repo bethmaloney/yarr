@@ -45,10 +45,6 @@ vi.mock("./store", () => ({
   }),
 }));
 
-vi.mock("./hooks/useBranchInfo", () => ({
-  useBranchInfo: () => new Map(),
-}));
-
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockResolvedValue([]),
 }));

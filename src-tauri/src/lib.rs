@@ -30,13 +30,6 @@ pub(crate) struct TaggedSessionEvent {
     event: SessionEvent,
 }
 
-#[derive(Debug, serde::Serialize, Clone)]
-pub(crate) struct BranchInfo {
-    name: String,
-    ahead: Option<u32>,
-    behind: Option<u32>,
-}
-
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RepoGitStatus {
@@ -681,34 +674,6 @@ fn generate_branch_name(plan_file: &str) -> String {
 }
 
 #[tauri::command]
-async fn get_branch_info(app: tauri::AppHandle, repo: RepoType) -> Result<BranchInfo, String> {
-    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
-    let timeout = std::time::Duration::from_secs(30);
-
-    let branch_output = rt
-        .run_command("git branch --show-current", &working_dir, timeout)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if branch_output.exit_code != 0 {
-        return Err(branch_output.stderr);
-    }
-
-    let name = branch_output.stdout.trim().to_string();
-
-    let rev_list_result = rt
-        .run_command("git rev-list --left-right --count HEAD...@{upstream}", &working_dir, timeout)
-        .await;
-
-    let (ahead, behind) = match rev_list_result {
-        Ok(output) if output.exit_code == 0 => parse_rev_list_output(&output.stdout),
-        _ => (None, None),
-    };
-
-    Ok(BranchInfo { name, ahead, behind })
-}
-
-#[tauri::command]
 async fn get_repo_git_status(app: tauri::AppHandle, repo: RepoType, fetch: bool) -> Result<RepoGitStatus, String> {
     let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
 
@@ -986,7 +951,7 @@ pub fn run() {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
         .manage(SshEnvCache::default())
-        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {
@@ -1493,38 +1458,6 @@ mod tests {
         assert_eq!(deserialized.conflict_prompt, original.conflict_prompt);
         assert_eq!(deserialized.model, original.model);
         assert_eq!(deserialized.max_push_retries, original.max_push_retries);
-    }
-
-    // --- BranchInfo serialization tests ---
-
-    #[test]
-    fn branch_info_serializes_with_all_fields() {
-        let info = BranchInfo {
-            name: "feature/login".to_string(),
-            ahead: Some(3),
-            behind: Some(5),
-        };
-
-        let json = serde_json::to_value(&info).expect("serialization should succeed");
-
-        assert_eq!(json["name"], "feature/login");
-        assert_eq!(json["ahead"], 3);
-        assert_eq!(json["behind"], 5);
-    }
-
-    #[test]
-    fn branch_info_serializes_with_none_ahead_behind() {
-        let info = BranchInfo {
-            name: "main".to_string(),
-            ahead: None,
-            behind: None,
-        };
-
-        let json = serde_json::to_value(&info).expect("serialization should succeed");
-
-        assert_eq!(json["name"], "main");
-        assert!(json["ahead"].is_null(), "ahead should serialize as null");
-        assert!(json["behind"].is_null(), "behind should serialize as null");
     }
 
     // --- parse_rev_list_output tests ---

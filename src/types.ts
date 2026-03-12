@@ -15,12 +15,6 @@ export type GitSyncConfig = {
   maxPushRetries: number;
 };
 
-export type BranchInfo = {
-  name: string;
-  ahead: number | null;
-  behind: number | null;
-};
-
 export type RepoGitStatus = {
   branchName: string;
   dirtyCount: number;

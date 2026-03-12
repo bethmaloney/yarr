@@ -309,12 +309,12 @@ Clean up the old hook and command now that everything uses the new ones.
 - Update any remaining references
 
 **Checklist:**
-- [ ] Delete `src/hooks/useBranchInfo.ts`
-- [ ] Remove `get_branch_info` from `src-tauri/src/lib.rs`
-- [ ] Remove from Tauri builder registration
-- [ ] Clean up `BranchInfo` type if unused
-- [ ] Update remaining imports
-- [ ] Verify: `npx tsc --noEmit && cd src-tauri && cargo check`
+- [x] Delete `src/hooks/useBranchInfo.ts`
+- [x] Remove `get_branch_info` from `src-tauri/src/lib.rs`
+- [x] Remove from Tauri builder registration
+- [x] Clean up `BranchInfo` type if unused
+- [x] Update remaining imports
+- [x] Verify: `npx tsc --noEmit && cd src-tauri && cargo check`
 
 ---
 
@@ -362,5 +362,5 @@ Update existing branch display tests and add new tests for git status polling.
 | 6 | Update Home page repo cards | Done |
 | 7 | Update RepoDetail page branch chip | Done |
 | 8 | Add auto-fetch toggle to repo config sheet | Done |
-| 9 | Remove `useBranchInfo` and `get_branch_info` | Not Started |
+| 9 | Remove `useBranchInfo` and `get_branch_info` | Done |
 | 10 | Update E2E tests | Not Started |

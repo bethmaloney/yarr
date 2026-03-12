@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { RepoConfig } from "./repos";
-import type { BranchInfo } from "./types";
-
-/** Build the repo payload for invoking get_branch_info */
+/** Build the repo payload for invoking get_repo_git_status */
 function buildRepoPayload(repo: RepoConfig) {
   return repo.type === "local"
     ? { type: "local" as const, path: repo.path }
@@ -120,105 +118,6 @@ describe("buildRepoPayload", () => {
   });
 });
 
-describe("branch info fetching with Promise.allSettled", () => {
-  it("maps fulfilled results back to a Map keyed by repo ID", async () => {
-    const repos: RepoConfig[] = [
-      makeLocalRepo({ id: "repo-a" }),
-      makeSshRepo({ id: "repo-b" }),
-    ];
-
-    const branchResults: BranchInfo[] = [
-      { name: "main", ahead: 0, behind: 0 },
-      { name: "develop", ahead: 2, behind: 1 },
-    ];
-
-    // Simulate Promise.allSettled with fulfilled promises
-    const results = await Promise.allSettled(
-      repos.map((_repo, i) => Promise.resolve(branchResults[i])),
-    );
-
-    const branchMap = new Map<string, string>();
-    results.forEach((result, i) => {
-      if (result.status === "fulfilled" && result.value) {
-        branchMap.set(repos[i].id, result.value.name);
-      }
-    });
-
-    expect(branchMap.size).toBe(2);
-    expect(branchMap.get("repo-a")).toBe("main");
-    expect(branchMap.get("repo-b")).toBe("develop");
-  });
-
-  it("skips rejected promises without affecting other entries", async () => {
-    const repos: RepoConfig[] = [
-      makeLocalRepo({ id: "repo-a" }),
-      makeSshRepo({ id: "repo-b" }),
-      makeLocalRepo({ id: "repo-c", path: "/home/beth/repos/third" }),
-    ];
-
-    const results = await Promise.allSettled([
-      Promise.resolve<BranchInfo>({ name: "main", ahead: 0, behind: 0 }),
-      Promise.reject(new Error("SSH connection failed")),
-      Promise.resolve<BranchInfo>({
-        name: "feature/x",
-        ahead: 3,
-        behind: null,
-      }),
-    ]);
-
-    const branchMap = new Map<string, string>();
-    results.forEach((result, i) => {
-      if (result.status === "fulfilled" && result.value) {
-        branchMap.set(repos[i].id, result.value.name);
-      }
-    });
-
-    expect(branchMap.size).toBe(2);
-    expect(branchMap.get("repo-a")).toBe("main");
-    expect(branchMap.has("repo-b")).toBe(false);
-    expect(branchMap.get("repo-c")).toBe("feature/x");
-  });
-
-  it("returns empty map when all promises reject", async () => {
-    const repos: RepoConfig[] = [
-      makeLocalRepo({ id: "repo-a" }),
-      makeSshRepo({ id: "repo-b" }),
-    ];
-
-    const promises: Promise<BranchInfo>[] = [
-      Promise.reject(new Error("not a git repo")),
-      Promise.reject(new Error("SSH timeout")),
-    ];
-    const results = await Promise.allSettled(promises);
-
-    const branchMap = new Map<string, string>();
-    results.forEach((result, i) => {
-      if (result.status === "fulfilled" && result.value) {
-        branchMap.set(repos[i].id, result.value.name);
-      }
-    });
-
-    expect(branchMap.size).toBe(0);
-  });
-
-  it("returns empty map when repos list is empty", async () => {
-    const repos: RepoConfig[] = [];
-
-    const results = await Promise.allSettled(
-      repos.map(() => Promise.resolve<BranchInfo | null>(null)),
-    );
-
-    const branchMap = new Map<string, string>();
-    results.forEach((result, i) => {
-      if (result.status === "fulfilled" && result.value) {
-        branchMap.set(repos[i].id, result.value.name);
-      }
-    });
-
-    expect(branchMap.size).toBe(0);
-  });
-});
-
 describe("buildRepoPayload produces correct payloads for branch info fetch", () => {
   it("builds payloads for a mixed list of local and ssh repos", () => {
     const repos: RepoConfig[] = [
@@ -241,28 +140,3 @@ describe("buildRepoPayload produces correct payloads for branch info fetch", () 
   });
 });
 
-describe("BranchInfo type shape", () => {
-  it("has the expected shape with all fields populated", () => {
-    const info: BranchInfo = {
-      name: "feature/branch-label",
-      ahead: 3,
-      behind: 1,
-    };
-
-    expect(info.name).toBe("feature/branch-label");
-    expect(info.ahead).toBe(3);
-    expect(info.behind).toBe(1);
-  });
-
-  it("supports null for ahead and behind", () => {
-    const info: BranchInfo = {
-      name: "main",
-      ahead: null,
-      behind: null,
-    };
-
-    expect(info.name).toBe("main");
-    expect(info.ahead).toBeNull();
-    expect(info.behind).toBeNull();
-  });
-});
