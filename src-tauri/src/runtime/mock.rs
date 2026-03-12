@@ -11,6 +11,7 @@ pub struct MockRuntime {
     call_count: AtomicUsize,
     pub command_results: Vec<CommandOutput>,
     command_call_count: AtomicUsize,
+    pub env_override: Option<HashMap<String, String>>,
 }
 
 /// What a single mock invocation should emit
@@ -44,6 +45,7 @@ impl MockRuntime {
             call_count: AtomicUsize::new(0),
             command_results: Vec::new(),
             command_call_count: AtomicUsize::new(0),
+            env_override: None,
         }
     }
 }
@@ -181,6 +183,13 @@ impl RuntimeProvider for MockRuntime {
         Ok(())
     }
 
+    async fn resolve_env(&self) -> Result<HashMap<String, String>> {
+        match &self.env_override {
+            Some(env) => Ok(env.clone()),
+            None => Ok(std::env::vars().collect()),
+        }
+    }
+
     async fn run_command(
         &self,
         _command: &str,
@@ -263,5 +272,78 @@ mod tests {
             .expect("second call");
         assert_eq!(out2.exit_code, 0);
         assert_eq!(out2.stdout, "second");
+    }
+
+    // ---------------------------------------------------------------
+    // Tests for configurable resolve_env
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn resolve_env_no_override_returns_process_env() {
+        let runtime = MockRuntime::completing_after(1);
+        assert!(runtime.env_override.is_none());
+
+        let env = runtime
+            .resolve_env()
+            .await
+            .expect("resolve_env should succeed");
+
+        // With no override, should return process env which always has PATH
+        assert!(
+            env.contains_key("PATH") || env.contains_key("Path"),
+            "without env_override, resolve_env should return process env containing PATH"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_env_with_override_returns_custom_map() {
+        let mut runtime = MockRuntime::completing_after(1);
+        let custom_env = HashMap::from([
+            ("MY_VAR".to_string(), "hello".to_string()),
+            ("ANOTHER".to_string(), "world".to_string()),
+        ]);
+        runtime.env_override = Some(custom_env.clone());
+
+        let env = runtime
+            .resolve_env()
+            .await
+            .expect("resolve_env should succeed");
+
+        assert_eq!(env.len(), 2);
+        assert_eq!(env.get("MY_VAR").unwrap(), "hello");
+        assert_eq!(env.get("ANOTHER").unwrap(), "world");
+        // Should NOT contain process env vars when override is set
+        assert!(
+            !env.contains_key("PATH"),
+            "with env_override set, resolve_env should not include process env"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_env_with_empty_override_returns_empty_map() {
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.env_override = Some(HashMap::new());
+
+        let env = runtime
+            .resolve_env()
+            .await
+            .expect("resolve_env should succeed");
+
+        assert!(
+            env.is_empty(),
+            "env_override of empty map should yield empty result"
+        );
+    }
+
+    #[test]
+    fn env_warning_returns_none_by_default() {
+        // MockRuntime does not override env_warning(), so it inherits the
+        // trait default which returns None.
+        let runtime = MockRuntime::completing_after(1);
+        let warning = runtime.env_warning();
+        assert_eq!(
+            warning, None,
+            "MockRuntime env_warning() should return None (trait default)"
+        );
     }
 }

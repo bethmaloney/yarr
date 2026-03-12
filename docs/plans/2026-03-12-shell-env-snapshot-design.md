@@ -275,10 +275,10 @@ Ensure MockRuntime and existing tests still pass, add new tests.
 - Verify `cargo test` passes
 
 **Checklist:**
-- [ ] Update MockRuntime `resolve_env`
-- [ ] Update SSH test `SshRuntime::new()` calls
-- [ ] Add edge case tests for `snapshot_shell_env`
-- [ ] `cd src-tauri && cargo test`
+- [x] Update MockRuntime `resolve_env`
+- [x] Update SSH test `SshRuntime::new()` calls
+- [x] Add edge case tests for `snapshot_shell_env`
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -293,4 +293,4 @@ Ensure MockRuntime and existing tests still pass, add new tests.
 | 5 | Implement `resolve_env` for SshRuntime | Done |
 | 6 | Wire up `SshEnvCache` in Tauri state | Done |
 | 7 | Surface warnings as toast notifications | Done |
-| 8 | Update tests | Not Started |
+| 8 | Update tests | Done |

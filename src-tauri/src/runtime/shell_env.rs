@@ -385,4 +385,179 @@ mod tests {
 
         assert!(result.is_err(), "expected timeout error");
     }
+
+    #[test]
+    fn test_parse_combined_common_and_ssh_denylist() {
+        let marker = "MARKER_COMBINED";
+        let stdout = build_env_stdout(
+            marker,
+            &[
+                "HOME=/home/user",
+                // COMMON_DENYLIST entries
+                "_=/usr/bin/env",
+                "SHLVL=2",
+                "PWD=/tmp",
+                "OLDPWD=/home",
+                // SSH_DENYLIST entries
+                "SSH_AUTH_SOCK=/tmp/ssh-xxx/agent.123",
+                "SSH_CONNECTION=10.0.0.1 12345 10.0.0.2 22",
+                "SSH_CLIENT=10.0.0.1 12345 22",
+                "SSH_TTY=/dev/pts/0",
+                // Should survive both denylists
+                "EDITOR=vim",
+                "LANG=en_US.UTF-8",
+            ],
+        );
+
+        let mut combined: Vec<&str> = COMMON_DENYLIST.to_vec();
+        combined.extend_from_slice(SSH_DENYLIST);
+
+        let result = parse_snapshot_output(&stdout, marker, &combined).unwrap();
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(result.get("HOME").unwrap(), "/home/user");
+        assert_eq!(result.get("EDITOR").unwrap(), "vim");
+        assert_eq!(result.get("LANG").unwrap(), "en_US.UTF-8");
+        // Verify all COMMON_DENYLIST entries are filtered
+        assert!(!result.contains_key("_"));
+        assert!(!result.contains_key("SHLVL"));
+        assert!(!result.contains_key("PWD"));
+        assert!(!result.contains_key("OLDPWD"));
+        // Verify all SSH_DENYLIST entries are filtered
+        assert!(!result.contains_key("SSH_AUTH_SOCK"));
+        assert!(!result.contains_key("SSH_CONNECTION"));
+        assert!(!result.contains_key("SSH_CLIENT"));
+        assert!(!result.contains_key("SSH_TTY"));
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_shell_env_non_zero_exit_with_valid_output() {
+        // An interactive shell may exit non-zero (e.g., last command in .bashrc
+        // fails), but the env output between markers is still valid.
+        let spawn_fn = |cmd: String| async move {
+            let echo_prefix = "echo -n ";
+            let marker_start = cmd.find(echo_prefix).expect("should contain echo -n")
+                + echo_prefix.len();
+            let marker_end = cmd[marker_start..]
+                .find(';')
+                .expect("should contain semicolon after marker");
+            let marker = &cmd[marker_start..marker_start + marker_end];
+
+            let mut stdout = Vec::new();
+            stdout.extend_from_slice(marker.as_bytes());
+            stdout.extend_from_slice(b"HOME=/home/testuser");
+            stdout.push(0);
+            stdout.extend_from_slice(b"LANG=C.UTF-8");
+            stdout.extend_from_slice(marker.as_bytes());
+
+            // Simulate non-zero exit via ExitStatus
+            // We can't construct a non-zero ExitStatus directly in stable Rust,
+            // so we use Command to produce one.
+            let status = std::process::Command::new("sh")
+                .arg("-c")
+                .arg("exit 1")
+                .status()
+                .expect("should be able to run sh");
+
+            Ok(std::process::Output {
+                status,
+                stdout,
+                stderr: b"bash: some_rc_cmd: command not found\n".to_vec(),
+            })
+        };
+
+        let result = snapshot_shell_env(spawn_fn, LOCAL_TIMEOUT, &[]).await.unwrap();
+
+        assert_eq!(result.get("HOME").unwrap(), "/home/testuser");
+        assert_eq!(result.get("LANG").unwrap(), "C.UTF-8");
+    }
+
+    #[test]
+    fn test_parse_value_with_empty_value() {
+        let marker = "MARKER_EMPTYVAL";
+        let stdout = build_env_stdout(
+            marker,
+            &["EMPTY_VAR=", "NORMAL=hello", "ALSO_EMPTY="],
+        );
+
+        let result = parse_snapshot_output(&stdout, marker, &[]).unwrap();
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(
+            result.get("EMPTY_VAR").unwrap(),
+            "",
+            "var with empty value after '=' should parse as empty string"
+        );
+        assert_eq!(result.get("NORMAL").unwrap(), "hello");
+        assert_eq!(
+            result.get("ALSO_EMPTY").unwrap(),
+            "",
+            "another var with empty value should also parse as empty string"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_shell_env_with_ssh_extra_denylist() {
+        // Passing SSH_DENYLIST as extra_denylist should filter both COMMON_DENYLIST
+        // (always applied) and SSH_DENYLIST vars.
+        let spawn_fn = |cmd: String| async move {
+            let echo_prefix = "echo -n ";
+            let marker_start = cmd.find(echo_prefix).expect("should contain echo -n")
+                + echo_prefix.len();
+            let marker_end = cmd[marker_start..]
+                .find(';')
+                .expect("should contain semicolon after marker");
+            let marker = &cmd[marker_start..marker_start + marker_end];
+
+            let mut stdout = Vec::new();
+            stdout.extend_from_slice(marker.as_bytes());
+            // Vars that should survive
+            stdout.extend_from_slice(b"HOME=/home/user");
+            stdout.push(0);
+            stdout.extend_from_slice(b"EDITOR=vim");
+            stdout.push(0);
+            // COMMON_DENYLIST var — should be filtered
+            stdout.extend_from_slice(b"SHLVL=3");
+            stdout.push(0);
+            stdout.extend_from_slice(b"PWD=/home/user");
+            stdout.push(0);
+            // SSH_DENYLIST var — should be filtered via extra_denylist
+            stdout.extend_from_slice(b"SSH_AUTH_SOCK=/tmp/ssh-abc/agent.999");
+            stdout.push(0);
+            stdout.extend_from_slice(b"SSH_TTY=/dev/pts/1");
+            stdout.extend_from_slice(marker.as_bytes());
+
+            Ok(std::process::Output {
+                status: std::process::ExitStatus::default(),
+                stdout,
+                stderr: Vec::new(),
+            })
+        };
+
+        let result = snapshot_shell_env(spawn_fn, LOCAL_TIMEOUT, SSH_DENYLIST)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result.get("HOME").unwrap(), "/home/user");
+        assert_eq!(result.get("EDITOR").unwrap(), "vim");
+        // COMMON_DENYLIST vars filtered
+        assert!(
+            !result.contains_key("SHLVL"),
+            "SHLVL should be filtered by COMMON_DENYLIST"
+        );
+        assert!(
+            !result.contains_key("PWD"),
+            "PWD should be filtered by COMMON_DENYLIST"
+        );
+        // SSH_DENYLIST vars filtered via extra_denylist
+        assert!(
+            !result.contains_key("SSH_AUTH_SOCK"),
+            "SSH_AUTH_SOCK should be filtered by SSH_DENYLIST extra_denylist"
+        );
+        assert!(
+            !result.contains_key("SSH_TTY"),
+            "SSH_TTY should be filtered by SSH_DENYLIST extra_denylist"
+        );
+    }
 }
