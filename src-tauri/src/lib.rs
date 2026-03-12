@@ -37,6 +37,15 @@ pub(crate) struct BranchInfo {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RepoGitStatus {
+    branch_name: String,
+    dirty_count: u32,
+    ahead: Option<u32>,
+    behind: Option<u32>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct SshTestStep {
     step: String,
     status: String,
@@ -588,6 +597,13 @@ fn parse_rev_list_output(output: &str) -> (Option<u32>, Option<u32>) {
     (None, None)
 }
 
+fn count_porcelain_lines(output: &str) -> u32 {
+    output
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count() as u32
+}
+
 fn resolve_runtime(repo: &RepoType, ssh_env_cache: &SshEnvCache) -> (Box<dyn RuntimeProvider>, PathBuf) {
     match repo {
         RepoType::Local { path } => (default_runtime(), PathBuf::from(path)),
@@ -633,6 +649,68 @@ async fn get_branch_info(app: tauri::AppHandle, repo: RepoType) -> Result<Branch
     };
 
     Ok(BranchInfo { name, ahead, behind })
+}
+
+#[tauri::command]
+async fn get_repo_git_status(app: tauri::AppHandle, repo: RepoType, fetch: bool) -> Result<RepoGitStatus, String> {
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
+
+    // Optionally fetch from origin (non-fatal on failure)
+    if fetch {
+        let fetch_timeout = std::time::Duration::from_secs(60);
+        match rt.run_command("git fetch origin", &working_dir, fetch_timeout).await {
+            Ok(output) if output.exit_code != 0 => {
+                tracing::warn!(stderr = %output.stderr, "git fetch origin failed (non-fatal)");
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "git fetch origin failed (non-fatal)");
+            }
+            _ => {}
+        }
+    }
+
+    let timeout = std::time::Duration::from_secs(30);
+
+    // Get dirty file count
+    let status_output = rt
+        .run_command("git status --porcelain", &working_dir, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if status_output.exit_code != 0 {
+        return Err(status_output.stderr);
+    }
+
+    let dirty_count = count_porcelain_lines(&status_output.stdout);
+
+    // Get ahead/behind counts (non-fatal if no upstream)
+    let rev_list_result = rt
+        .run_command("git rev-list --left-right --count HEAD...@{upstream}", &working_dir, timeout)
+        .await;
+
+    let (ahead, behind) = match rev_list_result {
+        Ok(output) if output.exit_code == 0 => parse_rev_list_output(&output.stdout),
+        _ => (None, None),
+    };
+
+    // Get current branch name
+    let branch_output = rt
+        .run_command("git branch --show-current", &working_dir, timeout)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if branch_output.exit_code != 0 {
+        return Err(branch_output.stderr);
+    }
+
+    let branch_name = branch_output.stdout.trim().to_string();
+
+    Ok(RepoGitStatus {
+        branch_name,
+        dirty_count,
+        ahead,
+        behind,
+    })
 }
 
 #[tauri::command]
@@ -851,7 +929,7 @@ pub fn run() {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
         .manage(SshEnvCache::default())
-        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_branch_info, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {
@@ -2370,5 +2448,121 @@ mod tests {
             !active_sessions.tokens.lock().await.contains_key(&repo_id),
             "ActiveSessions should be cleaned up even after panic"
         );
+    }
+
+    // --- RepoGitStatus serialization tests ---
+
+    #[test]
+    fn repo_git_status_serializes_with_camel_case_fields() {
+        let status = RepoGitStatus {
+            branch_name: "main".to_string(),
+            dirty_count: 3,
+            ahead: Some(2),
+            behind: Some(1),
+        };
+
+        let json = serde_json::to_value(&status).expect("serialization should succeed");
+
+        assert_eq!(json["branchName"], "main",
+            "branch_name should serialize as camelCase 'branchName'");
+        assert_eq!(json["dirtyCount"], 3,
+            "dirty_count should serialize as camelCase 'dirtyCount'");
+        assert_eq!(json["ahead"], 2,
+            "ahead should serialize as the numeric value when Some");
+        assert_eq!(json["behind"], 1,
+            "behind should serialize as the numeric value when Some");
+    }
+
+    #[test]
+    fn repo_git_status_serializes_none_ahead_behind_as_null() {
+        let status = RepoGitStatus {
+            branch_name: "feature/test".to_string(),
+            dirty_count: 0,
+            ahead: None,
+            behind: None,
+        };
+
+        let json = serde_json::to_value(&status).expect("serialization should succeed");
+
+        assert_eq!(json["branchName"], "feature/test");
+        assert_eq!(json["dirtyCount"], 0);
+        assert!(json["ahead"].is_null(),
+            "ahead should serialize as null when None");
+        assert!(json["behind"].is_null(),
+            "behind should serialize as null when None");
+    }
+
+    #[test]
+    fn repo_git_status_does_not_have_snake_case_fields() {
+        let status = RepoGitStatus {
+            branch_name: "develop".to_string(),
+            dirty_count: 1,
+            ahead: Some(0),
+            behind: None,
+        };
+
+        let json = serde_json::to_value(&status).expect("serialization should succeed");
+
+        assert!(json.get("branch_name").is_none(),
+            "snake_case 'branch_name' should not exist in serialized JSON");
+        assert!(json.get("dirty_count").is_none(),
+            "snake_case 'dirty_count' should not exist in serialized JSON");
+    }
+
+    #[test]
+    fn repo_git_status_clone_produces_equal_json() {
+        let status = RepoGitStatus {
+            branch_name: "main".to_string(),
+            dirty_count: 5,
+            ahead: Some(1),
+            behind: Some(3),
+        };
+
+        let cloned = status.clone();
+
+        let json_original = serde_json::to_string(&status).expect("serialization should succeed");
+        let json_cloned = serde_json::to_string(&cloned).expect("serialization should succeed");
+
+        assert_eq!(json_original, json_cloned,
+            "cloned RepoGitStatus should serialize to identical JSON");
+    }
+
+    // --- count_porcelain_lines tests ---
+
+    #[test]
+    fn count_porcelain_lines_empty_string() {
+        let count = count_porcelain_lines("");
+        assert_eq!(count, 0, "empty string should yield 0 lines");
+    }
+
+    #[test]
+    fn count_porcelain_lines_single_modified_file() {
+        let output = " M src/main.rs\n";
+        let count = count_porcelain_lines(output);
+        assert_eq!(count, 1, "single modified file should yield 1");
+    }
+
+    #[test]
+    fn count_porcelain_lines_multiple_files() {
+        let output = " M src/main.rs\n?? untracked.txt\nA  staged.rs\n";
+        let count = count_porcelain_lines(output);
+        assert_eq!(count, 3, "three files (modified, untracked, staged) should yield 3");
+    }
+
+    #[test]
+    fn count_porcelain_lines_trailing_newline_no_double_count() {
+        // Typical git output ends with a trailing newline
+        let output = " M file1.rs\n M file2.rs\n";
+        let count = count_porcelain_lines(output);
+        assert_eq!(count, 2,
+            "trailing newline should not cause a double-count, expected 2");
+    }
+
+    #[test]
+    fn count_porcelain_lines_whitespace_only_lines_not_counted() {
+        let output = " M file.rs\n   \n\n  \n";
+        let count = count_porcelain_lines(output);
+        assert_eq!(count, 1,
+            "whitespace-only and empty lines should not be counted");
     }
 }

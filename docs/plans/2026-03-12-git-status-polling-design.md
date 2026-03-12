@@ -131,13 +131,13 @@ Create the `get_repo_git_status` backend command that returns branch name, dirty
 - Register the new command in the Tauri builder
 
 **Checklist:**
-- [ ] Add `RepoGitStatus` struct with serde derives
-- [ ] Implement `get_repo_git_status` command
-- [ ] Run `git fetch` conditionally based on `fetch` param
-- [ ] Run `git status --porcelain` and count lines
-- [ ] Reuse ahead/behind logic from `get_branch_info`
-- [ ] Register command in Tauri builder
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `RepoGitStatus` struct with serde derives
+- [x] Implement `get_repo_git_status` command
+- [x] Run `git fetch` conditionally based on `fetch` param
+- [x] Run `git status --porcelain` and count lines
+- [x] Reuse ahead/behind logic from `get_branch_info`
+- [x] Register command in Tauri builder
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -355,7 +355,7 @@ Update existing branch display tests and add new tests for git status polling.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add `autoFetch` to repo config types | Done |
-| 2 | Add `RepoGitStatus` type and new Tauri command | Not Started |
+| 2 | Add `RepoGitStatus` type and new Tauri command | Done |
 | 3 | Add `RepoGitStatus` type to frontend types | Not Started |
 | 4 | Add git status state and actions to Zustand store | Not Started |
 | 5 | Create `useGitStatus` hook with polling | Not Started |
