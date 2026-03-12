@@ -164,11 +164,11 @@ Save the `session_id` to the one-shot entry when the session starts.
 - Recommended: Option A — update `OneShotResult` to include `session_id`, then save it to the entry in `runOneShot`
 
 **Checklist:**
-- [ ] Add `session_id` to `OneShotResult` struct in `lib.rs`
-- [ ] Return `session_id` from `run_oneshot` command
-- [ ] Save `session_id` to the `OneShotEntry` in `store.ts` `runOneShot`
-- [ ] Persist to store
-- [ ] Run `cd src-tauri && cargo check` and `npx tsc --noEmit`
+- [x] Add `session_id` to `OneShotResult` struct in `lib.rs`
+- [x] Return `session_id` from `run_oneshot` command
+- [x] Save `session_id` to the `OneShotEntry` in `store.ts` `runOneShot`
+- [x] Persist to store
+- [x] Run `cd src-tauri && cargo check` and `npx tsc --noEmit`
 
 ---
 
@@ -187,10 +187,10 @@ When the frontend receives `OneShotStarted` with the new fields, update the one-
 - Persist to `oneShotStore`
 
 **Checklist:**
-- [ ] Add handler for `one_shot_started` in event listener
-- [ ] Update entry with `worktreePath` and `branch`
-- [ ] Persist to store
-- [ ] Run `npx tsc --noEmit`
+- [x] Add handler for `one_shot_started` in event listener
+- [x] Update entry with `worktreePath` and `branch`
+- [x] Persist to store
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -379,8 +379,8 @@ Update existing tests and add new ones for the changed behavior.
 |------|-------------|--------|
 | 1 | Add fields to `OneShotEntry` type | Done |
 | 2 | Extend `OneShotStarted` event with worktree/branch | Done |
-| 3 | Persist `session_id` in entry on launch | Not Started |
-| 4 | Save `worktreePath`/`branch` from event | Not Started |
+| 3 | Persist `session_id` in entry on launch | Done |
+| 4 | Save `worktreePath`/`branch` from event | Done |
 | 5 | Reconcile one-shot entries in `syncActiveSession()` | Not Started |
 | 6 | Load one-shot events/traces on startup | Not Started |
 | 7 | Add empty state to `OneShotDetail` | Not Started |

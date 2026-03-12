@@ -252,6 +252,21 @@ export const useAppStore = create<AppStore>((set, get) => {
           next.set(repo_id, { ...session, ...updates });
           set({ sessions: next });
 
+          // Save worktree path and branch from one_shot_started event
+          if (sessionEvent.kind === "one_shot_started") {
+            const oneshotEntries = new Map(get().oneShotEntries);
+            const entry = oneshotEntries.get(repo_id);
+            if (entry) {
+              oneshotEntries.set(repo_id, {
+                ...entry,
+                worktreePath: sessionEvent.worktree_path,
+                branch: sessionEvent.branch,
+              });
+              set({ oneShotEntries: oneshotEntries });
+              oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch(() => {});
+            }
+          }
+
           // Update 1-shot entry status
           if (sessionEvent.kind === "one_shot_complete" || sessionEvent.kind === "one_shot_failed") {
             const oneshotEntries = new Map(get().oneShotEntries);
@@ -464,7 +479,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath,
               };
 
-        const result = await invoke<{ oneshot_id: string }>("run_oneshot", {
+        const result = await invoke<{ oneshot_id: string; session_id: string }>("run_oneshot", {
           repoId,
           repo: repoPayload,
           title,
@@ -482,7 +497,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         // Replace temp entry with real oneshot_id
         const entries = new Map(get().oneShotEntries);
         entries.delete(tempId);
-        const realEntry = { ...entry, id: result.oneshot_id };
+        const realEntry = { ...entry, id: result.oneshot_id, session_id: result.session_id };
         entries.set(result.oneshot_id, realEntry);
         set({ oneShotEntries: entries });
         oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch(() => {});

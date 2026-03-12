@@ -1487,6 +1487,22 @@ describe("runOneShot", () => {
 
     expect(result).toBe("oneshot-xyz");
   });
+
+  it("on success: saves session_id from backend result to entry", async () => {
+    mockInvoke.mockResolvedValue({
+      oneshot_id: "oneshot-xyz",
+      session_id: "sess-123",
+      trace: makeTrace(),
+    });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.has("oneshot-xyz")).toBe(true);
+
+    const entry = entries.get("oneshot-xyz")!;
+    expect(entry.session_id).toBe("sess-123");
+  });
 });
 
 // ===========================================================================
@@ -1951,6 +1967,87 @@ describe("1-shot persistence", () => {
     expect(entries.has("oneshot-abc")).toBe(true);
     expect(entries.get("oneshot-abc")!.id).toBe("oneshot-abc");
     expect(entries.get("oneshot-abc")!.status).toBe("completed");
+  });
+});
+
+// ===========================================================================
+// 13b. one_shot_started event: saves worktreePath and branch
+// ===========================================================================
+
+describe("one_shot_started event", () => {
+  beforeEach(() => {
+    useAppStore.getState().initialize();
+  });
+
+  it("saves worktreePath and branch from one_shot_started event", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+    });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "one_shot_started",
+      worktree_path: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+
+    const entries = useAppStore.getState().oneShotEntries;
+    const updated = entries.get("oneshot-abc")!;
+    expect(updated.worktreePath).toBe("/tmp/wt");
+    expect(updated.branch).toBe("oneshot/fix");
+  });
+
+  it("persists entry after saving worktreePath and branch", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+    });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "one_shot_started",
+      worktree_path: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+
+    // Wait for the async persistence to complete
+    await vi.waitFor(() => {
+      const saved = mockData.get("oneshot-entries") as
+        | [string, OneShotEntry][]
+        | undefined;
+      expect(saved).toBeDefined();
+      const restoredMap = new Map(saved!);
+      expect(restoredMap.get("oneshot-abc")!.worktreePath).toBe("/tmp/wt");
+      expect(restoredMap.get("oneshot-abc")!.branch).toBe("oneshot/fix");
+    });
+  });
+
+  it("ignores one_shot_started for unknown oneshot IDs", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+    });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    // Emit for an unknown ID — should not throw or modify existing entries
+    emitSessionEvent("oneshot-unknown", {
+      kind: "one_shot_started",
+      worktree_path: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.size).toBe(1);
+    const existing = entries.get("oneshot-abc")!;
+    expect(existing.worktreePath).toBeUndefined();
+    expect(existing.branch).toBeUndefined();
   });
 });
 

@@ -387,6 +387,7 @@ pub(crate) struct SessionResult {
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct OneShotResult {
     pub oneshot_id: String,
+    pub session_id: String,
 }
 
 #[tauri::command]
@@ -408,6 +409,7 @@ async fn run_oneshot(
     let oneshot_id = oneshot::generate_oneshot_id();
     let cancel_token = CancellationToken::new();
     let session_id = Uuid::new_v4().to_string();
+    let session_id_for_result = session_id.clone();
     {
         let active = app.state::<ActiveSessions>();
         active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
@@ -490,7 +492,7 @@ async fn run_oneshot(
                 }
             }
 
-            Ok(OneShotResult { oneshot_id })
+            Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
         }
         RepoType::Ssh { .. } => {
             app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
@@ -2120,6 +2122,7 @@ mod tests {
     fn oneshot_result_serializes_with_oneshot_id() {
         let result = OneShotResult {
             oneshot_id: "oneshot-a1b2c3".to_string(),
+            session_id: "sess-test".to_string(),
         };
 
         let json = serde_json::to_value(&result).expect("serialization should succeed");
@@ -2132,6 +2135,7 @@ mod tests {
     fn oneshot_result_clone_produces_equal_json() {
         let result = OneShotResult {
             oneshot_id: "oneshot-d4e5f6".to_string(),
+            session_id: "sess-test".to_string(),
         };
 
         let cloned = result.clone();
@@ -2149,6 +2153,7 @@ mod tests {
     fn oneshot_result_oneshot_id_is_string() {
         let result = OneShotResult {
             oneshot_id: "oneshot-aabbcc".to_string(),
+            session_id: "sess-test".to_string(),
         };
 
         let json = serde_json::to_value(&result).expect("serialization should succeed");
@@ -3163,6 +3168,40 @@ mod tests {
             }
             other => panic!("expected SessionComplete, got {:?}", other),
         }
+    }
+
+    // --- OneShotResult session_id tests (TDD — field does not exist yet) ---
+
+    #[test]
+    fn oneshot_result_serializes_with_session_id() {
+        let result = OneShotResult {
+            oneshot_id: "oneshot-a1b2c3".to_string(),
+            session_id: "sess-abc123".to_string(),
+        };
+
+        let json = serde_json::to_value(&result).expect("serialization should succeed");
+
+        assert!(
+            json.get("session_id").is_some(),
+            "JSON should contain 'session_id' field"
+        );
+        assert_eq!(json["session_id"], "sess-abc123");
+    }
+
+    #[test]
+    fn oneshot_result_session_id_is_string() {
+        let result = OneShotResult {
+            oneshot_id: "oneshot-d4e5f6".to_string(),
+            session_id: "sess-xyz789".to_string(),
+        };
+
+        let json = serde_json::to_value(&result).expect("serialization should succeed");
+
+        assert!(
+            json["session_id"].is_string(),
+            "session_id should serialize as a JSON string, got: {:?}",
+            json["session_id"]
+        );
     }
 
     #[tokio::test]
