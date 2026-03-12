@@ -22,6 +22,8 @@ export function getPhaseFromEvents(events: SessionEvent[]): string {
   if (kinds.has("one_shot_failed")) return "failed";
   if (kinds.has("git_finalize_complete") || kinds.has("one_shot_complete"))
     return "complete";
+  if (kinds.has("git_finalize_started") && kinds.has("git_sync_conflict"))
+    return "finalizing_conflict";
   if (kinds.has("git_finalize_started")) return "finalizing";
   if (kinds.has("implementation_phase_complete"))
     return "implementation_complete";
@@ -41,6 +43,7 @@ const PHASE_LABELS: Record<string, string> = {
   implementation: "Implementation Phase",
   implementation_complete: "Implementation Complete",
   finalizing: "Finalizing...",
+  finalizing_conflict: "Resolving Conflicts...",
   complete: "Complete",
   failed: "Failed",
 };

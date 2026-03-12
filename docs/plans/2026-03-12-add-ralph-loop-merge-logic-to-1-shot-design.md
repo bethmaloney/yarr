@@ -95,17 +95,17 @@ The `Branch` strategy currently does a single `git push -u origin {branch}`. If 
 
 ### Task 4: Frontend — Display Merge Progress During Finalize
 
-**Files to modify:** `src/oneshot-helpers.ts`, `src/pages/OneShotDetail.tsx`
+**Files to modify:** `src/oneshot-helpers.ts`, `src/pages/OneShotDetail.tsx`, `src/iteration-groups.ts`
 
 **Pattern reference:** Existing `getPhaseFromEvents` in `oneshot-helpers.ts:15-33`, and how `EventsList` / `IterationGroup` display `git_sync_*` events.
 
 The frontend already knows how to display `git_sync_*` events in the Ralph loop's iteration view. Since the 1-shot finalize will now emit these same events, we just need to ensure they're visible during the finalize phase.
 
 **Checklist:**
-- [ ] Verify that `git_sync_*` events emitted during finalize are already captured in the session's event list (they should be, since the 1-shot's `emit()` already pushes all events to `accumulated_events` and forwards to the frontend)
-- [ ] In `OneShotDetail.tsx`, ensure that git sync events during the finalize phase are displayed — the `EventsList` component should already show them since they'll be in the events array, but verify this works
-- [ ] In `oneshot-helpers.ts`, consider adding a more specific phase like `"finalizing_conflict"` when `git_finalize_started` is present AND `git_sync_conflict` events are present, so the phase badge can show "Resolving Conflicts..." instead of generic "Finalizing..."
-- [ ] Add the new phase label to `PHASE_LABELS` if adding a new phase string
+- [x] Verify that `git_sync_*` events emitted during finalize are already captured in the session's event list (they should be, since the 1-shot's `emit()` already pushes all events to `accumulated_events` and forwards to the frontend)
+- [x] In `OneShotDetail.tsx`, ensure that git sync events during the finalize phase are displayed — the `EventsList` component should already show them since they'll be in the events array, but verify this works
+- [x] In `oneshot-helpers.ts`, consider adding a more specific phase like `"finalizing_conflict"` when `git_finalize_started` is present AND `git_sync_conflict` events are present, so the phase badge can show "Resolving Conflicts..." instead of generic "Finalizing..."
+- [x] Add the new phase label to `PHASE_LABELS` if adding a new phase string
 
 ### Task 5: Tests
 
@@ -155,5 +155,5 @@ The frontend already knows how to display `git_sync_*` events in the Ralph loop'
 | Task 1: Extract shared merge logic | Complete | `git_merge.rs` with shared function + 7 tests. `SessionRunner::git_sync` refactored to call `git_merge_push` with event translation. 426 tests pass. Note: pre-existing bug — `env_vars` not passed to `ClaudeInvocation` in conflict resolution (both old inline code and new `git_merge.rs` use `HashMap::new()`). |
 | Task 2: MergeToMain with retries | Complete | Replaced naive fetch→rebase→push with `git_merge_push` call. Uses `u32::MAX` as iteration sentinel for GitSync events during finalize. 2 new integration tests (conflict resolution success + all retries fail). 428 tests pass. Pre-existing note: `git branch -d` runs from worktree dir so silently fails (branch checked out there) — cleanup still works via `git worktree remove`. |
 | Task 3: Branch with retries | Complete | Replaced naive single push with `git_merge_push` call. Uses `push_command: "git push origin {branch}"`, `push_u_command: Some("git push -u origin {branch}")`, `fetch_command: "git fetch origin {branch}"`, `rebase_command: "git pull --rebase origin {branch}"`. Same event translation and `GitSyncConfig` default as MergeToMain. 2 new integration tests (retry succeeds + all retries fail). 430 tests pass. |
-| Task 4: Frontend merge progress | Pending | Depends on Tasks 2-3 |
+| Task 4: Frontend merge progress | Complete | Added `finalizing_conflict` phase to `getPhaseFromEvents` (returns "Resolving Conflicts..." when conflicts occur during finalize). Fixed `iteration-groups.ts` to show git_sync_* events as standalone during finalize (no fake iteration group with u32::MAX). 5 new tests. 792 tests pass. |
 | Task 5: Tests | Pending | Depends on Tasks 1-4 |

@@ -16,6 +16,15 @@ export type GroupedEvents = {
   iterations: IterationGroup[];
 };
 
+const GIT_SYNC_EVENTS = new Set([
+  "git_sync_started",
+  "git_sync_push_succeeded",
+  "git_sync_conflict",
+  "git_sync_conflict_resolve_started",
+  "git_sync_conflict_resolve_complete",
+  "git_sync_failed",
+]);
+
 export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
   const standaloneEvents: GroupedEvents["standaloneEvents"] = [];
   const iterations: IterationGroup[] = [];
@@ -65,6 +74,13 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
         startTs: ev._ts,
         endTs: undefined,
       };
+      continue;
+    }
+
+    // Git sync events without an open iteration group (e.g. during finalize)
+    // are shown as standalone events rather than creating a fake iteration group.
+    if (!currentGroup && GIT_SYNC_EVENTS.has(ev.kind)) {
+      standaloneEvents.push({ index: "before", event: ev });
       continue;
     }
 

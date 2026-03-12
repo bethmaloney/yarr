@@ -576,6 +576,83 @@ describe("groupEventsByIteration", () => {
     });
   });
 
+  describe("git_sync events during finalize", () => {
+    it("treats git_sync events as standalone when no iteration group is open", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "git_finalize_started", _ts: 1000 }),
+        makeEvent({
+          kind: "git_sync_started",
+          iteration: 4294967295,
+          _ts: 1100,
+        }),
+        makeEvent({
+          kind: "git_sync_conflict",
+          iteration: 4294967295,
+          _ts: 1200,
+        }),
+        makeEvent({
+          kind: "git_sync_push_succeeded",
+          iteration: 4294967295,
+          _ts: 1300,
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      // All events should be standalone "before" events, not in any iteration group
+      expect(result.iterations).toEqual([]);
+      expect(result.standaloneEvents).toHaveLength(4);
+      expect(result.standaloneEvents[0]).toEqual({
+        index: "before",
+        event: events[0],
+      });
+      expect(result.standaloneEvents[1]).toEqual({
+        index: "before",
+        event: events[1],
+      });
+      expect(result.standaloneEvents[2]).toEqual({
+        index: "before",
+        event: events[2],
+      });
+      expect(result.standaloneEvents[3]).toEqual({
+        index: "before",
+        event: events[3],
+      });
+    });
+
+    it("keeps git_sync events in iteration group when one is open", () => {
+      const events: SessionEvent[] = [
+        makeEvent({
+          kind: "iteration_started",
+          iteration: 1,
+          _ts: 1000,
+        }),
+        makeEvent({
+          kind: "git_sync_started",
+          iteration: 1,
+          _ts: 1100,
+        }),
+        makeEvent({
+          kind: "git_sync_push_succeeded",
+          iteration: 1,
+          _ts: 1200,
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.standaloneEvents).toEqual([]);
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].iteration).toBe(1);
+      expect(result.iterations[0].events).toHaveLength(3);
+      expect(result.iterations[0].events[0].kind).toBe("iteration_started");
+      expect(result.iterations[0].events[1].kind).toBe("git_sync_started");
+      expect(result.iterations[0].events[2].kind).toBe(
+        "git_sync_push_succeeded",
+      );
+    });
+  });
+
   describe("orphaned events (e.g. after sleep/wake)", () => {
     it("creates an implicit group for events without a preceding iteration_started", () => {
       const events: SessionEvent[] = [
