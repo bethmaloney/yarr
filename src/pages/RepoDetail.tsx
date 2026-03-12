@@ -109,6 +109,7 @@ export default function RepoDetail() {
   const [createBranch, setCreateBranch] = useState(true);
   const [autoFetch, setAutoFetch] = useState(true);
   const [plansDir, setPlansDir] = useState("");
+  const [movePlansToCompleted, setMovePlansToCompleted] = useState(true);
   const [gitSyncEnabled, setGitSyncEnabled] = useState(false);
   const [gitSyncModel, setGitSyncModel] = useState("");
   const [gitSyncMaxRetries, setGitSyncMaxRetries] = useState(3);
@@ -176,6 +177,7 @@ export default function RepoDetail() {
     setCreateBranch(repo.createBranch ?? true);
     setAutoFetch(repo.autoFetch ?? (repo.type === "local" ? true : false));
     setPlansDir(repo.plansDir ?? "");
+    setMovePlansToCompleted(repo.movePlansToCompleted ?? true);
     setGitSyncEnabled(repo.gitSync?.enabled ?? false);
     setGitSyncModel(repo.gitSync?.model ?? "");
     setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
@@ -374,6 +376,7 @@ export default function RepoDetail() {
       checks,
       createBranch,
       autoFetch,
+      movePlansToCompleted,
       plansDir: plansDir || undefined,
       gitSync: {
         enabled: gitSyncEnabled,
@@ -918,6 +921,18 @@ export default function RepoDetail() {
                   <span className="text-xs text-muted-foreground font-normal">
                     Automatically fetch from remote every 30 seconds
                   </span>
+                </Label>
+                <Label
+                  htmlFor="move-plans-completed"
+                  className="flex items-center gap-2 text-sm font-normal"
+                >
+                  <Checkbox
+                    id="move-plans-completed"
+                    checked={movePlansToCompleted}
+                    onCheckedChange={(v) => setMovePlansToCompleted(v === true)}
+                    disabled={session.running}
+                  />
+                  Move plans to completed folder after run
                 </Label>
                 <fieldset
                   disabled={session.running}

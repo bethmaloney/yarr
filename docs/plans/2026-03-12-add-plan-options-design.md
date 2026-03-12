@@ -28,10 +28,10 @@ Add two per-repo configuration options for plan management:
 - `plansDir` state initialization at `RepoDetail.tsx:111,175,380`
 
 **Checklist:**
-- [ ] Add `movePlansToCompleted` state: `const [movePlansToCompleted, setMovePlansToCompleted] = useState(true);`
-- [ ] Initialize from repo config in the `useEffect` that syncs state (near line 175): `setMovePlansToCompleted(repo.movePlansToCompleted ?? true);`
-- [ ] Include in `saveSettings()` (near line 380): `movePlansToCompleted`
-- [ ] Add a Checkbox UI element below the Plans Directory input (after line 850), following the `createBranch` checkbox pattern:
+- [x] Add `movePlansToCompleted` state: `const [movePlansToCompleted, setMovePlansToCompleted] = useState(true);`
+- [x] Initialize from repo config in the `useEffect` that syncs state (near line 175): `setMovePlansToCompleted(repo.movePlansToCompleted ?? true);`
+- [x] Include in `saveSettings()` (near line 380): `movePlansToCompleted`
+- [x] Add a Checkbox UI element below the Plans Directory input (after line 850), following the `createBranch` checkbox pattern:
   ```tsx
   <Label htmlFor="move-plans-completed" className="flex items-center gap-2 text-sm font-normal">
     <Checkbox
@@ -130,7 +130,7 @@ Add two per-repo configuration options for plan management:
   - Test that move IS called when `movePlansToCompleted` is `true` (or undefined/default)
   - Test that move is NOT called when `movePlansToCompleted` is `false`
 - [ ] In `store.test.ts`: same for `one_shot_complete` event handler
-- [ ] In `RepoDetail.test.tsx`: verify the new checkbox renders and toggles correctly
+- [x] In `RepoDetail.test.tsx`: verify the new checkbox renders and toggles correctly
 - [ ] Update `OneShotConfig` construction in any Rust tests to include `plans_dir`
 
 ## Progress Tracking
@@ -138,7 +138,7 @@ Add two per-repo configuration options for plan management:
 | Task | Status | Notes |
 |------|--------|-------|
 | 1. Add `movePlansToCompleted` to RepoConfig | Complete | Added to both LocalRepoConfig and SshRepoConfig |
-| 2. Settings UI toggle | Not Started | Follow `createBranch` checkbox pattern |
+| 2. Settings UI toggle | Complete | Added state, useEffect init, saveSettings, and Checkbox UI |
 | 3. Gate auto-move on config | Not Started | Two locations in store.ts |
 | 4. Pass `plansDir` to design prompt | Not Started | Largest task — touches prompt.rs, oneshot.rs, lib.rs, store.ts |
 | 5. Update tests | Not Started | Prompt tests, store tests, UI tests |
