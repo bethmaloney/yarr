@@ -100,10 +100,10 @@ This code is correct in structure but:
 **Pattern reference:** `WslRuntime::run_command` at `wsl.rs:210` which already converts paths via `to_wsl_path`.
 
 **Checklist:**
-- [ ] Verify that `resolve_runtime()` in `lib.rs` (line ~490) returns a `WslRuntime` for `RepoType::Local` when running on Windows. Currently `default_runtime()` handles this — confirm the `move_plan_to_completed` command uses the same logic via `resolve_runtime(&repo)` (line 713). **This is already correct** — `resolve_runtime` calls `default_runtime()` for Local repos.
-- [ ] Verify that `WslRuntime::run_command` converts `working_dir` via `to_wsl_path`. This is confirmed at `wsl.rs:217`.
-- [ ] The `plans_dir` in the shell command (`mkdir -p {plans_dir}/completed && mv ...`) is a relative path (e.g., `docs/plans/`), so it doesn't need path conversion — it's relative to the `cd` target. **This should work correctly already.**
-- [ ] Add a `tracing::debug!` in `WslRuntime::run_command` that logs the converted WSL path and the command being run (if not already present)
+- [x] Verify that `resolve_runtime()` in `lib.rs` (line ~490) returns a `WslRuntime` for `RepoType::Local` when running on Windows. Currently `default_runtime()` handles this — confirm the `move_plan_to_completed` command uses the same logic via `resolve_runtime(&repo)` (line 713). **This is already correct** — `resolve_runtime` calls `default_runtime()` for Local repos.
+- [x] Verify that `WslRuntime::run_command` converts `working_dir` via `to_wsl_path`. This is confirmed at `wsl.rs:217`.
+- [x] The `plans_dir` in the shell command (`mkdir -p {plans_dir}/completed && mv ...`) is a relative path (e.g., `docs/plans/`), so it doesn't need path conversion — it's relative to the `cd` target. **This should work correctly already.**
+- [x] Add a `tracing::debug!` in `WslRuntime::run_command` that logs the converted WSL path and the command being run (if not already present)
 - [ ] Test manually: run a Ralph loop with a plan file on a WSL-backed repo, confirm the plan moves to `completed/`
 
 ### Task 5: Update frontend TypeScript types
@@ -154,9 +154,9 @@ This code is correct in structure but:
 **Pattern reference:** The existing `tracing::info!` in `WslAbortHandle::abort` and `spawn_claude`.
 
 **Checklist:**
-- [ ] Add `tracing::debug!` at the start of `run_command` logging the original working_dir, converted WSL path, and the command
-- [ ] Add `tracing::debug!` on command success with exit code
-- [ ] Add `tracing::warn!` on command failure (non-zero exit or timeout) with stderr output
+- [x] Add `tracing::debug!` at the start of `run_command` logging the original working_dir, converted WSL path, and the command
+- [x] Add `tracing::debug!` on command success with exit code
+- [x] Add `tracing::warn!` on command failure (non-zero exit or timeout) with stderr output
 
 ## Progress Tracking
 
@@ -165,7 +165,7 @@ This code is correct in structure but:
 | 1. Add `plan_file` to `SessionComplete` | **Done** | Core Rust fix. Also updated ssh_orchestrator.rs emission site and trace.rs tests. |
 | 2. Handle plan move for 1-shot in frontend | **Done** | Added plan move on one_shot_complete via design_phase_complete event lookup. Added console.log for triggered/skipped in both session_complete and one_shot_complete paths. 7 new tests. |
 | 3. Add logging to `move_plan_to_completed_impl` | **Done** | Added tracing::info/error/warn to both move_plan_to_completed_impl and the Tauri command wrapper. |
-| 4. Verify WSL path handling | Not started | Cross-platform correctness |
+| 4. Verify WSL path handling | **Done** | Verified resolve_runtime, to_wsl_path, and relative plans_dir all correct. Added debug/warn logging to WslRuntime::run_command. Manual test pending. |
 | 5. Update frontend TypeScript types | Not started | Type verification |
 | 6. Update tests | Not started | Rust + frontend tests |
-| 7. Add logging to `WslRuntime::run_command` | Not started | Observability |
+| 7. Add logging to `WslRuntime::run_command` | **Done** | Added debug at start (working_dir, wsl_dir, command), debug on success, warn on failure/timeout. |
