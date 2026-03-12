@@ -729,6 +729,115 @@ describe("RepoDetail", () => {
         });
       });
     });
+
+    describe("movePlansToCompleted setting", () => {
+      it("checkbox shows in settings with correct label", async () => {
+        setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          expect(
+            screen.getByRole("checkbox", { name: /move plans to completed/i }),
+          ).toBeInTheDocument();
+        });
+      });
+
+      it("defaults to checked when movePlansToCompleted is undefined", async () => {
+        setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          const checkbox = screen.getByRole("checkbox", {
+            name: /move plans to completed/i,
+          });
+          expect(checkbox).toBeChecked();
+        });
+      });
+
+      it("shows unchecked when movePlansToCompleted is false", async () => {
+        const repo = makeLocalRepo({
+          movePlansToCompleted: false,
+        } as Partial<RepoConfig>);
+        setupMockState({ repos: [repo] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          const checkbox = screen.getByRole("checkbox", {
+            name: /move plans to completed/i,
+          });
+          expect(checkbox).not.toBeChecked();
+        });
+      });
+
+      it("is disabled when session is running", async () => {
+        setupMockState({
+          repos: [makeLocalRepo()],
+          sessions: new Map([
+            ["test-repo", makeSessionState({ running: true })],
+          ]),
+        });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          const checkbox = screen.getByRole("checkbox", {
+            name: /move plans to completed/i,
+          });
+          expect(checkbox).toBeDisabled();
+        });
+      });
+
+      it("Save includes movePlansToCompleted true by default", async () => {
+        const state = setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          expect(
+            screen.getByRole("checkbox", { name: /move plans to completed/i }),
+          ).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+        expect(state.updateRepo).toHaveBeenCalledWith(
+          expect.objectContaining({ movePlansToCompleted: true }),
+        );
+      });
+
+      it("Save includes movePlansToCompleted false after unchecking", async () => {
+        const state = setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          expect(
+            screen.getByRole("checkbox", { name: /move plans to completed/i }),
+          ).toBeInTheDocument();
+        });
+
+        // Uncheck the checkbox
+        const checkbox = screen.getByRole("checkbox", {
+          name: /move plans to completed/i,
+        });
+        fireEvent.click(checkbox);
+
+        fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+        expect(state.updateRepo).toHaveBeenCalledWith(
+          expect.objectContaining({ movePlansToCompleted: false }),
+        );
+      });
+    });
   });
 
   // =========================================================================

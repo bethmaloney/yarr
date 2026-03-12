@@ -109,6 +109,7 @@ export default function RepoDetail() {
   const [checks, setChecks] = useState<Check[]>([]);
   const [createBranch, setCreateBranch] = useState(true);
   const [plansDir, setPlansDir] = useState("");
+  const [movePlansToCompleted, setMovePlansToCompleted] = useState(true);
   const [gitSyncEnabled, setGitSyncEnabled] = useState(false);
   const [gitSyncModel, setGitSyncModel] = useState("");
   const [gitSyncMaxRetries, setGitSyncMaxRetries] = useState(3);
@@ -173,6 +174,7 @@ export default function RepoDetail() {
     setChecks(repo.checks ?? []);
     setCreateBranch(repo.createBranch ?? true);
     setPlansDir(repo.plansDir ?? "");
+    setMovePlansToCompleted(repo.movePlansToCompleted ?? true);
     setGitSyncEnabled(repo.gitSync?.enabled ?? false);
     setGitSyncModel(repo.gitSync?.model ?? "");
     setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
@@ -377,6 +379,7 @@ export default function RepoDetail() {
       envVars: envVarsRecord,
       checks,
       createBranch,
+      movePlansToCompleted,
       plansDir: plansDir || undefined,
       gitSync: {
         enabled: gitSyncEnabled,
@@ -856,6 +859,15 @@ export default function RepoDetail() {
                     disabled={session.running}
                   />
                   Create branch on run
+                </Label>
+                <Label htmlFor="move-plans-completed" className="flex items-center gap-2 text-sm font-normal">
+                  <Checkbox
+                    id="move-plans-completed"
+                    checked={movePlansToCompleted}
+                    onCheckedChange={(v) => setMovePlansToCompleted(v === true)}
+                    disabled={session.running}
+                  />
+                  Move plans to completed folder after run
                 </Label>
                 <fieldset disabled={session.running} className="flex flex-col gap-3">
                   <legend className="text-sm font-medium mb-2">Environment Variables</legend>
