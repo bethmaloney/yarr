@@ -658,6 +658,7 @@ mod tests {
             },
             SessionEvent::SessionComplete {
                 outcome: SessionOutcome::Completed,
+                plan_file: None,
             },
         ];
 
@@ -859,6 +860,7 @@ mod tests {
             },
             SessionEvent::SessionComplete {
                 outcome: SessionOutcome::Completed,
+                plan_file: None,
             },
         ];
 
@@ -881,7 +883,7 @@ mod tests {
         }
 
         // Verify last event is SessionComplete with Completed outcome
-        if let SessionEvent::SessionComplete { outcome } = &restored_events[4] {
+        if let SessionEvent::SessionComplete { outcome, .. } = &restored_events[4] {
             assert_eq!(outcome.clone(), SessionOutcome::Completed);
         } else {
             panic!("expected SessionComplete as last event");
@@ -1375,6 +1377,7 @@ mod tests {
             },
             SessionEvent::SessionComplete {
                 outcome: SessionOutcome::Completed,
+                plan_file: None,
             },
         ]
     }
@@ -1431,7 +1434,7 @@ mod tests {
             }
             if i == lines.len() - 1 {
                 match &parsed {
-                    SessionEvent::SessionComplete { outcome } => {
+                    SessionEvent::SessionComplete { outcome, .. } => {
                         assert_eq!(*outcome, SessionOutcome::Completed);
                     }
                     other => panic!("expected SessionComplete as last event, got {:?}", other),
@@ -1466,6 +1469,7 @@ mod tests {
             },
             SessionEvent::SessionComplete {
                 outcome: SessionOutcome::Completed,
+                plan_file: None,
             },
         ];
 
@@ -1494,7 +1498,7 @@ mod tests {
 
         // Verify last event
         match &restored[3] {
-            SessionEvent::SessionComplete { outcome } => {
+            SessionEvent::SessionComplete { outcome, .. } => {
                 assert_eq!(*outcome, SessionOutcome::Completed);
             }
             other => panic!("expected SessionComplete, got {:?}", other),
@@ -1591,6 +1595,7 @@ mod tests {
             },
             SessionEvent::SessionComplete {
                 outcome: SessionOutcome::Completed,
+                plan_file: None,
             },
         ];
 

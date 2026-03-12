@@ -820,6 +820,7 @@ mod tests {
             repo_id: "repo-xyz".to_string(),
             event: SessionEvent::SessionComplete {
                 outcome: SessionOutcome::Completed,
+                plan_file: Some("docs/plans/test.md".to_string()),
             },
         };
 
@@ -831,6 +832,13 @@ mod tests {
             serde_json::to_string(&cloned).expect("serialization should succeed");
 
         assert_eq!(json_original, json_cloned);
+
+        // Verify the serialized JSON contains the plan_file field
+        assert!(
+            json_original.contains("\"plan_file\":\"docs/plans/test.md\""),
+            "serialized JSON should contain plan_file field, got: {}",
+            json_original
+        );
     }
 
     #[test]
