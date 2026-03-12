@@ -502,6 +502,168 @@ async fn run_oneshot(
 }
 
 #[tauri::command]
+async fn resume_oneshot(
+    app: tauri::AppHandle,
+    oneshot_id: String,
+    repo_id: String,
+    repo: RepoType,
+    title: String,
+    prompt: String,
+    model: String,
+    merge_strategy: oneshot::MergeStrategy,
+    env_vars: Option<HashMap<String, String>>,
+    max_iterations: u32,
+    completion_signal: String,
+    checks: Option<Vec<session::Check>>,
+    git_sync: Option<session::GitSyncConfig>,
+    plans_dir: Option<String>,
+    worktree_path: String,
+    branch: String,
+    old_session_id: String,
+) -> Result<OneShotResult, String> {
+    let session_id = Uuid::new_v4().to_string();
+    let session_id_for_result = session_id.clone();
+    let cancel_token = CancellationToken::new();
+    {
+        let active = app.state::<ActiveSessions>();
+        active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
+    }
+
+    match &repo {
+        RepoType::Local { path } => {
+            // Validate worktree_path to prevent shell injection
+            if worktree_path.contains(';') || worktree_path.contains('$') || worktree_path.contains('`')
+                || worktree_path.contains('|') || worktree_path.contains('&') || worktree_path.contains('\n')
+                || worktree_path.contains('\'') || worktree_path.contains('"') || worktree_path.contains('\\')
+                || worktree_path.contains('(') || worktree_path.contains(')') {
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                return Err("Invalid worktree path".to_string());
+            }
+
+            if branch.contains(';') || branch.contains('$') || branch.contains('`')
+                || branch.contains('|') || branch.contains('&') || branch.contains('\n')
+                || branch.contains('\'') || branch.contains('"') || branch.contains('\\')
+                || branch.contains(' ') || branch.contains('(') || branch.contains(')') {
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                return Err("Invalid branch name".to_string());
+            }
+
+            let repo_path_buf = PathBuf::from(path);
+
+            // Pre-warm env cache and emit warning if snapshot failed
+            let runtime = default_runtime();
+            let _ = runtime.resolve_env().await;
+            if let Some(warning) = runtime.env_warning() {
+                let _ = app.emit("env-warning", &warning);
+            }
+
+            // Load events from previous session
+            let base_dir = match app.path().app_data_dir() {
+                Ok(d) => d,
+                Err(e) => {
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                    return Err(e.to_string());
+                }
+            };
+            let events = match TraceCollector::read_events(&base_dir, &oneshot_id, &old_session_id) {
+                Ok(events) => events,
+                Err(e) => {
+                    tracing::warn!("Failed to read events for resume (oneshot_id={}, session_id={}): {}. Will re-run all phases.", oneshot_id, old_session_id, e);
+                    Vec::new()
+                }
+            };
+
+            // Detect which phases to skip
+            let resume_state = oneshot::detect_resume_phase(
+                &events,
+                PathBuf::from(&worktree_path),
+                branch.clone(),
+            );
+
+            // Verify worktree still exists on disk
+            let wt_check = runtime
+                .run_command(
+                    &format!("test -d {}", worktree_path),
+                    &repo_path_buf,
+                    std::time::Duration::from_secs(10),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            if wt_check.exit_code != 0 {
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                return Err("Worktree no longer exists on disk".to_string());
+            }
+
+            let config = oneshot::OneShotConfig {
+                repo_id: repo_id.clone(),
+                repo_path: repo_path_buf,
+                title,
+                prompt,
+                model,
+                merge_strategy,
+                env_vars: env_vars.unwrap_or_default(),
+                max_iterations,
+                completion_signal,
+                checks: checks.unwrap_or_default(),
+                git_sync,
+                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+            };
+
+            let collector = TraceCollector::new(base_dir, &oneshot_id);
+
+            let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
+            let app_handle = app.clone();
+            let oneshot_id_clone = oneshot_id.clone();
+            let runner = OneShotRunner::new(config, collector, cancel_token)
+                .abort_registry(abort_registry)
+                .on_event(Box::new(move |event| {
+                    let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                        repo_id: oneshot_id_clone.clone(),
+                        event: event.clone(),
+                    });
+                }))
+                .with_resume_state(resume_state)
+                .with_session_id(session_id);
+
+            // Spawn as a background task so we return immediately
+            let app_bg = app.clone();
+            let oneshot_id_bg = oneshot_id.clone();
+            let join_handle = tokio::spawn(async move {
+                let _guard = scopeguard::guard((), {
+                    let app = app_bg.clone();
+                    let oneshot_id = oneshot_id_bg.clone();
+                    move |_| {
+                        let app = app.clone();
+                        let oneshot_id = oneshot_id.clone();
+                        tokio::spawn(async move {
+                            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                        });
+                    }
+                });
+
+                let runtime = default_runtime();
+                let _result = runner.run(runtime.as_ref()).await;
+            });
+
+            // Update the placeholder with the real JoinHandle
+            {
+                let active = app.state::<ActiveSessions>();
+                let mut sessions = active.tokens.lock().await;
+                if let Some(handle) = sessions.get_mut(&oneshot_id) {
+                    handle.join_handle = join_handle;
+                }
+            }
+
+            Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
+        }
+        RepoType::Ssh { .. } => {
+            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+            Err("1-shot is not supported for SSH repos".to_string())
+        }
+    }
+}
+
+#[tauri::command]
 fn list_traces(app: tauri::AppHandle, repo_id: Option<String>) -> Result<Vec<trace::SessionTrace>, String> {
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     TraceCollector::list_traces(&base_dir, repo_id.as_deref()).map_err(|e| e.to_string())
@@ -1001,7 +1163,7 @@ pub fn run() {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
         .manage(SshEnvCache::default())
-        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, resume_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {

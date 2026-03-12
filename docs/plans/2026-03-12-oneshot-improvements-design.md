@@ -314,10 +314,10 @@ Backend command that detects phase and resumes.
 - Register in `ActiveSessions`
 
 **Checklist:**
-- [ ] Add `resume_oneshot` command
-- [ ] Add phase detection logic
-- [ ] Register in `tauri::generate_handler![]`
-- [ ] Run `cd src-tauri && cargo check`
+- [x] Add `resume_oneshot` command
+- [x] Add phase detection logic
+- [x] Register in `tauri::generate_handler![]`
+- [x] Run `cd src-tauri && cargo check`
 
 ---
 
@@ -385,6 +385,6 @@ Update existing tests and add new ones for the changed behavior.
 | 6 | Load one-shot events/traces on startup | Done |
 | 7 | Add empty state to `OneShotDetail` | Done |
 | 8 | Add `ResumeState` and refactor runner | Done |
-| 9 | Add `resume_oneshot` Tauri command | Not Started |
+| 9 | Add `resume_oneshot` Tauri command | Done |
 | 10 | Add `resumeOneShot` store action and wire UI | Not Started |
 | 11 | Update tests | Not Started |

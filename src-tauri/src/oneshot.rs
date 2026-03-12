@@ -164,6 +164,40 @@ pub fn branch_name(slug: &str, short_id: &str) -> String {
     format!("oneshot/{}-{}", slug, short_id)
 }
 
+/// Detect which phases have been completed by scanning persisted events.
+/// Returns a ResumeState indicating which phases to skip on resume.
+pub fn detect_resume_phase(
+    events: &[SessionEvent],
+    worktree_path: PathBuf,
+    branch: String,
+) -> ResumeState {
+    let mut skip_design = false;
+    let mut skip_implementation = false;
+    let mut plan_file = None;
+
+    for event in events {
+        match event {
+            SessionEvent::DesignPhaseComplete { plan_file: pf } => {
+                skip_design = true;
+                plan_file = Some(pf.clone());
+            }
+            SessionEvent::ImplementationPhaseComplete => {
+                skip_design = true;
+                skip_implementation = true;
+            }
+            _ => {}
+        }
+    }
+
+    ResumeState {
+        worktree_path,
+        branch,
+        plan_file,
+        skip_design,
+        skip_implementation,
+    }
+}
+
 /// Orchestrates a 1-shot autonomous implementation session.
 ///
 /// Lifecycle:
@@ -3370,6 +3404,154 @@ mod tests {
             event_kinds.contains(&"implementation_phase_started"),
             "should emit ImplementationPhaseStarted when skip_implementation=false, events: {:?}",
             event_kinds
+        );
+    }
+
+    // =========================================================================
+    // detect_resume_phase tests
+    // =========================================================================
+
+    #[test]
+    fn test_detect_resume_phase_no_events() {
+        let events: Vec<SessionEvent> = vec![];
+        let worktree = PathBuf::from("/home/user/.yarr/worktrees/repo-oneshot-abc123");
+        let branch = "oneshot/my-feature-abc123".to_string();
+
+        let state = detect_resume_phase(&events, worktree.clone(), branch.clone());
+
+        assert!(!state.skip_design, "skip_design should be false with no events");
+        assert!(
+            !state.skip_implementation,
+            "skip_implementation should be false with no events"
+        );
+        assert!(
+            state.plan_file.is_none(),
+            "plan_file should be None with no events"
+        );
+    }
+
+    #[test]
+    fn test_detect_resume_phase_design_complete() {
+        let events = vec![
+            SessionEvent::OneShotStarted {
+                title: "Test feature".to_string(),
+                parent_repo_id: "test-repo".to_string(),
+                prompt: "Do the thing".to_string(),
+                merge_strategy: "branch".to_string(),
+                worktree_path: "/tmp/wt".to_string(),
+                branch: "oneshot/test".to_string(),
+            },
+            SessionEvent::DesignPhaseStarted,
+            SessionEvent::DesignPhaseComplete {
+                plan_file: "docs/plans/test.md".to_string(),
+            },
+        ];
+        let worktree = PathBuf::from("/home/user/.yarr/worktrees/repo-oneshot-abc123");
+        let branch = "oneshot/my-feature-abc123".to_string();
+
+        let state = detect_resume_phase(&events, worktree.clone(), branch.clone());
+
+        assert!(
+            state.skip_design,
+            "skip_design should be true when DesignPhaseComplete is present"
+        );
+        assert!(
+            !state.skip_implementation,
+            "skip_implementation should be false when only design is complete"
+        );
+        assert_eq!(
+            state.plan_file,
+            Some("docs/plans/test.md".to_string()),
+            "plan_file should be captured from DesignPhaseComplete event"
+        );
+    }
+
+    #[test]
+    fn test_detect_resume_phase_implementation_complete() {
+        let events = vec![
+            SessionEvent::OneShotStarted {
+                title: "Test feature".to_string(),
+                parent_repo_id: "test-repo".to_string(),
+                prompt: "Do the thing".to_string(),
+                merge_strategy: "branch".to_string(),
+                worktree_path: "/tmp/wt".to_string(),
+                branch: "oneshot/test".to_string(),
+            },
+            SessionEvent::DesignPhaseStarted,
+            SessionEvent::DesignPhaseComplete {
+                plan_file: "docs/plans/impl.md".to_string(),
+            },
+            SessionEvent::ImplementationPhaseStarted,
+            SessionEvent::ImplementationPhaseComplete,
+        ];
+        let worktree = PathBuf::from("/home/user/.yarr/worktrees/repo-oneshot-abc123");
+        let branch = "oneshot/my-feature-abc123".to_string();
+
+        let state = detect_resume_phase(&events, worktree.clone(), branch.clone());
+
+        assert!(
+            state.skip_design,
+            "skip_design should be true when ImplementationPhaseComplete is present"
+        );
+        assert!(
+            state.skip_implementation,
+            "skip_implementation should be true when ImplementationPhaseComplete is present"
+        );
+        assert_eq!(
+            state.plan_file,
+            Some("docs/plans/impl.md".to_string()),
+            "plan_file should be preserved from DesignPhaseComplete even when ImplementationPhaseComplete is present"
+        );
+    }
+
+    #[test]
+    fn test_detect_resume_phase_only_started_events() {
+        let events = vec![
+            SessionEvent::OneShotStarted {
+                title: "Test feature".to_string(),
+                parent_repo_id: "test-repo".to_string(),
+                prompt: "Do the thing".to_string(),
+                merge_strategy: "branch".to_string(),
+                worktree_path: "/tmp/wt".to_string(),
+                branch: "oneshot/test".to_string(),
+            },
+            SessionEvent::DesignPhaseStarted,
+            SessionEvent::ImplementationPhaseStarted,
+        ];
+        let worktree = PathBuf::from("/home/user/.yarr/worktrees/repo-oneshot-abc123");
+        let branch = "oneshot/my-feature-abc123".to_string();
+
+        let state = detect_resume_phase(&events, worktree.clone(), branch.clone());
+
+        assert!(
+            !state.skip_design,
+            "skip_design should be false when only Started events are present (no Complete)"
+        );
+        assert!(
+            !state.skip_implementation,
+            "skip_implementation should be false when only Started events are present (no Complete)"
+        );
+        assert!(
+            state.plan_file.is_none(),
+            "plan_file should be None when no DesignPhaseComplete event exists"
+        );
+    }
+
+    #[test]
+    fn test_detect_resume_phase_preserves_worktree_and_branch() {
+        let events: Vec<SessionEvent> = vec![];
+        let worktree = PathBuf::from("/home/user/.yarr/worktrees/my-repo-oneshot-xyz789");
+        let branch = "oneshot/cool-feature-xyz789".to_string();
+
+        let state = detect_resume_phase(&events, worktree.clone(), branch.clone());
+
+        assert_eq!(
+            state.worktree_path, worktree,
+            "worktree_path should be passed through to ResumeState"
+        );
+        assert_eq!(
+            state.branch, branch,
+            "branch should be passed through to ResumeState"
         );
     }
 }
