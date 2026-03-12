@@ -120,9 +120,9 @@ match push_output {
 - `src/store.test.ts` — existing tests for plan auto-move
 
 **Checklist:**
-- [ ] Confirm the frontend `invoke` calls don't need changes — they already fire-and-forget with `.catch()`
-- [ ] Run existing frontend tests (`npm test`) to verify no regressions
-- [ ] Run existing Rust tests (`cd src-tauri && cargo test`) to verify no regressions
+- [x] Confirm the frontend `invoke` calls don't need changes — they already fire-and-forget with `.catch()`
+- [x] Run existing frontend tests (`npm test`) to verify no regressions
+- [x] Run existing Rust tests (`cd src-tauri && cargo test`) to verify no regressions
 
 ## Progress
 
@@ -130,4 +130,4 @@ match push_output {
 |------|--------|-------|
 | Task 1: Add git commit+push to `move_plan_to_completed_impl` | Done | git add + commit + push added as best-effort after mv |
 | Task 2: Add Rust tests | Done | 4 MockRuntime-based tests covering all paths |
-| Task 3: Verify frontend unchanged | Not started | Existing tests should pass |
+| Task 3: Verify frontend unchanged | Done | 825 frontend + 463 Rust tests pass, no changes needed |
