@@ -900,6 +900,52 @@ pub(crate) async fn move_plan_to_completed_impl(
     }
 
     tracing::info!(plans_dir = %plans_dir, filename = %filename, "plan moved to completed");
+
+    // Git add both old (deleted) and new (added) paths
+    let add_cmd = format!(
+        "git add {escaped_plans_dir}/{escaped_filename} {escaped_plans_dir}/completed/{escaped_filename}"
+    );
+    let add_output = rt.run_command(&add_cmd, working_dir, timeout).await;
+    if let Ok(output) = &add_output {
+        if output.exit_code != 0 {
+            tracing::warn!(stderr = %output.stderr, "git add for completed plan failed");
+            return Ok(()); // Move succeeded, git commit is best-effort
+        }
+    } else {
+        tracing::warn!("git add command failed for completed plan");
+        return Ok(());
+    }
+
+    // Commit
+    let commit_msg = ssh_shell_escape(&format!("move plan to completed: {}", filename));
+    let commit_cmd = format!("git commit -m {commit_msg} --no-verify");
+    let commit_output = rt.run_command(&commit_cmd, working_dir, timeout).await;
+    if let Ok(output) = &commit_output {
+        if output.exit_code != 0 {
+            tracing::warn!(stderr = %output.stderr, "git commit for completed plan failed");
+            return Ok(());
+        }
+    } else {
+        tracing::warn!("git commit command failed for completed plan");
+        return Ok(());
+    }
+
+    tracing::info!(filename = %filename, "committed completed plan");
+
+    // Push (best-effort)
+    let push_output = rt.run_command("git push", working_dir, timeout).await;
+    match push_output {
+        Ok(output) if output.exit_code == 0 => {
+            tracing::info!(filename = %filename, "pushed completed plan");
+        }
+        Ok(output) => {
+            tracing::warn!(stderr = %output.stderr, filename = %filename, "git push for completed plan failed (will need manual push)");
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, filename = %filename, "git push command failed for completed plan");
+        }
+    }
+
     Ok(())
 }
 
@@ -977,6 +1023,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::{CommandOutput, MockRuntime};
     use session::SessionEvent;
     use trace::SessionOutcome;
 
@@ -1924,6 +1971,140 @@ mod tests {
 
         assert!(result.is_err(),
             "should return Err when source file does not exist");
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_commits_and_pushes() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. mv succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 2. git add succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. git commit succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git push succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result =
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md").await;
+
+        assert!(
+            result.is_ok(),
+            "should return Ok when mv, git add, commit, and push all succeed"
+        );
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_ok_when_git_add_fails() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. mv succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 2. git add fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "git add failed".to_string(),
+            },
+        ];
+
+        let result =
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md").await;
+
+        assert!(
+            result.is_ok(),
+            "should return Ok even when git add fails — git steps are best-effort"
+        );
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_ok_when_push_fails() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. mv succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 2. git add succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. git commit succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git push fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "push rejected".to_string(),
+            },
+        ];
+
+        let result =
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md").await;
+
+        assert!(
+            result.is_ok(),
+            "should return Ok even when git push fails — git steps are best-effort"
+        );
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_mv_fails_returns_err() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. mv fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "No such file or directory".to_string(),
+            },
+        ];
+
+        let result =
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "nonexistent.md").await;
+
+        assert!(
+            result.is_err(),
+            "should return Err when the mv command itself fails"
+        );
     }
 
     // --- OneShotResult tests ---
