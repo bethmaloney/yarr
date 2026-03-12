@@ -340,9 +340,9 @@ Frontend action to call `resume_oneshot` and update state.
 - In `OneShotDetail`, wire Resume button `onClick` to `resumeOneShot(oneshotId)`
 
 **Checklist:**
-- [ ] Add `resumeOneShot` action to store
-- [ ] Wire Resume button in `OneShotDetail`
-- [ ] Run `npx tsc --noEmit`
+- [x] Add `resumeOneShot` action to store
+- [x] Wire Resume button in `OneShotDetail`
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -386,5 +386,5 @@ Update existing tests and add new ones for the changed behavior.
 | 7 | Add empty state to `OneShotDetail` | Done |
 | 8 | Add `ResumeState` and refactor runner | Done |
 | 9 | Add `resume_oneshot` Tauri command | Done |
-| 10 | Add `resumeOneShot` store action and wire UI | Not Started |
+| 10 | Add `resumeOneShot` store action and wire UI | Done |
 | 11 | Update tests | Not Started |

@@ -39,6 +39,16 @@ const { mockSaveRecent } = vi.hoisted(() => {
   return { mockSaveRecent: vi.fn() };
 });
 
+const { mockToast } = vi.hoisted(() => {
+  return {
+    mockToast: {
+      error: vi.fn(),
+      info: vi.fn(),
+      warning: vi.fn(),
+    },
+  };
+});
+
 const { mockData } = vi.hoisted(() => {
   return { mockData: new Map<string, unknown>() };
 });
@@ -78,6 +88,10 @@ vi.mock("./repos", () => ({
 
 vi.mock("./recents", () => ({
   saveRecent: mockSaveRecent,
+}));
+
+vi.mock("sonner", () => ({
+  toast: mockToast,
 }));
 
 // ---------------------------------------------------------------------------
@@ -2680,5 +2694,324 @@ describe("clearGitStatusError", () => {
     useAppStore.getState().clearGitStatusError("nonexistent");
     const after = useAppStore.getState().gitStatus;
     expect(after).toEqual(before);
+  });
+});
+
+// ===========================================================================
+// 17. resumeOneShot
+// ===========================================================================
+
+describe("resumeOneShot", () => {
+  it("returns early if entry not found", async () => {
+    await useAppStore.getState().resumeOneShot("nonexistent");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+  });
+
+  it("returns early if parent repo not found", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+    useAppStore.setState({
+      repos: [],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+    expect(mockToast.error).toHaveBeenCalled();
+  });
+
+  it("returns early if entry has no worktreePath", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      branch: "oneshot/fix",
+      // no worktreePath
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+    expect(mockToast.error).toHaveBeenCalled();
+  });
+
+  it("returns early if entry has no branch", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      // no branch
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+    expect(mockToast.error).toHaveBeenCalled();
+  });
+
+  it("calls invoke with correct arguments", async () => {
+    const repo = makeLocalRepo({
+      envVars: { MY_VAR: "hello" },
+      gitSync: { enabled: true, conflictPrompt: undefined, model: undefined, maxPushRetries: 3 },
+      plansDir: "custom/plans/",
+    });
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      title: "Fix the bug",
+      prompt: "Fix the flaky test in store.test.ts",
+      model: "opus",
+      mergeStrategy: "fast-forward",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [repo],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).toHaveBeenCalledWith("resume_oneshot", {
+      oneshotId: "oneshot-abc",
+      repoId: "repo-1",
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      title: "Fix the bug",
+      prompt: "Fix the flaky test in store.test.ts",
+      model: "opus",
+      mergeStrategy: "fast-forward",
+      envVars: { MY_VAR: "hello" },
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
+      gitSync: { enabled: true, conflictPrompt: undefined, model: undefined, maxPushRetries: 3 },
+      plansDir: "custom/plans/",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      oldSessionId: "old-sess",
+    });
+  });
+
+  it("on success: updates entry status to running and saves new session_id", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    const entries = useAppStore.getState().oneShotEntries;
+    const updated = entries.get("oneshot-abc")!;
+    expect(updated.status).toBe("running");
+    expect(updated.session_id).toBe("new-sess");
+  });
+
+  it("on success: sets up session in sessions map", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    const session = useAppStore.getState().sessions.get("oneshot-abc");
+    expect(session).toBeDefined();
+    expect(session!.running).toBe(true);
+    expect(session!.events).toEqual([]);
+    expect(session!.session_id).toBe("new-sess");
+  });
+
+  it("on success: persists to oneShotStore", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    const saved = mockData.get("oneshot-entries") as [string, OneShotEntry][];
+    expect(saved).toBeDefined();
+    const restoredMap = new Map(saved);
+    expect(restoredMap.has("oneshot-abc")).toBe(true);
+    expect(restoredMap.get("oneshot-abc")!.status).toBe("running");
+    expect(restoredMap.get("oneshot-abc")!.session_id).toBe("new-sess");
+  });
+
+  it("on error: shows toast.error", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockRejectedValue(new Error("backend crashed"));
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockToast.error).toHaveBeenCalledWith(
+      expect.stringContaining("backend crashed"),
+    );
+  });
+
+  it("on error: does not update entry status", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockRejectedValue(new Error("backend crashed"));
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    const entries = useAppStore.getState().oneShotEntries;
+    const unchanged = entries.get("oneshot-abc")!;
+    expect(unchanged.status).toBe("failed");
+  });
+
+  it("defaults plansDir to docs/plans/ when repo has no plansDir", async () => {
+    const repo = makeLocalRepo({
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
+      // no plansDir
+    });
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [repo],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.objectContaining({
+        plansDir: "docs/plans/",
+      }),
+    );
+  });
+
+  it("returns early if entry is already running", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+  });
+
+  it("builds correct repo payload for SSH repos", async () => {
+    const repo = makeSshRepo();
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-2",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [repo],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.objectContaining({
+        repo: { type: "ssh", sshHost: "dev-server", remotePath: "/home/beth/repos/other" },
+      }),
+    );
   });
 });

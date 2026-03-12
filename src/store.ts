@@ -621,9 +621,74 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     async resumeOneShot(oneshotId: string) {
-      // TODO: Task 10 — wire to resume_oneshot backend command
-      toast.info("Resume is not yet implemented");
-      console.warn("resumeOneShot not yet implemented", oneshotId);
+      const entry = get().oneShotEntries.get(oneshotId);
+      if (!entry) return;
+      if (entry.status === "running") return;
+
+      const repo = get().repos.find((r) => r.id === entry.parentRepoId);
+      if (!repo) {
+        toast.error("Parent repo not found");
+        return;
+      }
+
+      if (!entry.worktreePath || !entry.branch) {
+        toast.error("Cannot resume: missing worktree path or branch");
+        return;
+      }
+
+      const repoPayload =
+        repo.type === "local"
+          ? { type: "local" as const, path: repo.path }
+          : {
+              type: "ssh" as const,
+              sshHost: (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost,
+              remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath,
+            };
+
+      try {
+        const result = await invoke<{ oneshot_id: string; session_id: string }>("resume_oneshot", {
+          oneshotId,
+          repoId: entry.parentRepoId,
+          repo: repoPayload,
+          title: entry.title,
+          prompt: entry.prompt,
+          model: entry.model,
+          mergeStrategy: entry.mergeStrategy,
+          envVars: repo.envVars ?? {},
+          maxIterations: repo.maxIterations,
+          completionSignal: repo.completionSignal,
+          checks: repo.checks ?? [],
+          gitSync: repo.gitSync,
+          plansDir: repo.plansDir || "docs/plans/",
+          worktreePath: entry.worktreePath,
+          branch: entry.branch,
+          oldSessionId: entry.session_id ?? "",
+        });
+
+        // Update entry status to running with new session_id
+        const entries = new Map(get().oneShotEntries);
+        const current = entries.get(oneshotId);
+        if (current) {
+          entries.set(oneshotId, { ...current, status: "running", session_id: result.session_id });
+          set({ oneShotEntries: entries });
+          oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch(() => {});
+        }
+
+        // Set up session state
+        const next = new Map(get().sessions);
+        next.set(oneshotId, {
+          running: true,
+          session_id: result.session_id,
+          disconnected: false,
+          reconnecting: false,
+          events: [],
+          trace: null,
+          error: null,
+        });
+        set({ sessions: next });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
     },
 
     runSession: async (repoId: string, planFile: string) => {
