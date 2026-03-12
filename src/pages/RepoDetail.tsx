@@ -107,6 +107,7 @@ export default function RepoDetail() {
   const [envVars, setEnvVars] = useState<{ key: string; value: string }[]>([]);
   const [checks, setChecks] = useState<Check[]>([]);
   const [createBranch, setCreateBranch] = useState(true);
+  const [autoFetch, setAutoFetch] = useState(true);
   const [plansDir, setPlansDir] = useState("");
   const [gitSyncEnabled, setGitSyncEnabled] = useState(false);
   const [gitSyncModel, setGitSyncModel] = useState("");
@@ -173,6 +174,7 @@ export default function RepoDetail() {
     );
     setChecks(repo.checks ?? []);
     setCreateBranch(repo.createBranch ?? true);
+    setAutoFetch(repo.autoFetch ?? (repo.type === "local" ? true : false));
     setPlansDir(repo.plansDir ?? "");
     setGitSyncEnabled(repo.gitSync?.enabled ?? false);
     setGitSyncModel(repo.gitSync?.model ?? "");
@@ -371,6 +373,7 @@ export default function RepoDetail() {
       envVars: envVarsRecord,
       checks,
       createBranch,
+      autoFetch,
       plansDir: plansDir || undefined,
       gitSync: {
         enabled: gitSyncEnabled,
@@ -901,6 +904,21 @@ export default function RepoDetail() {
                   />
                   Create branch on run
                 </Label>
+                <Label
+                  htmlFor="auto-fetch"
+                  className="flex items-center gap-2 text-sm font-normal"
+                >
+                  <Checkbox
+                    id="auto-fetch"
+                    checked={autoFetch}
+                    onCheckedChange={(v) => setAutoFetch(v === true)}
+                    disabled={session.running}
+                  />
+                  Auto-fetch from remote
+                  <span className="text-xs text-muted-foreground font-normal">
+                    Automatically fetch from remote every 30 seconds
+                  </span>
+                </Label>
                 <fieldset
                   disabled={session.running}
                   className="flex flex-col gap-3"
@@ -1297,6 +1315,14 @@ export default function RepoDetail() {
             Browse
           </Button>
         </div>
+        <Input
+          type="text"
+          value={planFile}
+          onChange={(e) => setPlanFile(e.target.value)}
+          placeholder="docs/plans/my-feature-design.md"
+          disabled={session.running}
+          className="mt-2"
+        />
         {previewLoading && (
           <p className="text-sm text-muted-foreground mt-2">Loading...</p>
         )}

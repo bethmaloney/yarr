@@ -283,10 +283,10 @@ Add the toggle to the Settings tab in the repo configuration sheet.
 - Save to repo config on sheet close (alongside other settings)
 
 **Checklist:**
-- [ ] Add `autoFetch` state variable with correct default per repo type
-- [ ] Add toggle UI in Settings tab
-- [ ] Include in save logic
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `autoFetch` state variable with correct default per repo type
+- [x] Add toggle UI in Settings tab
+- [x] Include in save logic
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -361,6 +361,6 @@ Update existing branch display tests and add new tests for git status polling.
 | 5 | Create `useGitStatus` hook with polling | Done |
 | 6 | Update Home page repo cards | Done |
 | 7 | Update RepoDetail page branch chip | Done |
-| 8 | Add auto-fetch toggle to repo config sheet | Not Started |
+| 8 | Add auto-fetch toggle to repo config sheet | Done |
 | 9 | Remove `useBranchInfo` and `get_branch_info` | Not Started |
 | 10 | Update E2E tests | Not Started |
