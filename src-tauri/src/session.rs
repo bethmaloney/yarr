@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
+use crate::git_merge::{git_merge_push, GitMergeConfig, GitMergeEvent};
 use crate::output::{ContentBlock, ResultEvent, StreamEvent};
 use crate::runtime::{ClaudeInvocation, RuntimeProvider};
 use crate::trace::{self, SessionOutcome, SpanAttributes, TraceCollector};
@@ -505,342 +506,45 @@ impl SessionRunner {
             return;
         }
 
-        // Track the last error for reporting
-        let mut last_error;
+        // Build command strings for GitMergeConfig
+        let push_cmd = format!("git push origin {branch}");
+        let fetch_cmd = format!("git fetch origin {branch}");
+        let rebase_cmd = format!("git pull --rebase origin {branch}");
+        let push_u_cmd = format!("git push -u origin {branch}");
 
-        // Step 2: Try git push origin {branch}
-        match runtime
-            .run_command(
-                &format!("git push origin {branch}"),
-                self.config.effective_working_dir(),
-                timeout,
-            )
-            .await
-        {
-            Ok(output) if output.exit_code == 0 => {
-                self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
-                return;
-            }
-            Ok(output) => {
-                last_error = combine_output(&output.stdout, &output.stderr);
-                tracing::info!("git push failed: {}", last_error);
-            }
-            Err(e) => {
-                last_error = format!("git push command error: {}", e);
-                tracing::warn!("{}", last_error);
-            }
-        }
-
-        // Step 3: Try git push -u origin {branch} (in case upstream isn't set)
-        match runtime
-            .run_command(
-                &format!("git push -u origin {branch}"),
-                self.config.effective_working_dir(),
-                timeout,
-            )
-            .await
-        {
-            Ok(output) if output.exit_code == 0 => {
-                self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
-                return;
-            }
-            Ok(output) => {
-                last_error = combine_output(&output.stdout, &output.stderr);
-                tracing::info!("git push -u failed: {}", last_error);
-            }
-            Err(e) => {
-                last_error = format!("git push -u command error: {}", e);
-                tracing::warn!("{}", last_error);
-            }
-        }
-
-        // Step 4: Retry loop — fetch, rebase, push
-        for attempt in 1..=git_sync_config.max_push_retries {
-            if self.cancel_token.is_cancelled() {
-                return;
-            }
-
-            // Fetch
-            match runtime
-                .run_command(
-                    &format!("git fetch origin {branch}"),
-                    self.config.effective_working_dir(),
-                    timeout,
-                )
-                .await
-            {
-                Ok(output) if output.exit_code != 0 => {
-                    last_error = combine_output(&output.stdout, &output.stderr);
-                    tracing::warn!(
-                        "git fetch failed (attempt {}/{}): {}",
-                        attempt,
-                        git_sync_config.max_push_retries,
-                        last_error
-                    );
-                    continue;
-                }
-                Err(e) => {
-                    last_error = format!("git fetch command error: {}", e);
-                    tracing::warn!(
-                        "git fetch error (attempt {}/{}): {}",
-                        attempt,
-                        git_sync_config.max_push_retries,
-                        last_error
-                    );
-                    continue;
-                }
-                _ => {} // success
-            }
-
-            // Pull --rebase
-            let rebase_result = runtime
-                .run_command(
-                    &format!("git pull --rebase origin {branch}"),
-                    self.config.effective_working_dir(),
-                    timeout,
-                )
-                .await;
-
-            match rebase_result {
-                Ok(output) if output.exit_code == 0 => {
-                    // Rebase succeeded, retry push
-                    match runtime
-                        .run_command(
-                            &format!("git push origin {branch}"),
-                            self.config.effective_working_dir(),
-                            timeout,
-                        )
-                        .await
-                    {
-                        Ok(push_output) if push_output.exit_code == 0 => {
-                            self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
-                            return;
-                        }
-                        Ok(push_output) => {
-                            last_error = combine_output(&push_output.stdout, &push_output.stderr);
-                            tracing::warn!(
-                                "push after rebase failed (attempt {}/{}): {}",
-                                attempt,
-                                git_sync_config.max_push_retries,
-                                last_error
-                            );
-                        }
-                        Err(e) => {
-                            last_error = format!("push after rebase command error: {}", e);
-                            tracing::warn!(
-                                "push after rebase error (attempt {}/{}): {}",
-                                attempt,
-                                git_sync_config.max_push_retries,
-                                last_error
-                            );
-                        }
-                    }
-                }
-                Ok(rebase_output) => {
-                    let rebase_error = combine_output(&rebase_output.stdout, &rebase_output.stderr);
-                    tracing::warn!(
-                        "rebase failed (attempt {}/{}): {}",
-                        attempt,
-                        git_sync_config.max_push_retries,
-                        rebase_error
-                    );
-
-                    // Rebase failed — check for conflicts
-                    let status_result = runtime
-                        .run_command("git status", self.config.effective_working_dir(), timeout)
-                        .await;
-
-                    let has_conflict = match &status_result {
-                        Ok(status) => {
-                            let combined = combine_output(&status.stdout, &status.stderr);
-                            combined.contains("Unmerged paths") || combined.contains("both modified")
-                        }
-                        Err(_) => false,
-                    };
-
-                    if has_conflict {
-                        // Get conflict file list
-                        let conflict_files = match runtime
-                            .run_command(
-                                "git diff --name-only --diff-filter=U",
-                                self.config.effective_working_dir(),
-                                timeout,
-                            )
-                            .await
-                        {
-                            Ok(output) => output
-                                .stdout
-                                .lines()
-                                .map(|l| l.trim().to_string())
-                                .filter(|l| !l.is_empty())
-                                .collect::<Vec<String>>(),
-                            Err(_) => Vec::new(),
-                        };
-
-                        let files_str = conflict_files.join("\n");
-
-                        self.emit(SessionEvent::GitSyncConflict {
-                            iteration,
-                            files: conflict_files,
-                        });
-
-                        self.emit(SessionEvent::GitSyncConflictResolveStarted {
-                            iteration,
-                            attempt,
-                        });
-
-                        // Build conflict prompt and spawn Claude
-                        let conflict_prompt = crate::prompt::build_conflict_prompt(
-                            git_sync_config.conflict_prompt.as_deref(),
-                            &files_str,
-                        );
-
-                        let invocation = ClaudeInvocation {
-                            prompt: conflict_prompt,
-                            working_dir: self.config.effective_working_dir().to_path_buf(),
-                            model: git_sync_config
-                                .model
-                                .clone()
-                                .or(Some("sonnet".to_string())),
-                            extra_args: vec!["--dangerously-skip-permissions".to_string()],
-                            env_vars: std::collections::HashMap::new(),
-                        };
-
-                        match runtime.spawn_claude(&invocation).await {
-                            Ok(mut process) => {
-                                loop {
-                                    tokio::select! {
-                                        event = process.events.recv() => {
-                                            let Some(_event) = event else { break };
-                                            // don't need to do anything with events, just drain
-                                        }
-                                        _ = self.cancel_token.cancelled() => {
-                                            process.abort_handle.abort();
-                                            let _ = runtime.run_command(
-                                                "git rebase --abort",
-                                                self.config.effective_working_dir(),
-                                                Duration::from_secs(120),
-                                            ).await;
-                                            return;
-                                        }
-                                    }
-                                }
-                                let _ = process.completion.await;
-                            }
-                            Err(e) => {
-                                tracing::warn!("Conflict resolution agent failed to spawn: {}", e);
-                                // Abort the rebase since we can't resolve conflicts
-                                let _ = runtime
-                                    .run_command("git rebase --abort", self.config.effective_working_dir(), timeout)
-                                    .await;
-                                last_error = format!("conflict resolution failed to start: {}", e);
-                                continue;
-                            }
-                        }
-
-                        // Check if rebase is still in progress
-                        let post_status = runtime
-                            .run_command("git status", self.config.effective_working_dir(), timeout)
-                            .await;
-
-                        let rebase_in_progress = match &post_status {
-                            Ok(status) => {
-                                let combined = combine_output(&status.stdout, &status.stderr);
-                                combined.contains("rebase in progress")
-                            }
-                            Err(_) => false,
-                        };
-
-                        if rebase_in_progress {
-                            let _ = runtime
-                                .run_command(
-                                    "git rebase --abort",
-                                    self.config.effective_working_dir(),
-                                    timeout,
-                                )
-                                .await;
-                            self.emit(SessionEvent::GitSyncConflictResolveComplete {
-                                iteration,
-                                attempt,
-                                success: false,
-                            });
-                            last_error = "conflict resolution did not complete rebase".to_string();
-                        } else {
-                            self.emit(SessionEvent::GitSyncConflictResolveComplete {
-                                iteration,
-                                attempt,
-                                success: true,
-                            });
-
-                            // Retry push after successful conflict resolution
-                            match runtime
-                                .run_command(
-                                    &format!("git push origin {branch}"),
-                                    self.config.effective_working_dir(),
-                                    timeout,
-                                )
-                                .await
-                            {
-                                Ok(push_output) if push_output.exit_code == 0 => {
-                                    self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
-                                    return;
-                                }
-                                Ok(push_output) => {
-                                    last_error = combine_output(
-                                        &push_output.stdout,
-                                        &push_output.stderr,
-                                    );
-                                    tracing::warn!(
-                                        "push after conflict resolution failed (attempt {}/{}): {}",
-                                        attempt,
-                                        git_sync_config.max_push_retries,
-                                        last_error
-                                    );
-                                }
-                                Err(e) => {
-                                    last_error = format!(
-                                        "push after conflict resolution command error: {}",
-                                        e
-                                    );
-                                    tracing::warn!(
-                                        "push after conflict resolution error (attempt {}/{}): {}",
-                                        attempt,
-                                        git_sync_config.max_push_retries,
-                                        last_error
-                                    );
-                                }
-                            }
-                        }
-                    } else {
-                        // Rebase failed for non-conflict reasons
-                        last_error = rebase_error;
-                        let _ = runtime
-                            .run_command("git rebase --abort", self.config.effective_working_dir(), timeout)
-                            .await;
-                    }
-                }
-                Err(e) => {
-                    last_error = format!("rebase command error: {}", e);
-                    tracing::warn!(
-                        "rebase error (attempt {}/{}): {}",
-                        attempt,
-                        git_sync_config.max_push_retries,
-                        last_error
-                    );
-                }
-            }
-        }
-
-        // All retries exhausted — include the last error for debugging
-        let error_msg = if last_error.is_empty() {
-            "push failed after all retries".to_string()
-        } else {
-            format!("push failed after all retries: {}", last_error)
+        let merge_config = GitMergeConfig {
+            working_dir: self.config.effective_working_dir(),
+            push_command: &push_cmd,
+            fetch_command: &fetch_cmd,
+            rebase_command: &rebase_cmd,
+            push_u_command: Some(&push_u_cmd),
+            conflict_prompt: git_sync_config.conflict_prompt.as_deref(),
+            conflict_model: git_sync_config.model.clone().or(Some("sonnet".to_string())),
+            max_retries: git_sync_config.max_push_retries,
+            cancel_token: &self.cancel_token,
+            env_vars: &self.config.env_vars,
         };
-        self.emit(SessionEvent::GitSyncFailed {
-            iteration,
-            error: error_msg,
-        });
+
+        let _ = git_merge_push(runtime, &merge_config, |event| {
+            match event {
+                GitMergeEvent::PushSucceeded => {
+                    self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
+                }
+                GitMergeEvent::ConflictDetected { files } => {
+                    self.emit(SessionEvent::GitSyncConflict { iteration, files });
+                }
+                GitMergeEvent::ConflictResolveStarted { attempt } => {
+                    self.emit(SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
+                }
+                GitMergeEvent::ConflictResolveComplete { attempt, success } => {
+                    self.emit(SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
+                }
+                GitMergeEvent::Failed { error } => {
+                    self.emit(SessionEvent::GitSyncFailed { iteration, error });
+                }
+            }
+        })
+        .await;
     }
 
     /// Execute the Ralph loop. Returns the finalized trace.
@@ -2555,6 +2259,136 @@ mod tests {
         assert!(
             !events.iter().any(|e| matches!(e, SessionEvent::GitSyncPushSucceeded { .. })),
             "should not emit GitSyncPushSucceeded when all retries fail, got: {:?}",
+            events
+        );
+    }
+
+    #[tokio::test]
+    async fn git_sync_conflict_resolved_successfully() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let runner = make_runner_with_git_sync(
+            &tmp,
+            Some(GitSyncConfig {
+                enabled: true,
+                ..Default::default()
+            }),
+        );
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. Branch detection: git branch --show-current
+            CommandOutput {
+                exit_code: 0,
+                stdout: "feature-branch\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. First push: git push origin feature-branch — fails (rejected)
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "rejected".to_string(),
+            },
+            // 3. Push -u: git push -u origin feature-branch — also fails (rejected)
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "rejected".to_string(),
+            },
+            // 4. Fetch: git fetch origin feature-branch — succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. Rebase: git pull --rebase origin feature-branch — fails with CONFLICT
+            CommandOutput {
+                exit_code: 1,
+                stdout: "CONFLICT (content): Merge conflict in src/app.rs\n".to_string(),
+                stderr: String::new(),
+            },
+            // 6. git status — shows unmerged paths
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Unmerged paths:\n  both modified:   src/app.rs\n".to_string(),
+                stderr: String::new(),
+            },
+            // 7. git diff --name-only --diff-filter=U — returns conflicted files
+            CommandOutput {
+                exit_code: 0,
+                stdout: "src/app.rs\n".to_string(),
+                stderr: String::new(),
+            },
+            // 8. (Claude is spawned via spawn_claude — MockRuntime handles this automatically)
+            // 9. Post-resolution git status — clean state, no "rebase in progress"
+            CommandOutput {
+                exit_code: 0,
+                stdout: "On branch feature-branch\nnothing to commit, working tree clean\n".to_string(),
+                stderr: String::new(),
+            },
+            // 10. Push after conflict resolution: git push origin feature-branch — succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        runner.git_sync(&runtime, 1).await;
+
+        let events = get_events(&runner);
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, SessionEvent::GitSyncStarted { iteration: 1 })),
+            "should emit GitSyncStarted, got: {:?}",
+            events
+        );
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                SessionEvent::GitSyncConflict {
+                    iteration: 1,
+                    files
+                } if files == &vec!["src/app.rs".to_string()]
+            )),
+            "should emit GitSyncConflict with conflicted files, got: {:?}",
+            events
+        );
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                SessionEvent::GitSyncConflictResolveStarted {
+                    iteration: 1,
+                    attempt: 1
+                }
+            )),
+            "should emit GitSyncConflictResolveStarted, got: {:?}",
+            events
+        );
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                SessionEvent::GitSyncConflictResolveComplete {
+                    iteration: 1,
+                    attempt: 1,
+                    success: true
+                }
+            )),
+            "should emit GitSyncConflictResolveComplete with success: true, got: {:?}",
+            events
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, SessionEvent::GitSyncPushSucceeded { iteration: 1 })),
+            "should emit GitSyncPushSucceeded, got: {:?}",
+            events
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, SessionEvent::GitSyncFailed { .. })),
+            "should NOT emit GitSyncFailed, got: {:?}",
             events
         );
     }

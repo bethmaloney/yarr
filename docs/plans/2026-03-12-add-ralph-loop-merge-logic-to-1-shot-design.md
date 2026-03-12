@@ -51,9 +51,9 @@ The goal is to extract the retry loop (fetch → rebase → detect conflicts →
   ```
 - [x] Create `pub async fn git_merge_push(runtime, config, on_event)` that implements the core retry loop: try push → optional push -u fallback → retry loop (fetch/rebase/conflict-resolution/push). 7 tests covering all paths.
 - [x] The push command is configurable via `push_command` and `push_u_command` fields — `MergeToMain` can use `git push origin {branch}:main`, `Branch`/`git_sync` can use `git push origin {branch}`
-- [ ] Refactor `SessionRunner::git_sync` to call `git_merge_push` internally, translating `GitMergeEvent` callbacks into `SessionEvent` emissions (preserving the `iteration` field)
-- [ ] Ensure all existing `SessionEvent::GitSync*` events are still emitted correctly after the refactor
-- [x] Run `cargo test` in `src-tauri` — all 425 tests pass
+- [x] Refactor `SessionRunner::git_sync` to call `git_merge_push` internally, translating `GitMergeEvent` callbacks into `SessionEvent` emissions (preserving the `iteration` field)
+- [x] Ensure all existing `SessionEvent::GitSync*` events are still emitted correctly after the refactor — added `git_sync_conflict_resolved_successfully` test to verify conflict event translation
+- [x] Run `cargo test` in `src-tauri` — all 426 tests pass
 
 ### Task 2: Add Merge Logic to 1-Shot `MergeToMain` Strategy
 
@@ -152,7 +152,7 @@ The frontend already knows how to display `git_sync_*` events in the Ralph loop'
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Task 1: Extract shared merge logic | In Progress | `git_merge.rs` created with `GitMergeConfig`, `GitMergeEvent`, `git_merge_push` + 7 tests. Still need to refactor `session.rs:git_sync` to call it. |
+| Task 1: Extract shared merge logic | Complete | `git_merge.rs` with shared function + 7 tests. `SessionRunner::git_sync` refactored to call `git_merge_push` with event translation. 426 tests pass. Note: pre-existing bug — `env_vars` not passed to `ClaudeInvocation` in conflict resolution (both old inline code and new `git_merge.rs` use `HashMap::new()`). |
 | Task 2: MergeToMain with retries | Pending | Depends on Task 1 |
 | Task 3: Branch with retries | Pending | Depends on Task 1 |
 | Task 4: Frontend merge progress | Pending | Depends on Tasks 2-3 |
