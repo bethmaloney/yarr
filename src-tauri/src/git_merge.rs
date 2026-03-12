@@ -429,7 +429,62 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // Test 2: Push fails, rebase succeeds, then push succeeds
+    // Test 2: Push fails, push -u succeeds (no retry loop)
+    // ---------------------------------------------------------------
+    #[tokio::test]
+    async fn test_push_u_fallback_succeeds() {
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. Push: git push origin main — fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "error: failed to push some refs".to_string(),
+            },
+            // 2. Push -u: git push -u origin branch — succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let cancel_token = CancellationToken::new();
+        let env_vars = HashMap::new();
+        let config = GitMergeConfig {
+            working_dir: Path::new("/mock/repo"),
+            push_command: "git push origin main",
+            push_u_command: Some("git push -u origin branch"),
+            fetch_command: "git fetch origin main",
+            rebase_command: "git pull --rebase origin main",
+            conflict_prompt: None,
+            conflict_model: None,
+            max_retries: 3,
+            cancel_token: &cancel_token,
+            env_vars: &env_vars,
+        };
+
+        let (events, on_event) = event_collector();
+        let result = git_merge_push(&runtime, &config, on_event).await;
+
+        assert!(result.is_ok(), "push -u should succeed, got: {:?}", result);
+
+        let collected = events.lock().unwrap().clone();
+        assert!(
+            collected.contains(&GitMergeEvent::PushSucceeded),
+            "should emit PushSucceeded, got: {:?}",
+            collected
+        );
+        assert_eq!(
+            collected.len(),
+            1,
+            "should only emit PushSucceeded (no retry loop events), got: {:?}",
+            collected
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // Test 3: Push fails, rebase succeeds, then push succeeds
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_push_fails_rebase_succeeds_push_succeeds() {
@@ -479,7 +534,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // Test 3: Rebase conflict, Claude resolves, push succeeds
+    // Test 4: Rebase conflict, Claude resolves, push succeeds
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_rebase_conflict_claude_resolves_push_succeeds() {
@@ -568,7 +623,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // Test 4: Rebase conflict, Claude fails to resolve, abort and retry
+    // Test 5: Rebase conflict, Claude fails to resolve, abort and retry
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_rebase_conflict_claude_fails_abort_retry() {
@@ -665,7 +720,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // Test 5: All retries exhausted
+    // Test 6: All retries exhausted
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_all_retries_exhausted() {
@@ -727,7 +782,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // Test 6: Cancellation during conflict resolution
+    // Test 7: Cancellation during conflict resolution
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_cancellation_during_conflict_resolution() {
@@ -790,7 +845,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // Test 7: Fetch fails, continues to next retry
+    // Test 8: Fetch fails, continues to next retry
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_fetch_fails_continues_to_next_retry() {

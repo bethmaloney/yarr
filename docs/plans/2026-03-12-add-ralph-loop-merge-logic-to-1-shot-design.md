@@ -117,24 +117,27 @@ The frontend already knows how to display `git_sync_*` events in the Ralph loop'
 - Existing `oneshot-helpers.test.ts`
 
 **Checklist:**
-- [ ] **Shared merge function tests** (in `session.rs` or a new `src-tauri/src/git_merge.rs` test module):
-  - Test successful push on first try
-  - Test push fails, push -u succeeds
-  - Test push fails, rebase succeeds, push succeeds
-  - Test rebase with conflicts, Claude resolves, push succeeds
-  - Test rebase with conflicts, Claude fails to resolve (rebase still in progress), abort, retry
-  - Test all retries exhausted → returns error
-  - Test cancellation during conflict resolution
-- [ ] **1-shot MergeToMain tests** (in `oneshot.rs`):
-  - Test merge-to-main with conflict during rebase that Claude resolves successfully
-  - Test merge-to-main where all retries fail → preserves worktree with error message
-  - Existing `test_oneshot_merge_to_main_flow` should still pass (no conflicts = no retries needed)
-- [ ] **1-shot Branch tests** (in `oneshot.rs`):
-  - Test branch push failure → retry with rebase succeeds
-  - Existing branch tests should still pass
-- [ ] **Frontend tests** (in `oneshot-helpers.test.ts`):
-  - Test `getPhaseFromEvents` returns correct phase when `git_sync_conflict` events are present during finalize
-- [ ] Run full test suite: `cd src-tauri && cargo test` and `npm test`
+- [x] **Shared merge function tests** (in `src-tauri/src/git_merge.rs` test module):
+  - Test successful push on first try — `test_push_succeeds_first_try`
+  - Test push fails, push -u succeeds — `test_push_u_fallback_succeeds` (added in Task 5)
+  - Test push fails, rebase succeeds, push succeeds — `test_push_fails_rebase_succeeds_push_succeeds`
+  - Test rebase with conflicts, Claude resolves, push succeeds — `test_rebase_conflict_claude_resolves_push_succeeds`
+  - Test rebase with conflicts, Claude fails to resolve (rebase still in progress), abort, retry — `test_rebase_conflict_claude_fails_abort_retry`
+  - Test all retries exhausted → returns error — `test_all_retries_exhausted`
+  - Test cancellation during conflict resolution — `test_cancellation_during_conflict_resolution`
+  - Bonus: fetch failure recovery — `test_fetch_fails_continues_to_next_retry`
+- [x] **1-shot MergeToMain tests** (in `oneshot.rs`):
+  - Test merge-to-main with conflict during rebase that Claude resolves successfully — `test_oneshot_merge_to_main_with_conflict_resolution`
+  - Test merge-to-main where all retries fail → preserves worktree with error message — `test_oneshot_merge_to_main_all_retries_fail`
+  - Existing `test_oneshot_merge_to_main_flow` still passes (no conflicts = no retries needed)
+- [x] **1-shot Branch tests** (in `oneshot.rs`):
+  - Test branch push failure → retry with rebase succeeds — `test_oneshot_branch_push_failure_retry_succeeds`
+  - Test branch all retries fail — `test_oneshot_branch_all_retries_fail`
+  - Existing `test_oneshot_branch_flow` still passes
+- [x] **Frontend tests** (in `oneshot-helpers.test.ts`):
+  - Test `getPhaseFromEvents` returns `finalizing_conflict` when `git_sync_conflict` events are present during finalize
+  - Test `phaseLabel` returns "Resolving Conflicts..." for `finalizing_conflict` phase
+- [x] Run full test suite: `cd src-tauri && cargo test` (431 pass) and `npm test` (792 pass)
 
 ## Design Decisions
 
@@ -156,4 +159,4 @@ The frontend already knows how to display `git_sync_*` events in the Ralph loop'
 | Task 2: MergeToMain with retries | Complete | Replaced naive fetch→rebase→push with `git_merge_push` call. Uses `u32::MAX` as iteration sentinel for GitSync events during finalize. 2 new integration tests (conflict resolution success + all retries fail). 428 tests pass. Pre-existing note: `git branch -d` runs from worktree dir so silently fails (branch checked out there) — cleanup still works via `git worktree remove`. |
 | Task 3: Branch with retries | Complete | Replaced naive single push with `git_merge_push` call. Uses `push_command: "git push origin {branch}"`, `push_u_command: Some("git push -u origin {branch}")`, `fetch_command: "git fetch origin {branch}"`, `rebase_command: "git pull --rebase origin {branch}"`. Same event translation and `GitSyncConfig` default as MergeToMain. 2 new integration tests (retry succeeds + all retries fail). 430 tests pass. |
 | Task 4: Frontend merge progress | Complete | Added `finalizing_conflict` phase to `getPhaseFromEvents` (returns "Resolving Conflicts..." when conflicts occur during finalize). Fixed `iteration-groups.ts` to show git_sync_* events as standalone during finalize (no fake iteration group with u32::MAX). 5 new tests. 792 tests pass. |
-| Task 5: Tests | Pending | Depends on Tasks 1-4 |
+| Task 5: Tests | Complete | Added missing `test_push_u_fallback_succeeds` test in `git_merge.rs`. All other tests were already written during Tasks 1-4. Full suite: 431 Rust tests, 792 frontend tests — all pass. |
