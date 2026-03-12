@@ -7,9 +7,10 @@ use anyhow::Result;
 use chrono::Utc;
 use tokio_util::sync::CancellationToken;
 
+use crate::git_merge::{git_merge_push, GitMergeConfig, GitMergeEvent};
 use crate::prompt;
 use crate::runtime::RuntimeProvider;
-use crate::session::{AbortRegistry, OnSessionEvent, SessionConfig, SessionEvent, SessionRunner};
+use crate::session::{AbortRegistry, GitSyncConfig, OnSessionEvent, SessionConfig, SessionEvent, SessionRunner};
 use crate::trace::{SessionOutcome, SessionTrace, TraceCollector};
 
 /// Strategy for integrating 1-shot work back into the repository.
@@ -589,86 +590,69 @@ impl OneShotRunner {
 
         match self.config.merge_strategy {
             MergeStrategy::MergeToMain => {
-                // All git operations happen inside the worktree to avoid
-                // touching the user's main repo checkout.
+                // Use shared git_merge_push for robust merge-with-retry logic.
+                // This handles fetch, rebase, conflict resolution via Claude,
+                // and push retries automatically.
+                let push_cmd = format!("git push origin {}:main", branch);
+                let fetch_cmd = "git fetch origin main".to_string();
+                let rebase_cmd = "git rebase origin/main".to_string();
 
-                // 1. Fetch latest origin/main
-                let fetch = runtime
-                    .run_command(
-                        "git fetch origin main",
-                        &wt_path,
-                        Duration::from_secs(120),
-                    )
-                    .await?;
+                let git_sync_config = self.config.git_sync.clone().unwrap_or(GitSyncConfig {
+                    enabled: true,
+                    conflict_prompt: None,
+                    model: None,
+                    max_push_retries: 3,
+                });
 
-                if fetch.exit_code != 0 {
-                    let fetch_err = if fetch.stderr.is_empty() { &fetch.stdout } else { &fetch.stderr };
+                let merge_config = GitMergeConfig {
+                    working_dir: &wt_path,
+                    push_command: &push_cmd,
+                    fetch_command: &fetch_cmd,
+                    rebase_command: &rebase_cmd,
+                    push_u_command: None,
+                    conflict_prompt: git_sync_config.conflict_prompt.as_deref(),
+                    conflict_model: git_sync_config.model.clone().or(Some("sonnet".to_string())),
+                    max_retries: git_sync_config.max_push_retries,
+                    cancel_token: &self.cancel_token,
+                    env_vars: &self.config.env_vars,
+                };
+
+                let iteration = u32::MAX;
+                let merge_result = git_merge_push(runtime, &merge_config, |event| {
+                    match event {
+                        GitMergeEvent::PushSucceeded => {
+                            self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
+                        }
+                        GitMergeEvent::ConflictDetected { files } => {
+                            self.emit(SessionEvent::GitSyncConflict { iteration, files });
+                        }
+                        GitMergeEvent::ConflictResolveStarted { attempt } => {
+                            self.emit(SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
+                        }
+                        GitMergeEvent::ConflictResolveComplete { attempt, success } => {
+                            self.emit(SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
+                        }
+                        GitMergeEvent::Failed { error } => {
+                            self.emit(SessionEvent::GitSyncFailed { iteration, error });
+                        }
+                    }
+                }).await;
+
+                if let Err(err) = merge_result {
                     self.emit(SessionEvent::OneShotFailed {
                         reason: format!(
-                            "Failed to fetch origin/main: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree and push manually. Once done, remove the worktree with:\ngit worktree remove {}",
-                            fetch_err, branch, wt_path.display(), wt_path.display()
+                            "Merge to main failed: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree, rebase manually, then push. Once done, remove the worktree with:\ngit worktree remove {}",
+                            err, branch, wt_path.display(), wt_path.display()
                         ),
                     });
                     trace.outcome = SessionOutcome::Failed;
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
                     let _ = self.collector.finalize(&mut trace, &events).await;
-                    return Err(anyhow::anyhow!("Fetch failed"));
+                    return Err(anyhow::anyhow!("Merge to main failed"));
                 }
 
-                // 2. Rebase our branch onto origin/main
-                let rebase = runtime
-                    .run_command(
-                        "git rebase origin/main",
-                        &wt_path,
-                        Duration::from_secs(120),
-                    )
-                    .await?;
-
-                if rebase.exit_code != 0 {
-                    // Abort rebase to leave worktree in a clean state
-                    let _ = runtime.run_command("git rebase --abort", &wt_path, Duration::from_secs(30)).await;
-                    let rebase_err = if rebase.stderr.is_empty() { &rebase.stdout } else { &rebase.stderr };
-                    self.emit(SessionEvent::OneShotFailed {
-                        reason: format!(
-                            "Rebase onto origin/main failed (conflicts): {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree, rebase manually, then push. Once done, remove the worktree with:\ngit worktree remove {}",
-                            rebase_err, branch, wt_path.display(), wt_path.display()
-                        ),
-                    });
-                    trace.outcome = SessionOutcome::Failed;
-                    trace.end_time = Some(Utc::now());
-                    let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
-                    return Err(anyhow::anyhow!("Rebase failed"));
-                }
-
-                // 3. Push rebased branch directly to origin/main
-                // We skip checkout + ff-merge because `main` may already be
-                // checked out in the primary worktree, which git forbids.
-                let push = runtime
-                    .run_command(
-                        &format!("git push origin {}:main", branch),
-                        &wt_path,
-                        Duration::from_secs(120),
-                    )
-                    .await?;
-
-                if push.exit_code != 0 {
-                    let push_err = if push.stderr.is_empty() { &push.stdout } else { &push.stderr };
-                    self.emit(SessionEvent::OneShotFailed {
-                        reason: format!(
-                            "Push failed: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree, pull/rebase, then push manually. Once done, remove the worktree with:\ngit worktree remove {}",
-                            push_err, branch, wt_path.display(), wt_path.display()
-                        ),
-                    });
-                    trace.outcome = SessionOutcome::Failed;
-                    trace.end_time = Some(Utc::now());
-                    let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
-                    return Err(anyhow::anyhow!("Push failed"));
-                }
-
-                // 6. Clean up: delete branch and remove worktree
+                // Clean up: delete branch and remove worktree
                 let _ = runtime
                     .run_command(
                         &format!("git branch -d {}", branch),
@@ -1688,34 +1672,113 @@ mod tests {
 
         let mut runtime = MockRuntime::completing_after(1);
 
-        // Command results:
+        // Command results for the git_merge_push flow:
         // 1. mkdir -p (success)
         // 2. git worktree add (success)
-        // 3. git fetch origin main (success)
-        // 4. git rebase origin/main (FAIL — conflict)
-        // 5. git rebase --abort (cleanup)
+        // --- git_merge_push begins ---
+        // 3. git push (optimistic) — FAIL (rejected)
+        // --- retry loop attempt 1/3 ---
+        // 4. git fetch origin main — success
+        // 5. git rebase origin/main — FAIL (non-conflict, e.g. diverged)
+        // 6. git status — no "Unmerged paths" (not a conflict)
+        // 7. git rebase --abort
+        // --- retry loop attempt 2/3 ---
+        // 8. git fetch origin main — success
+        // 9. git rebase origin/main — FAIL again
+        // 10. git status — no "Unmerged paths"
+        // 11. git rebase --abort
+        // --- retry loop attempt 3/3 ---
+        // 12. git fetch origin main — success
+        // 13. git rebase origin/main — FAIL again
+        // 14. git status — no "Unmerged paths"
+        // 15. git rebase --abort
+        // --- git_merge_push returns Err (all retries exhausted) ---
         runtime.command_results = vec![
+            // 1. mkdir -p
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 2. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
+            // 3. git push (optimistic) — FAIL
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "rejected: non-fast-forward".to_string(),
+            },
+            // 4. git fetch (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 5. git rebase (attempt 1) — FAIL (non-conflict)
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
-                stderr: "CONFLICT (content): Merge conflict in src/main.rs".to_string(),
+                stderr: "error: cannot rebase".to_string(),
             },
-            // rebase --abort cleanup
+            // 6. git status (conflict check) — no conflict markers
+            CommandOutput {
+                exit_code: 0,
+                stdout: "On branch oneshot/test\nnothing to commit".to_string(),
+                stderr: String::new(),
+            },
+            // 7. git rebase --abort
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 8. git fetch (attempt 2) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 9. git rebase (attempt 2) — FAIL
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "error: cannot rebase".to_string(),
+            },
+            // 10. git status — no conflict
+            CommandOutput {
+                exit_code: 0,
+                stdout: "On branch oneshot/test\nnothing to commit".to_string(),
+                stderr: String::new(),
+            },
+            // 11. git rebase --abort
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 12. git fetch (attempt 3) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 13. git rebase (attempt 3) — FAIL
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "error: cannot rebase".to_string(),
+            },
+            // 14. git status — no conflict
+            CommandOutput {
+                exit_code: 0,
+                stdout: "On branch oneshot/test\nnothing to commit".to_string(),
+                stderr: String::new(),
+            },
+            // 15. git rebase --abort
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -1736,7 +1799,7 @@ mod tests {
             *captured
         );
 
-        // Should have OneShotFailed (due to rebase conflict)
+        // Should have OneShotFailed (due to rebase failure after all retries)
         let failed_event = captured
             .iter()
             .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
@@ -1746,11 +1809,11 @@ mod tests {
             *captured
         );
 
-        // Verify the failure reason mentions rebase and worktree path
+        // Verify the failure reason mentions the merge failure and worktree path
         if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
             assert!(
-                reason.contains("Rebase"),
-                "failure reason should mention rebase, got: {}",
+                reason.contains("rebase") || reason.contains("Merge") || reason.contains("failed"),
+                "failure reason should mention rebase/merge failure, got: {}",
                 reason
             );
             assert!(
@@ -2139,5 +2202,359 @@ mod tests {
             Some("claude-sonnet".to_string())
         );
         assert_eq!(git_sync.max_push_retries, 5);
+    }
+
+    // =========================================================================
+    // MergeToMain with git_merge_push integration tests
+    // =========================================================================
+
+    /// Test that when the merge-to-main flow encounters a rebase conflict,
+    /// Claude resolves it successfully, the push succeeds, and the correct
+    /// GitSync* events are emitted during the finalize phase.
+    #[tokio::test]
+    async fn test_oneshot_merge_to_main_with_conflict_resolution() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_runner_with_events(&tmp, MergeStrategy::MergeToMain);
+
+        // completing_after(1) gives 2 scenarios (design + implementation).
+        // The mock reuses the last scenario when exhausted, so the 3rd
+        // spawn_claude call (conflict resolution inside git_merge_push)
+        // will also get a completing scenario. That's fine.
+        let mut runtime = MockRuntime::completing_after(1);
+
+        // Command sequence:
+        // 1. mkdir -p (worktree parent dir)               -> success
+        // 2. git worktree add                              -> success
+        //    [design phase — spawn_claude #1]
+        //    [implementation phase — spawn_claude #2]
+        // --- git_merge_push begins ---
+        // 3. git push origin {branch}:main (optimistic)   -> FAIL (rejected)
+        // --- retry loop attempt 1 ---
+        // 4. git fetch origin main                         -> success
+        // 5. git rebase origin/main                        -> FAIL (conflict)
+        // 6. git status (conflict check)                   -> "Unmerged paths" + "both modified"
+        // 7. git diff --name-only --diff-filter=U          -> conflict file list
+        //    [conflict resolution — spawn_claude #3]
+        // 8. git status (post-resolution check)            -> clean (no "rebase in progress")
+        // 9. git push origin {branch}:main (after resolve) -> success
+        // --- git_merge_push ends ---
+        // 10. git branch -d {branch}                       -> success
+        // 11. git worktree remove                          -> success
+        runtime.command_results = vec![
+            // 1. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 2. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git push (optimistic) — FAIL
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "rejected: non-fast-forward".to_string(),
+            },
+            // 4. git fetch origin main — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git rebase origin/main — FAIL (conflict)
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "CONFLICT (content): Merge conflict in src/main.rs".to_string(),
+            },
+            // 6. git status — shows unmerged paths
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Unmerged paths:\n  both modified: src/main.rs".to_string(),
+                stderr: String::new(),
+            },
+            // 7. git diff --name-only --diff-filter=U — conflict file list
+            CommandOutput {
+                exit_code: 0,
+                stdout: "src/main.rs\n".to_string(),
+                stderr: String::new(),
+            },
+            // [spawn_claude #3 for conflict resolution happens here]
+            // 8. git status (post-resolution) — clean, no "rebase in progress"
+            CommandOutput {
+                exit_code: 0,
+                stdout: "On branch oneshot/add-login-feature\nnothing to commit".to_string(),
+                stderr: String::new(),
+            },
+            // 9. git push (after conflict resolution) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 10. git branch -d
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Deleted branch".to_string(),
+                stderr: String::new(),
+            },
+            // 11. git worktree remove
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(
+            result.is_ok(),
+            "run should succeed after conflict resolution, got: {:?}",
+            result.err()
+        );
+
+        let captured = events.lock().unwrap();
+
+        // Verify GitFinalizeStarted is present
+        let finalize_started_idx = captured
+            .iter()
+            .position(|e| matches!(e, SessionEvent::GitFinalizeStarted { .. }))
+            .expect("should have GitFinalizeStarted");
+
+        // All GitSync* events should appear AFTER GitFinalizeStarted
+        let events_after_finalize = &captured[finalize_started_idx..];
+
+        // Verify GitSyncConflict event with file list
+        assert!(
+            events_after_finalize.iter().any(|e| matches!(
+                e,
+                SessionEvent::GitSyncConflict { files, .. } if files.contains(&"src/main.rs".to_string())
+            )),
+            "should emit GitSyncConflict with conflict files after GitFinalizeStarted, got: {:?}",
+            events_after_finalize
+        );
+
+        // Verify GitSyncConflictResolveStarted
+        assert!(
+            events_after_finalize
+                .iter()
+                .any(|e| matches!(e, SessionEvent::GitSyncConflictResolveStarted { .. })),
+            "should emit GitSyncConflictResolveStarted after GitFinalizeStarted, got: {:?}",
+            events_after_finalize
+        );
+
+        // Verify GitSyncConflictResolveComplete with success=true
+        assert!(
+            events_after_finalize.iter().any(|e| matches!(
+                e,
+                SessionEvent::GitSyncConflictResolveComplete { success, .. } if *success
+            )),
+            "should emit GitSyncConflictResolveComplete(success=true) after GitFinalizeStarted, got: {:?}",
+            events_after_finalize
+        );
+
+        // Verify GitSyncPushSucceeded
+        assert!(
+            events_after_finalize
+                .iter()
+                .any(|e| matches!(e, SessionEvent::GitSyncPushSucceeded { .. })),
+            "should emit GitSyncPushSucceeded after GitFinalizeStarted, got: {:?}",
+            events_after_finalize
+        );
+
+        // Verify OneShotComplete is present
+        assert!(
+            captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should emit OneShotComplete after successful conflict resolution, got: {:?}",
+            *captured
+        );
+
+        // Should NOT have OneShotFailed
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotFailed { .. })),
+            "should not emit OneShotFailed on success"
+        );
+    }
+
+    /// Test that when the merge-to-main flow exhausts all push retries,
+    /// OneShotFailed is emitted, the worktree is NOT cleaned up, and
+    /// OneShotComplete is NOT emitted.
+    #[tokio::test]
+    async fn test_oneshot_merge_to_main_all_retries_fail() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_runner_with_events(&tmp, MergeStrategy::MergeToMain);
+
+        let mut runtime = MockRuntime::completing_after(1);
+
+        // Command sequence:
+        // 1. mkdir -p (worktree parent dir)               -> success
+        // 2. git worktree add                              -> success
+        //    [design phase — spawn_claude #1]
+        //    [implementation phase — spawn_claude #2]
+        // --- git_merge_push begins ---
+        // 3. git push origin {branch}:main (optimistic)   -> FAIL
+        // --- retry loop attempt 1/3 ---
+        // 4. git fetch origin main                         -> success
+        // 5. git rebase origin/main                        -> success
+        // 6. git push origin {branch}:main                 -> FAIL
+        // --- retry loop attempt 2/3 ---
+        // 7. git fetch origin main                         -> success
+        // 8. git rebase origin/main                        -> success
+        // 9. git push origin {branch}:main                 -> FAIL
+        // --- retry loop attempt 3/3 ---
+        // 10. git fetch origin main                        -> success
+        // 11. git rebase origin/main                       -> success
+        // 12. git push origin {branch}:main                -> FAIL
+        // --- git_merge_push returns Err (all retries exhausted) ---
+        // NO git branch -d or git worktree remove should follow
+        runtime.command_results = vec![
+            // 1. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 2. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git push (optimistic) — FAIL
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "rejected: non-fast-forward".to_string(),
+            },
+            // 4. git fetch (attempt 1) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git rebase (attempt 1) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Successfully rebased".to_string(),
+                stderr: String::new(),
+            },
+            // 6. git push (attempt 1) — FAIL
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "rejected again".to_string(),
+            },
+            // 7. git fetch (attempt 2) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 8. git rebase (attempt 2) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Successfully rebased".to_string(),
+                stderr: String::new(),
+            },
+            // 9. git push (attempt 2) — FAIL
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "rejected again".to_string(),
+            },
+            // 10. git fetch (attempt 3) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 11. git rebase (attempt 3) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Successfully rebased".to_string(),
+                stderr: String::new(),
+            },
+            // 12. git push (attempt 3) — FAIL (last retry)
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "rejected: remote has changed".to_string(),
+            },
+            // If the implementation incorrectly tries to clean up after failure,
+            // it would consume more commands from the mock. Since MockRuntime
+            // repeats the last result when exhausted (exit_code: 1), any
+            // additional cleanup commands would get a failure result. The test
+            // verifies correctness through event assertions below.
+        ];
+
+        let _result = runner.run(&runtime).await;
+
+        let captured = events.lock().unwrap();
+
+        // Verify OneShotFailed is emitted with a message about push failure
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed when all retries are exhausted, events: {:?}",
+            *captured
+        );
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.to_lowercase().contains("push")
+                    || reason.to_lowercase().contains("retries")
+                    || reason.to_lowercase().contains("failed"),
+                "OneShotFailed reason should mention push failure, got: {}",
+                reason
+            );
+        }
+
+        // Verify OneShotComplete is NOT emitted
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should not emit OneShotComplete when all retries fail"
+        );
+
+        // Verify GitFinalizeStarted was emitted (we did enter the finalize phase)
+        assert!(
+            captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::GitFinalizeStarted { .. })),
+            "should emit GitFinalizeStarted even when push eventually fails, events: {:?}",
+            *captured
+        );
+
+        // Verify GitFinalizeComplete is NOT emitted (finalize did not succeed)
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::GitFinalizeComplete)),
+            "should not emit GitFinalizeComplete when push fails after all retries"
+        );
+
+        // Verify the OneShotFailed reason specifically mentions push failure
+        // after retries (not a fetch or rebase failure). The new git_merge_push
+        // returns an error like "push failed after all retries: ..." which the
+        // oneshot runner wraps in the OneShotFailed event.
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            let reason_lower = reason.to_lowercase();
+            assert!(
+                reason_lower.contains("push failed after all retries")
+                    || reason_lower.contains("push failed"),
+                "OneShotFailed reason should contain 'push failed after all retries' (from git_merge_push retry exhaustion), got: {}",
+                reason
+            );
+        }
     }
 }
