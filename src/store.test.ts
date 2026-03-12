@@ -176,13 +176,15 @@ beforeEach(() => {
   mockData.clear();
   mockListenerCallback.current = null;
 
-  // Default: listen captures the callback and returns the unlisten fn
+  // Default: listen captures the session-event callback and returns the unlisten fn
   mockListen.mockImplementation(
     async (
-      _eventName: string,
+      eventName: string,
       callback: (event: { payload: TaggedSessionEvent }) => void,
     ) => {
-      mockListenerCallback.current = callback;
+      if (eventName === "session-event") {
+        mockListenerCallback.current = callback;
+      }
       return mockUnlisten;
     },
   );

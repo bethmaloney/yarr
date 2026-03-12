@@ -6,10 +6,29 @@ import { MemoryRouter } from "react-router";
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockInitialize, mockCleanup } = vi.hoisted(() => ({
-  mockInitialize: vi.fn(),
-  mockCleanup: vi.fn(),
-}));
+const { mockInitialize, mockCleanup, stableStore } = vi.hoisted(() => {
+  const mockInitialize = vi.fn();
+  const mockCleanup = vi.fn();
+  // All store values must be stable references to avoid infinite re-render loops.
+  // Creating vi.fn() inside the selector callback would produce a new reference on
+  // every render, causing React to re-render indefinitely and OOM.
+  const stableStore: Record<string, unknown> = {
+    initialize: mockInitialize,
+    repos: [],
+    sessions: new Map(),
+    latestTraces: new Map(),
+    oneShotEntries: new Map(),
+    addLocalRepo: vi.fn(),
+    addSshRepo: vi.fn(),
+    dismissOneShot: vi.fn(),
+    runSession: vi.fn(),
+    stopSession: vi.fn(),
+    reconnectSession: vi.fn(),
+    updateRepo: vi.fn(),
+    runOneShot: vi.fn(),
+  };
+  return { mockInitialize, mockCleanup, stableStore };
+});
 
 // ---------------------------------------------------------------------------
 // vi.mock declarations
@@ -18,17 +37,9 @@ const { mockInitialize, mockCleanup } = vi.hoisted(() => ({
 vi.mock("./store", () => ({
   useAppStore: vi.fn((selector?: unknown) => {
     if (typeof selector === "function") {
-      return (selector as (s: Record<string, unknown>) => unknown)({
-        initialize: mockInitialize,
-        repos: [],
-        sessions: new Map(),
-        latestTraces: new Map(),
-        oneShotEntries: new Map(),
-        addLocalRepo: vi.fn(),
-        addSshRepo: vi.fn(),
-      });
+      return (selector as (s: Record<string, unknown>) => unknown)(stableStore);
     }
-    return { initialize: mockInitialize };
+    return stableStore;
   }),
 }));
 
