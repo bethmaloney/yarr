@@ -539,6 +539,74 @@ describe("session event handling", () => {
       );
     });
   });
+
+  it("auto-move: NOT invoked when movePlansToCompleted is false", () => {
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+          movePlansToCompleted: false,
+        } as Partial<RepoConfig>),
+      ],
+    });
+
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "completed",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "move_plan_to_completed",
+      expect.anything(),
+    );
+  });
+
+  it("auto-move: invoked when movePlansToCompleted is true", () => {
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+          movePlansToCompleted: true,
+        } as Partial<RepoConfig>),
+      ],
+    });
+
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "completed",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
+
+  it("auto-move: invoked when movePlansToCompleted is undefined (default true)", () => {
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+        } as Partial<RepoConfig>),
+      ],
+    });
+
+    // movePlansToCompleted is not set on the repo — should default to true
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "completed",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
 });
 
 // ===========================================================================
@@ -1620,6 +1688,67 @@ describe("1-shot auto-move plan on completion", () => {
         sshHost: "dev-server",
         remotePath: "/home/beth/repos/other",
       },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
+
+  it("auto-move: NOT invoked when parent repo has movePlansToCompleted false", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+          movePlansToCompleted: false,
+        } as Partial<RepoConfig>),
+      ],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    // First emit design_phase_complete so plan_file is in session events
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    // Then emit one_shot_complete to trigger the auto-move
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "move_plan_to_completed",
+      expect.anything(),
+    );
+  });
+
+  it("auto-move: invoked when parent repo has movePlansToCompleted true", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+          movePlansToCompleted: true,
+        } as Partial<RepoConfig>),
+      ],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
       plansDir: "docs/plans/",
       filename: "my-plan.md",
     });
