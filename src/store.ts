@@ -88,6 +88,21 @@ export const useAppStore = create<AppStore>((set, get) => {
 
     set({ sessions: next });
 
+    // One-shot entry reconciliation: mark stale running entries as failed
+    const oneShotEntries = get().oneShotEntries;
+    const nextOneShot = new Map(oneShotEntries);
+    let oneShotChanged = false;
+    for (const [key, entry] of oneShotEntries) {
+      if (entry.status === "running" && !activeMap.has(key)) {
+        nextOneShot.set(key, { ...entry, status: "failed" });
+        oneShotChanged = true;
+      }
+    }
+    if (oneShotChanged) {
+      set({ oneShotEntries: nextOneShot });
+      oneShotStore.set("oneshot-entries", [...nextOneShot]).then(() => oneShotStore.save()).catch(() => {});
+    }
+
     // Event recovery: load historical events from disk for running sessions with empty events
     for (const [repoId, session] of next) {
       if (

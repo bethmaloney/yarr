@@ -1010,6 +1010,172 @@ describe("syncActiveSessions", () => {
     expect(session!.running).toBe(true);
     expect(session!.events).toEqual([]);
   });
+
+  // -------------------------------------------------------------------------
+  // One-shot entry reconciliation
+  // -------------------------------------------------------------------------
+
+  describe("one-shot entry reconciliation", () => {
+    it("marks running one-shot entry as failed when NOT in active sessions", async () => {
+      const entry = makeOneShotEntry({ id: "oneshot-abc", status: "running" });
+      useAppStore.setState({
+        oneShotEntries: new Map([["oneshot-abc", entry]]),
+      });
+
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions") return [];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const updated = useAppStore.getState().oneShotEntries.get("oneshot-abc");
+        expect(updated).toBeDefined();
+        expect(updated!.status).toBe("failed");
+      });
+    });
+
+    it("keeps running one-shot entry as running when IN active sessions", async () => {
+      const entry = makeOneShotEntry({ id: "oneshot-abc", status: "running" });
+      useAppStore.setState({
+        oneShotEntries: new Map([["oneshot-abc", entry]]),
+      });
+
+      // oneshot-abc IS in the active sessions list
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions")
+          return [["oneshot-abc", "sess-oneshot"]];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const calls = mockInvoke.mock.calls.filter(
+          (c) => c[0] === "get_active_sessions",
+        );
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+      });
+
+      const updated = useAppStore.getState().oneShotEntries.get("oneshot-abc");
+      expect(updated).toBeDefined();
+      expect(updated!.status).toBe("running");
+    });
+
+    it("does not change non-running one-shot entries", async () => {
+      const completed = makeOneShotEntry({
+        id: "oneshot-done",
+        status: "completed",
+      });
+      const failed = makeOneShotEntry({
+        id: "oneshot-fail",
+        status: "failed",
+      });
+      useAppStore.setState({
+        oneShotEntries: new Map([
+          ["oneshot-done", completed],
+          ["oneshot-fail", failed],
+        ]),
+      });
+
+      // No active sessions at all
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions") return [];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const calls = mockInvoke.mock.calls.filter(
+          (c) => c[0] === "get_active_sessions",
+        );
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+      });
+
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.get("oneshot-done")!.status).toBe("completed");
+      expect(entries.get("oneshot-fail")!.status).toBe("failed");
+    });
+
+    it("persists updated entries to oneShotStore after reconciliation", async () => {
+      const entry = makeOneShotEntry({ id: "oneshot-abc", status: "running" });
+      useAppStore.setState({
+        oneShotEntries: new Map([["oneshot-abc", entry]]),
+      });
+
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions") return [];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const updated = useAppStore.getState().oneShotEntries.get("oneshot-abc");
+        expect(updated).toBeDefined();
+        expect(updated!.status).toBe("failed");
+      });
+
+      // Verify persistence
+      const saved = mockData.get("oneshot-entries") as
+        | [string, OneShotEntry][]
+        | undefined;
+      expect(saved).toBeDefined();
+      const restoredMap = new Map(saved);
+      expect(restoredMap.get("oneshot-abc")).toBeDefined();
+      expect(restoredMap.get("oneshot-abc")!.status).toBe("failed");
+    });
+
+    it("only marks stale running entries as failed among multiple entries", async () => {
+      const staleRunning = makeOneShotEntry({
+        id: "oneshot-stale",
+        status: "running",
+      });
+      const activeRunning = makeOneShotEntry({
+        id: "oneshot-active",
+        status: "running",
+      });
+      const completedEntry = makeOneShotEntry({
+        id: "oneshot-done",
+        status: "completed",
+      });
+
+      useAppStore.setState({
+        oneShotEntries: new Map([
+          ["oneshot-stale", staleRunning],
+          ["oneshot-active", activeRunning],
+          ["oneshot-done", completedEntry],
+        ]),
+      });
+
+      // Only oneshot-active is in the active sessions
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions")
+          return [["oneshot-active", "sess-active"]];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const stale =
+          useAppStore.getState().oneShotEntries.get("oneshot-stale");
+        expect(stale).toBeDefined();
+        expect(stale!.status).toBe("failed");
+      });
+
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.get("oneshot-active")!.status).toBe("running");
+      expect(entries.get("oneshot-done")!.status).toBe("completed");
+    });
+  });
 });
 
 // ===========================================================================

@@ -210,9 +210,9 @@ Mark interrupted one-shot entries as failed when the backend process is gone.
 - Persist updated entries to `oneShotStore`
 
 **Checklist:**
-- [ ] Add one-shot reconciliation after sessions reconciliation
-- [ ] Persist changes
-- [ ] Run `npx tsc --noEmit`
+- [x] Add one-shot reconciliation after sessions reconciliation
+- [x] Persist changes
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -381,7 +381,7 @@ Update existing tests and add new ones for the changed behavior.
 | 2 | Extend `OneShotStarted` event with worktree/branch | Done |
 | 3 | Persist `session_id` in entry on launch | Done |
 | 4 | Save `worktreePath`/`branch` from event | Done |
-| 5 | Reconcile one-shot entries in `syncActiveSession()` | Not Started |
+| 5 | Reconcile one-shot entries in `syncActiveSession()` | Done |
 | 6 | Load one-shot events/traces on startup | Not Started |
 | 7 | Add empty state to `OneShotDetail` | Not Started |
 | 8 | Add `ResumeState` and refactor runner | Not Started |
