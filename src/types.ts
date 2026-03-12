@@ -99,4 +99,7 @@ export type OneShotEntry = {
   mergeStrategy: string;
   status: "running" | "completed" | "failed";
   startedAt: number;
+  session_id?: string;
+  worktreePath?: string;
+  branch?: string;
 };

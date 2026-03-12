@@ -118,8 +118,8 @@ Add `session_id`, `worktreePath`, and `branch` to the TypeScript type.
 - All optional to maintain backward compatibility with existing persisted entries
 
 **Checklist:**
-- [ ] Add three optional fields to `OneShotEntry`
-- [ ] Run `npx tsc --noEmit` to verify
+- [x] Add three optional fields to `OneShotEntry`
+- [x] Run `npx tsc --noEmit` to verify
 
 ---
 
@@ -377,7 +377,7 @@ Update existing tests and add new ones for the changed behavior.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add fields to `OneShotEntry` type | Not Started |
+| 1 | Add fields to `OneShotEntry` type | Done |
 | 2 | Extend `OneShotStarted` event with worktree/branch | Not Started |
 | 3 | Persist `session_id` in entry on launch | Not Started |
 | 4 | Save `worktreePath`/`branch` from event | Not Started |
