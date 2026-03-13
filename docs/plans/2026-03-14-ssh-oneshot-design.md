@@ -271,9 +271,9 @@ Add E2E test variants for SSH oneshot using mocked Tauri IPC.
 - Verify stop functionality works
 
 **Checklist:**
-- [ ] Add SSH oneshot happy path E2E test
-- [ ] Add SSH oneshot stop E2E test
-- [ ] `npm run test:e2e` passes
+- [x] Add SSH oneshot happy path E2E test
+- [x] Add SSH oneshot stop E2E test
+- [x] `npm run test:e2e` passes
 
 ---
 
@@ -287,4 +287,4 @@ Add E2E test variants for SSH oneshot using mocked Tauri IPC.
 | 4 | Handle reconnect notify for SSH oneshots | Done |
 | 5 | Update OneShotDetail.tsx for SSH host prefix | Done |
 | 6 | Rust unit tests for SSH oneshot | Done |
-| 7 | E2E tests for SSH oneshot | Not Started |
+| 7 | E2E tests for SSH oneshot | Done |
