@@ -125,9 +125,9 @@ Ensure all existing tests pass and update any that rely on the old context compu
 - `src/context-bar.test.ts` (no changes expected)
 
 **Checklist:**
-- [ ] Run `npm test` to verify all frontend tests pass
-- [ ] Run `cd src-tauri && cargo test` to verify all Rust tests pass
-- [ ] Run `npx tsc --noEmit` to verify no type errors
+- [x] Run `npm test` to verify all frontend tests pass
+- [x] Run `cd src-tauri && cargo test` to verify all Rust tests pass
+- [x] Run `npx tsc --noEmit` to verify no type errors
 
 ## Implementation Order
 
@@ -159,4 +159,4 @@ The recommended implementation order is:
 | Task 3: RepoCard.tsx update | Complete | Uses max_context_percent with fallback to old computation |
 | Task 4: OneShotDetail.tsx update | Complete | Peak context from max iteration, memoized, styled with sessionContextColor |
 | Task 5: Rust SessionTrace field | Complete | `max_context_percent: u8` in struct, `record_iteration`, `finalize`, 5 Rust tests, TS type updated, RepoCard integrated |
-| Task 6: Test verification | Not Started | All tests green |
+| Task 6: Test verification | Complete | 900 frontend tests, 485 Rust tests, no TS errors |
