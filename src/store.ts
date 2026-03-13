@@ -585,6 +585,8 @@ export const useAppStore = create<AppStore>((set, get) => {
 
         return result.oneshot_id;
       } catch (e) {
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        toast.error(`Failed to launch 1-shot: ${errorMsg}`);
         // Mark as failed
         const entries = new Map(get().oneShotEntries);
         const current = entries.get(tempId);

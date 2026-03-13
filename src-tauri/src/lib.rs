@@ -410,6 +410,7 @@ async fn run_oneshot(
     let cancel_token = CancellationToken::new();
     let session_id = Uuid::new_v4().to_string();
     let session_id_for_result = session_id.clone();
+    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, repo_type = ?repo, "run_oneshot called");
     {
         let active = app.state::<ActiveSessions>();
         active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
@@ -444,6 +445,7 @@ async fn run_oneshot(
             let base_dir = match app.path().app_data_dir() {
                 Ok(d) => d,
                 Err(e) => {
+                    tracing::error!(oneshot_id = %oneshot_id, error = %e, "failed to resolve app data dir");
                     app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
                     return Err(e.to_string());
                 }
@@ -480,7 +482,9 @@ async fn run_oneshot(
                 });
 
                 let runtime = default_runtime();
-                let _result = runner.run(runtime.as_ref()).await;
+                if let Err(e) = runner.run(runtime.as_ref()).await {
+                    tracing::error!(oneshot_id = %oneshot_id_bg, error = %e, "oneshot runner failed");
+                }
             });
 
             // Update the placeholder with the real JoinHandle
@@ -495,6 +499,7 @@ async fn run_oneshot(
             Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
         }
         RepoType::Ssh { .. } => {
+            tracing::warn!(oneshot_id = %oneshot_id, repo_id = %repo_id, "1-shot is not supported for SSH repos");
             app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
             Err("1-shot is not supported for SSH repos".to_string())
         }
@@ -524,6 +529,7 @@ async fn resume_oneshot(
     let session_id = Uuid::new_v4().to_string();
     let session_id_for_result = session_id.clone();
     let cancel_token = CancellationToken::new();
+    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, repo_type = ?repo, "resume_oneshot called");
     {
         let active = app.state::<ActiveSessions>();
         active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
@@ -536,6 +542,7 @@ async fn resume_oneshot(
                 || worktree_path.contains('|') || worktree_path.contains('&') || worktree_path.contains('\n')
                 || worktree_path.contains('\'') || worktree_path.contains('"') || worktree_path.contains('\\')
                 || worktree_path.contains('(') || worktree_path.contains(')') {
+                tracing::warn!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "resume_oneshot: invalid worktree path");
                 app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
                 return Err("Invalid worktree path".to_string());
             }
@@ -544,6 +551,7 @@ async fn resume_oneshot(
                 || branch.contains('|') || branch.contains('&') || branch.contains('\n')
                 || branch.contains('\'') || branch.contains('"') || branch.contains('\\')
                 || branch.contains(' ') || branch.contains('(') || branch.contains(')') {
+                tracing::warn!(oneshot_id = %oneshot_id, branch = %branch, "resume_oneshot: invalid branch name");
                 app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
                 return Err("Invalid branch name".to_string());
             }
@@ -566,7 +574,10 @@ async fn resume_oneshot(
                 }
             };
             let events = match TraceCollector::read_events(&base_dir, &oneshot_id, &old_session_id) {
-                Ok(events) => events,
+                Ok(events) => {
+                    tracing::info!(oneshot_id = %oneshot_id, event_count = events.len(), "loaded events from previous session");
+                    events
+                }
                 Err(e) => {
                     tracing::warn!("Failed to read events for resume (oneshot_id={}, session_id={}): {}. Will re-run all phases.", oneshot_id, old_session_id, e);
                     Vec::new()
@@ -579,8 +590,16 @@ async fn resume_oneshot(
                 PathBuf::from(&worktree_path),
                 branch.clone(),
             );
+            tracing::info!(
+                oneshot_id = %oneshot_id,
+                skip_design = resume_state.skip_design,
+                skip_implementation = resume_state.skip_implementation,
+                plan_file = ?resume_state.plan_file,
+                "detected resume phase"
+            );
 
             // Verify worktree still exists on disk
+            tracing::info!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "verifying worktree exists");
             let wt_check = runtime
                 .run_command(
                     &format!("test -d {}", worktree_path),
@@ -590,6 +609,7 @@ async fn resume_oneshot(
                 .await
                 .map_err(|e| e.to_string())?;
             if wt_check.exit_code != 0 {
+                tracing::error!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "worktree no longer exists on disk");
                 app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
                 return Err("Worktree no longer exists on disk".to_string());
             }
@@ -642,7 +662,9 @@ async fn resume_oneshot(
                 });
 
                 let runtime = default_runtime();
-                let _result = runner.run(runtime.as_ref()).await;
+                if let Err(e) = runner.run(runtime.as_ref()).await {
+                    tracing::error!(oneshot_id = %oneshot_id_bg, error = %e, "resume oneshot runner failed");
+                }
             });
 
             // Update the placeholder with the real JoinHandle
@@ -657,6 +679,7 @@ async fn resume_oneshot(
             Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
         }
         RepoType::Ssh { .. } => {
+            tracing::warn!(oneshot_id = %oneshot_id, repo_id = %repo_id, "resume_oneshot: 1-shot is not supported for SSH repos");
             app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
             Err("1-shot is not supported for SSH repos".to_string())
         }

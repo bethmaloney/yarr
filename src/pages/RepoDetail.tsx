@@ -528,8 +528,6 @@ export default function RepoDetail() {
       );
       if (oneshotId) {
         navigate(`/oneshot/${oneshotId}`);
-      } else {
-        toast.error("Failed to launch 1-shot");
       }
     } finally {
       setOneShotSubmitting(false);

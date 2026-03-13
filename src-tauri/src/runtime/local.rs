@@ -41,6 +41,12 @@ impl RuntimeProvider for LocalRuntime {
         let env = self.resolve_env().await?;
         let prompt = invocation.prompt.clone();
         let start = std::time::Instant::now();
+        tracing::debug!(
+            working_dir = %invocation.working_dir.display(),
+            model = ?invocation.model,
+            extra_args = ?invocation.extra_args,
+            "local spawn_claude"
+        );
 
         let mut args = vec![
             "-p".to_string(),
@@ -136,6 +142,7 @@ impl RuntimeProvider for LocalRuntime {
 
     async fn health_check(&self) -> Result<()> {
         let env = self.resolve_env().await?;
+        tracing::debug!(claude_bin = %self.claude_bin, "checking for claude binary");
         let output = Command::new("which")
             .arg(&self.claude_bin)
             .envs(&env)
@@ -143,11 +150,13 @@ impl RuntimeProvider for LocalRuntime {
             .await?;
 
         if !output.status.success() {
+            tracing::error!(claude_bin = %self.claude_bin, "claude binary not found");
             anyhow::bail!(
                 "claude binary '{}' not found. Is Claude Code installed?",
                 self.claude_bin
             );
         }
+        tracing::debug!(claude_bin = %self.claude_bin, "claude binary found");
         Ok(())
     }
 
@@ -157,6 +166,7 @@ impl RuntimeProvider for LocalRuntime {
         working_dir: &std::path::Path,
         timeout: std::time::Duration,
     ) -> Result<CommandOutput> {
+        tracing::debug!(command = %command, working_dir = %working_dir.display(), timeout_secs = timeout.as_secs(), "running command");
         let env = self.resolve_env().await?;
         let child = Command::new("bash")
             .arg("-c")
@@ -178,6 +188,7 @@ impl RuntimeProvider for LocalRuntime {
             Ok(Err(e)) => Err(e.into()),
             Err(_) => {
                 // child is dropped here, kill_on_drop(true) ensures cleanup
+                tracing::warn!(command = %command, timeout_secs = timeout.as_secs(), "command timed out");
                 anyhow::bail!("Command timed out after {:?}", timeout)
             }
         }

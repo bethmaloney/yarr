@@ -53,3 +53,7 @@ Yarr runs on Windows (WSL), macOS, and Linux. Path handling, shell commands, and
 ## Error Handling
 
 Users are technical. Surface errors as Sonner toasts (`toast.error(...)` from `sonner`) with the actual error message so they can diagnose and resolve issues themselves. Don't swallow errors or show vague "something went wrong" messages.
+
+## Logging
+
+Include enough `tracing::` logging (with structured fields like `oneshot_id`, `session_id`) to debug the application from logs alone. Log entry points, state transitions, successes, and failures — not just errors.
