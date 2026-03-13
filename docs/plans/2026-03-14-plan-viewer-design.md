@@ -99,11 +99,11 @@ Populate plan content on the trace after the design phase writes the plan file.
 - Same error handling as Task 2 — log and continue if read fails
 
 **Checklist:**
-- [ ] Read plan file after design phase completes
-- [ ] Store in trace
-- [ ] Handle file-read errors gracefully
-- [ ] Verify `cargo check` passes
-- [ ] Verify `cargo test` passes
+- [x] Read plan file after design phase completes
+- [x] Store in trace
+- [x] Handle file-read errors gracefully
+- [x] Verify `cargo check` passes
+- [x] Verify `cargo test` passes
 
 ---
 
@@ -203,7 +203,7 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 |------|-------------|--------|
 | 1 | Add `plan_content` to `SessionTrace` | Done |
 | 2 | Snapshot plan content in Ralph loop sessions | Done |
-| 3 | Snapshot plan content in one-shot sessions | Not Started |
+| 3 | Snapshot plan content in one-shot sessions | Done |
 | 4 | Create PlanPanel component | Not Started |
 | 5 | Wire PlanPanel into RunDetail | Not Started |
 | 6 | Wire PlanPanel into OneShotDetail | Not Started |

@@ -636,6 +636,19 @@ impl OneShotRunner {
             pfp
         };
 
+        // Snapshot plan content into trace
+        trace.plan_file = Some(plan_file_path.clone());
+        let plan_file_abs = format!("{}/{}", wt_path.display(), plan_file_path);
+        match tokio::fs::read_to_string(&plan_file_abs).await {
+            Ok(content) => {
+                tracing::info!(plan_file = %plan_file_abs, "plan content snapshot captured");
+                trace.plan_content = Some(content);
+            }
+            Err(e) => {
+                tracing::warn!(plan_file = %plan_file_abs, error = %e, "failed to read plan file, continuing without plan content");
+            }
+        }
+
         // Check cancellation
         if self.cancel_token.is_cancelled() {
             self.cleanup_worktree(runtime, &wt_path).await;
@@ -2215,6 +2228,83 @@ mod tests {
             assert_eq!(
                 trace.session_type, "one_shot",
                 "session_type should be 'one_shot' for oneshot sessions"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_trace_plan_file_set_after_design() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Branch pushed".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        if let Ok(trace) = result {
+            assert!(
+                trace.plan_file.is_some(),
+                "trace.plan_file should be set after design phase completes"
+            );
+            let plan_file = trace.plan_file.unwrap();
+            assert!(
+                plan_file.contains("docs/plans/"),
+                "plan_file should contain the plans directory, got: '{}'",
+                plan_file
+            );
+            assert!(
+                plan_file.ends_with("-design.md"),
+                "plan_file should end with '-design.md', got: '{}'",
+                plan_file
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_trace_plan_content_none_when_file_missing() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Branch pushed".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        if let Ok(trace) = result {
+            assert!(
+                trace.plan_content.is_none(),
+                "trace.plan_content should be None when plan file doesn't exist on disk"
             );
         }
     }
