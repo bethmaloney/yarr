@@ -4790,6 +4790,7 @@ mod tests {
             checks: Vec::new(),
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
+            move_plans_to_completed: true,
             ssh_host: Some("testhost".to_string()),
             move_plans_to_completed: true,
         }

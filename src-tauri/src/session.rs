@@ -146,6 +146,8 @@ pub enum SessionEvent {
     AssistantText { iteration: u32, text: String },
     /// An iteration completed with its result
     IterationComplete { iteration: u32, result: ResultEvent },
+    /// Plan content updated after iteration (for progress tracking)
+    PlanContentUpdated { plan_content: String },
     /// An iteration failed with an error (process crash, etc.)
     IterationFailed { iteration: u32, error: String },
     /// The entire session finished
@@ -302,6 +304,7 @@ impl SessionRunner {
             SessionEvent::ToolResult { .. } => "tool_result",
             SessionEvent::AssistantText { .. } => "assistant_text",
             SessionEvent::IterationComplete { .. } => "iteration_complete",
+            SessionEvent::PlanContentUpdated { .. } => "plan_content_updated",
             SessionEvent::IterationFailed { .. } => "iteration_failed",
             SessionEvent::SessionComplete { .. } => "session_complete",
             SessionEvent::Disconnected { .. } => "disconnected",
@@ -745,6 +748,17 @@ impl SessionRunner {
                         iteration: display_iter,
                         result: result.clone(),
                     });
+
+                    if let Some(ref plan_file) = self.config.plan_file {
+                        match tokio::fs::read_to_string(plan_file).await {
+                            Ok(content) => {
+                                self.emit(SessionEvent::PlanContentUpdated { plan_content: content });
+                            }
+                            Err(e) => {
+                                tracing::debug!(plan_file = %plan_file, error = %e, "could not read plan file for progress");
+                            }
+                        }
+                    }
 
                     tracing::info!(iteration = display_iter, cost = result.total_cost_usd.unwrap_or(0.0), turns = result.num_turns.unwrap_or(0), signal = has_signal, "iteration complete");
 
@@ -3284,6 +3298,174 @@ mod tests {
         assert_eq!(
             trace.plan_content, None,
             "trace.plan_content should be None when no plan_file is configured"
+        );
+    }
+
+    // =========================================================================
+    // PlanContentUpdated event tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_plan_content_updated_emitted_after_iteration() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // Create a plan file on disk with known content
+        let plan_dir = tmp.path().join("plans");
+        std::fs::create_dir_all(&plan_dir).expect("create plans dir");
+        let plan_path = plan_dir.join("my-plan.md");
+        let plan_text = "# My Plan\n\n- [ ] Step one\n- [x] Step two\n";
+        std::fs::write(&plan_path, plan_text).expect("write plan file");
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            plan_file: Some(plan_path.to_string_lossy().to_string()),
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let _trace = runner.run(&runtime).await.expect("run should succeed");
+        let events = get_events(&runner);
+
+        // Find all IterationComplete and PlanContentUpdated events with their indices
+        let iteration_complete_idx = events
+            .iter()
+            .position(|e| matches!(e, SessionEvent::IterationComplete { .. }))
+            .expect("should have IterationComplete event");
+
+        let plan_updated_idx = events
+            .iter()
+            .position(|e| matches!(e, SessionEvent::PlanContentUpdated { .. }))
+            .expect("should have PlanContentUpdated event");
+
+        // PlanContentUpdated must come after IterationComplete
+        assert!(
+            plan_updated_idx > iteration_complete_idx,
+            "PlanContentUpdated (index {}) should appear after IterationComplete (index {})",
+            plan_updated_idx,
+            iteration_complete_idx,
+        );
+
+        // Verify the content matches
+        match &events[plan_updated_idx] {
+            SessionEvent::PlanContentUpdated { plan_content } => {
+                assert_eq!(
+                    plan_content, plan_text,
+                    "PlanContentUpdated should carry the plan file contents"
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_updated_not_emitted_without_plan_file() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let _trace = runner.run(&runtime).await.expect("run should succeed");
+        let events = get_events(&runner);
+
+        // No PlanContentUpdated event should be emitted
+        let has_plan_updated = events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::PlanContentUpdated { .. }));
+        assert!(
+            !has_plan_updated,
+            "PlanContentUpdated should NOT be emitted when plan_file is None"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_updated_not_emitted_when_file_missing() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            plan_file: Some("/nonexistent/path/plan.md".to_string()),
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let _trace = runner.run(&runtime).await.expect("run should succeed even when plan file is missing");
+        let events = get_events(&runner);
+
+        // No PlanContentUpdated event should be emitted when the file doesn't exist
+        let has_plan_updated = events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::PlanContentUpdated { .. }));
+        assert!(
+            !has_plan_updated,
+            "PlanContentUpdated should NOT be emitted when the plan file does not exist"
+        );
+    }
+
+    #[test]
+    fn test_plan_content_updated_serialization() {
+        let event = SessionEvent::PlanContentUpdated {
+            plan_content: "# Plan\n- [x] Done".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize PlanContentUpdated");
+        assert_eq!(
+            json["kind"], "plan_content_updated",
+            "serialized kind should be plan_content_updated"
+        );
+        assert_eq!(
+            json["plan_content"], "# Plan\n- [x] Done",
+            "serialized plan_content should match"
         );
     }
 }

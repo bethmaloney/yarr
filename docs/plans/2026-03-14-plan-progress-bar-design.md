@@ -63,9 +63,9 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 - Uses `debug!` level logging on read failure (expected for sessions without plans)
 
 **Checklist:**
-- [ ] Add `PlanContentUpdated { plan_content: String }` variant to `SessionEvent` enum (after line 140)
-- [ ] Add `SessionEvent::PlanContentUpdated { .. } => "plan_content_updated"` to the `emit()` match arm (after line 293)
-- [ ] After the `IterationComplete` emission (line 736), add plan file read + emit:
+- [x] Add `PlanContentUpdated { plan_content: String }` variant to `SessionEvent` enum (after line 140)
+- [x] Add `SessionEvent::PlanContentUpdated { .. } => "plan_content_updated"` to the `emit()` match arm (after line 293)
+- [x] After the `IterationComplete` emission (line 736), add plan file read + emit:
   ```rust
   if let Some(ref plan_file) = self.config.plan_file {
       match tokio::fs::read_to_string(plan_file).await {
@@ -78,7 +78,7 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
       }
   }
   ```
-- [ ] Run `cd src-tauri && cargo check` to verify compilation
+- [x] Run `cd src-tauri && cargo check` to verify compilation
 
 ---
 
@@ -251,7 +251,7 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Plan progress parser + tests | Done |
-| 2 | Rust `PlanContentUpdated` event | Not Started |
+| 2 | Rust `PlanContentUpdated` event | Done |
 | 3 | Frontend type updates | Not Started |
 | 4 | Zustand store handling | Not Started |
 | 5 | Event emoji/label | Not Started |
