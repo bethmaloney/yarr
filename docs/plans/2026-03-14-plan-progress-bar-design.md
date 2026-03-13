@@ -32,20 +32,20 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 - `currentTask` = first task where `completed < total`; null if all complete
 
 **Checklist:**
-- [ ] Define `TaskProgress` interface: `{ number, title, total, completed }`
-- [ ] Define `PlanProgress` interface: `{ tasks, totalItems, completedItems, currentTask }`
-- [ ] Implement `parsePlanProgress(content: string): PlanProgress | null`
+- [x] Define `TaskProgress` interface: `{ number, title, total, completed }`
+- [x] Define `PlanProgress` interface: `{ tasks, totalItems, completedItems, currentTask }`
+- [x] Implement `parsePlanProgress(content: string): PlanProgress | null`
   - Return `null` if no checklist items found anywhere (graceful no-op)
   - Use regex: `/^##\s+(?:Task\s+)?(\d+)[:\s—–-]*(.*)$/i` for task headings
   - Use regex: `/^[\s]*- \[([ xX])\]/ ` for checklist items
   - Heading text after the number becomes the task title (trimmed)
-- [ ] Add unit tests in `src/plan-progress.test.ts`:
+- [x] Add unit tests in `src/plan-progress.test.ts`:
   - Standard plan with tasks and mixed checked/unchecked items
   - Plan with all items complete → `currentTask` is null
   - Plan with no checklist items → returns null
   - Plan with no `## Task` headings but has checklists under `##` headings → still works
   - Malformed/empty input → returns null, no crash
-- [ ] Run `npm test` to verify
+- [x] Run `npm test` to verify
 
 ---
 
@@ -250,7 +250,7 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Plan progress parser + tests | Not Started |
+| 1 | Plan progress parser + tests | Done |
 | 2 | Rust `PlanContentUpdated` event | Not Started |
 | 3 | Frontend type updates | Not Started |
 | 4 | Zustand store handling | Not Started |
