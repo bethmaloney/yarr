@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { IterationGroup } from "../iteration-groups";
 import { eventEmoji, eventLabel } from "../event-format";
 import { formatTokenCount, contextBarColor } from "../context-bar";
@@ -59,6 +60,57 @@ function handleKeyDown(callback: () => void) {
   };
 }
 
+interface ToolOutputSectionProps {
+  toolOutput: string;
+  toolName: string;
+  globalIndex: number;
+  expandedOutputs: Set<number>;
+  setExpandedOutputs: React.Dispatch<React.SetStateAction<Set<number>>>;
+}
+
+function ToolOutputSection({
+  toolOutput,
+  toolName,
+  globalIndex,
+  expandedOutputs,
+  setExpandedOutputs,
+}: ToolOutputSectionProps) {
+  const lines = toolOutput.split("\n");
+  const isOutputExpanded = expandedOutputs.has(globalIndex);
+  const needsTruncation = lines.length > 20;
+  const displayedLines = needsTruncation && !isOutputExpanded
+    ? lines.slice(0, 20)
+    : lines;
+  const remainingLines = lines.length - 20;
+
+  return (
+    <div className="mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded text-xs text-[#9ca3af]">
+      <div className="text-[#a78bfa] mb-1">Output</div>
+      {toolName === "Agent" ? (
+        <Markdown>{needsTruncation && !isOutputExpanded ? displayedLines.join("\n") : toolOutput}</Markdown>
+      ) : (
+        <pre className="font-mono whitespace-pre-wrap break-words overflow-x-auto">{displayedLines.map((line, li) => (
+          <span key={li}>{line}{li < displayedLines.length - 1 ? "\n" : ""}</span>
+        ))}</pre>
+      )}
+      {needsTruncation && !isOutputExpanded && (
+        <button
+          className="mt-1 text-[#a78bfa] hover:underline cursor-pointer bg-transparent border-none text-xs p-0"
+          onClick={() => {
+            setExpandedOutputs((prev) => {
+              const next = new Set(prev);
+              next.add(globalIndex);
+              return next;
+            });
+          }}
+        >
+          Show more ({remainingLines} more lines)
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function IterationGroupComponent({
   group,
   expanded,
@@ -69,6 +121,10 @@ export function IterationGroupComponent({
   globalStartIndex,
   repoPath,
 }: IterationGroupProps) {
+  const [expandedOutputs, setExpandedOutputs] = useState<Set<number>>(
+    () => new Set(),
+  );
+
   const percentage =
     group.contextWindow > 0
       ? Math.round((group.inputTokens / group.contextWindow) * 100)
@@ -161,6 +217,16 @@ export function IterationGroupComponent({
                   <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
                     {JSON.stringify(ev.tool_input, null, 2)}
                   </pre>
+                )}
+
+                {isExpanded && ev.kind === "tool_use" && ev.tool_output && (
+                  <ToolOutputSection
+                    toolOutput={ev.tool_output}
+                    toolName={ev.tool_name ?? ""}
+                    globalIndex={globalIndex}
+                    expandedOutputs={expandedOutputs}
+                    setExpandedOutputs={setExpandedOutputs}
+                  />
                 )}
 
                 {isExpanded && ev.kind === "check_failed" && ev.output && (

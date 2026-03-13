@@ -165,12 +165,12 @@ Add the "Output" section below tool input for Bash and Agent events.
 - Same container styling as input section
 
 **Checklist:**
-- [ ] Add output rendering block after tool input sections
-- [ ] Implement Agent markdown rendering path
-- [ ] Implement Bash monospace rendering path
-- [ ] Add truncation with "Show more (N more lines)" button
-- [ ] Add local state for expand/collapse per event
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add output rendering block after tool input sections
+- [x] Implement Agent markdown rendering path
+- [x] Implement Bash monospace rendering path
+- [x] Add truncation with "Show more (N more lines)" button
+- [x] Add local state for expand/collapse per event
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -247,7 +247,7 @@ Test the merge logic in iteration-groups.ts.
 | 1 | Add ToolResult variant and ID tracking | Done |
 | 2 | Parse StreamEvent::User and emit ToolResult | Done |
 | 3 | Update frontend types and event merging | Done |
-| 4 | Render tool output in IterationGroup | Not Started |
+| 4 | Render tool output in IterationGroup | Done |
 | 5 | Update event formatting for tool_result | Done |
 | 6 | Rust unit tests | Done |
 | 7 | Frontend tests for event merging | Done |

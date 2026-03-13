@@ -961,4 +961,245 @@ describe("IterationGroupComponent", () => {
     const keyValuePairs = agentDetail!.querySelectorAll(".flex.gap-2.py-0\\.5");
     expect(keyValuePairs.length).toBe(0);
   });
+
+  // =========================================================================
+  // 21. Tool output rendering
+  // =========================================================================
+
+  describe("tool_output rendering", () => {
+    it("renders Bash tool_output in a <pre> element with an Output label when expanded", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "echo hello" },
+          tool_output: "hello\nworld",
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      // Should have an "Output" label
+      expect(screen.getByText("Output")).toBeInTheDocument();
+
+      // The output text should appear inside a <pre> element
+      const preElements = document.querySelectorAll("pre");
+      const found = Array.from(preElements).some((pre) =>
+        pre.textContent?.includes("hello\nworld"),
+      );
+      expect(found).toBe(true);
+    });
+
+    it("renders Agent tool_output as markdown (not in a <pre> element) when expanded", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Agent",
+          tool_input: { prompt: "Do something" },
+          tool_output: "Agent completed the task successfully",
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      // Should have an "Output" label
+      expect(screen.getByText("Output")).toBeInTheDocument();
+
+      // The output text should appear in the document
+      expect(
+        screen.getByText("Agent completed the task successfully"),
+      ).toBeInTheDocument();
+
+      // The output text should NOT be inside a <pre> element
+      const preElements = document.querySelectorAll("pre");
+      const foundInPre = Array.from(preElements).some((pre) =>
+        pre.textContent?.includes("Agent completed the task successfully"),
+      );
+      expect(foundInPre).toBe(false);
+    });
+
+    it("does not show Output section when tool_output is undefined", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "echo hello" },
+          // no tool_output
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      expect(screen.queryByText("Output")).not.toBeInTheDocument();
+    });
+
+    it("does not show Output section when tool_output is empty string", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "true" },
+          tool_output: "",
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      expect(screen.queryByText("Output")).not.toBeInTheDocument();
+    });
+
+    it("does not show tool_output when event is not expanded", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "echo hello" },
+          tool_output: "hello",
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set<number>(); // none expanded
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      expect(screen.queryByText("Output")).not.toBeInTheDocument();
+      expect(screen.queryByText("hello")).not.toBeInTheDocument();
+    });
+
+    it("truncates output longer than 20 lines and shows a Show more button", () => {
+      const lines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`);
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "seq 30" },
+          tool_output: lines.join("\n"),
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      // First 20 lines should be visible
+      expect(screen.getByText(/line 1$/)).toBeInTheDocument();
+      expect(screen.getByText(/line 20$/)).toBeInTheDocument();
+
+      // Line 21 should NOT be visible yet
+      expect(screen.queryByText(/line 21$/)).not.toBeInTheDocument();
+
+      // Should show "Show more (10 more lines)" button
+      expect(
+        screen.getByText(/Show more \(10 more lines\)/),
+      ).toBeInTheDocument();
+    });
+
+    it("reveals full output when Show more button is clicked", () => {
+      const lines = Array.from({ length: 25 }, (_, i) => `output ${i + 1}`);
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "seq 25" },
+          tool_output: lines.join("\n"),
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      // Line 25 should not be visible initially
+      expect(screen.queryByText(/output 25$/)).not.toBeInTheDocument();
+
+      // Click "Show more"
+      const showMoreButton = screen.getByText(/Show more \(5 more lines\)/);
+      fireEvent.click(showMoreButton);
+
+      // Now all lines should be visible
+      expect(screen.getByText(/output 25$/)).toBeInTheDocument();
+
+      // Show more button should be gone
+      expect(screen.queryByText(/Show more/)).not.toBeInTheDocument();
+    });
+
+    it("does not show Show more button when output is 20 lines or fewer", () => {
+      const lines = Array.from({ length: 15 }, (_, i) => `line ${i + 1}`);
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "seq 15" },
+          tool_output: lines.join("\n"),
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      // All 15 lines should be visible
+      expect(screen.getByText(/line 1$/)).toBeInTheDocument();
+      expect(screen.getByText(/line 15$/)).toBeInTheDocument();
+
+      // No "Show more" button
+      expect(screen.queryByText(/Show more/)).not.toBeInTheDocument();
+    });
+  });
 });
