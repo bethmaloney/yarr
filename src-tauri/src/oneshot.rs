@@ -165,6 +165,65 @@ pub fn branch_name(slug: &str, short_id: &str) -> String {
     format!("oneshot/{}-{}", slug, short_id)
 }
 
+/// Detect the default branch for the remote `origin`.
+///
+/// Tries `git symbolic-ref refs/remotes/origin/HEAD` first, then falls back
+/// to `git rev-parse --verify origin/main` and `origin/master`.
+/// Returns a ref like `"origin/main"` or `"origin/master"`.
+async fn detect_default_branch(runtime: &dyn RuntimeProvider, repo_path: &std::path::Path) -> String {
+    // Try symbolic-ref first
+    if let Ok(output) = runtime
+        .run_command(
+            "git symbolic-ref refs/remotes/origin/HEAD",
+            repo_path,
+            Duration::from_secs(30),
+        )
+        .await
+    {
+        if output.exit_code == 0 && !output.stdout.trim().is_empty() {
+            let trimmed = output.stdout.trim();
+            if let Some(rest) = trimmed.strip_prefix("refs/remotes/") {
+                tracing::info!(detected_branch = %rest, "detected default branch via symbolic-ref");
+                return rest.to_string();
+            }
+        }
+    }
+
+    // Fallback: try origin/main
+    if let Ok(output) = runtime
+        .run_command(
+            "git rev-parse --verify origin/main",
+            repo_path,
+            Duration::from_secs(30),
+        )
+        .await
+    {
+        if output.exit_code == 0 {
+            tracing::info!("detected default branch via rev-parse: origin/main");
+            return "origin/main".to_string();
+        }
+    }
+
+    // Fallback: try origin/master
+    if let Ok(output) = runtime
+        .run_command(
+            "git rev-parse --verify origin/master",
+            repo_path,
+            Duration::from_secs(30),
+        )
+        .await
+    {
+        if output.exit_code == 0 {
+            tracing::info!("detected default branch via rev-parse: origin/master");
+            return "origin/master".to_string();
+        }
+    }
+
+    // All failed, default to origin/main
+    tracing::debug!("all detection methods failed, defaulting to origin/main");
+    "origin/main".to_string()
+}
+
 /// Detect which phases have been completed by scanning persisted events.
 /// Returns a ResumeState indicating which phases to skip on resume.
 pub fn detect_resume_phase(
@@ -421,6 +480,25 @@ impl OneShotRunner {
             return Err(anyhow::anyhow!("Cancelled"));
         }
 
+        // Detect the default branch for this repo
+        let default_branch_ref = detect_default_branch(runtime, &self.config.repo_path).await;
+        let default_branch_short = default_branch_ref.strip_prefix("origin/").unwrap_or(&default_branch_ref);
+        tracing::info!(
+            oneshot_id = %self.config.repo_id,
+            default_branch_ref = %default_branch_ref,
+            "detected default branch"
+        );
+        if self.resume_state.is_none() {
+            // Fetch the default branch to ensure ref is up to date
+            let _ = runtime
+                .run_command(
+                    &format!("git fetch origin {} --quiet", default_branch_short),
+                    &self.config.repo_path,
+                    Duration::from_secs(30),
+                )
+                .await;
+        }
+
         // 1. Create worktree (ensure parent directory exists first)
         if self.resume_state.is_none() {
             tracing::info!(oneshot_id = %self.config.repo_id, worktree = %wt_path.display(), branch = %branch, "creating worktree");
@@ -436,7 +514,7 @@ impl OneShotRunner {
 
             let output = runtime
                 .run_command(
-                    &format!("git worktree add {} -b {}", wt_path.display(), branch),
+                    &format!("git worktree add {} -b {} {}", wt_path.display(), branch, default_branch_ref),
                     &self.config.repo_path,
                     Duration::from_secs(60),
                 )
@@ -760,13 +838,22 @@ impl OneShotRunner {
                 // Use shared git_merge_push for robust merge-with-retry logic.
                 // This handles fetch, rebase, conflict resolution via Claude,
                 // and push retries automatically.
-                let push_cmd = format!("git push origin {}:main", branch);
-                let fetch_cmd = "git fetch origin main".to_string();
-                let rebase_cmd = "git rebase origin/main".to_string();
+                let default_branch_short = default_branch_ref.strip_prefix("origin/").unwrap_or(&default_branch_ref);
+                let push_cmd = format!("git push origin {}:{}", branch, default_branch_short);
+                let fetch_cmd = format!("git fetch origin {}", default_branch_short);
+                let rebase_cmd = format!("git rebase {}", default_branch_ref);
 
                 tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, fetch_cmd = %fetch_cmd, "git finalize: fetch step");
                 tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, rebase_cmd = %rebase_cmd, "git finalize: rebase step");
                 tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, push_cmd = %push_cmd, "git finalize: push step");
+
+                // Pre-fetch and rebase before pushing to ensure we're up to date
+                let _ = runtime
+                    .run_command(&fetch_cmd, &wt_path, Duration::from_secs(120))
+                    .await;
+                let _ = runtime
+                    .run_command(&rebase_cmd, &wt_path, Duration::from_secs(120))
+                    .await;
 
                 let git_sync_config = self.config.git_sync.clone().unwrap_or(GitSyncConfig {
                     enabled: true,
@@ -1365,46 +1452,65 @@ mod tests {
         // So completing_after(1) provides enough scenarios for 2 spawn_claude calls
 
         // Command results in order:
-        // 1. mkdir -p (success, ignored)
-        // 2. git worktree add (success)
-        // 3. git fetch origin main (success)
-        // 4. git rebase origin/main (success)
-        // 5. git push origin <branch>:main (success)
-        // 6. git branch -d <branch> (success)
-        // 7. git worktree remove <path> (success)
-        // MockRuntime returns success by default when command_results is
-        // exhausted, so we only need to provide the first few explicitly.
+        // 1. git symbolic-ref refs/remotes/origin/HEAD (detect default branch)
+        // 2. git fetch origin main --quiet (fetch before worktree creation)
+        // 3. mkdir -p (success)
+        // 4. git worktree add {path} -b {branch} origin/main (includes start-point)
+        // 5. git fetch origin main (finalize fetch)
+        // 6. git rebase origin/main (finalize rebase)
+        // 7. git push origin <branch>:main (finalize push)
+        // 8. git branch -d <branch> (cleanup)
+        // 9. git worktree remove <path> (cleanup)
         runtime.command_results = vec![
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
+            // 5. git fetch origin main
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 6. git rebase origin/main
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 7. git push origin <branch>:main
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 8. git branch -d
             CommandOutput {
                 exit_code: 0,
                 stdout: "Deleted branch".to_string(),
                 stderr: String::new(),
             },
+            // 9. git worktree remove
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -1612,20 +1718,51 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command results in order for Branch strategy:
-        // 1. git worktree add (success)
-        // 2. git push -u origin <branch> (success)
-        // 3. git worktree remove <path> (success)
+        // 1. git symbolic-ref refs/remotes/origin/HEAD (detect default branch)
+        // 2. git fetch origin main --quiet (fetch before worktree creation)
+        // 3. git worktree add {path} -b {branch} origin/main (includes start-point)
+        // 4. git fetch origin <branch> (finalize fetch)
+        // 5. git pull --rebase origin <branch> (finalize rebase)
+        // 6. git push -u origin <branch> (finalize push)
+        // 7. git worktree remove <path> (cleanup)
         runtime.command_results = vec![
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
+            // 4. git fetch origin <branch>
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git pull --rebase origin <branch>
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. git push -u origin <branch>
             CommandOutput {
                 exit_code: 0,
                 stdout: "Branch pushed".to_string(),
                 stderr: String::new(),
             },
+            // 7. git worktree remove
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -1908,82 +2045,86 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command results for the git_merge_push flow:
-        // 1. mkdir -p (success)
-        // 2. git worktree add (success)
+        // 1. detect default branch (symbolic-ref succeeds)
+        // 2. git fetch origin main --quiet
+        // 3. mkdir -p (success)
+        // 4. git worktree add (success)
+        // 5. pre-fetch origin main (success)
+        // 6. pre-rebase origin/main (success)
         // --- git_merge_push begins ---
-        // 3. git push (optimistic) — FAIL (rejected)
+        // 7. git push (optimistic) — FAIL (rejected)
         // --- retry loop attempt 1/3 ---
-        // 4. git fetch origin main — success
-        // 5. git rebase origin/main — FAIL (non-conflict, e.g. diverged)
-        // 6. git status — no "Unmerged paths" (not a conflict)
-        // 7. git rebase --abort
-        // --- retry loop attempt 2/3 ---
         // 8. git fetch origin main — success
-        // 9. git rebase origin/main — FAIL again
-        // 10. git status — no "Unmerged paths"
+        // 9. git rebase origin/main — FAIL (non-conflict, e.g. diverged)
+        // 10. git status — no "Unmerged paths" (not a conflict)
         // 11. git rebase --abort
-        // --- retry loop attempt 3/3 ---
+        // --- retry loop attempt 2/3 ---
         // 12. git fetch origin main — success
         // 13. git rebase origin/main — FAIL again
         // 14. git status — no "Unmerged paths"
         // 15. git rebase --abort
+        // --- retry loop attempt 3/3 ---
+        // 16. git fetch origin main — success
+        // 17. git rebase origin/main — FAIL again
+        // 18. git status — no "Unmerged paths"
+        // 19. git rebase --abort
         // --- git_merge_push returns Err (all retries exhausted) ---
         runtime.command_results = vec![
-            // 1. mkdir -p
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 2. git worktree add
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
-            // 3. git push (optimistic) — FAIL
+            // 5. pre-fetch origin main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. pre-rebase origin/main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push (optimistic) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected: non-fast-forward".to_string(),
             },
-            // 4. git fetch (attempt 1) — success
+            // 8. git fetch (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 5. git rebase (attempt 1) — FAIL (non-conflict)
+            // 9. git rebase (attempt 1) — FAIL (non-conflict)
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "error: cannot rebase".to_string(),
             },
-            // 6. git status (conflict check) — no conflict markers
-            CommandOutput {
-                exit_code: 0,
-                stdout: "On branch oneshot/test\nnothing to commit".to_string(),
-                stderr: String::new(),
-            },
-            // 7. git rebase --abort
-            CommandOutput {
-                exit_code: 0,
-                stdout: String::new(),
-                stderr: String::new(),
-            },
-            // 8. git fetch (attempt 2) — success
-            CommandOutput {
-                exit_code: 0,
-                stdout: String::new(),
-                stderr: String::new(),
-            },
-            // 9. git rebase (attempt 2) — FAIL
-            CommandOutput {
-                exit_code: 1,
-                stdout: String::new(),
-                stderr: "error: cannot rebase".to_string(),
-            },
-            // 10. git status — no conflict
+            // 10. git status (conflict check) — no conflict markers
             CommandOutput {
                 exit_code: 0,
                 stdout: "On branch oneshot/test\nnothing to commit".to_string(),
@@ -1995,13 +2136,13 @@ mod tests {
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 12. git fetch (attempt 3) — success
+            // 12. git fetch (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 13. git rebase (attempt 3) — FAIL
+            // 13. git rebase (attempt 2) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
@@ -2014,6 +2155,30 @@ mod tests {
                 stderr: String::new(),
             },
             // 15. git rebase --abort
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 16. git fetch (attempt 3) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 17. git rebase (attempt 3) — FAIL
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "error: cannot rebase".to_string(),
+            },
+            // 18. git status — no conflict
+            CommandOutput {
+                exit_code: 0,
+                stdout: "On branch oneshot/test\nnothing to commit".to_string(),
+                stderr: String::new(),
+            },
+            // 19. git rebase --abort
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -2502,86 +2667,114 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command sequence:
-        // 1. mkdir -p (worktree parent dir)               -> success
-        // 2. git worktree add                              -> success
+        // 1. detect default branch (symbolic-ref succeeds)
+        // 2. git fetch origin main --quiet
+        // 3. mkdir -p (worktree parent dir)               -> success
+        // 4. git worktree add                              -> success
         //    [design phase — spawn_claude #1]
         //    [implementation phase — spawn_claude #2]
+        // 5. pre-fetch origin main                         -> success
+        // 6. pre-rebase origin/main                        -> success
         // --- git_merge_push begins ---
-        // 3. git push origin {branch}:main (optimistic)   -> FAIL (rejected)
+        // 7. git push origin {branch}:main (optimistic)   -> FAIL (rejected)
         // --- retry loop attempt 1 ---
-        // 4. git fetch origin main                         -> success
-        // 5. git rebase origin/main                        -> FAIL (conflict)
-        // 6. git status (conflict check)                   -> "Unmerged paths" + "both modified"
-        // 7. git diff --name-only --diff-filter=U          -> conflict file list
+        // 8. git fetch origin main                         -> success
+        // 9. git rebase origin/main                        -> FAIL (conflict)
+        // 10. git status (conflict check)                  -> "Unmerged paths" + "both modified"
+        // 11. git diff --name-only --diff-filter=U         -> conflict file list
         //    [conflict resolution — spawn_claude #3]
-        // 8. git status (post-resolution check)            -> clean (no "rebase in progress")
-        // 9. git push origin {branch}:main (after resolve) -> success
+        // 12. git status (post-resolution check)           -> clean (no "rebase in progress")
+        // 13. git push origin {branch}:main (after resolve) -> success
         // --- git_merge_push ends ---
-        // 10. git branch -d {branch}                       -> success
-        // 11. git worktree remove                          -> success
+        // 14. git branch -d {branch}                       -> success
+        // 15. git worktree remove                          -> success
         runtime.command_results = vec![
-            // 1. mkdir -p
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 2. git worktree add
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
-            // 3. git push (optimistic) — FAIL
+            // 5. pre-fetch origin main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. pre-rebase origin/main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push (optimistic) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected: non-fast-forward".to_string(),
             },
-            // 4. git fetch origin main — success
+            // 8. git fetch origin main — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 5. git rebase origin/main — FAIL (conflict)
+            // 9. git rebase origin/main — FAIL (conflict)
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "CONFLICT (content): Merge conflict in src/main.rs".to_string(),
             },
-            // 6. git status — shows unmerged paths
+            // 10. git status — shows unmerged paths
             CommandOutput {
                 exit_code: 0,
                 stdout: "Unmerged paths:\n  both modified: src/main.rs".to_string(),
                 stderr: String::new(),
             },
-            // 7. git diff --name-only --diff-filter=U — conflict file list
+            // 11. git diff --name-only --diff-filter=U — conflict file list
             CommandOutput {
                 exit_code: 0,
                 stdout: "src/main.rs\n".to_string(),
                 stderr: String::new(),
             },
             // [spawn_claude #3 for conflict resolution happens here]
-            // 8. git status (post-resolution) — clean, no "rebase in progress"
+            // 12. git status (post-resolution) — clean, no "rebase in progress"
             CommandOutput {
                 exit_code: 0,
                 stdout: "On branch oneshot/add-login-feature\nnothing to commit".to_string(),
                 stderr: String::new(),
             },
-            // 9. git push (after conflict resolution) — success
+            // 13. git push (after conflict resolution) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 10. git branch -d
+            // 14. git branch -d
             CommandOutput {
                 exit_code: 0,
                 stdout: "Deleted branch".to_string(),
                 stderr: String::new(),
             },
-            // 11. git worktree remove
+            // 15. git worktree remove
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -2674,94 +2867,122 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command sequence:
-        // 1. mkdir -p (worktree parent dir)               -> success
-        // 2. git worktree add                              -> success
+        // 1. detect default branch (symbolic-ref succeeds)
+        // 2. git fetch origin main --quiet
+        // 3. mkdir -p (worktree parent dir)               -> success
+        // 4. git worktree add                              -> success
         //    [design phase — spawn_claude #1]
         //    [implementation phase — spawn_claude #2]
+        // 5. pre-fetch origin main                         -> success
+        // 6. pre-rebase origin/main                        -> success
         // --- git_merge_push begins ---
-        // 3. git push origin {branch}:main (optimistic)   -> FAIL
+        // 7. git push origin {branch}:main (optimistic)   -> FAIL
         // --- retry loop attempt 1/3 ---
-        // 4. git fetch origin main                         -> success
-        // 5. git rebase origin/main                        -> success
-        // 6. git push origin {branch}:main                 -> FAIL
+        // 8. git fetch origin main                         -> success
+        // 9. git rebase origin/main                        -> success
+        // 10. git push origin {branch}:main                -> FAIL
         // --- retry loop attempt 2/3 ---
-        // 7. git fetch origin main                         -> success
-        // 8. git rebase origin/main                        -> success
-        // 9. git push origin {branch}:main                 -> FAIL
+        // 11. git fetch origin main                        -> success
+        // 12. git rebase origin/main                       -> success
+        // 13. git push origin {branch}:main                -> FAIL
         // --- retry loop attempt 3/3 ---
-        // 10. git fetch origin main                        -> success
-        // 11. git rebase origin/main                       -> success
-        // 12. git push origin {branch}:main                -> FAIL
+        // 14. git fetch origin main                        -> success
+        // 15. git rebase origin/main                       -> success
+        // 16. git push origin {branch}:main                -> FAIL
         // --- git_merge_push returns Err (all retries exhausted) ---
         // NO git branch -d or git worktree remove should follow
         runtime.command_results = vec![
-            // 1. mkdir -p
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 2. git worktree add
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
-            // 3. git push (optimistic) — FAIL
+            // 5. pre-fetch origin main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. pre-rebase origin/main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push (optimistic) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected: non-fast-forward".to_string(),
             },
-            // 4. git fetch (attempt 1) — success
+            // 8. git fetch (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 5. git rebase (attempt 1) — success
+            // 9. git rebase (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 6. git push (attempt 1) — FAIL
+            // 10. git push (attempt 1) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected again".to_string(),
             },
-            // 7. git fetch (attempt 2) — success
+            // 11. git fetch (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 8. git rebase (attempt 2) — success
+            // 12. git rebase (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 9. git push (attempt 2) — FAIL
+            // 13. git push (attempt 2) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected again".to_string(),
             },
-            // 10. git fetch (attempt 3) — success
+            // 14. git fetch (attempt 3) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 11. git rebase (attempt 3) — success
+            // 15. git rebase (attempt 3) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 12. git push (attempt 3) — FAIL (last retry)
+            // 16. git push (attempt 3) — FAIL (last retry)
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
@@ -2988,101 +3209,115 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command sequence:
-        // 1. mkdir -p (worktree parent dir)                     -> success
-        // 2. git worktree add -b {branch}                       -> success
+        // 1. detect default branch (symbolic-ref succeeds)
+        // 2. git fetch origin main --quiet
+        // 3. mkdir -p (worktree parent dir)                     -> success
+        // 4. git worktree add -b {branch} origin/main           -> success
         //    [design phase — spawn_claude #1]
         //    [implementation phase — spawn_claude #2]
         // --- git_merge_push begins ---
-        // 3. git push origin {branch} (initial push)            -> FAIL
-        // 4. git push -u origin {branch} (push_u fallback)      -> FAIL
+        // 5. git push origin {branch} (initial push)            -> FAIL
+        // 6. git push -u origin {branch} (push_u fallback)      -> FAIL
         // --- retry loop attempt 1/3 ---
-        // 5. git fetch origin {branch}                          -> success
-        // 6. git pull --rebase origin {branch}                  -> success
-        // 7. git push origin {branch}                           -> FAIL
+        // 7. git fetch origin {branch}                          -> success
+        // 8. git pull --rebase origin {branch}                  -> success
+        // 9. git push origin {branch}                           -> FAIL
         // --- retry loop attempt 2/3 ---
-        // 8. git fetch origin {branch}                          -> success
-        // 9. git pull --rebase origin {branch}                  -> success
-        // 10. git push origin {branch}                          -> FAIL
+        // 10. git fetch origin {branch}                         -> success
+        // 11. git pull --rebase origin {branch}                 -> success
+        // 12. git push origin {branch}                          -> FAIL
         // --- retry loop attempt 3/3 ---
-        // 11. git fetch origin {branch}                         -> success
-        // 12. git pull --rebase origin {branch}                 -> success
-        // 13. git push origin {branch}                          -> FAIL
+        // 13. git fetch origin {branch}                         -> success
+        // 14. git pull --rebase origin {branch}                 -> success
+        // 15. git push origin {branch}                          -> FAIL
         // --- git_merge_push returns Err (all retries exhausted) ---
         // NO git worktree remove should follow (worktree preserved)
         runtime.command_results = vec![
-            // 1. mkdir -p
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 2. git worktree add
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
-            // 3. git push origin {branch} (initial) — FAIL
+            // 5. git push origin {branch} (initial) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "error: failed to push some refs".to_string(),
             },
-            // 4. git push -u origin {branch} (push_u fallback) — FAIL
+            // 6. git push -u origin {branch} (push_u fallback) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected: non-fast-forward".to_string(),
             },
-            // 5. git fetch (attempt 1) — success
+            // 7. git fetch (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 6. git rebase (attempt 1) — success
+            // 8. git rebase (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 7. git push (attempt 1) — FAIL
+            // 9. git push (attempt 1) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected again".to_string(),
             },
-            // 8. git fetch (attempt 2) — success
+            // 10. git fetch (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 9. git rebase (attempt 2) — success
+            // 11. git rebase (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 10. git push (attempt 2) — FAIL
+            // 12. git push (attempt 2) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected again".to_string(),
             },
-            // 11. git fetch (attempt 3) — success
+            // 13. git fetch (attempt 3) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 12. git rebase (attempt 3) — success
+            // 14. git rebase (attempt 3) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 13. git push (attempt 3) — FAIL (last retry)
+            // 15. git push (attempt 3) — FAIL (last retry)
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
@@ -3656,6 +3891,333 @@ mod tests {
         assert_eq!(
             state.branch, branch,
             "branch should be passed through to ResumeState"
+        );
+    }
+
+    // =========================================================================
+    // detect_default_branch tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_detect_default_branch_symbolic_ref_works() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref refs/remotes/origin/HEAD succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/main");
+    }
+
+    #[tokio::test]
+    async fn test_detect_default_branch_symbolic_ref_returns_master() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref refs/remotes/origin/HEAD returns master
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/master\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/master");
+    }
+
+    #[tokio::test]
+    async fn test_detect_default_branch_fallback_to_rev_parse_main() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "fatal: ref refs/remotes/origin/HEAD is not a symbolic ref".to_string(),
+            },
+            // git rev-parse --verify origin/main succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: "abc123\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/main");
+    }
+
+    #[tokio::test]
+    async fn test_detect_default_branch_fallback_to_rev_parse_master() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "fatal: ref refs/remotes/origin/HEAD is not a symbolic ref".to_string(),
+            },
+            // git rev-parse --verify origin/main fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "fatal: Needed a single revision".to_string(),
+            },
+            // git rev-parse --verify origin/master succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: "def456\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/master");
+    }
+
+    #[tokio::test]
+    async fn test_detect_default_branch_all_fail_defaults_to_origin_main() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // git rev-parse --verify origin/main fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // git rev-parse --verify origin/master fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/main");
+    }
+
+    #[tokio::test]
+    async fn test_worktree_add_includes_start_point() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::MergeToMain);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 5. git fetch origin main
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. git rebase origin/main
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push origin <branch>:main
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 8. git branch -d
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Deleted branch".to_string(),
+                stderr: String::new(),
+            },
+            // 9. git worktree remove
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_ok(), "run should succeed, got: {:?}", result.err());
+
+        let commands = runtime.captured_commands.lock().unwrap();
+
+        // Verify git fetch origin main --quiet appears before worktree add
+        let fetch_quiet_idx = commands
+            .iter()
+            .position(|c| c.contains("git fetch origin main") && c.contains("--quiet"))
+            .expect("should have a 'git fetch origin main --quiet' command");
+
+        let worktree_add_idx = commands
+            .iter()
+            .position(|c| c.contains("git worktree add"))
+            .expect("should have a 'git worktree add' command");
+
+        assert!(
+            fetch_quiet_idx < worktree_add_idx,
+            "git fetch should appear before git worktree add, fetch at {}, worktree at {}",
+            fetch_quiet_idx,
+            worktree_add_idx,
+        );
+
+        // Verify worktree add includes the start-point (origin/main)
+        let worktree_cmd = &commands[worktree_add_idx];
+        assert!(
+            worktree_cmd.contains("origin/main"),
+            "git worktree add should include origin/main as start-point, got: {}",
+            worktree_cmd,
+        );
+    }
+
+    #[tokio::test]
+    async fn test_merge_to_main_finalize_uses_detected_branch() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::MergeToMain);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. detect default branch — symbolic-ref returns master
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/master\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin master --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add {path} -b {branch} origin/master
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 5. git fetch origin master (finalize)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. git rebase origin/master (finalize)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push origin <branch>:master (finalize)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 8. git branch -d
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Deleted branch".to_string(),
+                stderr: String::new(),
+            },
+            // 9. git worktree remove
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_ok(), "run should succeed, got: {:?}", result.err());
+
+        let commands = runtime.captured_commands.lock().unwrap();
+
+        // Verify the worktree add uses origin/master as start-point
+        let worktree_cmd = commands
+            .iter()
+            .find(|c| c.contains("git worktree add"))
+            .expect("should have a git worktree add command");
+        assert!(
+            worktree_cmd.contains("origin/master"),
+            "git worktree add should use origin/master as start-point, got: {}",
+            worktree_cmd,
+        );
+
+        // Verify finalize fetch references master
+        let finalize_fetch = commands
+            .iter()
+            .filter(|c| c.contains("git fetch origin master") || c.contains("git fetch origin main"))
+            .collect::<Vec<_>>();
+        assert!(
+            finalize_fetch.iter().any(|c| c.contains("master")),
+            "finalize fetch should reference master, got commands: {:?}",
+            finalize_fetch,
+        );
+
+        // Verify rebase references origin/master
+        let rebase_cmd = commands
+            .iter()
+            .find(|c| c.contains("git rebase"))
+            .expect("should have a git rebase command");
+        assert!(
+            rebase_cmd.contains("origin/master"),
+            "git rebase should use origin/master, got: {}",
+            rebase_cmd,
+        );
+
+        // Verify push references master (push origin <branch>:master)
+        let push_cmd = commands
+            .iter()
+            .find(|c| c.contains("git push origin"))
+            .expect("should have a git push command");
+        assert!(
+            push_cmd.contains(":master"),
+            "git push should push to master, got: {}",
+            push_cmd,
         );
     }
 }

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
 use super::{ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
@@ -12,6 +13,7 @@ pub struct MockRuntime {
     pub command_results: Vec<CommandOutput>,
     command_call_count: AtomicUsize,
     pub env_override: Option<HashMap<String, String>>,
+    pub captured_commands: Arc<Mutex<Vec<String>>>,
 }
 
 /// What a single mock invocation should emit
@@ -46,6 +48,7 @@ impl MockRuntime {
             command_results: Vec::new(),
             command_call_count: AtomicUsize::new(0),
             env_override: None,
+            captured_commands: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -196,6 +199,10 @@ impl RuntimeProvider for MockRuntime {
         _working_dir: &std::path::Path,
         _timeout: std::time::Duration,
     ) -> Result<CommandOutput> {
+        self.captured_commands
+            .lock()
+            .unwrap()
+            .push(_command.to_string());
         if self.command_results.is_empty() {
             return Ok(CommandOutput {
                 exit_code: 0,

@@ -34,9 +34,9 @@ Currently `git worktree add <path> -b <branch>` (oneshot.rs:439) branches off HE
 **Pattern reference:** The git finalize phase already uses `origin/main` for rebase (oneshot.rs:763-765). We need a similar detection for the worktree creation.
 
 **Checklist:**
-- [ ] Add a helper function `detect_default_branch(runtime, repo_path) -> String` that runs `git symbolic-ref refs/remotes/origin/HEAD` (or falls back to checking if `origin/main` or `origin/master` exists) to determine the default branch name
-- [ ] Before worktree creation (around line 437), call this helper to get the default branch ref (e.g., `origin/main`)
-- [ ] Change the worktree add command from:
+- [x] Add a helper function `detect_default_branch(runtime, repo_path) -> String` that runs `git symbolic-ref refs/remotes/origin/HEAD` (or falls back to checking if `origin/main` or `origin/master` exists) to determine the default branch name
+- [x] Before worktree creation (around line 437), call this helper to get the default branch ref (e.g., `origin/main`)
+- [x] Change the worktree add command from:
   ```
   git worktree add {path} -b {branch}
   ```
@@ -45,8 +45,8 @@ Currently `git worktree add <path> -b <branch>` (oneshot.rs:439) branches off HE
   git worktree add {path} -b {branch} {default_branch_ref}
   ```
   This ensures the new branch starts from `origin/main` regardless of what HEAD points to
-- [ ] Update the git finalize `MergeToMain` logic to use the detected branch name instead of hardcoding `main` (lines 763-765). Store the detected default branch name in `OneShotConfig` or pass it through
-- [ ] Add a `fetch origin` before worktree creation to ensure `origin/main` is up to date:
+- [x] Update the git finalize `MergeToMain` logic to use the detected branch name instead of hardcoding `main` (lines 763-765). Store the detected default branch name in `OneShotConfig` or pass it through
+- [x] Add a `fetch origin` before worktree creation to ensure `origin/main` is up to date:
   ```
   git fetch origin {default_branch} --quiet
   ```
@@ -71,9 +71,9 @@ Currently `git worktree add <path> -b <branch>` (oneshot.rs:439) branches off HE
 **Pattern reference:** Existing `#[cfg(test)]` module in oneshot.rs.
 
 **Checklist:**
-- [ ] Add test for `detect_default_branch` returning `origin/main` when `symbolic-ref` works
-- [ ] Add test for fallback when `symbolic-ref` fails (check `origin/main` then `origin/master`)
-- [ ] Add test that worktree add command includes the start-point argument
+- [x] Add test for `detect_default_branch` returning `origin/main` when `symbolic-ref` works
+- [x] Add test for fallback when `symbolic-ref` fails (check `origin/main` then `origin/master`)
+- [x] Add test that worktree add command includes the start-point argument
 
 ## Task 5: Add Logging for Concurrent One-Shot Launch
 
@@ -93,7 +93,7 @@ Currently `git worktree add <path> -b <branch>` (oneshot.rs:439) branches off HE
 | Task | Status | Notes |
 |------|--------|-------|
 | 1. Remove UI guard on 1-Shot button | Done | Removed disabled prop and session.running guard |
-| 2. Worktree branches off main/master | Not started | Core safety change |
+| 2. Worktree branches off main/master | Done | detect_default_branch + worktree start-point + dynamic finalize |
 | 3. Update frontend tests | Done | Replaced guard test with two new assertions |
-| 4. Add Rust tests for branch detection | Not started | Depends on Task 2 |
+| 4. Add Rust tests for branch detection | Done | 7 new tests + MockRuntime captured_commands |
 | 5. Add concurrent launch logging | Not started | Independent |
