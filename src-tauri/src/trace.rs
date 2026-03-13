@@ -52,6 +52,8 @@ pub struct SessionTrace {
     pub context_window: u64,
     #[serde(default)]
     pub final_context_tokens: u64,
+    #[serde(default)]
+    pub max_context_percent: u8,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -142,6 +144,7 @@ impl TraceCollector {
             total_cache_creation_tokens: 0,
             context_window: 0,
             final_context_tokens: 0,
+            max_context_percent: 0,
         }
     }
 
@@ -172,6 +175,7 @@ impl TraceCollector {
             total_cache_creation_tokens: 0,
             context_window: 0,
             final_context_tokens: 0,
+            max_context_percent: 0,
         }
     }
 
@@ -212,6 +216,12 @@ impl TraceCollector {
             .map(|m| m.context_window)
             .max()
             .unwrap_or(0);
+
+        // Compute context percentage for this iteration
+        if trace.context_window > 0 {
+            let percent = (span.attributes.final_context_tokens * 100 / trace.context_window).min(100) as u8;
+            trace.max_context_percent = trace.max_context_percent.max(percent);
+        }
 
         trace.iterations.push(span);
     }
@@ -259,6 +269,23 @@ impl TraceCollector {
                 .max()
                 .unwrap_or(0);
         }
+
+        // Recompute max_context_percent from all iterations
+        trace.max_context_percent = trace.iterations.iter()
+            .map(|span| {
+                let cw = span.attributes.model_token_usage
+                    .values()
+                    .map(|m| m.context_window)
+                    .max()
+                    .unwrap_or(0);
+                if cw > 0 {
+                    (span.attributes.final_context_tokens * 100 / cw).min(100) as u8
+                } else {
+                    0
+                }
+            })
+            .max()
+            .unwrap_or(0);
 
         tokio::fs::create_dir_all(&self.output_dir).await?;
 
@@ -442,6 +469,7 @@ mod tests {
             total_cache_creation_tokens: 5,
             context_window: 0,
             final_context_tokens: 0,
+            max_context_percent: 0,
         }
     }
 
@@ -1881,6 +1909,192 @@ mod tests {
         assert!(
             output.contains("status=Error"),
             "expected 'status=Error' for iteration 2 in output: {output}"
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Tests for max_context_percent tracking
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Test A: max_context_percent backward compat ──
+
+    #[test]
+    fn max_context_percent_backward_compat() {
+        // 1. Serialize a trace
+        let trace = make_test_trace(None);
+        let json = serde_json::to_string(&trace).expect("serialize SessionTrace");
+
+        // 2. Remove the max_context_percent key to simulate an old-format file
+        let mut value: serde_json::Value =
+            serde_json::from_str(&json).expect("parse as Value");
+        let obj = value.as_object_mut().expect("top-level object");
+        assert!(
+            obj.remove("max_context_percent").is_some(),
+            "max_context_percent key should have been present"
+        );
+
+        let old_format_json =
+            serde_json::to_string(&value).expect("re-serialize without max_context_percent");
+
+        // 3. Deserialize — should succeed with the field defaulting to 0
+        let restored: SessionTrace =
+            serde_json::from_str(&old_format_json).expect("deserialize old-format trace");
+
+        assert_eq!(
+            restored.max_context_percent, 0,
+            "max_context_percent should default to 0 for old traces"
+        );
+        // Verify other fields still round-trip correctly
+        assert_eq!(restored.trace_id, trace.trace_id);
+        assert_eq!(restored.session_id, trace.session_id);
+        assert_eq!(restored.total_cost_usd, trace.total_cost_usd);
+    }
+
+    // ── Test B: record_iteration updates max_context_percent ──
+
+    #[test]
+    fn record_iteration_updates_max_context_percent() {
+        let collector = TraceCollector::new("/tmp", "test-repo");
+        let mut trace = collector.start_session("/tmp/repo", "max context test", None);
+
+        let now = Utc::now();
+        let later = now + chrono::Duration::seconds(10);
+
+        // Iteration with final_context_tokens=80_000, context_window=100_000 → 80%
+        let attrs = make_test_span_attrs(1, 80_000, 100_000);
+        collector.record_iteration(&mut trace, now, later, attrs, false);
+
+        assert_eq!(
+            trace.max_context_percent, 80,
+            "max_context_percent should be 80 for 80_000 / 100_000"
+        );
+    }
+
+    // ── Test C: max_context_percent is the max across iterations ──
+
+    #[test]
+    fn max_context_percent_tracks_maximum() {
+        let collector = TraceCollector::new("/tmp", "test-repo");
+        let mut trace = collector.start_session("/tmp/repo", "max tracking test", None);
+
+        let now = Utc::now();
+
+        // First iteration: 80% context usage
+        let attrs1 = make_test_span_attrs(1, 80_000, 100_000);
+        collector.record_iteration(
+            &mut trace,
+            now,
+            now + chrono::Duration::seconds(10),
+            attrs1,
+            false,
+        );
+
+        assert_eq!(trace.max_context_percent, 80, "after iteration 1: should be 80");
+
+        // Second iteration: 50% context usage (lower than first)
+        let attrs2 = make_test_span_attrs(2, 50_000, 100_000);
+        collector.record_iteration(
+            &mut trace,
+            now + chrono::Duration::seconds(10),
+            now + chrono::Duration::seconds(20),
+            attrs2,
+            false,
+        );
+
+        // max_context_percent should still be 80, not 50
+        assert_eq!(
+            trace.max_context_percent, 80,
+            "max_context_percent should reflect the max (80), not the last (50)"
+        );
+    }
+
+    // ── Test D: record_iteration with zero context_window ──
+
+    #[test]
+    fn record_iteration_zero_context_window_no_panic() {
+        let collector = TraceCollector::new("/tmp", "test-repo");
+        let mut trace = collector.start_session("/tmp/repo", "zero window test", None);
+
+        let now = Utc::now();
+        let later = now + chrono::Duration::seconds(10);
+
+        // Build attrs with empty model_token_usage → context_window is effectively 0
+        let attrs = SpanAttributes {
+            iteration: 1,
+            claude_session_id: None,
+            cost_usd: 0.01,
+            num_turns: Some(1),
+            api_duration_ms: Some(500),
+            completion_signal_found: false,
+            exit_code: 0,
+            result_preview: "test".to_string(),
+            token_usage: TokenUsage {
+                input_tokens: 1000,
+                output_tokens: 200,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+            },
+            model_token_usage: HashMap::new(), // empty → context_window would be 0
+            final_context_tokens: 5000,
+        };
+
+        // Should not panic due to division by zero
+        collector.record_iteration(&mut trace, now, later, attrs, false);
+
+        assert_eq!(
+            trace.max_context_percent, 0,
+            "max_context_percent should stay 0 when context_window is 0"
+        );
+    }
+
+    // ── Test E: finalize recomputes max_context_percent ──
+
+    #[tokio::test]
+    async fn finalize_recomputes_max_context_percent() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let mut trace = collector.start_session("/tmp/repo", "finalize max ctx test", None);
+
+        let now = Utc::now();
+
+        // Record two iterations: 80% then 50%
+        let attrs1 = make_test_span_attrs(1, 80_000, 100_000);
+        collector.record_iteration(
+            &mut trace,
+            now,
+            now + chrono::Duration::seconds(10),
+            attrs1,
+            false,
+        );
+
+        let attrs2 = make_test_span_attrs(2, 50_000, 100_000);
+        collector.record_iteration(
+            &mut trace,
+            now + chrono::Duration::seconds(10),
+            now + chrono::Duration::seconds(20),
+            attrs2,
+            false,
+        );
+
+        // Manually corrupt max_context_percent to 0 to test that finalize recomputes it
+        trace.max_context_percent = 0;
+
+        let events: Vec<SessionEvent> = vec![];
+        let trace_path = collector
+            .finalize(&mut trace, &events)
+            .await
+            .expect("finalize should succeed");
+
+        // Read the trace back from disk
+        let trace_json = std::fs::read_to_string(&trace_path).expect("read trace file");
+        let restored: SessionTrace =
+            serde_json::from_str(&trace_json).expect("deserialize trace");
+
+        assert_eq!(
+            restored.max_context_percent, 80,
+            "finalize should recompute max_context_percent to 80 (the max of 80% and 50%)"
         );
     }
 }
