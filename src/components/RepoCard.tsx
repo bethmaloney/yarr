@@ -17,6 +17,7 @@ interface RepoCardProps {
   gitStatus?: GitStatusInfo;
   planExcerpt?: string;
   onClick: () => void;
+  onPlanClick?: () => void;
 }
 
 const statusColors: Record<RepoStatus, string> = {
@@ -49,6 +50,7 @@ export function RepoCard({
   gitStatus,
   planExcerpt,
   onClick,
+  onPlanClick,
 }: RepoCardProps) {
   const repoFullPath =
     repo.type === "ssh" ? `${repo.sshHost}:${repo.remotePath}` : repo.path;
@@ -131,14 +133,40 @@ export function RepoCard({
         )}
       </div>
 
-      {lastTrace?.plan_file && (
-        <span className="text-xs text-muted-foreground font-mono truncate min-w-0">
-          {lastTrace.plan_file.split(/[\\/]/).pop()}
-        </span>
-      )}
-      {planExcerpt && (
-        <span className="text-xs text-muted-foreground truncate">{planExcerpt}</span>
-      )}
+      {lastTrace?.plan_file &&
+        (onPlanClick && lastTrace?.plan_content ? (
+          <span
+            role="button"
+            className="text-xs text-muted-foreground font-mono truncate min-w-0 cursor-pointer hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlanClick();
+            }}
+          >
+            {lastTrace.plan_file.split(/[\\/]/).pop()}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground font-mono truncate min-w-0">
+            {lastTrace.plan_file.split(/[\\/]/).pop()}
+          </span>
+        ))}
+      {planExcerpt &&
+        (onPlanClick && lastTrace?.plan_content ? (
+          <span
+            role="button"
+            className="text-xs text-muted-foreground truncate cursor-pointer hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlanClick();
+            }}
+          >
+            {planExcerpt}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground truncate">
+            {planExcerpt}
+          </span>
+        ))}
 
       <div className="flex-1" />
 

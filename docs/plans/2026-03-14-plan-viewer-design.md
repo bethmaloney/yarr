@@ -191,9 +191,9 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 - Only clickable when plan content is available
 
 **Checklist:**
-- [ ] Make plan excerpt clickable
-- [ ] Open PlanPanel with trace plan content
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Make plan excerpt clickable
+- [x] Open PlanPanel with trace plan content
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -207,4 +207,4 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 | 4 | Create PlanPanel component | Done |
 | 5 | Wire PlanPanel into RunDetail | Done |
 | 6 | Wire PlanPanel into OneShotDetail | Done |
-| 7 | Wire PlanPanel into RepoCard | Not Started |
+| 7 | Wire PlanPanel into RepoCard | Done |
