@@ -134,3 +134,16 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
 
   return { standaloneEvents, iterations };
 }
+
+export function maxContextPercent(groups: GroupedEvents): number {
+  let max = 0;
+  for (const iter of groups.iterations) {
+    if (iter.contextWindow > 0) {
+      const pct = Math.round((iter.inputTokens / iter.contextWindow) * 100);
+      if (pct > max) {
+        max = pct;
+      }
+    }
+  }
+  return max;
+}
