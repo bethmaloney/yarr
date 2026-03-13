@@ -1389,7 +1389,6 @@ export default function RepoDetail() {
                 size="lg"
                 variant="secondary"
                 onClick={() => setOneShotOpen(!oneShotOpen)}
-                disabled={session.running}
               >
                 1-Shot
               </Button>
@@ -1401,7 +1400,7 @@ export default function RepoDetail() {
             </>
           )}
         </div>
-        {oneShotOpen && !session.running && (
+        {oneShotOpen && (
           <div className="mt-4 pt-4 border-t border-border flex flex-col gap-3">
             <div>
               <Label
