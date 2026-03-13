@@ -871,6 +871,9 @@ impl SessionRunner {
         tracing::info!(iteration, "claude process spawned");
         let mut result_event: Option<ResultEvent> = None;
         let mut last_context_tokens: u64 = 0;
+        let mut last_assistant_text = String::new();
+        let mut event_count: u32 = 0;
+        let mut event_summary = Vec::<String>::new();
 
         // Register abort handle so it can be called on app exit
         let abort_arc: std::sync::Arc<dyn crate::runtime::AbortHandle> = std::sync::Arc::from(process.abort_handle);
@@ -883,8 +886,14 @@ impl SessionRunner {
             tokio::select! {
                 event = process.events.recv() => {
                     let Some(event) = event else { break };
+                    event_count += 1;
                     match &event {
                         StreamEvent::System(sys) => {
+                            if let Some(ref subtype) = sys.subtype {
+                                event_summary.push(format!("system:{subtype}"));
+                            } else {
+                                event_summary.push("system:init".to_string());
+                            }
                             if let Some(ref model) = sys.model {
                                 tracing::debug!("Iteration {iteration}: model={model}");
                             }
@@ -908,6 +917,7 @@ impl SessionRunner {
                                             text.clone()
                                         };
                                         tracing::debug!(iteration, preview, "text output");
+                                        last_assistant_text = text.clone();
                                         self.emit(SessionEvent::AssistantText {
                                             iteration,
                                             text: text.clone(),
@@ -925,6 +935,9 @@ impl SessionRunner {
                         }
                         StreamEvent::RateLimit(rl) => {
                             if let Some(ref info) = rl.rate_limit_info {
+                                let status = info.status.as_deref().unwrap_or("unknown");
+                                let rl_type = info.rate_limit_type.as_deref().unwrap_or("unknown");
+                                event_summary.push(format!("rate_limit:{status}/{rl_type}"));
                                 tracing::debug!(
                                     "Rate limit: status={:?} type={:?}",
                                     info.status,
@@ -961,12 +974,25 @@ impl SessionRunner {
         );
 
         if exit.exit_code != 0 && result_event.is_none() {
-            tracing::error!(iteration, exit_code = exit.exit_code, stderr = %exit.stderr.trim(), "claude process failed with no result");
-            anyhow::bail!(
-                "Claude process exited with code {} (stderr: {})",
-                exit.exit_code,
-                exit.stderr.trim()
-            );
+            let stderr = exit.stderr.trim();
+            let output = combine_output(last_assistant_text.trim(), stderr);
+            let events_desc = if event_summary.is_empty() {
+                "no events received".to_string()
+            } else {
+                format!("{event_count} events: [{}]", event_summary.join(", "))
+            };
+            tracing::error!(iteration, exit_code = exit.exit_code, stderr = %stderr, last_output = %last_assistant_text.trim(), events = %events_desc, "claude process failed with no result");
+            if output.is_empty() {
+                anyhow::bail!(
+                    "Claude process exited with code {} ({events_desc})",
+                    exit.exit_code,
+                );
+            } else {
+                anyhow::bail!(
+                    "Claude process exited with code {} — {output}",
+                    exit.exit_code,
+                );
+            }
         }
 
         if result_event.is_none() {
