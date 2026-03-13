@@ -105,11 +105,10 @@ export const useAppStore = create<AppStore>((set, get) => {
       oneShotStore.set("oneshot-entries", [...nextOneShot]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist oneshot entries:", e));
     }
 
-    // Event recovery: load historical events from disk for running sessions with empty events
+    // Event recovery: load historical events from disk for running sessions
     for (const [repoId, session] of next) {
       if (
         session.running &&
-        session.events.length === 0 &&
         session.session_id &&
         !recoveryInFlight.has(repoId)
       ) {
@@ -121,7 +120,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             if (events && events.length > 0) {
               const s = new Map(get().sessions);
               const current = s.get(repoId);
-              if (current && current.events.length === 0) {
+              if (current && events.length > current.events.length) {
                 s.set(repoId, { ...current, events });
                 set({ sessions: s });
               }
