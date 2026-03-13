@@ -46,14 +46,14 @@ Replace the trace-based `final_context_tokens / context_window` computation with
 **Pattern reference:** Current computation at `src/pages/RepoDetail.tsx:578-585`. The `EventsList` component already receives events and groups them; we need to compute the max from those grouped iterations.
 
 **Checklist:**
-- [ ] Import `groupEventsByIteration` and `maxContextPercent` from `../iteration-groups`
-- [ ] Replace the `ctxPercent` computation (lines 578-585) to:
+- [x] Import `groupEventsByIteration` and `maxContextPercent` from `../iteration-groups`
+- [x] Replace the `ctxPercent` computation (lines 578-585) to:
   - Call `groupEventsByIteration(session.events)` (or reuse the existing grouped result if available)
   - Call `maxContextPercent(grouped)` to get the peak percentage
   - Set `ctxPercent` to this value, or `null` if it's 0
-- [ ] Keep the existing display markup (dt "Context", dd with `sessionContextColor(ctxPercent)`) — only the value changes
-- [ ] Update the label from "Context" to "Peak Context" to make clear it's the max (optional, decide based on user preference — the task says "largest context usage", so "Peak Context" is clearer)
-- [ ] Update existing test in `src/pages/RepoDetail.test.tsx` (around line 1956) to:
+- [x] Keep the existing display markup (dt "Context", dd with `sessionContextColor(ctxPercent)`) — only the value changes
+- [x] Update the label from "Context" to "Peak Context" to make clear it's the max (optional, decide based on user preference — the task says "largest context usage", so "Peak Context" is clearer)
+- [x] Update existing test in `src/pages/RepoDetail.test.tsx` (around line 1956) to:
   - Provide session events with iteration_complete events that have model_usage data, rather than relying on trace.context_window/final_context_tokens
   - Assert the displayed percentage matches the max across iterations
 
@@ -155,7 +155,7 @@ The recommended implementation order is:
 | Task | Status | Notes |
 |------|--------|-------|
 | Task 1: maxContextPercent helper | Complete | Foundation utility |
-| Task 2: RepoDetail.tsx update | Not Started | Main session page |
+| Task 2: RepoDetail.tsx update | Complete | Peak context from max iteration, memoized, label "Peak Context" |
 | Task 3: RepoCard.tsx update | Not Started | Card display |
 | Task 4: OneShotDetail.tsx update | Not Started | 1-shot page |
 | Task 5: Rust SessionTrace field | Complete | `max_context_percent: u8` in struct, `record_iteration`, `finalize`, 5 Rust tests, TS type updated |

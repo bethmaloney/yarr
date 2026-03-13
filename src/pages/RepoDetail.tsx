@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/command";
 import { toast } from "sonner";
 import { sessionContextColor } from "../context-bar";
+import { groupEventsByIteration, maxContextPercent } from "../iteration-groups";
 import { parsePlanPreview, planDisplayName } from "../plan-preview";
 import {
   Cpu,
@@ -575,14 +576,12 @@ export default function RepoDetail() {
     setPlanSearch("");
   }
 
-  // Context percentage computation
-  const ctxPercent =
-    session.trace?.context_window && session.trace?.final_context_tokens
-      ? Math.round(
-          (session.trace.final_context_tokens / session.trace.context_window) *
-            100,
-        )
-      : null;
+  // Context percentage computation — peak across all iterations
+  const ctxPeak = useMemo(
+    () => maxContextPercent(groupEventsByIteration(session.events)),
+    [session.events],
+  );
+  const ctxPercent = ctxPeak > 0 ? ctxPeak : null;
 
   return (
     <main className="max-w-[900px] mx-auto p-8">
@@ -1586,7 +1585,7 @@ export default function RepoDetail() {
             <dd>${session.trace.total_cost_usd.toFixed(4)}</dd>
             {ctxPercent !== null && (
               <>
-                <dt className="text-muted-foreground">Context</dt>
+                <dt className="text-muted-foreground">Peak Context</dt>
                 <dd>
                   <span style={{ color: sessionContextColor(ctxPercent) }}>
                     {ctxPercent}%
