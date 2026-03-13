@@ -109,6 +109,20 @@ function makeLocalRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
   } as RepoConfig;
 }
 
+function makeSshRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
+  return {
+    type: "ssh",
+    id: "repo-ssh-1",
+    sshHost: "devbox",
+    remotePath: "/home/user/repos/remote-project",
+    name: "remote-project",
+    model: "opus",
+    maxIterations: 40,
+    completionSignal: "ALL TODO ITEMS COMPLETE",
+    checks: [],
+    ...overrides,
+  } as RepoConfig;
+}
 
 function makeEntry(overrides: Partial<OneShotEntry> = {}): OneShotEntry {
   return {
@@ -1588,6 +1602,87 @@ describe("OneShotDetail", () => {
         "/home/beth/repos/my-project/design.md",
       );
       expect(panel).toHaveTextContent("## Step 1 Refactor the module.");
+    });
+  });
+
+  // =========================================================================
+  // SSH host prefix on worktree path
+  // =========================================================================
+
+  describe("SSH host prefix on worktree path", () => {
+    it("displays worktree path as-is for local parent repo", () => {
+      setupMockState({
+        repos: [makeLocalRepo({ id: "repo-1" })],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              parentRepoId: "repo-1",
+              worktreePath: "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const eventsList = screen.getByTestId("events-list");
+      expect(eventsList).toHaveAttribute(
+        "data-repo-path",
+        "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+      );
+    });
+
+    it("prefixes worktree path with sshHost: for SSH parent repo", () => {
+      setupMockState({
+        repos: [makeSshRepo({ id: "repo-ssh-1" })],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              parentRepoId: "repo-ssh-1",
+              worktreePath: "/home/user/.yarr/worktrees/abc123-oneshot-def/",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const eventsList = screen.getByTestId("events-list");
+      expect(eventsList).toHaveAttribute(
+        "data-repo-path",
+        "devbox:/home/user/.yarr/worktrees/abc123-oneshot-def/",
+      );
+    });
+
+    it("displays worktree path as-is when parent repo is not found in repos list", () => {
+      setupMockState({
+        repos: [], // no repos — parent repo not found
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              parentRepoId: "repo-nonexistent",
+              worktreePath: "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const eventsList = screen.getByTestId("events-list");
+      expect(eventsList).toHaveAttribute(
+        "data-repo-path",
+        "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+      );
     });
   });
 });

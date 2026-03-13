@@ -224,10 +224,10 @@ Display the SSH host alongside the remote worktree path so users know it's a rem
 - Keep the existing display for local repos unchanged
 
 **Checklist:**
-- [ ] Add SSH host lookup for parent repo
-- [ ] Prefix worktree path with host when SSH
-- [ ] Verify local oneshot display is unchanged
-- [ ] `npx tsc --noEmit` passes
+- [x] Add SSH host lookup for parent repo
+- [x] Prefix worktree path with host when SSH
+- [x] Verify local oneshot display is unchanged
+- [x] `npx tsc --noEmit` passes
 
 ---
 
@@ -285,6 +285,6 @@ Add E2E test variants for SSH oneshot using mocked Tauri IPC.
 | 2 | Extract phase execution helper (local vs SSH) | Done |
 | 3 | Wire up SSH oneshot in run_oneshot command | Done |
 | 4 | Handle reconnect notify for SSH oneshots | Done |
-| 5 | Update OneShotDetail.tsx for SSH host prefix | Not Started |
+| 5 | Update OneShotDetail.tsx for SSH host prefix | Done |
 | 6 | Rust unit tests for SSH oneshot | Not Started |
 | 7 | E2E tests for SSH oneshot | Not Started |

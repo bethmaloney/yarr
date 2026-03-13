@@ -27,6 +27,7 @@ export default function OneShotDetail() {
   const entries = useAppStore((s) => s.oneShotEntries);
   const sessions = useAppStore((s) => s.sessions);
   const resumeOneShot = useAppStore((s) => s.resumeOneShot);
+  const repos = useAppStore((s) => s.repos);
 
   const [planPanelOpen, setPlanPanelOpen] = useState(false);
 
@@ -86,7 +87,14 @@ export default function OneShotDetail() {
   const displayEvents = entry ? session.events : fallbackEvents;
   const displayTrace = entry ? session.trace : fallbackTrace;
   const isRunning = entry ? session.running : false;
-  const displayRepoPath = entry?.worktreePath;
+  const displayRepoPath = useMemo(() => {
+    if (!entry?.worktreePath) return undefined;
+    const parentRepo = repos.find((r) => r.id === entry.parentRepoId);
+    if (parentRepo && parentRepo.type === "ssh") {
+      return parentRepo.sshHost + ":" + entry.worktreePath;
+    }
+    return entry.worktreePath;
+  }, [entry?.worktreePath, entry?.parentRepoId, repos]);
 
   const phase = useMemo(
     () => getPhaseFromEvents(displayEvents),
@@ -257,7 +265,7 @@ export default function OneShotDetail() {
             <dd className="m-0 text-sm font-mono">
               {displayTrace.session_id}
             </dd>
-            {session.trace.plan_content && (
+            {session.trace?.plan_content && (
               <>
                 <dt className="sr-only">Actions</dt>
                 <dd className="m-0 text-sm">
