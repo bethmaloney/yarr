@@ -157,12 +157,12 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 - Wrapped in a div with bottom margin to separate from events list
 
 **Checklist:**
-- [ ] Create component with `PlanProgressBarProps { progress: PlanProgress }`
-- [ ] Render 4px-tall rounded bar with percentage-width fill
-- [ ] Render stats line: percentage, item fraction
-- [ ] Render current task line: "Next: Task {N} — {title}" or "All tasks complete"
-- [ ] Fill color transitions to green (`bg-[#34d399]`) when `completedItems === totalItems`
-- [ ] Run `npx tsc --noEmit` to verify
+- [x] Create component with `PlanProgressBarProps { progress: PlanProgress }`
+- [x] Render 4px-tall rounded bar with percentage-width fill
+- [x] Render stats line: percentage, item fraction
+- [x] Render current task line: "Next: Task {N} — {title}" or "All tasks complete"
+- [x] Fill color transitions to green (`bg-[#34d399]`) when `completedItems === totalItems`
+- [x] Run `npx tsc --noEmit` to verify
 
 ---
 
@@ -255,7 +255,7 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 | 3 | Frontend type updates | Done |
 | 4 | Zustand store handling | Done |
 | 5 | Event emoji/label | Done |
-| 6 | PlanProgressBar component | Not Started |
+| 6 | PlanProgressBar component | Done |
 | 7 | Integrate into EventsList | Not Started |
 | 8 | Compact bar in RepoCard | Not Started |
 | 9 | Dashboard → RepoCard wiring | Not Started |
