@@ -60,9 +60,9 @@ The fix is to move the plan to completed **in the Rust backend** (`OneShotRunner
 - `src/store.ts`
 
 **Checklist:**
-- [ ] Remove or disable the `one_shot_complete` plan-move handler at lines 427-469, since the backend now handles it
-- [ ] Keep the `console.log` for debugging but remove the `invoke("move_plan_to_completed", ...)` call
-- [ ] Alternatively, keep the frontend code as a fallback but add a guard to avoid double-moving (check if file already exists in completed). Simpler to just remove it.
+- [x] Remove or disable the `one_shot_complete` plan-move handler at lines 427-469, since the backend now handles it
+- [x] Keep the `console.debug` for debugging but remove the `invoke("move_plan_to_completed", ...)` call
+- [x] Alternatively, keep the frontend code as a fallback but add a guard to avoid double-moving (check if file already exists in completed). Simpler to just remove it.
 
 ### Task 5: Add tests
 
@@ -91,5 +91,5 @@ The fix is to move the plan to completed **in the Rust backend** (`OneShotRunner
 | 1. Add plan move to OneShotRunner | **Done** | Calls `move_plan_to_completed_impl(commit=false)` after impl phase, with empty-filename guard and SSH-aware exists check |
 | 2. Add config field | **Done** | Added `move_plans_to_completed: bool` to OneShotConfig, wired through run_oneshot/resume_oneshot and frontend |
 | 3. Lightweight helper | **Done** | Added `commit: bool` param to `move_plan_to_completed_impl` |
-| 4. Remove frontend handler | Not started | Cleanup |
+| 4. Remove frontend handler | **Done** | Removed `invoke("move_plan_to_completed")` from oneshot handler, kept `console.debug` log, updated tests |
 | 5. Tests | Not started | Verification |
