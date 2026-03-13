@@ -77,19 +77,18 @@ When a user clicks a trace row in the History page, oneshot traces should naviga
 
 ### Checklist
 
-- [ ] Check `trace.session_type` — if it's `"one_shot"`, navigate to `/oneshot/${traceRepoId(trace, repoId)}` instead of `/run/...`.
-- [ ] The `trace.repo_id` for oneshot traces is the `oneshot_id` (e.g., `"oneshot-abc123"`), which is the key used in `oneShotEntries`.
-- [ ] If the entry doesn't exist in `oneShotEntries` (was pruned or from a previous install), fall back to `/run/{repoId}/{sessionId}` so the user can still see the generic trace+events view.
+- [x] Check `trace.session_type` — if it's `"one_shot"`, navigate to `/oneshot/${trace.repo_id}` instead of `/run/...`.
+- [x] The `trace.repo_id` for oneshot traces is the `oneshot_id` (e.g., `"oneshot-abc123"`), which is the key used in `oneShotEntries`.
+- [x] If the entry doesn't exist in `oneShotEntries` (was pruned or from a previous install), fall back to `/run/{repoId}/{sessionId}` so the user can still see the generic trace+events view.
 
 ### Implementation detail
 
 ```typescript
 onClick={() => {
-  const rid = traceRepoId(trace, repoId);
   if (trace.session_type === "one_shot") {
-    navigate(`/oneshot/${rid}`);
+    navigate(`/oneshot/${trace.repo_id ?? "unknown"}`);
   } else {
-    navigate(`/run/${rid}/${trace.session_id}`);
+    navigate(`/run/${traceRepoId(trace, repoId)}/${trace.session_id}`);
   }
 }}
 ```
@@ -169,7 +168,7 @@ If `oneshot-entries.json` gets corrupted or lost, all oneshot history is gone ev
 - [x] **store.test.ts**: Test that `runOneShot` initializes session state with `session_id`.
 - [x] **store.test.ts**: Test that `one_shot_complete` event triggers trace fetch.
 - [x] **store.test.ts**: Test that completed entries are no longer pruned.
-- [ ] **History.test.tsx**: Test that clicking a `session_type: "one_shot"` trace navigates to `/oneshot/{id}`.
+- [x] **History.test.tsx**: Test that clicking a `session_type: "one_shot"` trace navigates to `/oneshot/{id}`.
 - [ ] **OneShotDetail.test.tsx**: Test fallback rendering when entry is not in store but trace exists on disk.
 
 ---
@@ -181,7 +180,7 @@ If `oneshot-entries.json` gets corrupted or lost, all oneshot history is gone ev
 | 1. Initialize session state in runOneShot | Done | `src/store.ts` — session created after invoke returns |
 | 2. Fetch trace on oneshot completion | Done | `src/store.ts` — fetches on `one_shot_complete`, updates sessions + latestTraces |
 | 3. Remove aggressive pruning | Done | `src/store.ts` — pruning block removed |
-| 4. History → OneShotDetail navigation | Not Started | `src/pages/History.tsx` |
+| 4. History → OneShotDetail navigation | Done | `src/pages/History.tsx` — uses `trace.repo_id` directly for oneshot, not `traceRepoId` |
 | 5. OneShotDetail disk fallback | Not Started | `src/pages/OneShotDetail.tsx` |
 | 6. Reconcile entries from disk on startup | Not Started | `src/store.ts` — lower priority |
 | 7. Add tests | Not Started | Multiple test files |
