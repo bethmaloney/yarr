@@ -88,11 +88,11 @@ The `OneShotDetail` page shows a "Result" section with session trace data but cu
 **Pattern reference:** The Result section at `src/pages/OneShotDetail.tsx:156-186`. The `session.events` are available in this component.
 
 **Checklist:**
-- [ ] Import `groupEventsByIteration` and `maxContextPercent` from `../iteration-groups`
-- [ ] Import `sessionContextColor` from `../context-bar`
-- [ ] Compute max context percentage from `session.events` using `groupEventsByIteration` + `maxContextPercent`
-- [ ] Add a "Peak Context" row to the Result dl section, styled with `sessionContextColor`, matching the pattern in `RepoDetail.tsx`
-- [ ] Only show if the percentage is > 0
+- [x] Import `groupEventsByIteration` and `maxContextPercent` from `../iteration-groups`
+- [x] Import `sessionContextColor` from `../context-bar`
+- [x] Compute max context percentage from `session.events` using `groupEventsByIteration` + `maxContextPercent`
+- [x] Add a "Peak Context" row to the Result dl section, styled with `sessionContextColor`, matching the pattern in `RepoDetail.tsx`
+- [x] Only show if the percentage is > 0
 
 ### Task 5: Store max context percentage in Rust `SessionTrace` (backend)
 
@@ -157,6 +157,6 @@ The recommended implementation order is:
 | Task 1: maxContextPercent helper | Complete | Foundation utility |
 | Task 2: RepoDetail.tsx update | Complete | Peak context from max iteration, memoized, label "Peak Context" |
 | Task 3: RepoCard.tsx update | Complete | Uses max_context_percent with fallback to old computation |
-| Task 4: OneShotDetail.tsx update | Not Started | 1-shot page |
+| Task 4: OneShotDetail.tsx update | Complete | Peak context from max iteration, memoized, styled with sessionContextColor |
 | Task 5: Rust SessionTrace field | Complete | `max_context_percent: u8` in struct, `record_iteration`, `finalize`, 5 Rust tests, TS type updated, RepoCard integrated |
 | Task 6: Test verification | Not Started | All tests green |

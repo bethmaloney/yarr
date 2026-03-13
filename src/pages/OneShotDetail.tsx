@@ -6,6 +6,8 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { EventsList } from "@/components/EventsList";
 import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
+import { groupEventsByIteration, maxContextPercent } from "../iteration-groups";
+import { sessionContextColor } from "../context-bar";
 import { Loader2, AlertTriangle, Terminal } from "lucide-react";
 import type { SessionState } from "../types";
 
@@ -32,6 +34,12 @@ export default function OneShotDetail() {
     () => getPhaseFromEvents(session.events),
     [session.events],
   );
+
+  const ctxPeak = useMemo(
+    () => maxContextPercent(groupEventsByIteration(session.events)),
+    [session.events],
+  );
+  const ctxPercent = ctxPeak > 0 ? ctxPeak : null;
 
   const repoPath = entry?.worktreePath;
 
@@ -168,6 +176,16 @@ export default function OneShotDetail() {
             <dd className="m-0 text-sm font-mono">
               ${session.trace.total_cost_usd.toFixed(4)}
             </dd>
+            {ctxPercent !== null && (
+              <>
+                <dt className="text-muted-foreground text-sm">Peak Context</dt>
+                <dd className="m-0 text-sm font-mono">
+                  <span style={{ color: sessionContextColor(ctxPercent) }}>
+                    {ctxPercent}%
+                  </span>
+                </dd>
+              </>
+            )}
             <dt className="text-muted-foreground text-sm">Session ID</dt>
             <dd className="m-0 text-sm font-mono">
               {session.trace.session_id}
