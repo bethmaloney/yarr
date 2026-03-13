@@ -139,6 +139,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
     repo_path: "/home/beth/repos/yarr",
     prompt: "do stuff",
     plan_file: "plan.md",
+    plan_content: null,
     repo_id: "repo-1",
     start_time: "2026-03-10T00:00:00Z",
     end_time: "2026-03-10T00:01:00Z",

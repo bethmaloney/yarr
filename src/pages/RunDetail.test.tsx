@@ -62,6 +62,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
     repo_path: "/home/beth/repos/my-project",
     prompt: "Fix the login bug",
     plan_file: "/home/beth/plans/fix-bug.md",
+    plan_content: null,
     repo_id: "repo-1",
     session_type: "ralph_loop",
     start_time: "2026-03-10T10:00:00Z",

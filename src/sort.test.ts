@@ -9,6 +9,7 @@ function makeTrace(
     repo_path: "/home/user/repos/project",
     prompt: "do something",
     plan_file: null,
+    plan_content: null,
     start_time: "2026-03-07T10:00:00Z",
     end_time: "2026-03-07T10:05:00Z",
     outcome: "completed",

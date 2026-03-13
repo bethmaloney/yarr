@@ -171,6 +171,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
     repo_path: "/home/beth/repos/my-project",
     prompt: "test prompt",
     plan_file: null,
+    plan_content: null,
     start_time: new Date().toISOString(),
     end_time: new Date().toISOString(),
     outcome: "completed",

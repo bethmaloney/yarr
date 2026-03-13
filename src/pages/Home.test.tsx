@@ -110,6 +110,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
     repo_path: "/home/beth/repos/my-project",
     prompt: "test prompt",
     plan_file: null,
+    plan_content: null,
     start_time: new Date().toISOString(),
     end_time: null,
     outcome: "completed",
@@ -1168,6 +1169,7 @@ describe("Home", () => {
       } as Partial<RepoConfig>);
       const trace = makeTrace({
         plan_file: null,
+    plan_content: null,
       });
 
       setupMockState({

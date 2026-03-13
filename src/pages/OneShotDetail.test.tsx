@@ -113,6 +113,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
     repo_path: "/home/beth/repos/my-project",
     prompt: "Fix the login bug where users get redirected incorrectly",
     plan_file: null,
+    plan_content: null,
     repo_id: "repo-1",
     session_type: "one_shot",
     start_time: "2026-03-10T10:00:00Z",

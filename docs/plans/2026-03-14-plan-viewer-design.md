@@ -56,8 +56,8 @@ Add the new field to the trace struct and ensure it serializes/deserializes.
 - Field should default to `None` for backwards compatibility with existing serialized traces
 
 **Checklist:**
-- [ ] Add field to `SessionTrace`
-- [ ] Verify `cargo check` passes
+- [x] Add field to `SessionTrace`
+- [x] Verify `cargo check` passes
 
 ---
 
@@ -201,7 +201,7 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add `plan_content` to `SessionTrace` | Not Started |
+| 1 | Add `plan_content` to `SessionTrace` | Done |
 | 2 | Snapshot plan content in Ralph loop sessions | Not Started |
 | 3 | Snapshot plan content in one-shot sessions | Not Started |
 | 4 | Create PlanPanel component | Not Started |
