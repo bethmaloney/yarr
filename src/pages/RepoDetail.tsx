@@ -62,6 +62,7 @@ import {
   Square,
   Terminal,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import type { Check, SessionState } from "../types";
 import type { RepoConfig } from "../repos";
@@ -124,6 +125,7 @@ export default function RepoDetail() {
   const gitStatus = gitStatusEntry?.status ?? null;
   const [branches, setBranches] = useState<string[]>([]);
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
+  const [fastForwarding, setFastForwarding] = useState(false);
   const [branchSearch, setBranchSearch] = useState("");
 
   // Plan state
@@ -495,15 +497,18 @@ export default function RepoDetail() {
   async function handleFastForward() {
     const payload = buildRepoPayload();
     if (!payload) return;
+    setFastForwarding(true);
     try {
       await invoke("fast_forward_branch", { repo: payload });
+      if (repoId && repo) await fetchGitStatus(repoId, repo, false);
       setBranchDropdownOpen(false);
       setBranchSearch("");
-      if (repoId && repo) fetchGitStatus(repoId, repo, true);
       toast.success("Branch fast-forwarded");
     } catch (e) {
       console.error("Failed to fast-forward:", e);
       toast.error(`Failed to fast-forward: ${e}`);
+    } finally {
+      setFastForwarding(false);
     }
   }
 
@@ -698,8 +703,16 @@ export default function RepoDetail() {
                           size="sm"
                           className="w-full"
                           onClick={handleFastForward}
+                          disabled={fastForwarding}
                         >
-                          Fast-forward
+                          {fastForwarding ? (
+                            <>
+                              <Loader2 className="size-3.5 animate-spin" />
+                              Fast-forwarding…
+                            </>
+                          ) : (
+                            "Fast-forward"
+                          )}
                         </Button>
                       </div>
                     )}
