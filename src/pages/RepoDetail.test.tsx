@@ -1756,22 +1756,32 @@ describe("RepoDetail", () => {
       });
     });
 
-    it("form is hidden when session is running", () => {
+    it("1-Shot button is enabled when session is running", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         sessions: new Map([["test-repo", makeSessionState({ running: true })]]),
       });
       renderRepoDetail();
 
-      // The 1-Shot button should not be present or the form should be hidden
-      // when a session is actively running
-      const oneshotButton = screen.queryByRole("button", { name: /1-shot/i });
-      if (oneshotButton) {
-        // If the button exists, clicking it should not reveal the form
-        fireEvent.click(oneshotButton);
-        expect(document.getElementById("oneshot-title")).not.toBeInTheDocument();
-      }
-      // Either the button is absent or clicking it does not open the form
+      const oneshotButton = screen.getByRole("button", { name: /1-shot/i });
+      expect(oneshotButton).toBeInTheDocument();
+      expect(oneshotButton).not.toBeDisabled();
+    });
+
+    it("1-Shot form renders when oneShotOpen is true and session is running", async () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        sessions: new Map([["test-repo", makeSessionState({ running: true })]]),
+      });
+      renderRepoDetail();
+      const user = userEvent.setup();
+
+      // Click the 1-Shot button to open the form
+      await user.click(screen.getByRole("button", { name: /1-shot/i }));
+
+      // Form should be visible even though session is running
+      expect(document.getElementById("oneshot-title")).toBeInTheDocument();
+      expect(document.getElementById("oneshot-prompt")).toBeInTheDocument();
     });
 
     it("Cancel button collapses the form", async () => {
