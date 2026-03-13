@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { useAppStore } from "../store";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ export default function OneShotDetail() {
       await invoke("stop_session", { repoId: oneshotId });
     } catch (e) {
       console.error("Failed to stop session:", e);
+      toast.error(`Failed to stop session: ${e}`);
     }
   }
 

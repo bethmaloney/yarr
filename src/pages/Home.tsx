@@ -49,8 +49,8 @@ export default function Home() {
           if (parsed.excerpt) {
             newMap.set(repoId, parsed.excerpt);
           }
-        } catch {
-          // Skip entries that fail to read
+        } catch (e) {
+          console.warn("[Home] failed to load plan preview:", e);
         }
       }
       setPlanPreviews(newMap);

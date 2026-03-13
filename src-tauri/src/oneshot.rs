@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::Result;
 use chrono::Utc;
 use tokio_util::sync::CancellationToken;
+use tracing::instrument;
 
 use crate::git_merge::{git_merge_push, GitMergeConfig, GitMergeEvent};
 use crate::prompt;
@@ -295,6 +296,7 @@ impl OneShotRunner {
     }
 
     /// Attempt best-effort cleanup of the worktree.
+    #[instrument(skip(self, runtime), fields(oneshot_id = %self.config.repo_id))]
     async fn cleanup_worktree(&self, runtime: &dyn RuntimeProvider, wt_path: &PathBuf) {
         tracing::info!(oneshot_id = %self.config.repo_id, worktree = %wt_path.display(), "cleaning up worktree");
         match runtime
@@ -325,10 +327,12 @@ impl OneShotRunner {
     /// Extract a plan file path from the design phase output text.
     /// Looks for references to `docs/plans/*.md` in the text.
     fn extract_plan_file_from_output(&self, text: &str, plans_dir: &str) -> Option<String> {
+        tracing::debug!(oneshot_id = %self.config.repo_id, plans_dir = %plans_dir, "extracting plan file from output text");
         // Look for a path like docs/plans/something.md
         for word in text.split_whitespace() {
             let cleaned = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '-' && c != '_' && c != '.');
             if cleaned.contains(plans_dir) && cleaned.ends_with(".md") {
+                tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %cleaned, "found plan file in output text (whitespace scan)");
                 return Some(cleaned.to_string());
             }
         }
@@ -336,13 +340,16 @@ impl OneShotRunner {
         for segment in text.split('`') {
             let trimmed = segment.trim();
             if trimmed.contains(plans_dir) && trimmed.ends_with(".md") {
+                tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %trimmed, "found plan file in output text (backtick scan)");
                 return Some(trimmed.to_string());
             }
         }
+        tracing::debug!(oneshot_id = %self.config.repo_id, plans_dir = %plans_dir, "no plan file found in output text");
         None
     }
 
     /// Run the full 1-shot lifecycle.
+    #[instrument(skip(self, runtime), fields(oneshot_id = %self.config.repo_id))]
     pub async fn run(&self, runtime: &dyn RuntimeProvider) -> Result<SessionTrace> {
         let repo_str = self.config.repo_path.to_string_lossy().to_string();
         tracing::info!(
@@ -408,7 +415,9 @@ impl OneShotRunner {
             trace.outcome = SessionOutcome::Cancelled;
             trace.end_time = Some(Utc::now());
             let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-            let _ = self.collector.finalize(&mut trace, &events).await;
+            if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+            }
             return Err(anyhow::anyhow!("Cancelled"));
         }
 
@@ -450,7 +459,9 @@ impl OneShotRunner {
                 trace.outcome = SessionOutcome::Failed;
                 trace.end_time = Some(Utc::now());
                 let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                let _ = self.collector.finalize(&mut trace, &events).await;
+                if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                    tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                }
                 return Err(anyhow::anyhow!("Worktree creation failed"));
             }
             tracing::info!(oneshot_id = %self.config.repo_id, "worktree created successfully");
@@ -465,7 +476,9 @@ impl OneShotRunner {
             trace.outcome = SessionOutcome::Cancelled;
             trace.end_time = Some(Utc::now());
             let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-            let _ = self.collector.finalize(&mut trace, &events).await;
+            if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+            }
             return Err(anyhow::anyhow!("Cancelled"));
         }
 
@@ -523,7 +536,7 @@ impl OneShotRunner {
                 design_runner
             };
 
-            tracing::info!("Starting design phase for '{}'", self.config.title);
+            tracing::info!(oneshot_id = %self.config.repo_id, title = %self.config.title, "starting design phase runner");
             design_runner.run_with_trace(runtime, &mut trace).await?;
 
             // Check design phase outcome
@@ -537,7 +550,9 @@ impl OneShotRunner {
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Design phase failed"));
                 }
                 SessionOutcome::Cancelled => {
@@ -547,7 +562,9 @@ impl OneShotRunner {
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Cancelled"));
                 }
                 _ => {
@@ -572,7 +589,7 @@ impl OneShotRunner {
 
             // Determine the plan file path
             let pfp = if let Some(p) = plan_file_from_events {
-                tracing::info!("Using plan file from events: {}", p);
+                tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %p, "plan file extracted from design events");
                 // Make path relative if it's absolute and within the worktree
                 let wt_prefix = format!("{}/", wt_path.display());
                 if p.starts_with(&wt_prefix) {
@@ -581,7 +598,7 @@ impl OneShotRunner {
                     p
                 }
             } else if let Some(p) = plan_file_from_text {
-                tracing::info!("Using plan file from text: {}", p);
+                tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %p, "plan file extracted from design output text");
                 p
             } else if collected_text.contains("<promise>COMPLETE</promise>") {
                 tracing::warn!(
@@ -599,7 +616,9 @@ impl OneShotRunner {
                 trace.outcome = SessionOutcome::Failed;
                 trace.end_time = Some(Utc::now());
                 let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                let _ = self.collector.finalize(&mut trace, &events).await;
+                if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                    tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                }
                 return Err(anyhow::anyhow!("Design phase did not produce a plan file"));
             } else {
                 let slug = slugify(&self.config.title);
@@ -626,7 +645,9 @@ impl OneShotRunner {
             trace.outcome = SessionOutcome::Cancelled;
             trace.end_time = Some(Utc::now());
             let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-            let _ = self.collector.finalize(&mut trace, &events).await;
+            if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+            }
             return Err(anyhow::anyhow!("Cancelled"));
         }
 
@@ -671,7 +692,7 @@ impl OneShotRunner {
                 impl_runner
             };
 
-            tracing::info!("Starting implementation phase");
+            tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %plan_file_path, "starting implementation phase runner");
             impl_runner.run_with_trace(runtime, &mut trace).await?;
 
             // Check implementation phase outcome
@@ -685,7 +706,9 @@ impl OneShotRunner {
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Implementation phase failed"));
                 }
                 SessionOutcome::Cancelled => {
@@ -695,7 +718,9 @@ impl OneShotRunner {
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Cancelled"));
                 }
                 _ => {
@@ -717,7 +742,9 @@ impl OneShotRunner {
             trace.outcome = SessionOutcome::Cancelled;
             trace.end_time = Some(Utc::now());
             let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-            let _ = self.collector.finalize(&mut trace, &events).await;
+            if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+            }
             return Err(anyhow::anyhow!("Cancelled"));
         }
 
@@ -736,6 +763,10 @@ impl OneShotRunner {
                 let push_cmd = format!("git push origin {}:main", branch);
                 let fetch_cmd = "git fetch origin main".to_string();
                 let rebase_cmd = "git rebase origin/main".to_string();
+
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, fetch_cmd = %fetch_cmd, "git finalize: fetch step");
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, rebase_cmd = %rebase_cmd, "git finalize: rebase step");
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, push_cmd = %push_cmd, "git finalize: push step");
 
                 let git_sync_config = self.config.git_sync.clone().unwrap_or(GitSyncConfig {
                     enabled: true,
@@ -789,7 +820,9 @@ impl OneShotRunner {
                     trace.outcome = SessionOutcome::Failed;
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Merge to main failed"));
                 }
 
@@ -816,6 +849,10 @@ impl OneShotRunner {
                 let push_u_cmd = format!("git push -u origin {}", branch);
                 let fetch_cmd = format!("git fetch origin {}", branch);
                 let rebase_cmd = format!("git pull --rebase origin {}", branch);
+
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, fetch_cmd = %fetch_cmd, "git finalize: fetch step");
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, rebase_cmd = %rebase_cmd, "git finalize: rebase step");
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, push_cmd = %push_cmd, "git finalize: push step");
 
                 let git_sync_config = self.config.git_sync.clone().unwrap_or(GitSyncConfig {
                     enabled: true,
@@ -869,7 +906,9 @@ impl OneShotRunner {
                     trace.outcome = SessionOutcome::Failed;
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Push to branch failed"));
                 }
 

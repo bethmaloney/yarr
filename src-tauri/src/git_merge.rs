@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
+use tracing::instrument;
 
 use crate::runtime::{ClaudeInvocation, RuntimeProvider};
 
@@ -58,6 +59,7 @@ fn combine_output(stdout: &str, stderr: &str) -> String {
 ///    - If rebase fails with conflicts: detect files, spawn Claude, check completion, push
 ///    - If rebase fails for other reasons: abort rebase, continue
 /// 4. Returns `Ok(())` on successful push, `Err(last_error)` after all retries exhausted
+#[instrument(skip(runtime, on_event, config), fields(push_command = %config.push_command, max_retries = config.max_retries, merge_strategy = "rebase"))]
 pub async fn git_merge_push(
     runtime: &dyn RuntimeProvider,
     config: &GitMergeConfig<'_>,
@@ -65,8 +67,16 @@ pub async fn git_merge_push(
 ) -> Result<(), String> {
     let timeout = Duration::from_secs(120);
 
+    tracing::info!(
+        push_command = %config.push_command,
+        merge_strategy = "rebase",
+        max_retries = config.max_retries,
+        "git_merge_push starting"
+    );
+
     // 1. Check cancel_token
     if config.cancel_token.is_cancelled() {
+        tracing::info!("git_merge_push cancelled before initial push");
         return Err("cancelled".to_string());
     }
 
@@ -79,6 +89,7 @@ pub async fn git_merge_push(
         .await
     {
         Ok(output) if output.exit_code == 0 => {
+            tracing::info!(push_command = %config.push_command, "git push succeeded on first attempt");
             on_event(GitMergeEvent::PushSucceeded);
             return Ok(());
         }
@@ -99,6 +110,7 @@ pub async fn git_merge_push(
             .await
         {
             Ok(output) if output.exit_code == 0 => {
+                tracing::info!(push_u_command = %push_u_cmd, "git push -u fallback succeeded");
                 on_event(GitMergeEvent::PushSucceeded);
                 return Ok(());
             }
@@ -117,6 +129,7 @@ pub async fn git_merge_push(
     for attempt in 1..=config.max_retries {
         // a. Check cancel_token
         if config.cancel_token.is_cancelled() {
+            tracing::info!(attempt, "git_merge_push cancelled at start of retry loop");
             return Err("cancelled".to_string());
         }
 
@@ -127,12 +140,12 @@ pub async fn git_merge_push(
         {
             Ok(output) if output.exit_code != 0 => {
                 last_error = combine_output(&output.stdout, &output.stderr);
-                tracing::warn!("git fetch failed (attempt {}/{}): {}", attempt, config.max_retries, last_error);
+                tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "git fetch failed");
                 continue;
             }
             Err(e) => {
                 last_error = format!("git fetch command error: {}", e);
-                tracing::warn!("git fetch error (attempt {}/{}): {}", attempt, config.max_retries, last_error);
+                tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "git fetch error");
                 continue;
             }
             _ => {} // success
@@ -151,24 +164,25 @@ pub async fn git_merge_push(
                     .await
                 {
                     Ok(push_output) if push_output.exit_code == 0 => {
+                        tracing::info!(attempt, "push succeeded after rebase");
                         on_event(GitMergeEvent::PushSucceeded);
                         return Ok(());
                     }
                     Ok(push_output) => {
                         last_error =
                             combine_output(&push_output.stdout, &push_output.stderr);
-                        tracing::warn!("push after rebase failed (attempt {}/{}): {}", attempt, config.max_retries, last_error);
+                        tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "push after rebase failed");
                     }
                     Err(e) => {
                         last_error = format!("push after rebase command error: {}", e);
-                        tracing::warn!("push after rebase failed (attempt {}/{}): {}", attempt, config.max_retries, last_error);
+                        tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "push after rebase failed");
                     }
                 }
             }
             Ok(rebase_output) => {
                 let rebase_error =
                     combine_output(&rebase_output.stdout, &rebase_output.stderr);
-                tracing::warn!("rebase failed (attempt {}/{}): {}", attempt, config.max_retries, rebase_error);
+                tracing::warn!(attempt, max_retries = config.max_retries, error = %rebase_error, "rebase failed");
 
                 // Rebase failed -- check for conflicts
                 let status_result = runtime
@@ -206,6 +220,13 @@ pub async fn git_merge_push(
 
                     let files_str = conflict_files.join("\n");
 
+                    tracing::info!(
+                        attempt,
+                        conflict_file_count = conflict_files.len(),
+                        conflict_files = %files_str,
+                        "rebase conflict detected, starting resolution"
+                    );
+
                     on_event(GitMergeEvent::ConflictDetected {
                         files: conflict_files,
                     });
@@ -242,6 +263,7 @@ pub async fn git_merge_push(
                                         // Just drain, don't need to do anything
                                     }
                                     _ = config.cancel_token.cancelled() => {
+                                        tracing::info!(attempt, "git_merge_push cancelled during conflict resolution");
                                         process.abort_handle.abort();
                                         let _ = runtime.run_command(
                                             "git rebase --abort",
@@ -255,7 +277,7 @@ pub async fn git_merge_push(
                             let _ = process.completion.await;
                         }
                         Err(e) => {
-                            tracing::warn!("Conflict resolution agent failed to spawn: {}", e);
+                            tracing::warn!(attempt, error = %e, "Conflict resolution agent failed to spawn");
                             // Abort the rebase since we can't resolve conflicts
                             let _ = runtime
                                 .run_command(
@@ -314,6 +336,7 @@ pub async fn git_merge_push(
                             .await
                         {
                             Ok(push_output) if push_output.exit_code == 0 => {
+                                tracing::info!(attempt, "push succeeded after conflict resolution");
                                 on_event(GitMergeEvent::PushSucceeded);
                                 return Ok(());
                             }
@@ -322,14 +345,14 @@ pub async fn git_merge_push(
                                     &push_output.stdout,
                                     &push_output.stderr,
                                 );
-                                tracing::warn!("push after conflict resolution failed (attempt {}/{}): {}", attempt, config.max_retries, last_error);
+                                tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "push after conflict resolution failed");
                             }
                             Err(e) => {
                                 last_error = format!(
                                     "push after conflict resolution command error: {}",
                                     e
                                 );
-                                tracing::warn!("push after conflict resolution failed (attempt {}/{}): {}", attempt, config.max_retries, last_error);
+                                tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "push after conflict resolution failed");
                             }
                         }
                     }
@@ -347,7 +370,7 @@ pub async fn git_merge_push(
             }
             Err(e) => {
                 last_error = format!("rebase command error: {}", e);
-                tracing::warn!("rebase error (attempt {}/{}): {}", attempt, config.max_retries, last_error);
+                tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "rebase command error");
             }
         }
     }

@@ -29,18 +29,26 @@ impl AbortHandle for WslAbortHandle {
                 // Use .output() which blocks, but that's fine — this is a
                 // dedicated thread that won't stall the async runtime.
                 // If WSL is hung these threads will linger but won't block anything.
-                let _ = std::process::Command::new("wsl")
+                let sigterm_result = std::process::Command::new("wsl")
                     .args(["-e", "kill", "--", &format!("-{pid}")])
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .output();
-                let _ = std::process::Command::new("wsl")
+                match &sigterm_result {
+                    Ok(out) => tracing::debug!(pid, success = out.status.success(), "WSL SIGTERM kill result"),
+                    Err(e) => tracing::warn!(pid, error = %e, "WSL SIGTERM kill command failed"),
+                }
+                let sigkill_result = std::process::Command::new("wsl")
                     .args(["-e", "kill", "-9", &pid.to_string()])
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .output();
+                match &sigkill_result {
+                    Ok(out) => tracing::debug!(pid, success = out.status.success(), "WSL SIGKILL kill result"),
+                    Err(e) => tracing::warn!(pid, error = %e, "WSL SIGKILL kill command failed"),
+                }
             });
         }
     }
@@ -104,6 +112,7 @@ impl RuntimeProvider for WslRuntime {
         "wsl"
     }
 
+    #[tracing::instrument(skip(self, invocation), fields(working_dir = %invocation.working_dir.display()))]
     async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess> {
         let env = self.resolve_env().await?;
         let cmd_str = self.build_command(invocation, &env);
@@ -121,8 +130,12 @@ impl RuntimeProvider for WslRuntime {
         // Pipe prompt via stdin, then close it
         let mut stdin = child.stdin.take().expect("stdin was piped");
         let stdin_task = tokio::spawn(async move {
-            let _ = stdin.write_all(prompt.as_bytes()).await;
-            let _ = stdin.shutdown().await;
+            if let Err(e) = stdin.write_all(prompt.as_bytes()).await {
+                tracing::warn!(error = %e, "failed to write prompt to stdin");
+            }
+            if let Err(e) = stdin.shutdown().await {
+                tracing::warn!(error = %e, "failed to shutdown stdin");
+            }
         });
 
         let stdout = child.stdout.take().expect("stdout was piped");
@@ -159,6 +172,7 @@ impl RuntimeProvider for WslRuntime {
         let completion = tokio::spawn(async move {
             // Wait for stdin to finish writing
             let _ = stdin_task.await;
+            tracing::debug!("stdin task completed");
 
             // Collect stderr, extracting the WSL-side PID from the __PID__=<n> marker
             let mut stderr_buf = String::new();
@@ -169,8 +183,14 @@ impl RuntimeProvider for WslRuntime {
                     break;
                 }
                 if let Some(pid_str) = stderr_line.trim().strip_prefix("__PID__=") {
-                    if let Ok(pid) = pid_str.parse::<u32>() {
-                        *wsl_pid_for_completion.lock().unwrap() = Some(pid);
+                    match pid_str.parse::<u32>() {
+                        Ok(pid) => {
+                            tracing::debug!(pid, "extracted WSL process PID from stderr");
+                            *wsl_pid_for_completion.lock().unwrap() = Some(pid);
+                        }
+                        Err(e) => {
+                            tracing::warn!(pid_str, error = %e, "failed to parse WSL PID from stderr");
+                        }
                     }
                     stderr_line.clear();
                     continue;
@@ -180,6 +200,7 @@ impl RuntimeProvider for WslRuntime {
             }
 
             let status = child.wait().await?;
+            tracing::debug!(exit_code = status.code().unwrap_or(-1), "child process wait completed");
             let _ = reader_task.await;
             let elapsed = start.elapsed();
 
@@ -201,6 +222,7 @@ impl RuntimeProvider for WslRuntime {
         })
     }
 
+    #[tracing::instrument(skip(self))]
     async fn health_check(&self) -> Result<()> {
         let env = self.resolve_env().await?;
         let mut parts = env_export_parts(&env);
@@ -221,6 +243,7 @@ impl RuntimeProvider for WslRuntime {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, timeout), fields(working_dir = %working_dir.display(), command = %command))]
     async fn run_command(
         &self,
         command: &str,

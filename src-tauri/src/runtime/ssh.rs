@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
+use tracing::instrument;
 
 use super::{shell_env, AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
 use crate::output::StreamEvent;
@@ -284,6 +285,7 @@ impl SshRuntime {
     }
 
     /// Recover missed events from the log file starting at the given line.
+    #[instrument(skip(self), fields(ssh_host = %self.ssh_host, session_id = %session_id, from_line = from_line))]
     pub async fn recover_events(
         &self,
         session_id: &str,
@@ -298,7 +300,11 @@ impl SshRuntime {
             anyhow::bail!("Failed to recover events: {}", stderr);
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(parse_log_lines(&stdout))
+        let line_count = stdout.lines().filter(|l| !l.trim().is_empty()).count();
+        tracing::debug!(ssh_host = %self.ssh_host, session_id = %session_id, from_line = from_line, recovered_lines = line_count, "recovered log lines from remote");
+        let events = parse_log_lines(&stdout);
+        tracing::debug!(ssh_host = %self.ssh_host, session_id = %session_id, event_count = events.len(), "parsed events from recovered log lines");
+        Ok(events)
     }
 
     /// Resume tailing the log file from the given line, returning a RunningProcess.
@@ -307,6 +313,7 @@ impl SshRuntime {
         session_id: &str,
         from_line: u64,
     ) -> Result<RunningProcess> {
+        tracing::debug!(ssh_host = %self.ssh_host, session_id = %session_id, from_line = from_line, "initiating resume tail of remote log file");
         let start = std::time::Instant::now();
         let mut child = self
             .build_resume_tail_command(session_id, from_line)
@@ -358,11 +365,13 @@ impl SshRuntime {
 
     /// Clean up remote log and stderr files.
     pub async fn cleanup_remote(&self, session_id: &str) -> Result<()> {
+        tracing::info!(ssh_host = %self.ssh_host, session_id = %session_id, "cleaning up remote log and stderr files");
         let output = self.build_cleanup_command(session_id).output().await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!("Failed to clean up remote files: {}", stderr);
         }
+        tracing::debug!(ssh_host = %self.ssh_host, session_id = %session_id, "remote cleanup completed");
         Ok(())
     }
 
@@ -379,6 +388,7 @@ impl RuntimeProvider for SshRuntime {
         "ssh"
     }
 
+    #[instrument(skip(self, invocation), fields(ssh_host = %self.ssh_host, model = ?invocation.model))]
     async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess> {
         tracing::info!(
             ssh_host = %self.ssh_host,
@@ -389,7 +399,7 @@ impl RuntimeProvider for SshRuntime {
         let env = self.resolve_env().await?;
         let start = std::time::Instant::now();
         let session_id = uuid::Uuid::new_v4().to_string();
-        tracing::info!(ssh_host = %self.ssh_host, tmux_session = %session_id, "setting up remote log directory");
+        tracing::info!(ssh_host = %self.ssh_host, session_id = %session_id, "setting up remote log directory");
 
         // Create log directory and touch the log file so tail -f doesn't race
         let setup_cmd = format!(
@@ -403,19 +413,21 @@ impl RuntimeProvider for SshRuntime {
         }
 
         // Start tmux session with resolved env
-        tracing::info!(ssh_host = %self.ssh_host, tmux_session = %session_id, "starting remote tmux session");
+        tracing::debug!(ssh_host = %self.ssh_host, session_id = %session_id, "building tmux command for remote session");
+        tracing::info!(ssh_host = %self.ssh_host, session_id = %session_id, "starting remote tmux session");
         let tmux_output = self
             .build_tmux_command(&session_id, invocation, &env)
             .output()
             .await?;
         if !tmux_output.status.success() {
             let stderr = String::from_utf8_lossy(&tmux_output.stderr);
-            tracing::error!(ssh_host = %self.ssh_host, tmux_session = %session_id, stderr = %stderr, "failed to start remote tmux session");
+            tracing::error!(ssh_host = %self.ssh_host, session_id = %session_id, stderr = %stderr, "failed to start remote tmux session");
             anyhow::bail!("Failed to start remote tmux session: {}", stderr);
         }
-        tracing::info!(ssh_host = %self.ssh_host, tmux_session = %session_id, "remote tmux session started, tailing log");
+        tracing::info!(ssh_host = %self.ssh_host, session_id = %session_id, "remote tmux session started, tailing log");
 
         // Tail the log file
+        tracing::debug!(ssh_host = %self.ssh_host, session_id = %session_id, "setting up tail command for log file");
         let mut child = self
             .build_tail_command(&session_id)
             .stdout(Stdio::piped())
@@ -460,8 +472,9 @@ impl RuntimeProvider for SshRuntime {
         let abort_handle = SshAbortHandle {
             task_handle: completion.abort_handle(),
             ssh_host: self.ssh_host.clone(),
-            session_id,
+            session_id: session_id.clone(),
         };
+        tracing::info!(ssh_host = %self.ssh_host, session_id = %session_id, "ssh spawn_claude completed successfully");
         Ok(RunningProcess {
             events: rx,
             completion,
@@ -469,6 +482,7 @@ impl RuntimeProvider for SshRuntime {
         })
     }
 
+    #[instrument(skip(self), fields(ssh_host = %self.ssh_host))]
     async fn health_check(&self) -> Result<()> {
         tracing::debug!(ssh_host = %self.ssh_host, "ssh health check starting");
         let env = self.resolve_env().await?;
@@ -488,6 +502,7 @@ impl RuntimeProvider for SshRuntime {
         Ok(())
     }
 
+    #[instrument(skip(self, command, working_dir), fields(ssh_host = %self.ssh_host, timeout_secs = timeout.as_secs()))]
     async fn run_command(
         &self,
         command: &str,

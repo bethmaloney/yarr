@@ -84,6 +84,7 @@ export default function RunDetail() {
         }
       })
       .catch((e) => {
+        console.warn("[RunDetail] failed to load trace/events:", e);
         if (!cancelled) {
           setError(String(e));
           setLoading(false);
@@ -130,7 +131,8 @@ export default function RunDetail() {
           setPlanParsed(parsePlanPreview(content));
         }
       })
-      .catch(() => {
+      .catch((e) => {
+        console.warn("[RunDetail] failed to load plan preview:", e);
         if (currentPath === tracePlanFile) {
           setPlanParsed(null);
         }

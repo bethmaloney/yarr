@@ -90,6 +90,7 @@ async fn run_session(
     git_sync: Option<session::GitSyncConfig>,
     create_branch: bool,
 ) -> Result<SessionResult, String> {
+    tracing::info!(repo_id = %repo_id, model = %model, repo_type = ?repo, "run_session called");
     let cancel_token = CancellationToken::new();
     let session_id = Uuid::new_v4().to_string();
     {
@@ -99,6 +100,7 @@ async fn run_session(
             return Err("Session already running for this repo".to_string());
         }
         // Insert placeholder to hold the slot — prevents a second call from passing the reject guard
+        tracing::info!(repo_id = %repo_id, session_id = %session_id, "inserting session into ActiveSessions (placeholder)");
         sessions.insert(repo_id.clone(), SessionHandle {
             cancel_token: cancel_token.clone(),
             session_id: session_id.clone(),
@@ -114,7 +116,9 @@ async fn run_session(
             // Pre-warm env cache and emit warning if snapshot failed
             let _ = runtime.resolve_env().await;
             if let Some(warning) = runtime.env_warning() {
-                let _ = app.emit("env-warning", &warning);
+                if let Err(e) = app.emit("env-warning", &warning) {
+                    tracing::warn!(error = %e, "failed to emit env-warning");
+                }
             }
 
             // Resolve plan file to absolute path for the @file reference
@@ -202,10 +206,12 @@ async fn run_session(
                     if matches!(event, SessionEvent::SessionComplete { .. }) {
                         session_complete_flag.store(true, std::sync::atomic::Ordering::SeqCst);
                     }
-                    let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                    if let Err(e) = app_handle.emit("session-event", TaggedSessionEvent {
                         repo_id: repo_id_clone.clone(),
                         event: event.clone(),
-                    });
+                    }) {
+                        tracing::warn!(error = %e, "failed to emit session-event");
+                    }
                 }))
                 .with_session_id(session_id.clone());
 
@@ -221,6 +227,7 @@ async fn run_session(
                         let app = app.clone();
                         let repo_id = repo_id.clone();
                         tokio::spawn(async move {
+                            tracing::info!(repo_id = %repo_id, reason = "session ended", "removing session from ActiveSessions");
                             app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
                         });
                     }
@@ -228,15 +235,17 @@ async fn run_session(
 
                 let runtime = default_runtime();
                 if let Err(e) = runner.run(runtime.as_ref()).await {
-                    tracing::error!(error = %e, "session runner failed");
+                    tracing::error!(repo_id = %repo_id_bg, error = %e, "session runner failed");
                     if !session_complete_emitted_bg.load(std::sync::atomic::Ordering::SeqCst) {
-                        let _ = app_bg.emit("session-event", TaggedSessionEvent {
+                        if let Err(emit_err) = app_bg.emit("session-event", TaggedSessionEvent {
                             repo_id: repo_id_bg.clone(),
                             event: SessionEvent::SessionComplete {
                                 outcome: trace::SessionOutcome::Failed,
                                 plan_file: Some(plan_file_for_spawn),
                             },
-                        });
+                        }) {
+                            tracing::warn!(error = %emit_err, "failed to emit session-event");
+                        }
                     }
                 }
             });
@@ -250,6 +259,7 @@ async fn run_session(
                 }
             }
 
+            tracing::info!(repo_id = %repo_id, session_id = %session_id, "run_session spawned successfully (local)");
             Ok(SessionResult { session_id })
         }
         RepoType::Ssh { ssh_host, remote_path } => {
@@ -258,7 +268,9 @@ async fn run_session(
             // Pre-warm env cache and emit warning if snapshot failed
             let _ = ssh_runtime.resolve_env().await;
             if let Some(warning) = ssh_runtime.env_warning() {
-                let _ = app.emit("env-warning", &warning);
+                if let Err(e) = app.emit("env-warning", &warning) {
+                    tracing::warn!(error = %e, "failed to emit env-warning");
+                }
             }
 
             let plan_path = {
@@ -312,6 +324,7 @@ async fn run_session(
             {
                 let ssh_sessions = app.state::<ActiveSshSessions>();
                 ssh_sessions.sessions.lock().unwrap().insert(repo_id.clone(), reconnect_notify);
+                tracing::debug!(repo_id = %repo_id, "registered SSH session in ActiveSshSessions");
             }
 
             let session_complete_emitted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -322,10 +335,12 @@ async fn run_session(
                 if matches!(event, SessionEvent::SessionComplete { .. }) {
                     session_complete_flag.store(true, std::sync::atomic::Ordering::SeqCst);
                 }
-                let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                if let Err(e) = app_handle.emit("session-event", TaggedSessionEvent {
                     repo_id: repo_id_clone.clone(),
                     event: event.clone(),
-                });
+                }) {
+                    tracing::warn!(error = %e, "failed to emit session-event");
+                }
             }));
 
             // Spawn as a background task so we return immediately
@@ -341,26 +356,30 @@ async fn run_session(
                         {
                             let ssh_sessions = app.state::<ActiveSshSessions>();
                             ssh_sessions.sessions.lock().unwrap().remove(&repo_id);
+                            tracing::debug!(repo_id = %repo_id, "unregistered SSH session from ActiveSshSessions");
                         }
                         // Clean up ActiveSessions (tokio::sync::Mutex — must spawn)
                         let app = app.clone();
                         let repo_id = repo_id.clone();
                         tokio::spawn(async move {
+                            tracing::info!(repo_id = %repo_id, reason = "ssh session ended", "removing session from ActiveSessions");
                             app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
                         });
                     }
                 });
 
                 if let Err(e) = orchestrator.run().await {
-                    tracing::error!(error = %e, "ssh session orchestrator failed");
+                    tracing::error!(repo_id = %repo_id_bg, error = %e, "ssh session orchestrator failed");
                     if !session_complete_emitted_bg.load(std::sync::atomic::Ordering::SeqCst) {
-                        let _ = app_bg.emit("session-event", TaggedSessionEvent {
+                        if let Err(emit_err) = app_bg.emit("session-event", TaggedSessionEvent {
                             repo_id: repo_id_bg.clone(),
                             event: SessionEvent::SessionComplete {
                                 outcome: trace::SessionOutcome::Failed,
                                 plan_file: Some(plan_file_for_spawn),
                             },
-                        });
+                        }) {
+                            tracing::warn!(error = %emit_err, "failed to emit session-event");
+                        }
                     }
                 }
             });
@@ -374,6 +393,7 @@ async fn run_session(
                 }
             }
 
+            tracing::info!(repo_id = %repo_id, session_id = %session_id, "run_session spawned successfully (ssh)");
             Ok(SessionResult { session_id })
         }
     }
@@ -413,6 +433,7 @@ async fn run_oneshot(
     tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, repo_type = ?repo, "run_oneshot called");
     {
         let active = app.state::<ActiveSessions>();
+        tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, session_id = %session_id, "inserting oneshot into ActiveSessions (placeholder)");
         active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
     }
 
@@ -424,7 +445,9 @@ async fn run_oneshot(
             let runtime = default_runtime();
             let _ = runtime.resolve_env().await;
             if let Some(warning) = runtime.env_warning() {
-                let _ = app.emit("env-warning", &warning);
+                if let Err(e) = app.emit("env-warning", &warning) {
+                    tracing::warn!(error = %e, "failed to emit env-warning");
+                }
             }
 
             let config = oneshot::OneShotConfig {
@@ -458,10 +481,12 @@ async fn run_oneshot(
             let runner = OneShotRunner::new(config, collector, cancel_token)
                 .abort_registry(abort_registry)
                 .on_event(Box::new(move |event| {
-                    let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                    if let Err(e) = app_handle.emit("session-event", TaggedSessionEvent {
                         repo_id: oneshot_id_clone.clone(),
                         event: event.clone(),
-                    });
+                    }) {
+                        tracing::warn!(error = %e, "failed to emit session-event");
+                    }
                 }))
                 .with_session_id(session_id);
 
@@ -476,6 +501,7 @@ async fn run_oneshot(
                         let app = app.clone();
                         let oneshot_id = oneshot_id.clone();
                         tokio::spawn(async move {
+                            tracing::info!(repo_id = %oneshot_id, reason = "oneshot ended", "removing session from ActiveSessions");
                             app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
                         });
                     }
@@ -532,6 +558,7 @@ async fn resume_oneshot(
     tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, repo_type = ?repo, "resume_oneshot called");
     {
         let active = app.state::<ActiveSessions>();
+        tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, session_id = %session_id, "inserting resume oneshot into ActiveSessions (placeholder)");
         active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
     }
 
@@ -562,7 +589,9 @@ async fn resume_oneshot(
             let runtime = default_runtime();
             let _ = runtime.resolve_env().await;
             if let Some(warning) = runtime.env_warning() {
-                let _ = app.emit("env-warning", &warning);
+                if let Err(e) = app.emit("env-warning", &warning) {
+                    tracing::warn!(error = %e, "failed to emit env-warning");
+                }
             }
 
             // Load events from previous session
@@ -637,10 +666,12 @@ async fn resume_oneshot(
             let runner = OneShotRunner::new(config, collector, cancel_token)
                 .abort_registry(abort_registry)
                 .on_event(Box::new(move |event| {
-                    let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                    if let Err(e) = app_handle.emit("session-event", TaggedSessionEvent {
                         repo_id: oneshot_id_clone.clone(),
                         event: event.clone(),
-                    });
+                    }) {
+                        tracing::warn!(error = %e, "failed to emit session-event");
+                    }
                 }))
                 .with_resume_state(resume_state)
                 .with_session_id(session_id);
@@ -656,6 +687,7 @@ async fn resume_oneshot(
                         let app = app.clone();
                         let oneshot_id = oneshot_id.clone();
                         tokio::spawn(async move {
+                            tracing::info!(repo_id = %oneshot_id, reason = "resume oneshot ended", "removing session from ActiveSessions");
                             app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
                         });
                     }
@@ -688,30 +720,39 @@ async fn resume_oneshot(
 
 #[tauri::command]
 fn list_traces(app: tauri::AppHandle, repo_id: Option<String>) -> Result<Vec<trace::SessionTrace>, String> {
+    tracing::info!(repo_id = ?repo_id, "list_traces called");
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    TraceCollector::list_traces(&base_dir, repo_id.as_deref()).map_err(|e| e.to_string())
+    let traces = TraceCollector::list_traces(&base_dir, repo_id.as_deref()).map_err(|e| e.to_string())?;
+    tracing::debug!(count = traces.len(), "list_traces succeeded");
+    Ok(traces)
 }
 
 #[tauri::command]
 fn list_latest_traces(app: tauri::AppHandle) -> Result<Vec<trace::SessionTrace>, String> {
+    tracing::info!("list_latest_traces called");
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    TraceCollector::list_latest_traces(&base_dir).map_err(|e| e.to_string())
+    let traces = TraceCollector::list_latest_traces(&base_dir).map_err(|e| e.to_string())?;
+    tracing::debug!(count = traces.len(), "list_latest_traces succeeded");
+    Ok(traces)
 }
 
 #[tauri::command]
 fn get_trace(app: tauri::AppHandle, repo_id: String, session_id: String) -> Result<trace::SessionTrace, String> {
+    tracing::info!(repo_id = %repo_id, session_id = %session_id, "get_trace called");
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     TraceCollector::read_trace(&base_dir, &repo_id, &session_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn get_trace_events(app: tauri::AppHandle, repo_id: String, session_id: String) -> Result<Vec<session::SessionEvent>, String> {
+    tracing::info!(repo_id = %repo_id, session_id = %session_id, "get_trace_events called");
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     TraceCollector::read_events(&base_dir, &repo_id, &session_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn read_file_preview(path: String, max_lines: Option<u32>) -> Result<String, String> {
+    tracing::debug!(path = %path, "read_file_preview called");
     let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let limit = max_lines.unwrap_or(5) as usize;
     let result: String = content.lines().take(limit).collect::<Vec<_>>().join("\n");
@@ -720,24 +761,34 @@ fn read_file_preview(path: String, max_lines: Option<u32>) -> Result<String, Str
 
 #[tauri::command]
 async fn get_active_sessions(app: tauri::AppHandle) -> Result<Vec<(String, String)>, String> {
+    tracing::info!("get_active_sessions called");
     let active = app.state::<ActiveSessions>();
     let pairs: Vec<(String, String)> = active.tokens.lock().await
         .iter()
         .map(|(repo_id, handle)| (repo_id.clone(), handle.session_id.clone()))
         .collect();
+    tracing::debug!(count = pairs.len(), "get_active_sessions succeeded");
     Ok(pairs)
 }
 
 #[tauri::command]
 async fn stop_session(app: tauri::AppHandle, repo_id: String) -> Result<(), String> {
+    tracing::info!(repo_id = %repo_id, "stop_session called");
     let active = app.state::<ActiveSessions>();
     let token = {
         let sessions = active.tokens.lock().await;
         sessions.get(&repo_id).map(|h| h.cancel_token.clone())
     };
     match token {
-        Some(t) => { t.cancel(); Ok(()) }
-        None => Err("No active session to stop".to_string())
+        Some(t) => {
+            t.cancel();
+            tracing::info!(repo_id = %repo_id, "stop_session: cancellation token triggered");
+            Ok(())
+        }
+        None => {
+            tracing::warn!(repo_id = %repo_id, "stop_session: no active session found");
+            Err("No active session to stop".to_string())
+        }
     }
 }
 
@@ -779,16 +830,19 @@ async fn diagnose_path_failure(ssh_host: &str, remote_path: &str) -> String {
 
 #[tauri::command]
 async fn test_ssh_connection_steps(app: tauri::AppHandle, ssh_host: String, remote_path: String) -> Result<(), String> {
+    tracing::info!(ssh_host = %ssh_host, "test_ssh_connection_steps called");
     let remote_path = remote_path.trim().to_string();
     let steps = connection_test_steps(&ssh_host, &remote_path);
     for (step_name, mut cmd) in steps {
         let output = cmd.output().await.map_err(|e| e.to_string())?;
         if output.status.success() {
-            let _ = app.emit("ssh-test-step", SshTestStep {
+            if let Err(e) = app.emit("ssh-test-step", SshTestStep {
                 step: step_name,
                 status: "pass".to_string(),
                 error: None,
-            });
+            }) {
+                tracing::warn!(error = %e, "failed to emit ssh-test-step");
+            }
         } else {
             let error_msg = if step_name == "Remote path exists" {
                 diagnose_path_failure(&ssh_host, &remote_path).await
@@ -796,21 +850,28 @@ async fn test_ssh_connection_steps(app: tauri::AppHandle, ssh_host: String, remo
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
                 if stderr.is_empty() { "Check failed".to_string() } else { stderr }
             };
-            let _ = app.emit("ssh-test-step", SshTestStep {
+            if let Err(e) = app.emit("ssh-test-step", SshTestStep {
                 step: step_name,
                 status: "fail".to_string(),
                 error: Some(error_msg),
-            });
-            let _ = app.emit("ssh-test-complete", ());
+            }) {
+                tracing::warn!(error = %e, "failed to emit ssh-test-step");
+            }
+            if let Err(e) = app.emit("ssh-test-complete", ()) {
+                tracing::warn!(error = %e, "failed to emit ssh-test-complete");
+            }
             return Ok(());
         }
     }
-    let _ = app.emit("ssh-test-complete", ());
+    if let Err(e) = app.emit("ssh-test-complete", ()) {
+        tracing::warn!(error = %e, "failed to emit ssh-test-complete");
+    }
     Ok(())
 }
 
 #[tauri::command]
 async fn reconnect_session(app: tauri::AppHandle, repo_id: String) -> Result<(), String> {
+    tracing::info!(repo_id = %repo_id, "reconnect_session called");
     let ssh_sessions = app.state::<ActiveSshSessions>();
     let notify = {
         let guard = ssh_sessions.sessions.lock().unwrap();
@@ -819,9 +880,13 @@ async fn reconnect_session(app: tauri::AppHandle, repo_id: String) -> Result<(),
     match notify {
         Some(n) => {
             n.notify_one();
+            tracing::info!(repo_id = %repo_id, "reconnect_session: notify sent");
             Ok(())
         }
-        None => Err(format!("No active SSH session for repo {repo_id}"))
+        None => {
+            tracing::warn!(repo_id = %repo_id, "reconnect_session: no active SSH session found");
+            Err(format!("No active SSH session for repo {repo_id}"))
+        }
     }
 }
 
@@ -864,6 +929,7 @@ fn generate_branch_name(plan_file: &str) -> String {
 
 #[tauri::command]
 async fn get_repo_git_status(app: tauri::AppHandle, repo: RepoType, fetch: bool) -> Result<RepoGitStatus, String> {
+    tracing::info!(repo_type = ?repo, fetch = fetch, "get_repo_git_status called");
     let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
 
     // Optionally fetch from origin (non-fatal on failure)
@@ -926,6 +992,7 @@ async fn get_repo_git_status(app: tauri::AppHandle, repo: RepoType, fetch: bool)
 
 #[tauri::command]
 async fn list_local_branches(app: tauri::AppHandle, repo: RepoType) -> Result<Vec<String>, String> {
+    tracing::info!(repo_type = ?repo, "list_local_branches called");
     let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let timeout = std::time::Duration::from_secs(30);
 
@@ -945,11 +1012,13 @@ async fn list_local_branches(app: tauri::AppHandle, repo: RepoType) -> Result<Ve
         .filter(|l| !l.is_empty())
         .collect();
 
+    tracing::debug!(count = branches.len(), "list_local_branches succeeded");
     Ok(branches)
 }
 
 #[tauri::command]
 async fn switch_branch(app: tauri::AppHandle, repo: RepoType, branch: String) -> Result<(), String> {
+    tracing::info!(branch = %branch, repo_type = ?repo, "switch_branch called");
     if !branch.chars().all(|c| c.is_alphanumeric() || "-_./".contains(c)) {
         return Err("Invalid branch name".to_string());
     }
@@ -966,11 +1035,13 @@ async fn switch_branch(app: tauri::AppHandle, repo: RepoType, branch: String) ->
         return Err(output.stderr);
     }
 
+    tracing::info!(branch = %branch, "switch_branch succeeded");
     Ok(())
 }
 
 #[tauri::command]
 async fn fast_forward_branch(app: tauri::AppHandle, repo: RepoType) -> Result<(), String> {
+    tracing::info!(repo_type = ?repo, "fast_forward_branch called");
     let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let fetch_timeout = std::time::Duration::from_secs(60);
 
@@ -993,6 +1064,7 @@ async fn fast_forward_branch(app: tauri::AppHandle, repo: RepoType) -> Result<()
         return Err(merge_output.stderr);
     }
 
+    tracing::info!("fast_forward_branch succeeded");
     Ok(())
 }
 
@@ -1160,7 +1232,9 @@ pub fn run() {
         .and_then(|s| s.parse::<log::LevelFilter>().ok())
         .unwrap_or(log::LevelFilter::Info);
 
-    tauri::Builder::default()
+    tracing::info!(log_level = %log_level, "yarr starting up");
+
+    let app = tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([
@@ -1176,6 +1250,10 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .setup(|_app| {
+            tracing::info!("plugins initialized");
+            Ok(())
+        })
         .manage(ActiveSessions {
             tokens: Mutex::new(HashMap::new()),
         })
@@ -1188,25 +1266,28 @@ pub fn run() {
         .manage(SshEnvCache::default())
         .invoke_handler(tauri::generate_handler![run_session, run_oneshot, resume_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
         .build(tauri::generate_context!())
-        .expect("error building tauri application")
-        .run(|app, event| {
-            if let RunEvent::Exit = event {
-                // Cancel all cancellation tokens
-                let active = app.state::<ActiveSessions>();
-                if let Ok(guard) = active.tokens.try_lock() {
-                    for (repo_id, handle) in guard.iter() {
-                        tracing::info!("Cancelling session for repo {repo_id} on exit");
-                        handle.cancel_token.cancel();
-                    }
-                }
-                // Directly abort all child processes (kills WSL-side processes too)
-                let registry = app.state::<GlobalAbortRegistry>();
-                let handles = registry.inner.lock().unwrap();
-                for handle in handles.iter() {
-                    handle.abort();
+        .expect("error building tauri application");
+
+    tracing::info!("managed state initialized; app build succeeded; entering run loop");
+
+    app.run(|app, event| {
+        if let RunEvent::Exit = event {
+            // Cancel all cancellation tokens
+            let active = app.state::<ActiveSessions>();
+            if let Ok(guard) = active.tokens.try_lock() {
+                for (repo_id, handle) in guard.iter() {
+                    tracing::info!("Cancelling session for repo {repo_id} on exit");
+                    handle.cancel_token.cancel();
                 }
             }
-        });
+            // Directly abort all child processes (kills WSL-side processes too)
+            let registry = app.state::<GlobalAbortRegistry>();
+            let handles = registry.inner.lock().unwrap();
+            for handle in handles.iter() {
+                handle.abort();
+            }
+        }
+    });
 }
 
 #[cfg(test)]

@@ -244,7 +244,8 @@ export default function RepoDetail() {
           setPreviewLoading(false);
         }
       })
-      .catch(() => {
+      .catch((e) => {
+        console.warn("[RepoDetail] failed to load file preview:", e);
         if (currentFile === planFile) {
           setPreviewContent("");
           setPreviewLoading(false);
@@ -281,7 +282,8 @@ export default function RepoDetail() {
           setSessionPlanParsed(parsePlanPreview(content));
         }
       })
-      .catch(() => {
+      .catch((e) => {
+        console.warn("[RepoDetail] failed to load file preview:", e);
         if (currentPath === sessionPlanFile) {
           setSessionPlanParsed(null);
         }
@@ -463,10 +465,12 @@ export default function RepoDetail() {
       unlistenComplete();
     };
 
+    console.debug("[RepoDetail] invoking test_ssh_connection_steps", { sshHost: ssh.sshHost });
     invoke("test_ssh_connection_steps", {
       sshHost: ssh.sshHost,
       remotePath: ssh.remotePath,
-    }).catch(() => {
+    }).catch((e) => {
+      console.warn("[RepoDetail] SSH connection test failed:", e);
       setConnectionTest((prev) => (prev ? { ...prev, running: false } : null));
       unlistenStep();
       unlistenComplete();
@@ -476,12 +480,14 @@ export default function RepoDetail() {
   async function fetchBranches() {
     const payload = buildRepoPayload();
     if (!payload) return;
+    console.debug("[RepoDetail] invoking list_local_branches");
     try {
       const result = await invoke<string[]>("list_local_branches", {
         repo: payload,
       });
       setBranches(result);
-    } catch {
+    } catch (e) {
+      console.warn("[RepoDetail] failed to list branches:", e);
       setBranches([]);
     }
   }

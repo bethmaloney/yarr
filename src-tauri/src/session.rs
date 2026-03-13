@@ -3,6 +3,7 @@ use chrono::Utc;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
+use tracing::instrument;
 
 use crate::git_merge::{git_merge_push, GitMergeConfig, GitMergeEvent};
 use crate::output::{ContentBlock, ResultEvent, StreamEvent};
@@ -279,8 +280,45 @@ impl SessionRunner {
     }
 
     fn emit(&self, event: SessionEvent) {
+        let session_id = self.session_id.lock().unwrap().clone();
+        let event_kind = match &event {
+            SessionEvent::SessionStarted { .. } => "session_started",
+            SessionEvent::IterationStarted { .. } => "iteration_started",
+            SessionEvent::ToolUse { .. } => "tool_use",
+            SessionEvent::AssistantText { .. } => "assistant_text",
+            SessionEvent::IterationComplete { .. } => "iteration_complete",
+            SessionEvent::IterationFailed { .. } => "iteration_failed",
+            SessionEvent::SessionComplete { .. } => "session_complete",
+            SessionEvent::Disconnected { .. } => "disconnected",
+            SessionEvent::Reconnecting { .. } => "reconnecting",
+            SessionEvent::CheckStarted { .. } => "check_started",
+            SessionEvent::CheckPassed { .. } => "check_passed",
+            SessionEvent::CheckFailed { .. } => "check_failed",
+            SessionEvent::CheckFixStarted { .. } => "check_fix_started",
+            SessionEvent::CheckFixComplete { .. } => "check_fix_complete",
+            SessionEvent::OneShotStarted { .. } => "oneshot_started",
+            SessionEvent::DesignPhaseStarted => "design_phase_started",
+            SessionEvent::DesignPhaseComplete { .. } => "design_phase_complete",
+            SessionEvent::ImplementationPhaseStarted => "implementation_phase_started",
+            SessionEvent::ImplementationPhaseComplete => "implementation_phase_complete",
+            SessionEvent::GitFinalizeStarted { .. } => "git_finalize_started",
+            SessionEvent::GitFinalizeComplete => "git_finalize_complete",
+            SessionEvent::OneShotComplete => "oneshot_complete",
+            SessionEvent::OneShotFailed { .. } => "oneshot_failed",
+            SessionEvent::GitSyncStarted { .. } => "git_sync_started",
+            SessionEvent::GitSyncPushSucceeded { .. } => "git_sync_push_succeeded",
+            SessionEvent::GitSyncConflict { .. } => "git_sync_conflict",
+            SessionEvent::GitSyncConflictResolveStarted { .. } => "git_sync_conflict_resolve_started",
+            SessionEvent::GitSyncConflictResolveComplete { .. } => "git_sync_conflict_resolve_complete",
+            SessionEvent::GitSyncFailed { .. } => "git_sync_failed",
+        };
+        tracing::debug!(
+            session_id = session_id.as_deref().unwrap_or("<none>"),
+            event_kind,
+            "emitting session event"
+        );
         self.accumulated_events.lock().unwrap().push(event.clone());
-        if let Some(ref sid) = *self.session_id.lock().unwrap() {
+        if let Some(ref sid) = session_id {
             if let Err(e) = self.collector.append_event(sid, &event) {
                 tracing::warn!("Failed to append event to disk: {e}");
             }
@@ -300,6 +338,7 @@ impl SessionRunner {
         }
     }
 
+    #[instrument(skip(self, runtime, checks), fields(iteration))]
     async fn run_checks(
         &self,
         runtime: &dyn RuntimeProvider,
@@ -308,6 +347,8 @@ impl SessionRunner {
         checks: &[Check],
     ) {
         let matching: Vec<&Check> = checks.iter().filter(|c| &c.when == when).collect();
+
+        tracing::info!(iteration, when = ?when, count = matching.len(), "checks starting");
 
         for check in matching {
             if self.cancel_token.is_cancelled() {
@@ -343,6 +384,7 @@ impl SessionRunner {
             };
 
             if cmd_output.exit_code == 0 {
+                tracing::info!(iteration, check_name = %check_name, "check passed");
                 self.emit(SessionEvent::CheckPassed {
                     iteration,
                     check_name: check_name.clone(),
@@ -387,6 +429,7 @@ impl SessionRunner {
                         // Wait for completion
                         let _ = process.completion.await;
 
+                        tracing::info!(iteration, check_name = %check_name, attempt, "fix agent succeeded");
                         self.emit(SessionEvent::CheckFixComplete {
                             iteration,
                             check_name: check_name.clone(),
@@ -418,6 +461,7 @@ impl SessionRunner {
                 match recheck {
                     Ok(recheck_output) => {
                         if recheck_output.exit_code == 0 {
+                            tracing::info!(iteration, check_name = %check_name, attempt, "check now passing after fix");
                             self.emit(SessionEvent::CheckPassed {
                                 iteration,
                                 check_name: check_name.clone(),
@@ -457,7 +501,10 @@ impl SessionRunner {
                 .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '/' || c == '-')
     }
 
+    #[instrument(skip(self, runtime), fields(iteration))]
     async fn git_sync(&self, runtime: &dyn RuntimeProvider, iteration: u32) {
+        tracing::info!(iteration, "git_sync entered");
+
         let git_sync_config = match &self.config.git_sync {
             Some(cfg) => cfg,
             None => return,
@@ -480,7 +527,11 @@ impl SessionRunner {
             .run_command("git branch --show-current", self.config.effective_working_dir(), timeout)
             .await
         {
-            Ok(output) if output.exit_code == 0 => output.stdout.trim().to_string(),
+            Ok(output) if output.exit_code == 0 => {
+                let b = output.stdout.trim().to_string();
+                tracing::debug!(iteration, branch = %b, "detected current branch");
+                b
+            }
             Ok(output) => {
                 let error = combine_output(&output.stdout, &output.stderr);
                 self.emit(SessionEvent::GitSyncFailed {
@@ -548,6 +599,7 @@ impl SessionRunner {
     }
 
     /// Execute the Ralph loop. Returns the finalized trace.
+    #[instrument(skip(self, runtime), fields(repo_path = %self.config.effective_working_dir().display(), max_iterations = self.config.max_iterations))]
     pub async fn run(
         &self,
         runtime: &dyn RuntimeProvider,
@@ -603,6 +655,7 @@ impl SessionRunner {
     ///
     /// It **does** run checks, git_sync, record iterations, emit iteration-level
     /// events, and set `trace.outcome` / `trace.failure_reason`.
+    #[instrument(skip(self, runtime, trace), fields(max_iterations = self.config.max_iterations))]
     pub async fn run_with_trace(
         &self,
         runtime: &dyn RuntimeProvider,
@@ -793,6 +846,7 @@ impl SessionRunner {
     }
 
     /// Run a single iteration: spawn Claude, consume streaming events, return the final result.
+    #[instrument(skip(self, runtime, invocation), fields(iteration, working_dir = %invocation.working_dir.display()))]
     async fn run_iteration(
         &self,
         runtime: &dyn RuntimeProvider,
