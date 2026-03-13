@@ -732,10 +732,10 @@ test.describe("OneShotDetail - empty state", () => {
     });
     await page.goto(`/oneshot/${oneshotId}`);
 
+    await expect(page.locator("h1", { hasText: "Failed task" })).toBeVisible();
     await expect(
-      page.locator("h1", { hasText: "Failed task" }),
+      page.getByText("Session failed before starting"),
     ).toBeVisible();
-    await expect(page.getByText("Session failed before starting")).toBeVisible();
   });
 
   test('shows "No events recorded" when completed with no events', async ({
@@ -877,9 +877,7 @@ test.describe("SSH 1-Shot happy path", () => {
     });
     await page.goto("/");
     await page.getByRole("button", { name: /remote-app/ }).click();
-    await expect(
-      page.locator("h1", { hasText: "remote-app" }),
-    ).toBeVisible();
+    await expect(page.locator("h1", { hasText: "remote-app" })).toBeVisible();
   }
 
   async function openSshOneShotForm(

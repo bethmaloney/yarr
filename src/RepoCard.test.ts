@@ -139,4 +139,3 @@ describe("buildRepoPayload produces correct payloads for branch info fetch", () 
     ]);
   });
 });
-

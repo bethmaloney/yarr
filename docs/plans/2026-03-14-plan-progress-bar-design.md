@@ -237,12 +237,12 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 ## Task 10: E2E and integration verification
 
 **Checklist:**
-- [ ] Run `cd src-tauri && cargo check` — Rust compiles
-- [ ] Run `cd src-tauri && cargo test` — Rust tests pass
-- [ ] Run `npx tsc --noEmit` — TypeScript compiles
-- [ ] Run `npm test` — unit tests pass (including new plan-progress tests)
-- [ ] Run `npx eslint .` — no lint errors
-- [ ] Run `npx prettier --check .` — formatting OK (fix with `--write` if needed)
+- [x] Run `cd src-tauri && cargo check` — Rust compiles
+- [x] Run `cd src-tauri && cargo test` — Rust tests pass (545 passed)
+- [x] Run `npx tsc --noEmit` — TypeScript compiles
+- [x] Run `npm test` — unit tests pass (999 passed)
+- [x] Run `npx eslint .` — no lint errors (3 warnings from shadcn/ui, expected)
+- [x] Run `npx prettier --check .` — formatting OK (fixed with `--write`)
 
 ---
 
@@ -259,4 +259,4 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 | 7 | Integrate into EventsList | Done |
 | 8 | Compact bar in RepoCard | Done |
 | 9 | Dashboard → RepoCard wiring | Done |
-| 10 | E2E verification | Not Started |
+| 10 | E2E verification | Done |

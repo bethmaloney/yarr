@@ -329,9 +329,7 @@ async function navigateToRunDetailWithPlanPreview(
   mockTauri: (opts?: TauriMockOptions) => Promise<void>,
   overrides?: {
     trace?: typeof SAMPLE_TRACE;
-    readFilePreview?:
-      | string
-      | ((args: Record<string, unknown>) => string);
+    readFilePreview?: string | ((args: Record<string, unknown>) => string);
   },
 ) {
   await mockTauri({

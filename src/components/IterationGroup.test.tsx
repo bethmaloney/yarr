@@ -743,28 +743,19 @@ describe("IterationGroupComponent", () => {
     // structured key-value pairs outside of <pre> elements.
     // These values do NOT appear in the event label, so they should
     // only be present in the detail area.
-    const preElements = document.querySelectorAll("pre");
-    const preTexts = Array.from(preElements).map(
-      (pre) => pre.textContent ?? "",
-    );
-
     // Collect text from all leaf-level elements that are not inside <pre>
     function getTextOutsidePre(): string {
       const body = document.body;
-      const walker = document.createTreeWalker(
-        body,
-        NodeFilter.SHOW_TEXT,
-        {
-          acceptNode(node) {
-            let parent = node.parentElement;
-            while (parent) {
-              if (parent.tagName === "PRE") return NodeFilter.FILTER_REJECT;
-              parent = parent.parentElement;
-            }
-            return NodeFilter.FILTER_ACCEPT;
-          },
+      const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          let parent = node.parentElement;
+          while (parent) {
+            if (parent.tagName === "PRE") return NodeFilter.FILTER_REJECT;
+            parent = parent.parentElement;
+          }
+          return NodeFilter.FILTER_ACCEPT;
         },
-      );
+      });
       const texts: string[] = [];
       while (walker.nextNode()) {
         texts.push(walker.currentNode.textContent ?? "");
@@ -808,20 +799,16 @@ describe("IterationGroupComponent", () => {
     // rendered as content (e.g. via react-markdown or similar).
     function getTextOutsidePre(): string {
       const body = document.body;
-      const walker = document.createTreeWalker(
-        body,
-        NodeFilter.SHOW_TEXT,
-        {
-          acceptNode(node) {
-            let parent = node.parentElement;
-            while (parent) {
-              if (parent.tagName === "PRE") return NodeFilter.FILTER_REJECT;
-              parent = parent.parentElement;
-            }
-            return NodeFilter.FILTER_ACCEPT;
-          },
+      const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          let parent = node.parentElement;
+          while (parent) {
+            if (parent.tagName === "PRE") return NodeFilter.FILTER_REJECT;
+            parent = parent.parentElement;
+          }
+          return NodeFilter.FILTER_ACCEPT;
         },
-      );
+      });
       const texts: string[] = [];
       while (walker.nextNode()) {
         texts.push(walker.currentNode.textContent ?? "");

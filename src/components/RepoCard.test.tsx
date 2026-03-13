@@ -60,9 +60,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
   };
 }
 
-function makeGitStatus(
-  overrides: Partial<RepoGitStatus> = {},
-): RepoGitStatus {
+function makeGitStatus(overrides: Partial<RepoGitStatus> = {}): RepoGitStatus {
   return {
     branchName: "main",
     dirtyCount: 0,
@@ -769,8 +767,7 @@ describe("RepoCard", () => {
     // The excerpt span has exactly this className (no font-mono, no min-w-0, etc.)
     const allSpans = document.querySelectorAll("span");
     const excerptSpans = Array.from(allSpans).filter(
-      (span) =>
-        span.className === "text-xs text-muted-foreground truncate",
+      (span) => span.className === "text-xs text-muted-foreground truncate",
     );
     expect(excerptSpans.length).toBe(0);
   });
@@ -792,15 +789,16 @@ describe("RepoCard", () => {
     // The excerpt span has exactly this className (no font-mono, no min-w-0, etc.)
     const allSpans = document.querySelectorAll("span");
     const excerptSpans = Array.from(allSpans).filter(
-      (span) =>
-        span.className === "text-xs text-muted-foreground truncate",
+      (span) => span.className === "text-xs text-muted-foreground truncate",
     );
     expect(excerptSpans.length).toBe(0);
   });
 
   it("renders a truncated element with long excerpt text", () => {
     const longText =
-      "This is a very long excerpt that should be truncated by CSS. ".repeat(5).trim();
+      "This is a very long excerpt that should be truncated by CSS. "
+        .repeat(5)
+        .trim();
     const trace = makeTrace({
       plan_file: "/home/beth/plans/deploy-fix.md",
     });

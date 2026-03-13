@@ -29,7 +29,6 @@ export default function Home() {
   const addSshRepo = useAppStore((s) => s.addSshRepo);
   const oneShotEntries = useAppStore((s) => s.oneShotEntries);
 
-
   const [addMode, setAddMode] = useState<null | "choosing" | "ssh-form">(null);
   const [sshHost, setSshHost] = useState("");
   const [sshRemotePath, setSshRemotePath] = useState("");
@@ -82,8 +81,22 @@ export default function Home() {
 
   // Build unified sorted list of all cards
   type CardItem =
-    | { type: "repo"; key: string; isRunning: boolean; timestamp: number; repo: (typeof repos)[number]; status: RepoStatus }
-    | { type: "oneshot"; key: string; isRunning: boolean; timestamp: number; entry: NonNullable<ReturnType<typeof oneShotEntries.get>>; phase: string };
+    | {
+        type: "repo";
+        key: string;
+        isRunning: boolean;
+        timestamp: number;
+        repo: (typeof repos)[number];
+        status: RepoStatus;
+      }
+    | {
+        type: "oneshot";
+        key: string;
+        isRunning: boolean;
+        timestamp: number;
+        entry: NonNullable<ReturnType<typeof oneShotEntries.get>>;
+        phase: string;
+      };
 
   const cardItems: CardItem[] = [];
 
@@ -289,9 +302,7 @@ export default function Home() {
                   className="transition-transform duration-150"
                   style={{
                     display: "inline-block",
-                    transform: completedOpen
-                      ? "rotate(90deg)"
-                      : "rotate(0deg)",
+                    transform: completedOpen ? "rotate(90deg)" : "rotate(0deg)",
                   }}
                 >
                   &#x25B6;
@@ -312,9 +323,7 @@ export default function Home() {
                       <button
                         key={item.key}
                         className="flex items-center gap-3 px-4 py-2.5 bg-card/50 hover:bg-accent/50 transition-colors text-left cursor-pointer group/row"
-                        onClick={() =>
-                          navigate(`/oneshot/${item.entry.id}`)
-                        }
+                        onClick={() => navigate(`/oneshot/${item.entry.id}`)}
                       >
                         <span
                           className="w-1.5 h-1.5 rounded-full shrink-0"

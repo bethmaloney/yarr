@@ -759,7 +759,11 @@ describe("groupEventsByIteration", () => {
           kind: "iteration_complete",
           iteration: 1,
           _ts: 2000,
-          result: makeResult({ cost: 0.2, inputTokens: 200, outputTokens: 100 }),
+          result: makeResult({
+            cost: 0.2,
+            inputTokens: 200,
+            outputTokens: 100,
+          }),
         }),
       ];
 
@@ -951,9 +955,7 @@ describe("groupEventsByIteration", () => {
   });
 });
 
-function makeIteration(
-  overrides: Partial<IterationGroup>,
-): IterationGroup {
+function makeIteration(overrides: Partial<IterationGroup>): IterationGroup {
   return {
     iteration: 1,
     events: [],
@@ -967,9 +969,7 @@ function makeIteration(
   };
 }
 
-function makeGroupedEvents(
-  iterations: IterationGroup[],
-): GroupedEvents {
+function makeGroupedEvents(iterations: IterationGroup[]): GroupedEvents {
   return { standaloneEvents: [], iterations };
 }
 

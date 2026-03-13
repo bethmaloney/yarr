@@ -112,16 +112,16 @@ describe("planDisplayName", () => {
   });
 
   it("strips .md and date prefix from filename when no parsedName", () => {
-    expect(planDisplayName("/home/user/plans/2026-03-11-auth-refactor.md")).toBe(
-      "auth-refactor",
-    );
+    expect(
+      planDisplayName("/home/user/plans/2026-03-11-auth-refactor.md"),
+    ).toBe("auth-refactor");
   });
 
   it("strips .md only when filename has no date prefix", () => {
     expect(planDisplayName("/home/user/plans/my-plan.md")).toBe("my-plan");
   });
 
-  it('returns em dash when planFile is null', () => {
+  it("returns em dash when planFile is null", () => {
     expect(planDisplayName(null)).toBe("\u2014");
   });
 
@@ -134,9 +134,9 @@ describe("planDisplayName", () => {
   });
 
   it("handles deeply nested path", () => {
-    expect(
-      planDisplayName("/a/b/c/d/2025-12-01-nested-plan.md"),
-    ).toBe("nested-plan");
+    expect(planDisplayName("/a/b/c/d/2025-12-01-nested-plan.md")).toBe(
+      "nested-plan",
+    );
   });
 
   it("handles filename that is only a date prefix with .md", () => {
@@ -151,9 +151,7 @@ describe("planDisplayName", () => {
 
   it("handles Windows-style backslash paths", () => {
     // planDisplayName should handle the last segment regardless of separator
-    expect(
-      planDisplayName("C:\\Users\\docs\\2026-03-11-plan.md"),
-    ).toBe("plan");
+    expect(planDisplayName("C:\\Users\\docs\\2026-03-11-plan.md")).toBe("plan");
   });
 
   it("strips date prefix matching YYYY-MM-DD- pattern only", () => {

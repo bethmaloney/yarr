@@ -51,4 +51,3 @@ const PHASE_LABELS: Record<string, string> = {
 export function phaseLabel(phase: string): string {
   return PHASE_LABELS[phase] ?? phase;
 }
-

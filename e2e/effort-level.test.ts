@@ -152,10 +152,7 @@ test.describe("Oneshot form effort dropdowns", () => {
     await expect(page.getByText("Implementation Effort Level")).toBeVisible();
   });
 
-  test("design effort level defaults to high", async ({
-    page,
-    mockTauri,
-  }) => {
+  test("design effort level defaults to high", async ({ page, mockTauri }) => {
     await openOneShotForm(page, mockTauri);
 
     // The design effort select trigger should show "high"

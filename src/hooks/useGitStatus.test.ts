@@ -15,7 +15,7 @@ const { mockFetchGitStatus } = vi.hoisted(() => ({
 vi.mock("../store", () => ({
   useAppStore: Object.assign(
     // The hook function for selectors
-    (selector: (state: any) => any) =>
+    (selector: (state: Record<string, unknown>) => unknown) =>
       selector({ fetchGitStatus: mockFetchGitStatus }),
     // Zustand's getState
     { getState: () => ({ fetchGitStatus: mockFetchGitStatus }) },
@@ -61,9 +61,7 @@ function makeSshRepo(overrides: Record<string, unknown> = {}): RepoConfig {
   } as RepoConfig;
 }
 
-function makeSessionState(
-  overrides: Partial<SessionState> = {},
-): SessionState {
+function makeSessionState(overrides: Partial<SessionState> = {}): SessionState {
   return {
     running: false,
     events: [],
@@ -251,10 +249,8 @@ describe("useGitStatus", () => {
     stoppedSessions.set("local-1", makeSessionState({ running: false }));
 
     const { rerender } = renderHook(
-      (props: {
-        repos: RepoConfig[];
-        sessions: Map<string, SessionState>;
-      }) => useGitStatus(props.repos, props.sessions),
+      (props: { repos: RepoConfig[]; sessions: Map<string, SessionState> }) =>
+        useGitStatus(props.repos, props.sessions),
       {
         initialProps: { repos: [localRepo], sessions: runningSessions },
       },
@@ -281,9 +277,7 @@ describe("useGitStatus", () => {
     const localRepo = makeLocalRepo();
     const sessions = new Map<string, SessionState>();
 
-    const { unmount } = renderHook(() =>
-      useGitStatus([localRepo], sessions),
-    );
+    const { unmount } = renderHook(() => useGitStatus([localRepo], sessions));
 
     // Initial mount call
     expect(mockFetchGitStatus).toHaveBeenCalledTimes(1);

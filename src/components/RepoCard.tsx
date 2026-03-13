@@ -70,16 +70,10 @@ export function RepoCard({
   const indicators: React.ReactNode[] = [];
   if (gs) {
     if (gs.dirtyCount > 0) {
-      indicators.push(
-        <span key="dirty">{gs.dirtyCount} dirty</span>,
-      );
+      indicators.push(<span key="dirty">{gs.dirtyCount} dirty</span>);
     }
     if (gs.ahead != null && gs.ahead > 0) {
-      indicators.push(
-        <span key="ahead">
-          {gs.ahead}&#x2191;
-        </span>,
-      );
+      indicators.push(<span key="ahead">{gs.ahead}&#x2191;</span>);
     }
     if (gs.behind != null && gs.behind > 0) {
       indicators.push(
@@ -173,23 +167,33 @@ export function RepoCard({
 
       <div className="flex-1" />
 
-      {planProgress && (() => {
-        const pct = planProgress.totalItems > 0 ? Math.round((planProgress.completedItems / planProgress.totalItems) * 100) : 0;
-        return (
-          <div className="flex items-center gap-2 w-full">
-            <div className="flex-1 h-[3px] rounded-full bg-[#2a2a3e] overflow-hidden">
-              <div
-                data-testid="repo-progress-fill"
-                className={planProgress.completedItems === planProgress.totalItems ? "bg-[#34d399]" : "bg-[#4ecdc4]"}
-                style={{ width: `${pct}%`, height: "100%" }}
-              />
+      {planProgress &&
+        (() => {
+          const pct =
+            planProgress.totalItems > 0
+              ? Math.round(
+                  (planProgress.completedItems / planProgress.totalItems) * 100,
+                )
+              : 0;
+          return (
+            <div className="flex items-center gap-2 w-full">
+              <div className="flex-1 h-[3px] rounded-full bg-[#2a2a3e] overflow-hidden">
+                <div
+                  data-testid="repo-progress-fill"
+                  className={
+                    planProgress.completedItems === planProgress.totalItems
+                      ? "bg-[#34d399]"
+                      : "bg-[#4ecdc4]"
+                  }
+                  style={{ width: `${pct}%`, height: "100%" }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground font-mono shrink-0">
+                {planProgress.completedItems}/{planProgress.totalItems}
+              </span>
             </div>
-            <span className="text-xs text-muted-foreground font-mono shrink-0">
-              {planProgress.completedItems}/{planProgress.totalItems}
-            </span>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
       <div className="flex items-center gap-2 min-w-0">
         <span
@@ -206,30 +210,31 @@ export function RepoCard({
           <div className="flex items-center gap-1 ml-auto text-xs text-muted-foreground shrink-0">
             <span>${(lastTrace.total_cost_usd ?? 0).toFixed(2)}</span>
             {(() => {
-                const ctxPct =
-                  lastTrace.max_context_percent && lastTrace.max_context_percent > 0
-                    ? Math.round(lastTrace.max_context_percent)
-                    : lastTrace.context_window && lastTrace.context_window > 0
-                      ? Math.round(
-                          ((lastTrace.final_context_tokens ?? 0) /
-                            lastTrace.context_window) *
-                            100,
-                        )
-                      : null;
-                if (ctxPct === null) return null;
-                return (
-                  <>
-                    <span className="separator"> &middot; </span>
-                    <span
-                      style={{
-                        color: sessionContextColor(ctxPct),
-                      }}
-                    >
-                      {ctxPct}%
-                    </span>
-                  </>
-                );
-              })()}
+              const ctxPct =
+                lastTrace.max_context_percent &&
+                lastTrace.max_context_percent > 0
+                  ? Math.round(lastTrace.max_context_percent)
+                  : lastTrace.context_window && lastTrace.context_window > 0
+                    ? Math.round(
+                        ((lastTrace.final_context_tokens ?? 0) /
+                          lastTrace.context_window) *
+                          100,
+                      )
+                    : null;
+              if (ctxPct === null) return null;
+              return (
+                <>
+                  <span className="separator"> &middot; </span>
+                  <span
+                    style={{
+                      color: sessionContextColor(ctxPct),
+                    }}
+                  >
+                    {ctxPct}%
+                  </span>
+                </>
+              );
+            })()}
             <span className="separator"> &middot; </span>
             <span>{timeAgo(lastTrace.start_time)}</span>
           </div>

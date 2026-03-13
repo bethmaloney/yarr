@@ -31,8 +31,12 @@ export function parsePlanProgress(content: string): PlanProgress | null {
     completed: number;
   }[] = [];
 
-  let currentTask: { number: number; title: string; total: number; completed: number } | null =
-    null;
+  let currentTask: {
+    number: number;
+    title: string;
+    total: number;
+    completed: number;
+  } | null = null;
 
   for (const line of lines) {
     const headingMatch = line.match(TASK_HEADING_RE);

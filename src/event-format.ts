@@ -30,7 +30,12 @@ export function toWslPath(path: string): string {
   }
 
   // Drive letter pattern: single letter followed by :/
-  if (path.length >= 3 && /^[a-zA-Z]$/.test(path[0]) && path[1] === ":" && path[2] === "/") {
+  if (
+    path.length >= 3 &&
+    /^[a-zA-Z]$/.test(path[0]) &&
+    path[1] === ":" &&
+    path[2] === "/"
+  ) {
     const drive = path[0].toLowerCase();
     const rest = path.slice(3);
     return `/mnt/${drive}/${rest}`;
@@ -137,7 +142,11 @@ export function toolSummary(ev: SessionEvent, repoPath?: string): string {
   if (!input) return name;
   switch (name) {
     case "Bash":
-      return input.description ? `${name}: ${input.description}` : input.command ? `${name}: ${input.command}` : name;
+      return input.description
+        ? `${name}: ${input.description}`
+        : input.command
+          ? `${name}: ${input.command}`
+          : name;
     case "Read":
     case "Write":
     case "Edit":

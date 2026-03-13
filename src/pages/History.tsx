@@ -251,7 +251,9 @@ export default function History() {
                 if (trace.session_type === "one_shot") {
                   navigate(`/oneshot/${trace.repo_id ?? "unknown"}`);
                 } else {
-                  navigate(`/run/${traceRepoId(trace, repoId)}/${trace.session_id}`);
+                  navigate(
+                    `/run/${traceRepoId(trace, repoId)}/${trace.session_id}`,
+                  );
                 }
               }}
             >

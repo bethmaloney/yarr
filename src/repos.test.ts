@@ -1327,8 +1327,12 @@ describe("RepoConfig with effortLevel fields", () => {
       completionSignal: "DONE",
     } satisfies RepoConfig;
     expect(repo.type).toBe("local");
-    expect((repo as RepoConfig & { effortLevel?: string }).effortLevel).toBeUndefined();
-    expect((repo as RepoConfig & { designEffortLevel?: string }).designEffortLevel).toBeUndefined();
+    expect(
+      (repo as RepoConfig & { effortLevel?: string }).effortLevel,
+    ).toBeUndefined();
+    expect(
+      (repo as RepoConfig & { designEffortLevel?: string }).designEffortLevel,
+    ).toBeUndefined();
   });
 
   it("SSH RepoConfig with effort fields is valid", () => {

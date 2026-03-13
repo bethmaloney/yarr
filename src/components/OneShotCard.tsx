@@ -26,11 +26,7 @@ function phaseColor(phase: string): string {
   }
 }
 
-export function OneShotCard({
-  entry,
-  phase,
-  onClick,
-}: OneShotCardProps) {
+export function OneShotCard({ entry, phase, onClick }: OneShotCardProps) {
   const color = phaseColor(phase);
   const label = phaseLabel(phase);
 
@@ -76,10 +72,7 @@ export function OneShotCard({
 
       <div className="flex items-center gap-2 min-w-0">
         <span className={dotClassName} style={{ background: color }} />
-        <span
-          className="text-xs font-medium tracking-wider"
-          style={{ color }}
-        >
+        <span className="text-xs font-medium tracking-wider" style={{ color }}>
           {label}
         </span>
         <span className="ml-auto text-xs text-muted-foreground shrink-0">

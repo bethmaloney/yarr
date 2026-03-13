@@ -590,8 +590,7 @@ describe("RepoDetail", () => {
         },
       });
       mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "list_local_branches")
-          return Promise.resolve(["main"]);
+        if (cmd === "list_local_branches") return Promise.resolve(["main"]);
         if (cmd === "fast_forward_branch") return Promise.resolve(null);
         return Promise.resolve(null);
       });
@@ -636,8 +635,7 @@ describe("RepoDetail", () => {
         },
       });
       mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "list_local_branches")
-          return Promise.resolve(["main"]);
+        if (cmd === "list_local_branches") return Promise.resolve(["main"]);
         if (cmd === "fast_forward_branch")
           return Promise.reject("Fast-forward failed");
         return Promise.resolve(null);
@@ -1198,9 +1196,7 @@ describe("RepoDetail", () => {
 
     it("selecting a plan constructs full path with plansDir", async () => {
       const state = setupMockState({
-        repos: [
-          makeLocalRepo({ plansDir: "plans/" } as Partial<RepoConfig>),
-        ],
+        repos: [makeLocalRepo({ plansDir: "plans/" } as Partial<RepoConfig>)],
       });
       mockInvoke.mockImplementation((cmd: string) => {
         if (cmd === "list_plans") return Promise.resolve(["design.md"]);
@@ -1319,7 +1315,7 @@ describe("RepoDetail", () => {
     it("clears plan selector after successful session completion", async () => {
       // Step 1: Render with a running session and a plan file selected
       const runningSession = makeSessionState({ running: true });
-      const state = setupMockState({
+      setupMockState({
         repos: [makeLocalRepo()],
         sessions: new Map([["test-repo", runningSession]]),
       });
@@ -1331,7 +1327,7 @@ describe("RepoDetail", () => {
         return Promise.resolve(null);
       });
 
-      const { rerender } = renderRepoDetail();
+      renderRepoDetail();
 
       // The plan selector is disabled while running, so we can't select via dropdown.
       // Instead, re-render with a non-running session first to select a plan,
@@ -1422,9 +1418,7 @@ describe("RepoDetail", () => {
       });
 
       await waitFor(() => {
-        expect(
-          screen.getByText(/failed to load plans/i),
-        ).toBeInTheDocument();
+        expect(screen.getByText(/failed to load plans/i)).toBeInTheDocument();
       });
     });
 
@@ -1729,10 +1723,6 @@ describe("RepoDetail", () => {
       const promptInput = document.getElementById(
         "oneshot-prompt",
       ) as HTMLTextAreaElement;
-      const modelInput = document.getElementById(
-        "oneshot-model",
-      ) as HTMLInputElement;
-
       await user.type(titleInput, "Fix bug");
       await user.type(promptInput, "Please fix the login bug");
       // Model is pre-filled with "opus", leave as-is
@@ -1802,9 +1792,7 @@ describe("RepoDetail", () => {
       await user.click(cancelButton);
 
       // Form should be collapsed
-      expect(
-        document.getElementById("oneshot-title"),
-      ).not.toBeInTheDocument();
+      expect(document.getElementById("oneshot-title")).not.toBeInTheDocument();
     });
 
     it("does not navigate when runOneShot returns undefined", async () => {
@@ -2026,7 +2014,7 @@ describe("RepoDetail", () => {
                   iteration: 1,
                   _ts: Date.now(),
                   result: {
-                    total_cost_usd: 0.10,
+                    total_cost_usd: 0.1,
                     usage: {
                       input_tokens: 170000,
                       cache_read_input_tokens: 10000,

@@ -7,7 +7,9 @@ import { PlanPanel } from "./PlanPanel";
 // Mock react-markdown since it requires ESM and doesn't play well with jsdom.
 // Render children as plain text so we can assert on markdown content.
 vi.mock("react-markdown", () => ({
-  default: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div>,
+  default: ({ children }: { children: string }) => (
+    <div data-testid="markdown">{children}</div>
+  ),
 }));
 
 afterEach(() => {
@@ -42,9 +44,7 @@ describe("PlanPanel", () => {
 
   it("shows the plan filename basename in the header when open", () => {
     render(<PlanPanel {...defaultProps} />);
-    expect(
-      screen.getByText("2026-03-14-auth-redesign.md"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("2026-03-14-auth-redesign.md")).toBeInTheDocument();
   });
 
   it("does not show the full path in the header", () => {
@@ -62,7 +62,9 @@ describe("PlanPanel", () => {
     render(
       <PlanPanel
         {...defaultProps}
-        planContent={"# Heading\n\n- item one\n- item two\n\n```ts\nconst x = 1;\n```"}
+        planContent={
+          "# Heading\n\n- item one\n- item two\n\n```ts\nconst x = 1;\n```"
+        }
       />,
     );
     // Our mock renders children as plain text
@@ -93,9 +95,7 @@ describe("PlanPanel", () => {
   // ===========================================================================
 
   it("handles a plain filename with no path separators", () => {
-    render(
-      <PlanPanel {...defaultProps} planFile="standalone-plan.md" />,
-    );
+    render(<PlanPanel {...defaultProps} planFile="standalone-plan.md" />);
     expect(screen.getByText("standalone-plan.md")).toBeInTheDocument();
   });
 

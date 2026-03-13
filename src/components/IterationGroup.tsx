@@ -78,20 +78,28 @@ function ToolOutputSection({
   const lines = toolOutput.split("\n");
   const isOutputExpanded = expandedOutputs.has(globalIndex);
   const needsTruncation = lines.length > 20;
-  const displayedLines = needsTruncation && !isOutputExpanded
-    ? lines.slice(0, 20)
-    : lines;
+  const displayedLines =
+    needsTruncation && !isOutputExpanded ? lines.slice(0, 20) : lines;
   const remainingLines = lines.length - 20;
 
   return (
     <div className="mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded text-xs text-[#9ca3af]">
       <div className="text-[#a78bfa] mb-1">Output</div>
       {toolName === "Agent" ? (
-        <Markdown>{needsTruncation && !isOutputExpanded ? displayedLines.join("\n") : toolOutput}</Markdown>
+        <Markdown>
+          {needsTruncation && !isOutputExpanded
+            ? displayedLines.join("\n")
+            : toolOutput}
+        </Markdown>
       ) : (
-        <pre className="font-mono whitespace-pre-wrap break-words overflow-x-auto">{displayedLines.map((line, li) => (
-          <span key={li}>{line}{li < displayedLines.length - 1 ? "\n" : ""}</span>
-        ))}</pre>
+        <pre className="font-mono whitespace-pre-wrap break-words overflow-x-auto">
+          {displayedLines.map((line, li) => (
+            <span key={li}>
+              {line}
+              {li < displayedLines.length - 1 ? "\n" : ""}
+            </span>
+          ))}
+        </pre>
       )}
       {needsTruncation && !isOutputExpanded && (
         <button
@@ -132,7 +140,13 @@ export function IterationGroupComponent({
 
   return (
     <div className={`iteration-group${expanded ? " expanded" : ""}`}>
-      <div role="button" tabIndex={0} className="iteration-header flex items-baseline gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-[#1e1e38] select-text" onClick={handleSelectableClick(onToggle)} onKeyDown={handleKeyDown(onToggle)}>
+      <div
+        role="button"
+        tabIndex={0}
+        className="iteration-header flex items-baseline gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-[#1e1e38] select-text"
+        onClick={handleSelectableClick(onToggle)}
+        onKeyDown={handleKeyDown(onToggle)}
+      >
         <span className="iteration-toggle shrink-0">
           {expanded ? "\u25BC" : "\u25B6"}
         </span>
@@ -187,37 +201,59 @@ export function IterationGroupComponent({
                   role="button"
                   tabIndex={0}
                   className="event-btn flex items-baseline gap-2 w-full px-3 py-1 pl-8 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text"
-                  onClick={handleSelectableClick(() => toggleEvent(globalIndex))}
+                  onClick={handleSelectableClick(() =>
+                    toggleEvent(globalIndex),
+                  )}
                   onKeyDown={handleKeyDown(() => toggleEvent(globalIndex))}
                 >
-                  <span className="event-emoji shrink-0">{eventEmoji(ev.kind)}</span>
-                  <span className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}>{eventLabel(ev, repoPath)}</span>
-                  <span className="event-time shrink-0 text-[#555] text-xs">{formatTime(ev._ts)}</span>
+                  <span className="event-emoji shrink-0">
+                    {eventEmoji(ev.kind)}
+                  </span>
+                  <span
+                    className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                  >
+                    {eventLabel(ev, repoPath)}
+                  </span>
+                  <span className="event-time shrink-0 text-[#555] text-xs">
+                    {formatTime(ev._ts)}
+                  </span>
                 </div>
 
-                {isExpanded && ev.kind === "tool_use" && ev.tool_input && ev.tool_name === "Agent" && (
-                  <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded text-xs text-[#9ca3af]">
-                    {Object.entries(ev.tool_input)
-                      .filter(([key]) => key !== "prompt")
-                      .map(([key, value]) => (
-                        <div key={key} className="flex gap-2 py-0.5">
-                          <span className="font-semibold text-[#a78bfa]">{key}:</span>
-                          <span>{typeof value === "object" ? JSON.stringify(value) : String(value)}</span>
+                {isExpanded &&
+                  ev.kind === "tool_use" &&
+                  ev.tool_input &&
+                  ev.tool_name === "Agent" && (
+                    <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded text-xs text-[#9ca3af]">
+                      {Object.entries(ev.tool_input)
+                        .filter(([key]) => key !== "prompt")
+                        .map(([key, value]) => (
+                          <div key={key} className="flex gap-2 py-0.5">
+                            <span className="font-semibold text-[#a78bfa]">
+                              {key}:
+                            </span>
+                            <span>
+                              {typeof value === "object"
+                                ? JSON.stringify(value)
+                                : String(value)}
+                            </span>
+                          </div>
+                        ))}
+                      {typeof ev.tool_input.prompt === "string" && (
+                        <div className="mt-2 border-t border-[#2a2a3e] pt-2">
+                          <Markdown>{ev.tool_input.prompt}</Markdown>
                         </div>
-                      ))}
-                    {typeof ev.tool_input.prompt === "string" && (
-                      <div className="mt-2 border-t border-[#2a2a3e] pt-2">
-                        <Markdown>{ev.tool_input.prompt}</Markdown>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )}
 
-                {isExpanded && ev.kind === "tool_use" && ev.tool_input && ev.tool_name !== "Agent" && (
-                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
-                    {JSON.stringify(ev.tool_input, null, 2)}
-                  </pre>
-                )}
+                {isExpanded &&
+                  ev.kind === "tool_use" &&
+                  ev.tool_input &&
+                  ev.tool_name !== "Agent" && (
+                    <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                      {JSON.stringify(ev.tool_input, null, 2)}
+                    </pre>
+                  )}
 
                 {isExpanded && ev.kind === "tool_use" && ev.tool_output && (
                   <ToolOutputSection
@@ -230,11 +266,15 @@ export function IterationGroupComponent({
                 )}
 
                 {isExpanded && ev.kind === "check_failed" && ev.output && (
-                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">{ev.output}</pre>
+                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                    {ev.output}
+                  </pre>
                 )}
 
                 {isExpanded && ev.kind === "git_sync_failed" && ev.error && (
-                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">{ev.error}</pre>
+                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                    {ev.error}
+                  </pre>
                 )}
               </li>
             );

@@ -69,7 +69,10 @@ export function planDisplayName(
   if (planFile === null) return "\u2014";
 
   // Extract filename: handle both `/` and `\` separators
-  const lastSep = Math.max(planFile.lastIndexOf("/"), planFile.lastIndexOf("\\"));
+  const lastSep = Math.max(
+    planFile.lastIndexOf("/"),
+    planFile.lastIndexOf("\\"),
+  );
   let filename = lastSep >= 0 ? planFile.slice(lastSep + 1) : planFile;
 
   // Strip .md extension

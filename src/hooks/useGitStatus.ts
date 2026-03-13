@@ -31,7 +31,10 @@ export function useGitStatus(
   useEffect(() => {
     const id = setInterval(() => {
       for (const repo of reposRef.current) {
-        if (shouldAutoFetch(repo) && !sessionsRef.current.get(repo.id)?.running) {
+        if (
+          shouldAutoFetch(repo) &&
+          !sessionsRef.current.get(repo.id)?.running
+        ) {
           fetchGitStatus(repo.id, repo, true);
         }
       }
@@ -52,7 +55,10 @@ export function useGitStatus(
       const prevSession = prev.get(repo.id);
       const currentSession = sessions.get(repo.id);
 
-      if (prevSession?.running && (!currentSession || !currentSession.running)) {
+      if (
+        prevSession?.running &&
+        (!currentSession || !currentSession.running)
+      ) {
         fetchGitStatus(repo.id, repo, true);
       }
     }

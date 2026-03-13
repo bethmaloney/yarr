@@ -135,9 +135,7 @@ function makeSessionState(overrides: Partial<SessionState> = {}): SessionState {
   };
 }
 
-function makeOneShotEntry(
-  overrides: Partial<OneShotEntry> = {},
-): OneShotEntry {
+function makeOneShotEntry(overrides: Partial<OneShotEntry> = {}): OneShotEntry {
   return {
     id: "oneshot-abc",
     parentRepoId: "r1",
@@ -718,7 +716,10 @@ describe("Home", () => {
 
   describe("1-Shot cards", () => {
     it("renders a 1-shot card alongside repo cards in the grid", () => {
-      const repo = makeLocalRepo({ id: "r1", name: "my-project" } as Partial<RepoConfig>);
+      const repo = makeLocalRepo({
+        id: "r1",
+        name: "my-project",
+      } as Partial<RepoConfig>);
       const entry = makeOneShotEntry({
         id: "oneshot-1",
         title: "Add dark mode",
@@ -870,10 +871,7 @@ describe("Home", () => {
           ],
         ]),
         latestTraces: new Map([
-          [
-            "r-running",
-            makeTrace({ start_time: new Date(now).toISOString() }),
-          ],
+          ["r-running", makeTrace({ start_time: new Date(now).toISOString() })],
           [
             "r-older",
             makeTrace({
@@ -895,8 +893,7 @@ describe("Home", () => {
       expect(running1ShotIdx).toBeLessThan(older1ShotIdx);
     });
 
-
-    it('shows empty state when there are no repos AND no 1-shot entries', () => {
+    it("shows empty state when there are no repos AND no 1-shot entries", () => {
       setupMockState({
         repos: [],
         oneShotEntries: new Map(),
@@ -1115,7 +1112,7 @@ describe("Home", () => {
       } as Partial<RepoConfig>);
       const trace = makeTrace({
         plan_file: null,
-    plan_content: null,
+        plan_content: null,
       });
 
       setupMockState({

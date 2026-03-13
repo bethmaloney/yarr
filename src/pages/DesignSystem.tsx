@@ -231,11 +231,7 @@ export default function DesignSystem() {
               cssVar="--secondary"
               oklch="0.22 0.01 260"
             />
-            <ColorSwatch
-              name="Muted"
-              cssVar="--muted"
-              oklch="0.22 0.01 260"
-            />
+            <ColorSwatch name="Muted" cssVar="--muted" oklch="0.22 0.01 260" />
           </div>
 
           <div className="space-y-4">
@@ -256,21 +252,13 @@ export default function DesignSystem() {
               fgVar="--accent-foreground"
               fgOklch="0.93 0.005 260"
             />
-            <ColorSwatch
-              name="Ring"
-              cssVar="--ring"
-              oklch="0.8 0.155 78"
-            />
+            <ColorSwatch name="Ring" cssVar="--ring" oklch="0.8 0.155 78" />
             <ColorSwatch
               name="Border"
               cssVar="--border"
               oklch="0.26 0.01 260"
             />
-            <ColorSwatch
-              name="Input"
-              cssVar="--input"
-              oklch="0.26 0.01 260"
-            />
+            <ColorSwatch name="Input" cssVar="--input" oklch="0.26 0.01 260" />
           </div>
 
           <div className="space-y-4">
@@ -631,27 +619,21 @@ export default function DesignSystem() {
         <div className="flex flex-wrap gap-4">
           <div className="space-y-2 text-center">
             <div className="size-20 rounded-md bg-background border border-transparent" />
-            <code className="text-xs text-muted-foreground block">
-              Level 0
-            </code>
+            <code className="text-xs text-muted-foreground block">Level 0</code>
             <span className="text-[10px] text-muted-foreground/50">
               Background
             </span>
           </div>
           <div className="space-y-2 text-center">
             <div className="size-20 rounded-md bg-card border border-border" />
-            <code className="text-xs text-muted-foreground block">
-              Level 1
-            </code>
+            <code className="text-xs text-muted-foreground block">Level 1</code>
             <span className="text-[10px] text-muted-foreground/50">
               Cards, list items
             </span>
           </div>
           <div className="space-y-2 text-center">
             <div className="size-20 rounded-md bg-popover border border-border" />
-            <code className="text-xs text-muted-foreground block">
-              Level 2
-            </code>
+            <code className="text-xs text-muted-foreground block">Level 2</code>
             <span className="text-[10px] text-muted-foreground/50">
               Popovers, menus
             </span>
@@ -664,9 +646,7 @@ export default function DesignSystem() {
                   "0 4px 16px oklch(0 0 0 / 0.4), 0 1px 4px oklch(0 0 0 / 0.2)",
               }}
             />
-            <code className="text-xs text-muted-foreground block">
-              Level 3
-            </code>
+            <code className="text-xs text-muted-foreground block">Level 3</code>
             <span className="text-[10px] text-muted-foreground/50">
               Dropdowns, dialogs
             </span>

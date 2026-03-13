@@ -261,7 +261,11 @@ export default function RunDetail() {
             <>
               <dt className="sr-only">Actions</dt>
               <dd className="m-0 text-sm">
-                <Button variant="outline" size="sm" onClick={() => setPlanPanelOpen(true)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPlanPanelOpen(true)}
+                >
                   View Plan
                 </Button>
               </dd>
@@ -298,7 +302,11 @@ export default function RunDetail() {
         </dl>
       </div>
 
-      <EventsList events={events} repoPath={trace.repo_path} planProgress={planProgress} />
+      <EventsList
+        events={events}
+        repoPath={trace.repo_path}
+        planProgress={planProgress}
+      />
 
       {trace.plan_content && trace.plan_file && (
         <PlanPanel

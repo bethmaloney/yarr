@@ -1,5 +1,11 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router";
 
 import type { RepoConfig } from "../repos";
@@ -164,9 +170,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
   };
 }
 
-function makeSessionState(
-  overrides: Partial<SessionState> = {},
-): SessionState {
+function makeSessionState(overrides: Partial<SessionState> = {}): SessionState {
   return {
     running: false,
     events: [],
@@ -234,7 +238,9 @@ describe("OneShotDetail", () => {
   describe("not found state", () => {
     it('shows "Not found" when oneshotId does not match any entry', async () => {
       setupMockState({
-        oneShotEntries: new Map([["oneshot-other", makeEntry({ id: "oneshot-other" })]]),
+        oneShotEntries: new Map([
+          ["oneshot-other", makeEntry({ id: "oneshot-other" })],
+        ]),
       });
       renderOneShotDetail("oneshot-nonexistent");
 
@@ -277,9 +283,7 @@ describe("OneShotDetail", () => {
     it('clicking "Home" navigates to "/"', () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        oneShotEntries: new Map([
-          ["oneshot-abc123", makeEntry()],
-        ]),
+        oneShotEntries: new Map([["oneshot-abc123", makeEntry()]]),
       });
       renderOneShotDetail();
 
@@ -309,9 +313,7 @@ describe("OneShotDetail", () => {
     it('shows "1-Shot" badge', () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        oneShotEntries: new Map([
-          ["oneshot-abc123", makeEntry()],
-        ]),
+        oneShotEntries: new Map([["oneshot-abc123", makeEntry()]]),
       });
       renderOneShotDetail();
 
@@ -322,10 +324,7 @@ describe("OneShotDetail", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         oneShotEntries: new Map([
-          [
-            "oneshot-abc123",
-            makeEntry({ parentRepoName: "awesome-repo" }),
-          ],
+          ["oneshot-abc123", makeEntry({ parentRepoName: "awesome-repo" })],
         ]),
       });
       renderOneShotDetail();
@@ -340,7 +339,8 @@ describe("OneShotDetail", () => {
           [
             "oneshot-abc123",
             makeEntry({
-              prompt: "Fix the login bug where users get redirected incorrectly",
+              prompt:
+                "Fix the login bug where users get redirected incorrectly",
             }),
           ],
         ]),
@@ -372,9 +372,7 @@ describe("OneShotDetail", () => {
       });
       renderOneShotDetail();
 
-      expect(
-        screen.getByRole("button", { name: /stop/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /stop/i })).toBeInTheDocument();
     });
 
     it('stop button calls invoke("stop_session", { repoId: oneshotId })', () => {
@@ -422,7 +420,10 @@ describe("OneShotDetail", () => {
         sessions: new Map([
           [
             "oneshot-abc123",
-            makeSessionState({ running: true, events: [{ kind: "one_shot_started" }] }),
+            makeSessionState({
+              running: true,
+              events: [{ kind: "one_shot_started" }],
+            }),
           ],
         ]),
       });
@@ -511,9 +512,7 @@ describe("OneShotDetail", () => {
       });
       renderOneShotDetail();
 
-      expect(
-        screen.getByText("Design phase timed out"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Design phase timed out")).toBeInTheDocument();
     });
 
     it("EventsList gets isLive=false when not running", () => {
@@ -525,7 +524,10 @@ describe("OneShotDetail", () => {
         sessions: new Map([
           [
             "oneshot-abc123",
-            makeSessionState({ running: false, events: [{ kind: "one_shot_started" }] }),
+            makeSessionState({
+              running: false,
+              events: [{ kind: "one_shot_started" }],
+            }),
           ],
         ]),
       });
@@ -681,7 +683,10 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+          [
+            "oneshot-abc123",
+            makeSessionState({ events: [{ kind: "one_shot_started" }] }),
+          ],
         ]),
       });
       renderOneShotDetail();
@@ -697,13 +702,13 @@ describe("OneShotDetail", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         oneShotEntries: new Map([
-          [
-            "oneshot-abc123",
-            makeEntry({ parentRepoId: "repo-1" }),
-          ],
+          ["oneshot-abc123", makeEntry({ parentRepoId: "repo-1" })],
         ]),
         sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+          [
+            "oneshot-abc123",
+            makeSessionState({ events: [{ kind: "one_shot_started" }] }),
+          ],
         ]),
       });
       renderOneShotDetail();
@@ -721,9 +726,7 @@ describe("OneShotDetail", () => {
     it("is not shown when session.error is null", () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        oneShotEntries: new Map([
-          ["oneshot-abc123", makeEntry()],
-        ]),
+        oneShotEntries: new Map([["oneshot-abc123", makeEntry()]]),
         sessions: new Map([
           ["oneshot-abc123", makeSessionState({ error: null })],
         ]),
@@ -736,9 +739,7 @@ describe("OneShotDetail", () => {
     it("shows error message in a pre block when session.error exists", () => {
       setupMockState({
         repos: [makeLocalRepo()],
-        oneShotEntries: new Map([
-          ["oneshot-abc123", makeEntry()],
-        ]),
+        oneShotEntries: new Map([["oneshot-abc123", makeEntry()]]),
         sessions: new Map([
           [
             "oneshot-abc123",
@@ -767,10 +768,7 @@ describe("OneShotDetail", () => {
           ["oneshot-abc123", makeEntry({ status: "running" })],
         ]),
         sessions: new Map([
-          [
-            "oneshot-abc123",
-            makeSessionState({ running: true, events: [] }),
-          ],
+          ["oneshot-abc123", makeSessionState({ running: true, events: [] })],
         ]),
       });
       renderOneShotDetail();
@@ -792,17 +790,12 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          [
-            "oneshot-abc123",
-            makeSessionState({ running: false, events: [] }),
-          ],
+          ["oneshot-abc123", makeSessionState({ running: false, events: [] })],
         ]),
       });
       renderOneShotDetail();
 
-      expect(
-        screen.getByText(/Session was interrupted/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Session was interrupted/)).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: /resume/i }),
       ).toBeInTheDocument();
@@ -822,10 +815,7 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          [
-            "oneshot-abc123",
-            makeSessionState({ running: false, events: [] }),
-          ],
+          ["oneshot-abc123", makeSessionState({ running: false, events: [] })],
         ]),
       });
       renderOneShotDetail();
@@ -843,10 +833,7 @@ describe("OneShotDetail", () => {
           ["oneshot-abc123", makeEntry({ status: "failed" })],
         ]),
         sessions: new Map([
-          [
-            "oneshot-abc123",
-            makeSessionState({ running: false, events: [] }),
-          ],
+          ["oneshot-abc123", makeSessionState({ running: false, events: [] })],
         ]),
       });
       renderOneShotDetail();
@@ -887,27 +874,20 @@ describe("OneShotDetail", () => {
           ["oneshot-abc123", makeEntry({ status: "running" })],
         ]),
         sessions: new Map([
-          [
-            "oneshot-abc123",
-            makeSessionState({ running: true, events }),
-          ],
+          ["oneshot-abc123", makeSessionState({ running: true, events })],
         ]),
       });
       renderOneShotDetail();
 
       expect(screen.getByTestId("events-list")).toBeInTheDocument();
-      expect(
-        screen.queryByText(/Session starting/),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/Session starting/)).not.toBeInTheDocument();
       expect(
         screen.queryByText(/Session was interrupted/),
       ).not.toBeInTheDocument();
       expect(
         screen.queryByText(/Session failed before starting/),
       ).not.toBeInTheDocument();
-      expect(
-        screen.queryByText(/No events recorded/),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/No events recorded/)).not.toBeInTheDocument();
     });
   });
 
@@ -929,10 +909,7 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          [
-            "oneshot-abc123",
-            makeSessionState({ running: true }),
-          ],
+          ["oneshot-abc123", makeSessionState({ running: true })],
         ]),
       });
       renderOneShotDetail();
@@ -1164,7 +1141,7 @@ describe("OneShotDetail", () => {
                   iteration: 1,
                   _ts: Date.now(),
                   result: {
-                    total_cost_usd: 0.10,
+                    total_cost_usd: 0.1,
                     usage: {
                       input_tokens: 170000,
                       cache_read_input_tokens: 10000,
@@ -1293,13 +1270,11 @@ describe("OneShotDetail", () => {
       traces: ReturnType<typeof makeTrace>[] = [diskTrace],
       events: SessionEvent[] = diskEvents,
     ) {
-      mockInvoke.mockImplementation(
-        (cmd: string, _args?: Record<string, unknown>) => {
-          if (cmd === "list_traces") return Promise.resolve(traces);
-          if (cmd === "get_trace_events") return Promise.resolve(events);
-          return Promise.resolve(null);
-        },
-      );
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "list_traces") return Promise.resolve(traces);
+        if (cmd === "get_trace_events") return Promise.resolve(events);
+        return Promise.resolve(null);
+      });
     }
 
     it("calls list_traces when entry is missing from store", async () => {
@@ -1364,8 +1339,7 @@ describe("OneShotDetail", () => {
       setupMockState({ oneShotEntries: new Map() });
       setupDiskFallbackMocks([
         makeTrace({
-          prompt:
-            "Fix the login bug where users get redirected incorrectly",
+          prompt: "Fix the login bug where users get redirected incorrectly",
         }),
       ]);
 
@@ -1419,9 +1393,7 @@ describe("OneShotDetail", () => {
 
     it("does NOT call list_traces when entry exists in store", () => {
       setupMockState({
-        oneShotEntries: new Map([
-          ["oneshot-abc123", makeEntry()],
-        ]),
+        oneShotEntries: new Map([["oneshot-abc123", makeEntry()]]),
       });
       setupDiskFallbackMocks();
 
@@ -1623,7 +1595,10 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+          [
+            "oneshot-abc123",
+            makeSessionState({ events: [{ kind: "one_shot_started" }] }),
+          ],
         ]),
       });
       renderOneShotDetail();
@@ -1648,7 +1623,10 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+          [
+            "oneshot-abc123",
+            makeSessionState({ events: [{ kind: "one_shot_started" }] }),
+          ],
         ]),
       });
       renderOneShotDetail();
@@ -1673,7 +1651,10 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+          [
+            "oneshot-abc123",
+            makeSessionState({ events: [{ kind: "one_shot_started" }] }),
+          ],
         ]),
       });
       renderOneShotDetail();

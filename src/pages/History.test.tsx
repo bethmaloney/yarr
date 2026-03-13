@@ -591,7 +591,9 @@ describe("History", () => {
           prompt: "Repo-filtered oneshot task",
         });
         mockInvoke.mockResolvedValue([trace]);
-        setupMockState({ repos: [makeLocalRepo({ id: "repo-1" } as Partial<RepoConfig>)] });
+        setupMockState({
+          repos: [makeLocalRepo({ id: "repo-1" } as Partial<RepoConfig>)],
+        });
         renderHistory("/history/repo-1");
 
         await waitFor(() => {

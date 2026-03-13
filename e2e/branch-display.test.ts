@@ -711,10 +711,7 @@ test.describe("Branch display chip", () => {
 
   // --- Home page repo card tests ---
 
-  test("Home page repo card shows dirty count", async ({
-    page,
-    mockTauri,
-  }) => {
+  test("Home page repo card shows dirty count", async ({ page, mockTauri }) => {
     await mockTauri({
       storeData: { repos: [localRepo] },
       invokeHandlers: {

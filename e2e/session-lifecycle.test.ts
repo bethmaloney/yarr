@@ -79,8 +79,9 @@ test.describe("Session lifecycle", () => {
     await navigateToRepoDetail(page, mockTauri, {
       invokeHandlers: {
         run_session: (args: Record<string, unknown>) => {
-          (window as unknown as Record<string, unknown>).__capturedRunSessionArgs =
-            args;
+          (
+            window as unknown as Record<string, unknown>
+          ).__capturedRunSessionArgs = args;
           return { session_id: "sess-123" };
         },
       },
@@ -140,9 +141,7 @@ test.describe("Session lifecycle", () => {
 
     // Verify iteration event appears (use exact text to avoid matching both
     // the iteration group header and the event line)
-    await expect(
-      eventsList.getByText("Iteration 1 started"),
-    ).toBeVisible();
+    await expect(eventsList.getByText("Iteration 1 started")).toBeVisible();
   });
 
   // ---------------------------------------------------------------------------
@@ -182,8 +181,7 @@ test.describe("Session lifecycle", () => {
 
     // Verify stop_session was called with the correct repoId
     const stopArgs = await page.evaluate(
-      () =>
-        (window as unknown as Record<string, unknown>).__stopSessionArgs,
+      () => (window as unknown as Record<string, unknown>).__stopSessionArgs,
     );
     expect(stopArgs).toBeTruthy();
     expect((stopArgs as Record<string, unknown>).repoId).toBe("repo-1");
@@ -198,18 +196,13 @@ test.describe("Session lifecycle", () => {
     await expect(page.getByRole("button", { name: "Run" })).toBeVisible();
 
     // Verify Stop button disappears
-    await expect(
-      page.getByRole("button", { name: "Stop" }),
-    ).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "Stop" })).not.toBeVisible();
   });
 
   // ---------------------------------------------------------------------------
   // 4. Reject duplicate session
   // ---------------------------------------------------------------------------
-  test("reject duplicate session: shows error", async ({
-    page,
-    mockTauri,
-  }) => {
+  test("reject duplicate session: shows error", async ({ page, mockTauri }) => {
     await navigateToRepoDetail(page, mockTauri, {
       invokeHandlers: {
         run_session: () => {
@@ -223,10 +216,9 @@ test.describe("Session lifecycle", () => {
     await page.getByRole("button", { name: "Run" }).click();
 
     // Verify error section appears with the error message
-    const errorSection = page.locator(
-      "section",
-      { has: page.locator("h2", { hasText: "Error" }) },
-    );
+    const errorSection = page.locator("section", {
+      has: page.locator("h2", { hasText: "Error" }),
+    });
     await expect(errorSection).toBeVisible();
     await expect(errorSection.locator("h2")).toHaveText("Error");
     await expect(errorSection.locator("pre")).toContainText(
@@ -242,10 +234,7 @@ test.describe("Session lifecycle", () => {
   // ---------------------------------------------------------------------------
   // 5. session_complete triggers trace fetch
   // ---------------------------------------------------------------------------
-  test("session_complete triggers trace fetch", async ({
-    page,
-    mockTauri,
-  }) => {
+  test("session_complete triggers trace fetch", async ({ page, mockTauri }) => {
     const mockTrace = {
       session_id: "sess-123",
       repo_path: "/home/user/projects/my-app",
@@ -267,8 +256,7 @@ test.describe("Session lifecycle", () => {
       invokeHandlers: {
         run_session: () => ({ session_id: "sess-123" }),
         get_trace: (args: Record<string, unknown>) => {
-          (window as unknown as Record<string, unknown>).__getTraceArgs =
-            args;
+          (window as unknown as Record<string, unknown>).__getTraceArgs = args;
           return mockTrace;
         },
       },
@@ -290,14 +278,11 @@ test.describe("Session lifecycle", () => {
     // Wait for get_trace to be called and verify args
     await expect(async () => {
       const traceArgs = await page.evaluate(
-        () =>
-          (window as unknown as Record<string, unknown>).__getTraceArgs,
+        () => (window as unknown as Record<string, unknown>).__getTraceArgs,
       );
       expect(traceArgs).toBeTruthy();
       expect((traceArgs as Record<string, unknown>).repoId).toBe("repo-1");
-      expect((traceArgs as Record<string, unknown>).sessionId).toBe(
-        "sess-123",
-      );
+      expect((traceArgs as Record<string, unknown>).sessionId).toBe("sess-123");
     }).toPass({ timeout: 5000 });
   });
 });

@@ -233,9 +233,7 @@ describe("eventLabel", () => {
         },
       });
       const label = eventLabel(ev);
-      expect(label).toBe(
-        "[2] Bash: Try alternative TypeScript check commands",
-      );
+      expect(label).toBe("[2] Bash: Try alternative TypeScript check commands");
     });
 
     it("returns tool use label with Bash description when only description present", () => {
@@ -475,9 +473,9 @@ describe("toolSummary with repoPath", () => {
 
 describe("toWslPath", () => {
   it("converts UNC //wsl.localhost/Distro/path to /path", () => {
-    expect(
-      toWslPath("//wsl.localhost/Ubuntu-24.04/home/beth/repos/yarr"),
-    ).toBe("/home/beth/repos/yarr");
+    expect(toWslPath("//wsl.localhost/Ubuntu-24.04/home/beth/repos/yarr")).toBe(
+      "/home/beth/repos/yarr",
+    );
   });
 
   it("converts UNC //wsl$/Distro/path to /path", () => {

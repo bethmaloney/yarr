@@ -154,7 +154,8 @@ export default function RepoDetail() {
   const [oneShotMergeStrategy, setOneShotMergeStrategy] =
     useState("merge_to_main");
   const [oneShotEffortLevel, setOneShotEffortLevel] = useState("medium");
-  const [oneShotDesignEffortLevel, setOneShotDesignEffortLevel] = useState("high");
+  const [oneShotDesignEffortLevel, setOneShotDesignEffortLevel] =
+    useState("high");
   const [oneShotSubmitting, setOneShotSubmitting] = useState(false);
 
   // Connection test state
@@ -353,6 +354,13 @@ export default function RepoDetail() {
     return parts[parts.length - 1];
   }, [planFile]);
 
+  // Context percentage computation — peak across all iterations
+  const ctxPeak = useMemo(
+    () => maxContextPercent(groupEventsByIteration(session.events)),
+    [session.events],
+  );
+  const ctxPercent = ctxPeak > 0 ? ctxPeak : null;
+
   if (!repo) {
     return <div>Repo not found</div>;
   }
@@ -475,7 +483,9 @@ export default function RepoDetail() {
       unlistenComplete();
     };
 
-    console.debug("[RepoDetail] invoking test_ssh_connection_steps", { sshHost: ssh.sshHost });
+    console.debug("[RepoDetail] invoking test_ssh_connection_steps", {
+      sshHost: ssh.sshHost,
+    });
     invoke("test_ssh_connection_steps", {
       sshHost: ssh.sshHost,
       remotePath: ssh.remotePath,
@@ -596,13 +606,6 @@ export default function RepoDetail() {
     setPlanDropdownOpen(false);
     setPlanSearch("");
   }
-
-  // Context percentage computation — peak across all iterations
-  const ctxPeak = useMemo(
-    () => maxContextPercent(groupEventsByIteration(session.events)),
-    [session.events],
-  );
-  const ctxPercent = ctxPeak > 0 ? ctxPeak : null;
 
   return (
     <main className="max-w-[900px] mx-auto p-8">
@@ -894,7 +897,11 @@ export default function RepoDetail() {
                 </Label>
                 <Label className="flex flex-col gap-1">
                   Effort Level
-                  <Select value={effortLevel} onValueChange={setEffortLevel} disabled={session.running}>
+                  <Select
+                    value={effortLevel}
+                    onValueChange={setEffortLevel}
+                    disabled={session.running}
+                  >
                     <SelectTrigger className="font-mono">
                       <SelectValue />
                     </SelectTrigger>
@@ -1490,7 +1497,11 @@ export default function RepoDetail() {
               <Label className="text-sm text-muted-foreground">
                 Design Effort Level
               </Label>
-              <Select value={oneShotDesignEffortLevel} onValueChange={setOneShotDesignEffortLevel} disabled={oneShotSubmitting}>
+              <Select
+                value={oneShotDesignEffortLevel}
+                onValueChange={setOneShotDesignEffortLevel}
+                disabled={oneShotSubmitting}
+              >
                 <SelectTrigger className="font-mono">
                   <SelectValue />
                 </SelectTrigger>
@@ -1506,7 +1517,11 @@ export default function RepoDetail() {
               <Label className="text-sm text-muted-foreground">
                 Implementation Effort Level
               </Label>
-              <Select value={oneShotEffortLevel} onValueChange={setOneShotEffortLevel} disabled={oneShotSubmitting}>
+              <Select
+                value={oneShotEffortLevel}
+                onValueChange={setOneShotEffortLevel}
+                disabled={oneShotSubmitting}
+              >
                 <SelectTrigger className="font-mono">
                   <SelectValue />
                 </SelectTrigger>

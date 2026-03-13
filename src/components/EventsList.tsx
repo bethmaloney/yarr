@@ -243,7 +243,9 @@ export function EventsList({
                     role="button"
                     tabIndex={0}
                     className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text"
-                    onClick={handleSelectableClick(() => toggleEvent(globalIndex))}
+                    onClick={handleSelectableClick(() =>
+                      toggleEvent(globalIndex),
+                    )}
                     onKeyDown={handleKeyDown(() => toggleEvent(globalIndex))}
                   >
                     <span className="event-emoji shrink-0">

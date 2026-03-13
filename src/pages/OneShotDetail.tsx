@@ -80,8 +80,7 @@ export default function OneShotDetail() {
     };
   }, [entry, oneshotId]);
 
-  const displayTitle =
-    entry?.title ?? fallbackTrace?.prompt.slice(0, 80) ?? "";
+  const displayTitle = entry?.title ?? fallbackTrace?.prompt.slice(0, 80) ?? "";
   const displayPrompt = entry?.prompt ?? fallbackTrace?.prompt ?? "";
   const displayParentName = entry?.parentRepoName ?? "Unknown";
   const displayEvents = entry ? session.events : fallbackEvents;
@@ -181,7 +180,9 @@ export default function OneShotDetail() {
           {entry?.status === "running" ? (
             <>
               <Loader2 className="size-8 text-muted-foreground mb-3 animate-spin" />
-              <p className="text-sm font-medium animate-pulse">Session starting...</p>
+              <p className="text-sm font-medium animate-pulse">
+                Session starting...
+              </p>
             </>
           ) : entry?.status === "failed" && entry.worktreePath ? (
             <>
@@ -199,7 +200,9 @@ export default function OneShotDetail() {
           ) : entry?.status === "failed" ? (
             <>
               <AlertTriangle className="size-8 text-muted-foreground mb-3" />
-              <p className="text-sm font-medium">Session failed before starting</p>
+              <p className="text-sm font-medium">
+                Session failed before starting
+              </p>
             </>
           ) : (
             <>
@@ -263,14 +266,16 @@ export default function OneShotDetail() {
               </>
             )}
             <dt className="text-muted-foreground text-sm">Session ID</dt>
-            <dd className="m-0 text-sm font-mono">
-              {displayTrace.session_id}
-            </dd>
+            <dd className="m-0 text-sm font-mono">{displayTrace.session_id}</dd>
             {session.trace?.plan_content && (
               <>
                 <dt className="sr-only">Actions</dt>
                 <dd className="m-0 text-sm">
-                  <Button variant="outline" size="sm" onClick={() => setPlanPanelOpen(true)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPlanPanelOpen(true)}
+                  >
                     View Plan
                   </Button>
                 </dd>

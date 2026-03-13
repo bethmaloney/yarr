@@ -20,7 +20,12 @@ function makeProgress(overrides: Partial<PlanProgress> = {}): PlanProgress {
     ],
     totalItems: 20,
     completedItems: 10,
-    currentTask: { number: 1, title: "Setup environment", total: 10, completed: 5 },
+    currentTask: {
+      number: 1,
+      title: "Setup environment",
+      total: 10,
+      completed: 5,
+    },
     ...overrides,
   };
 }
@@ -50,7 +55,12 @@ describe("PlanProgressBar", () => {
 
   it("shows current task name", () => {
     const progress = makeProgress({
-      currentTask: { number: 3, title: "Frontend store", total: 5, completed: 2 },
+      currentTask: {
+        number: 3,
+        title: "Frontend store",
+        total: 5,
+        completed: 2,
+      },
     });
     render(<PlanProgressBar progress={progress} />);
 

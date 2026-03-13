@@ -40,11 +40,7 @@ describe("OneShotCard", () => {
 
   it("renders as a button element", () => {
     render(
-      <OneShotCard
-        entry={makeEntry()}
-        phase="design"
-        onClick={vi.fn()}
-      />,
+      <OneShotCard entry={makeEntry()} phase="design" onClick={vi.fn()} />,
     );
     const button = screen.getByRole("button");
     expect(button).toBeInTheDocument();
@@ -71,11 +67,7 @@ describe("OneShotCard", () => {
 
   it('shows "1-Shot" badge text', () => {
     render(
-      <OneShotCard
-        entry={makeEntry()}
-        phase="design"
-        onClick={vi.fn()}
-      />,
+      <OneShotCard entry={makeEntry()} phase="design" onClick={vi.fn()} />,
     );
     expect(screen.getByText("1-Shot")).toBeInTheDocument();
   });
@@ -112,11 +104,7 @@ describe("OneShotCard", () => {
 
   it("shows phase label for design phase", () => {
     render(
-      <OneShotCard
-        entry={makeEntry()}
-        phase="design"
-        onClick={vi.fn()}
-      />,
+      <OneShotCard entry={makeEntry()} phase="design" onClick={vi.fn()} />,
     );
     expect(screen.getByText("Design Phase")).toBeInTheDocument();
   });
@@ -217,11 +205,7 @@ describe("OneShotCard", () => {
   it("calls onClick when the card is clicked", () => {
     const handleClick = vi.fn();
     render(
-      <OneShotCard
-        entry={makeEntry()}
-        phase="design"
-        onClick={handleClick}
-      />,
+      <OneShotCard entry={makeEntry()} phase="design" onClick={handleClick} />,
     );
     const button = screen.getByRole("button");
     fireEvent.click(button);
@@ -231,13 +215,8 @@ describe("OneShotCard", () => {
   it("does not call onClick before clicking", () => {
     const handleClick = vi.fn();
     render(
-      <OneShotCard
-        entry={makeEntry()}
-        phase="design"
-        onClick={handleClick}
-      />,
+      <OneShotCard entry={makeEntry()} phase="design" onClick={handleClick} />,
     );
     expect(handleClick).not.toHaveBeenCalled();
   });
-
 });
