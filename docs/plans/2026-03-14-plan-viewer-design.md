@@ -123,10 +123,10 @@ Build the Sheet-based plan viewer component.
 - Style consistently with existing dark theme
 
 **Checklist:**
-- [ ] Create `PlanPanel.tsx` with Sheet + react-markdown
-- [ ] Header shows filename
-- [ ] Body renders markdown and scrolls
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `PlanPanel.tsx` with Sheet + react-markdown
+- [x] Header shows filename
+- [x] Body renders markdown and scrolls
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -204,7 +204,7 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 | 1 | Add `plan_content` to `SessionTrace` | Done |
 | 2 | Snapshot plan content in Ralph loop sessions | Done |
 | 3 | Snapshot plan content in one-shot sessions | Done |
-| 4 | Create PlanPanel component | Not Started |
+| 4 | Create PlanPanel component | Done |
 | 5 | Wire PlanPanel into RunDetail | Not Started |
 | 6 | Wire PlanPanel into OneShotDetail | Not Started |
 | 7 | Wire PlanPanel into RepoCard | Not Started |
