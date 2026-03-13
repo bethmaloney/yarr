@@ -3284,3 +3284,138 @@ describe("oneshot entry reconciliation from disk traces", () => {
     expect(entry.prompt).toBe(longPrompt);
   });
 });
+
+// ===========================================================================
+// plan_content_updated event → planProgress
+// ===========================================================================
+
+describe("plan_content_updated event handling", () => {
+  beforeEach(() => {
+    useAppStore.getState().initialize();
+  });
+
+  it("sets planProgress on session state when plan_content_updated event has valid plan markdown", () => {
+    const planMarkdown = `## Task 1: Setup
+- [x] Install deps
+- [ ] Configure linter
+
+## Task 2: Build
+- [ ] Compile
+- [ ] Test
+`;
+
+    // First create a session
+    emitSessionEvent("repo-1", { kind: "iteration_start", iteration: 1 });
+
+    // Emit plan_content_updated with plan_content field
+    emitSessionEvent("repo-1", {
+      kind: "plan_content_updated",
+      plan_content: planMarkdown,
+    } as SessionEvent);
+
+    const session = useAppStore.getState().sessions.get("repo-1")!;
+    expect((session as Record<string, unknown>).planProgress).toBeDefined();
+
+    const planProgress = (session as Record<string, unknown>).planProgress as {
+      tasks: Array<{ number: number; title: string; total: number; completed: number }>;
+      totalItems: number;
+      completedItems: number;
+      currentTask: { number: number; title: string; total: number; completed: number } | null;
+    };
+
+    expect(planProgress.tasks).toHaveLength(2);
+    expect(planProgress.totalItems).toBe(4);
+    expect(planProgress.completedItems).toBe(1);
+    expect(planProgress.currentTask).toEqual({
+      number: 1,
+      title: "Setup",
+      total: 2,
+      completed: 1,
+    });
+  });
+
+  it("does not set planProgress when plan_content_updated event has unparseable content", () => {
+    emitSessionEvent("repo-1", { kind: "iteration_start", iteration: 1 });
+
+    emitSessionEvent("repo-1", {
+      kind: "plan_content_updated",
+      plan_content: "Just some plain text with no structure",
+    } as SessionEvent);
+
+    const session = useAppStore.getState().sessions.get("repo-1")!;
+    // planProgress should be null or undefined since the content has no parseable tasks
+    expect((session as Record<string, unknown>).planProgress).toBeFalsy();
+  });
+});
+
+// ===========================================================================
+// Trace loading with plan_content → planProgress
+// ===========================================================================
+
+describe("trace loading sets planProgress from plan_content", () => {
+  beforeEach(() => {
+    useAppStore.getState().initialize();
+  });
+
+  it("sets planProgress on session when trace has plan_content", async () => {
+    const planMarkdown = `## Task 1: Setup
+- [x] Install deps
+- [x] Configure
+
+## Task 2: Build
+- [x] Compile
+- [x] Test
+`;
+
+    const trace = makeTrace({
+      session_id: "sess-plan",
+      plan_content: planMarkdown,
+    });
+
+    // Set up a session with session_id so that session_complete triggers trace fetch
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      sessions: new Map([
+        [
+          "repo-1",
+          {
+            running: true,
+            session_id: "sess-plan",
+            events: [],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    emitSessionEvent("repo-1", { kind: "session_complete" });
+
+    // Wait for the async trace fetch to complete
+    await vi.waitFor(() => {
+      const session = useAppStore.getState().sessions.get("repo-1");
+      expect(session).toBeDefined();
+      expect(session!.trace).toEqual(trace);
+    });
+
+    // After trace is loaded, planProgress should be set from plan_content
+    const session = useAppStore.getState().sessions.get("repo-1")!;
+    const planProgress = (session as Record<string, unknown>).planProgress as {
+      tasks: Array<{ number: number; title: string; total: number; completed: number }>;
+      totalItems: number;
+      completedItems: number;
+      currentTask: null;
+    } | null;
+
+    expect(planProgress).toBeDefined();
+    expect(planProgress!.tasks).toHaveLength(2);
+    expect(planProgress!.totalItems).toBe(4);
+    expect(planProgress!.completedItems).toBe(4);
+    expect(planProgress!.currentTask).toBeNull();
+  });
+});

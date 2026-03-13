@@ -483,3 +483,20 @@ describe("toWslPath", () => {
     expect(toWslPath("//wsl.localhost/Ubuntu-24.04")).toBe("/");
   });
 });
+
+// ===========================================================================
+// plan_content_updated event
+// ===========================================================================
+
+describe("eventEmoji — plan_content_updated", () => {
+  it("returns chart emoji for plan_content_updated", () => {
+    expect(eventEmoji("plan_content_updated")).toBe("\u{1F4CA}");
+  });
+});
+
+describe("eventLabel — plan_content_updated", () => {
+  it("returns 'Plan progress updated' for plan_content_updated", () => {
+    const ev = makeEvent({ kind: "plan_content_updated" });
+    expect(eventLabel(ev)).toBe("Plan progress updated");
+  });
+});

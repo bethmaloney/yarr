@@ -19,6 +19,7 @@ import type {
   SessionTrace,
   TaggedSessionEvent,
 } from "./types";
+import { parsePlanProgress } from "./plan-progress";
 
 const oneShotStore = new LazyStore("oneshot-entries.json");
 
@@ -196,7 +197,10 @@ export const useAppStore = create<AppStore>((set, get) => {
                   trace: null,
                   error: null,
                 };
-                s.set(entryId, { ...current, trace });
+                const planProgress = trace.plan_content
+                  ? parsePlanProgress(trace.plan_content)
+                  : current.planProgress;
+                s.set(entryId, { ...current, trace, planProgress });
                 set({ sessions: s });
 
                 // Update entry status if trace outcome indicates completed or failed
@@ -356,7 +360,10 @@ export const useAppStore = create<AppStore>((set, get) => {
                   const s = new Map(get().sessions);
                   const current = s.get(repo_id);
                   if (current) {
-                    s.set(repo_id, { ...current, trace });
+                    const planProgress = trace.plan_content
+                      ? parsePlanProgress(trace.plan_content)
+                      : current.planProgress;
+                    s.set(repo_id, { ...current, trace, planProgress });
                     const lt = new Map(get().latestTraces);
                     lt.set(repo_id, trace);
                     set({ sessions: s, latestTraces: lt });
@@ -370,6 +377,10 @@ export const useAppStore = create<AppStore>((set, get) => {
             updates.disconnected = false;
             updates.reconnecting = false;
             updates.disconnectReason = undefined;
+          }
+
+          if (sessionEvent.kind === "plan_content_updated" && sessionEvent.plan_content) {
+            updates.planProgress = parsePlanProgress(sessionEvent.plan_content);
           }
 
           const next = new Map(get().sessions);
@@ -409,7 +420,10 @@ export const useAppStore = create<AppStore>((set, get) => {
                       const s = new Map(get().sessions);
                       const current = s.get(repo_id);
                       if (current) {
-                        s.set(repo_id, { ...current, trace });
+                        const planProgress = trace.plan_content
+                          ? parsePlanProgress(trace.plan_content)
+                          : current.planProgress;
+                        s.set(repo_id, { ...current, trace, planProgress });
                         const lt = new Map(get().latestTraces);
                         lt.set(repo_id, trace);
                         set({ sessions: s, latestTraces: lt });

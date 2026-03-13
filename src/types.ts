@@ -1,3 +1,5 @@
+import type { PlanProgress } from "./plan-progress";
+
 export type Check = {
   name: string;
   command: string;
@@ -46,6 +48,7 @@ export type SessionEvent = {
   error?: string;
   status?: string;
   rate_limit_type?: string;
+  plan_content?: string;
   _ts?: number;
 };
 
@@ -81,6 +84,7 @@ export type SessionState = {
   events: SessionEvent[];
   trace: SessionTrace | null;
   error: string | null;
+  planProgress?: PlanProgress | null;
 };
 
 export type RepoStatus =

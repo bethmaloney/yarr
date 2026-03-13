@@ -122,6 +122,8 @@ export function eventEmoji(kind: string): string {
       return "\u274C";
     case "rate_limited":
       return "\u23F3";
+    case "plan_content_updated":
+      return "\u{1F4CA}";
     default:
       return "\u{1F4CB}";
   }
@@ -211,6 +213,8 @@ export function eventLabel(ev: SessionEvent, repoPath?: string): string {
       return `[${ev.iteration}] Git sync failed${ev.error ? ": " + ev.error : ""}`;
     case "rate_limited":
       return `[${ev.iteration}] Rate limited (${ev.status ?? "unknown"}/${ev.rate_limit_type ?? "unknown"})`;
+    case "plan_content_updated":
+      return "Plan progress updated";
     default:
       return JSON.stringify(ev);
   }

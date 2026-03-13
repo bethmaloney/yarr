@@ -90,10 +90,10 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 **Pattern reference:** Existing optional fields on `SessionEvent` (types.ts:25-49) and `SessionState` (types.ts:75-84).
 
 **Checklist:**
-- [ ] Add `plan_content?: string` to `SessionEvent` type (after line 48)
-- [ ] Add `planProgress?: PlanProgress | null` to `SessionState` type (after line 83)
-- [ ] Add import of `PlanProgress` from `./plan-progress` in types.ts (or keep the type inline if circular import is a concern — use inline)
-- [ ] Run `npx tsc --noEmit` to verify
+- [x] Add `plan_content?: string` to `SessionEvent` type (after line 48)
+- [x] Add `planProgress?: PlanProgress | null` to `SessionState` type (after line 83)
+- [x] Add import of `PlanProgress` from `./plan-progress` in types.ts (or keep the type inline if circular import is a concern — use inline)
+- [x] Run `npx tsc --noEmit` to verify
 
 ---
 
@@ -109,22 +109,22 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 - Also parse plan progress from trace `plan_content` when loading historical sessions (so completed runs show final progress)
 
 **Checklist:**
-- [ ] Import `parsePlanProgress` from `./plan-progress`
-- [ ] In the event listener (after line 297), add:
+- [x] Import `parsePlanProgress` from `./plan-progress`
+- [x] In the event listener (after line 297), add:
   ```ts
   if (sessionEvent.kind === "plan_content_updated" && sessionEvent.plan_content) {
     updates.planProgress = parsePlanProgress(sessionEvent.plan_content);
   }
   ```
-- [ ] When loading trace on session complete (store.ts:352-361), also parse plan progress from `trace.plan_content`:
+- [x] When loading trace on session complete (store.ts:352-361), also parse plan progress from `trace.plan_content`:
   ```ts
   const planProgress = trace.plan_content
     ? parsePlanProgress(trace.plan_content)
     : current.planProgress;
   s.set(repo_id, { ...current, trace, planProgress });
   ```
-- [ ] Same for the oneshot trace loading (store.ts:406-413)
-- [ ] Run `npx tsc --noEmit` to verify
+- [x] Same for the oneshot trace loading (store.ts:406-413)
+- [x] Run `npx tsc --noEmit` to verify
 
 ---
 
@@ -136,9 +136,9 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 **Pattern reference:** Existing cases in `eventEmoji` (event-format.ts:67-127) and `eventLabel` (event-format.ts:154-216).
 
 **Checklist:**
-- [ ] Add `case "plan_content_updated": return "\u{1F4CA}";` (bar chart emoji) to `eventEmoji` (before `default:` at line 125)
-- [ ] Add `case "plan_content_updated": return "Plan progress updated";` to `eventLabel` (before `default:` at line 214)
-- [ ] Run `npx tsc --noEmit` to verify
+- [x] Add `case "plan_content_updated": return "\u{1F4CA}";` (bar chart emoji) to `eventEmoji` (before `default:` at line 125)
+- [x] Add `case "plan_content_updated": return "Plan progress updated";` to `eventLabel` (before `default:` at line 214)
+- [x] Run `npx tsc --noEmit` to verify
 
 ---
 
@@ -252,9 +252,9 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 |------|-------------|--------|
 | 1 | Plan progress parser + tests | Done |
 | 2 | Rust `PlanContentUpdated` event | Done |
-| 3 | Frontend type updates | Not Started |
-| 4 | Zustand store handling | Not Started |
-| 5 | Event emoji/label | Not Started |
+| 3 | Frontend type updates | Done |
+| 4 | Zustand store handling | Done |
+| 5 | Event emoji/label | Done |
 | 6 | PlanProgressBar component | Not Started |
 | 7 | Integrate into EventsList | Not Started |
 | 8 | Compact bar in RepoCard | Not Started |
