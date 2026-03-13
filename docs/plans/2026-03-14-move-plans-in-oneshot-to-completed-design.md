@@ -19,14 +19,14 @@ The fix is to move the plan to completed **in the Rust backend** (`OneShotRunner
 **Pattern reference:** `src-tauri/src/lib.rs:1435-1506` (`move_plan_to_completed_impl`) — the existing utility that creates the `completed/` dir, moves the file, git adds, commits, and pushes.
 
 **Checklist:**
-- [ ] After implementation phase completes successfully (around line 920, before git finalize at line 936), call `move_plan_to_completed_impl` with:
+- [x] After implementation phase completes successfully (around line 920, before git finalize at line 936), call `move_plan_to_completed_impl` with:
   - `runtime` as the `RuntimeProvider`
   - `&wt_path` as the `working_dir` (the worktree, not the main repo)
   - `&self.config.plans_dir` as the `plans_dir`
   - The filename extracted from `plan_file_path` (just the basename, e.g., split on `/` and take last segment)
-- [ ] Only do this if `self.config.move_plans_to_completed` is true (new config field, see Task 2)
-- [ ] Log success/failure but don't fail the entire oneshot if the move fails — treat it as best-effort (log warning and continue)
-- [ ] Skip the git commit and push within `move_plan_to_completed_impl` for the worktree case since the branch will be pushed in the git finalize step anyway. This means we need a lighter version — just the `mkdir -p` + `mv` + `git add`. See Task 3.
+- [x] Only do this if `self.config.move_plans_to_completed` is true (new config field, see Task 2)
+- [x] Log success/failure but don't fail the entire oneshot if the move fails — treat it as best-effort (log warning and continue)
+- [x] Skip the git commit and push within `move_plan_to_completed_impl` for the worktree case since the branch will be pushed in the git finalize step anyway. This means we need a lighter version — just the `mkdir -p` + `mv` + `git add`. See Task 3.
 
 ### Task 2: Add `move_plans_to_completed` field to `OneShotConfig`
 
@@ -88,7 +88,7 @@ The fix is to move the plan to completed **in the Rust backend** (`OneShotRunner
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 1. Add plan move to OneShotRunner | Not started | Core change |
+| 1. Add plan move to OneShotRunner | **Done** | Calls `move_plan_to_completed_impl(commit=false)` after impl phase, with empty-filename guard and SSH-aware exists check |
 | 2. Add config field | **Done** | Added `move_plans_to_completed: bool` to OneShotConfig, wired through run_oneshot/resume_oneshot and frontend |
 | 3. Lightweight helper | **Done** | Added `commit: bool` param to `move_plan_to_completed_impl` |
 | 4. Remove frontend handler | Not started | Cleanup |
