@@ -1795,7 +1795,7 @@ describe("RepoDetail", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("shows error toast and does not navigate when runOneShot fails", async () => {
+    it("does not navigate when runOneShot returns undefined", async () => {
       const state = setupMockState({ repos: [makeLocalRepo()] });
       state.runOneShot.mockResolvedValue(undefined);
       renderRepoDetail();
@@ -1818,11 +1818,7 @@ describe("RepoDetail", () => {
         expect(state.runOneShot).toHaveBeenCalled();
       });
 
-      // Should show error toast
-      expect(mockToast.error).toHaveBeenCalledWith(
-        "Failed to launch 1-shot",
-      );
-      // Should NOT navigate
+      // Should NOT navigate (toast is shown by the store, not the component)
       expect(mockNavigate).not.toHaveBeenCalled();
     });
   });

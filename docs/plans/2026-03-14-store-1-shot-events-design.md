@@ -164,7 +164,7 @@ If `oneshot-entries.json` gets corrupted or lost, all oneshot history is gone ev
 | 4. History → OneShotDetail navigation | Done | `src/pages/History.tsx` — uses `trace.repo_id` directly for oneshot, not `traceRepoId` |
 | 5. OneShotDetail disk fallback | Done | `src/pages/OneShotDetail.tsx` — loads trace+events from disk when entry not in store |
 | 6. Reconcile entries from disk on startup | Done | `src/store.ts` — reconciles oneshot traces from disk after loadOneShotEntries |
-| 7. Add tests | Not Started | Multiple test files |
+| 7. Add tests | Done | Tests already written in prior tasks; fixed pre-existing RepoDetail test |
 
 ## Priority Order
 
