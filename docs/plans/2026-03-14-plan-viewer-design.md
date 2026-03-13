@@ -170,11 +170,11 @@ Add the "View Plan" button and clickable plan text on the one-shot detail page.
 - Only show triggers after design phase completes (when plan content is available)
 
 **Checklist:**
-- [ ] Add PlanPanel state and component
-- [ ] Make plan info clickable
-- [ ] Add "View Plan" button
-- [ ] Only show after design phase completes
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Add PlanPanel state and component
+- [x] Make plan info clickable
+- [x] Add "View Plan" button
+- [x] Only show after design phase completes
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -206,5 +206,5 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 | 3 | Snapshot plan content in one-shot sessions | Done |
 | 4 | Create PlanPanel component | Done |
 | 5 | Wire PlanPanel into RunDetail | Done |
-| 6 | Wire PlanPanel into OneShotDetail | Not Started |
+| 6 | Wire PlanPanel into OneShotDetail | Done |
 | 7 | Wire PlanPanel into RepoCard | Not Started |

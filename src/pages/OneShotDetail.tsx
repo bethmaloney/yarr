@@ -10,6 +10,7 @@ import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
 import { groupEventsByIteration, maxContextPercent } from "../iteration-groups";
 import { sessionContextColor } from "../context-bar";
 import { Loader2, AlertTriangle, Terminal } from "lucide-react";
+import { PlanPanel } from "../PlanPanel";
 import type { SessionState, SessionTrace, SessionEvent } from "../types";
 
 const defaultSession: SessionState = {
@@ -26,6 +27,8 @@ export default function OneShotDetail() {
   const entries = useAppStore((s) => s.oneShotEntries);
   const sessions = useAppStore((s) => s.sessions);
   const resumeOneShot = useAppStore((s) => s.resumeOneShot);
+
+  const [planPanelOpen, setPlanPanelOpen] = useState(false);
 
   const entry = oneshotId ? entries.get(oneshotId) : undefined;
   const session =
@@ -254,8 +257,27 @@ export default function OneShotDetail() {
             <dd className="m-0 text-sm font-mono">
               {displayTrace.session_id}
             </dd>
+            {session.trace.plan_content && (
+              <>
+                <dt className="sr-only">Actions</dt>
+                <dd className="m-0 text-sm">
+                  <Button variant="outline" size="sm" onClick={() => setPlanPanelOpen(true)}>
+                    View Plan
+                  </Button>
+                </dd>
+              </>
+            )}
           </dl>
         </section>
+      )}
+
+      {session.trace?.plan_content && session.trace?.plan_file && (
+        <PlanPanel
+          open={planPanelOpen}
+          onOpenChange={setPlanPanelOpen}
+          planContent={session.trace.plan_content}
+          planFile={session.trace.plan_file}
+        />
       )}
     </main>
   );

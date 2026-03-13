@@ -45,6 +45,24 @@ vi.mock("../store", () => ({
   useAppStore: mockUseAppStore,
 }));
 
+// Mock PlanPanel to avoid Sheet complexity
+vi.mock("../PlanPanel", () => ({
+  PlanPanel: ({
+    open,
+    planContent,
+    planFile,
+  }: {
+    open: boolean;
+    planContent: string;
+    planFile: string;
+  }) =>
+    open ? (
+      <div data-testid="plan-panel" data-plan-file={planFile}>
+        {planContent}
+      </div>
+    ) : null,
+}));
+
 // Mock EventsList to avoid complexity
 vi.mock("../components/EventsList", () => ({
   EventsList: ({
@@ -1397,6 +1415,177 @@ describe("OneShotDetail", () => {
         "list_traces",
         expect.anything(),
       );
+    });
+  });
+
+  // =========================================================================
+  // 11. PlanPanel integration
+  // =========================================================================
+
+  describe("PlanPanel integration", () => {
+    it('"View Plan" button is visible when trace has plan_content', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: "# My Plan\nDo the thing.",
+                plan_file: "/home/beth/repos/my-project/plan.md",
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.getByRole("button", { name: /view plan/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('"View Plan" button is NOT visible when trace has no plan_content', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: null,
+                plan_file: null,
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.queryByRole("button", { name: /view plan/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('"View Plan" button is NOT visible when session is running', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "running" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: true,
+              trace: makeTrace({
+                plan_content: "# My Plan\nDo the thing.",
+                plan_file: "/home/beth/repos/my-project/plan.md",
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.queryByRole("button", { name: /view plan/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('clicking "View Plan" opens PlanPanel', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: "# My Plan\nDo the thing.",
+                plan_file: "/home/beth/repos/my-project/plan.md",
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // PlanPanel should not be visible before clicking
+      expect(screen.queryByTestId("plan-panel")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /view plan/i }));
+
+      expect(screen.getByTestId("plan-panel")).toBeInTheDocument();
+      expect(screen.getByTestId("plan-panel")).toHaveTextContent(
+        "# My Plan Do the thing.",
+      );
+    });
+
+    it("PlanPanel is not rendered when plan_content is null", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: null,
+                plan_file: null,
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(screen.queryByTestId("plan-panel")).not.toBeInTheDocument();
+    });
+
+    it("PlanPanel receives correct planFile and planContent props", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: "## Step 1\nRefactor the module.",
+                plan_file: "/home/beth/repos/my-project/design.md",
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /view plan/i }));
+
+      const panel = screen.getByTestId("plan-panel");
+      expect(panel).toHaveAttribute(
+        "data-plan-file",
+        "/home/beth/repos/my-project/design.md",
+      );
+      expect(panel).toHaveTextContent("## Step 1 Refactor the module.");
     });
   });
 });
