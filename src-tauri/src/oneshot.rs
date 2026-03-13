@@ -915,6 +915,69 @@ impl OneShotRunner {
             }
 
             self.emit(SessionEvent::ImplementationPhaseComplete);
+
+            // Move plan to completed (best-effort, inside worktree before git finalize)
+            if self.config.move_plans_to_completed {
+                let plan_filename = plan_file_path.rsplit('/').next().unwrap_or(&plan_file_path);
+                if plan_filename.is_empty() {
+                    tracing::warn!(
+                        oneshot_id = %self.config.repo_id,
+                        plan_file = %plan_file_path,
+                        "plan_file_path has no filename component, skipping move to completed"
+                    );
+                } else {
+                    // For local oneshots, check if the plan file exists before attempting
+                    // the move. For SSH oneshots, skip this check since the worktree is on
+                    // a remote machine and local filesystem checks are non-functional.
+                    let should_attempt = if self.config.ssh_host.is_some() {
+                        true
+                    } else {
+                        let plan_abs = wt_path.join(&plan_file_path);
+                        if plan_abs.exists() {
+                            true
+                        } else {
+                            tracing::debug!(
+                                oneshot_id = %self.config.repo_id,
+                                plan_file = %plan_filename,
+                                plan_path = %plan_abs.display(),
+                                "plan file not found in worktree, skipping move to completed"
+                            );
+                            false
+                        }
+                    };
+
+                    if should_attempt {
+                        tracing::info!(
+                            oneshot_id = %self.config.repo_id,
+                            plan_file = %plan_filename,
+                            "moving plan to completed folder"
+                        );
+                        match crate::move_plan_to_completed_impl(
+                            runtime,
+                            &wt_path,
+                            &self.config.plans_dir,
+                            plan_filename,
+                            false, // don't commit — will be included in git finalize
+                        ).await {
+                            Ok(()) => {
+                                tracing::info!(
+                                    oneshot_id = %self.config.repo_id,
+                                    plan_file = %plan_filename,
+                                    "plan moved to completed successfully"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    oneshot_id = %self.config.repo_id,
+                                    plan_file = %plan_filename,
+                                    error = %e,
+                                    "failed to move plan to completed (best-effort, continuing)"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             tracing::info!(oneshot_id = %self.config.repo_id, "skipping implementation phase (resume)");
         }
@@ -5343,6 +5406,165 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, SessionEvent::OneShotComplete)),
             "should not emit OneShotComplete when worktree_path_remote fails with relative path"
+        );
+    }
+
+    // =========================================================================
+    // move_plan_to_completed_impl with commit=false tests (plan-move in run())
+    // =========================================================================
+
+    #[tokio::test]
+    async fn move_plan_to_completed_no_commit_skips_commit_and_push() {
+        // Test that calling move_plan_to_completed_impl with commit=false
+        // only issues mkdir+mv and git add — no git commit or git push.
+        use crate::move_plan_to_completed_impl;
+
+        let runtime = MockRuntime::completing_after(1);
+        let working_dir = std::path::PathBuf::from("/fake/worktree");
+
+        let result = move_plan_to_completed_impl(
+            &runtime,
+            &working_dir,
+            "docs/plans",
+            "2024-03-14-add-login-feature-design.md",
+            false,
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "move_plan_to_completed_impl with commit=false should succeed, got: {:?}",
+            result
+        );
+
+        let commands = runtime.captured_commands.lock().unwrap();
+
+        // Should have exactly 2 commands: mkdir+mv and git add
+        assert_eq!(
+            commands.len(),
+            2,
+            "with commit=false should issue 2 commands (mkdir+mv, git add), got: {:?}",
+            *commands
+        );
+
+        // First command: mkdir -p + mv
+        assert!(
+            commands[0].contains("mkdir -p") && commands[0].contains("mv"),
+            "first command should contain mkdir+mv, got: {}",
+            commands[0]
+        );
+        assert!(
+            commands[0].contains("2024-03-14-add-login-feature-design.md"),
+            "mkdir+mv should reference the plan filename, got: {}",
+            commands[0]
+        );
+
+        // Second command: git add
+        assert!(
+            commands[1].starts_with("git add"),
+            "second command should be git add, got: {}",
+            commands[1]
+        );
+
+        // No commit or push commands should be present
+        for cmd in commands.iter() {
+            assert!(
+                !cmd.starts_with("git commit"),
+                "should NOT issue git commit with commit=false, but found: {}",
+                cmd
+            );
+            assert!(
+                !cmd.contains("git push"),
+                "should NOT issue git push with commit=false, but found: {}",
+                cmd
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_no_commit_git_add_failure_still_returns_ok() {
+        // When the file move succeeds but git add fails, the function should
+        // still return Ok — git operations are best-effort after the mv.
+        use crate::move_plan_to_completed_impl;
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // mkdir+mv succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // git add fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "fatal: not a git repository".to_string(),
+            },
+        ];
+
+        let working_dir = std::path::PathBuf::from("/fake/worktree");
+
+        let result = move_plan_to_completed_impl(
+            &runtime,
+            &working_dir,
+            "docs/plans",
+            "my-plan.md",
+            false,
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "should still succeed when git add fails (best-effort), got: {:?}",
+            result
+        );
+
+        let commands = runtime.captured_commands.lock().unwrap();
+        assert_eq!(
+            commands.len(),
+            2,
+            "should have attempted mkdir+mv and git add, got: {:?}",
+            *commands
+        );
+    }
+
+    #[test]
+    fn plan_filename_extraction_from_path() {
+        // Test the filename extraction logic that will be used in run() to
+        // extract the basename from plan_file_path before passing to
+        // move_plan_to_completed_impl.
+        // The pattern is: plan_file_path.rsplit('/').next()
+
+        let plan_file_path = "docs/plans/2024-03-14-add-login-feature-design.md";
+        let filename = plan_file_path.rsplit('/').next().unwrap();
+        assert_eq!(
+            filename, "2024-03-14-add-login-feature-design.md",
+            "should extract the basename from a plans dir path"
+        );
+
+        // Edge case: no directory separator (just a bare filename)
+        let bare_path = "my-plan.md";
+        let filename = bare_path.rsplit('/').next().unwrap();
+        assert_eq!(
+            filename, "my-plan.md",
+            "should handle a bare filename without directory"
+        );
+
+        // Edge case: trailing slash (would produce empty string)
+        let trailing_slash = "docs/plans/";
+        let filename = trailing_slash.rsplit('/').next().unwrap();
+        assert_eq!(
+            filename, "",
+            "trailing slash should produce an empty basename — caller must guard against this"
+        );
+
+        // Edge case: deeply nested path
+        let deep_path = "a/b/c/d/my-plan.md";
+        let filename = deep_path.rsplit('/').next().unwrap();
+        assert_eq!(
+            filename, "my-plan.md",
+            "should extract basename from deeply nested path"
         );
     }
 }
