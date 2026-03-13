@@ -654,6 +654,226 @@ describe("groupEventsByIteration", () => {
     });
   });
 
+  describe("tool_result merging", () => {
+    it("merges tool_result onto matching tool_use by tool_use_id", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_use_id: "tu_123",
+          tool_input: { command: "echo hi" },
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "tool_result",
+          tool_use_id: "tu_123",
+          tool_output: "some output",
+          _ts: 2000,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 3000,
+          result: makeResult({ cost: 0.1, inputTokens: 100, outputTokens: 50 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      const group = result.iterations[0];
+
+      // The tool_result event should be removed from the group's events
+      const toolResultEvents = group.events.filter(
+        (e) => e.kind === "tool_result",
+      );
+      expect(toolResultEvents).toHaveLength(0);
+
+      // The tool_use event should have tool_output merged onto it
+      const toolUseEvent = group.events.find((e) => e.kind === "tool_use");
+      expect(toolUseEvent).toBeDefined();
+      expect(toolUseEvent!.tool_output).toBe("some output");
+    });
+
+    it("keeps unmatched tool_result in events array", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "tool_result",
+          tool_use_id: "tu_no_match",
+          tool_output: "orphaned output",
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.05, inputTokens: 50, outputTokens: 25 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      const group = result.iterations[0];
+
+      // The unmatched tool_result should remain in the events
+      const toolResultEvents = group.events.filter(
+        (e) => e.kind === "tool_result",
+      );
+      expect(toolResultEvents).toHaveLength(1);
+      expect(toolResultEvents[0].tool_output).toBe("orphaned output");
+    });
+
+    it("merges multiple tool_use/tool_result pairs correctly", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_use_id: "tu_aaa",
+          tool_input: { command: "ls" },
+          _ts: 1100,
+        }),
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Read",
+          tool_use_id: "tu_bbb",
+          tool_input: { file_path: "/foo" },
+          _ts: 1200,
+        }),
+        makeEvent({
+          kind: "tool_result",
+          tool_use_id: "tu_aaa",
+          tool_output: "file1.ts\nfile2.ts",
+          _ts: 1300,
+        }),
+        makeEvent({
+          kind: "tool_result",
+          tool_use_id: "tu_bbb",
+          tool_output: "contents of foo",
+          _ts: 1400,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.2, inputTokens: 200, outputTokens: 100 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      const group = result.iterations[0];
+
+      // Both tool_result events should be removed
+      const toolResultEvents = group.events.filter(
+        (e) => e.kind === "tool_result",
+      );
+      expect(toolResultEvents).toHaveLength(0);
+
+      // Both tool_use events should have their outputs merged
+      const toolUseEvents = group.events.filter((e) => e.kind === "tool_use");
+      expect(toolUseEvents).toHaveLength(2);
+
+      const bashEvent = toolUseEvents.find((e) => e.tool_name === "Bash");
+      expect(bashEvent!.tool_output).toBe("file1.ts\nfile2.ts");
+
+      const readEvent = toolUseEvents.find((e) => e.tool_name === "Read");
+      expect(readEvent!.tool_output).toBe("contents of foo");
+    });
+
+    it("keeps tool_result without tool_use_id in events", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "tool_use",
+          iteration: 1,
+          tool_name: "Bash",
+          tool_use_id: "tu_1",
+          tool_input: { command: "echo hi" },
+          _ts: 1100,
+        }),
+        makeEvent({
+          kind: "tool_result",
+          iteration: 1,
+          tool_name: "Bash",
+          tool_output: "hi",
+          _ts: 1200,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: {},
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+      const group = result.iterations[0];
+      // The tool_result has no tool_use_id, so it should NOT be merged
+      const toolResults = group.events.filter((e) => e.kind === "tool_result");
+      expect(toolResults).toHaveLength(1);
+      // The tool_use should NOT have tool_output merged
+      const toolUse = group.events.find((e) => e.kind === "tool_use");
+      expect(toolUse?.tool_output).toBeUndefined();
+    });
+
+    it("does not merge tool_result across different iteration groups", () => {
+      const events: SessionEvent[] = [
+        // Iteration 1: has a tool_use
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_use_id: "tu_cross",
+          tool_input: { command: "echo hi" },
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.1, inputTokens: 100, outputTokens: 50 }),
+        }),
+        // Iteration 2: has a tool_result with the same tool_use_id
+        makeEvent({ kind: "iteration_started", iteration: 2, _ts: 2500 }),
+        makeEvent({
+          kind: "tool_result",
+          tool_use_id: "tu_cross",
+          tool_output: "late output",
+          _ts: 3000,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 2,
+          _ts: 3500,
+          result: makeResult({ cost: 0.05, inputTokens: 50, outputTokens: 25 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(2);
+
+      // Iteration 1: tool_use should NOT have tool_output merged
+      const group1ToolUse = result.iterations[0].events.find(
+        (e) => e.kind === "tool_use",
+      );
+      expect(group1ToolUse).toBeDefined();
+      expect(group1ToolUse!.tool_output).toBeUndefined();
+
+      // Iteration 2: tool_result should remain (unmatched within its group)
+      const group2ToolResult = result.iterations[1].events.filter(
+        (e) => e.kind === "tool_result",
+      );
+      expect(group2ToolResult).toHaveLength(1);
+      expect(group2ToolResult[0].tool_output).toBe("late output");
+    });
+  });
+
   describe("orphaned events (e.g. after sleep/wake)", () => {
     it("creates an implicit group for events without a preceding iteration_started", () => {
       const events: SessionEvent[] = [

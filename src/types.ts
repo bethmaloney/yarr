@@ -47,6 +47,8 @@ export type SessionEvent = {
   files?: string[];
   error?: string;
   status?: string;
+  tool_output?: string;
+  tool_use_id?: string;
   rate_limit_type?: string;
   plan_content?: string;
   _ts?: number;

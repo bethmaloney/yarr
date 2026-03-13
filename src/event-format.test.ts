@@ -286,6 +286,25 @@ describe("eventLabel", () => {
   });
 });
 
+describe("eventEmoji for tool_result", () => {
+  it("returns clipboard emoji for tool_result", () => {
+    expect(eventEmoji("tool_result")).toBe("\u{1F4CB}");
+  });
+});
+
+describe("eventLabel for tool_result", () => {
+  it("includes tool_name in label for tool_result event", () => {
+    const ev = makeEvent({
+      kind: "tool_result",
+      tool_name: "Bash",
+      tool_use_id: "tu_456",
+      tool_output: "hello world",
+    });
+    const label = eventLabel(ev);
+    expect(label).toContain("Bash");
+  });
+});
+
 describe("relativePath", () => {
   it("strips Unix repo prefix", () => {
     expect(relativePath("/home/user/repo/src/file.ts", "/home/user/repo")).toBe(

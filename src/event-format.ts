@@ -124,6 +124,8 @@ export function eventEmoji(kind: string): string {
       return "\u23F3";
     case "plan_content_updated":
       return "\u{1F4CA}";
+    case "tool_result":
+      return "\u{1F4CB}";
     default:
       return "\u{1F4CB}";
   }
@@ -215,6 +217,8 @@ export function eventLabel(ev: SessionEvent, repoPath?: string): string {
       return `[${ev.iteration}] Rate limited (${ev.status ?? "unknown"}/${ev.rate_limit_type ?? "unknown"})`;
     case "plan_content_updated":
       return "Plan progress updated";
+    case "tool_result":
+      return `[${ev.iteration}] Result: ${ev.tool_name ?? "unknown"}`;
     default:
       return JSON.stringify(ev);
   }

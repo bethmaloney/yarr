@@ -140,9 +140,9 @@ Add the new fields to the TypeScript type and implement the merge logic.
 - Handle edge case: `tool_result` arriving before merge (live streaming) — the merge runs on every render via `useMemo`
 
 **Checklist:**
-- [ ] Add `tool_output` and `tool_use_id` fields to `SessionEvent` type
-- [ ] Add merge pass in `groupEventsByIteration`
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `tool_output` and `tool_use_id` fields to `SessionEvent` type
+- [x] Add merge pass in `groupEventsByIteration`
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -189,9 +189,9 @@ Ensure the event formatter handles `tool_result` events gracefully (for any that
 - These are fallbacks in case a `tool_result` event isn't merged (e.g., if the corresponding `tool_use` was in a different group)
 
 **Checklist:**
-- [ ] Add `tool_result` to `eventEmoji()`
-- [ ] Add `tool_result` to `eventLabel()`
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `tool_result` to `eventEmoji()`
+- [x] Add `tool_result` to `eventLabel()`
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -234,9 +234,9 @@ Test the merge logic in iteration-groups.ts.
 - Test that non-Bash/Agent `tool_result` events (shouldn't exist, but defensive) are handled
 
 **Checklist:**
-- [ ] Add test for successful merge of tool_result onto tool_use
-- [ ] Add test for unmatched tool_result remaining visible
-- [ ] Verify: `npm test`
+- [x] Add test for successful merge of tool_result onto tool_use
+- [x] Add test for unmatched tool_result remaining visible
+- [x] Verify: `npm test`
 
 ---
 
@@ -246,8 +246,8 @@ Test the merge logic in iteration-groups.ts.
 |------|-------------|--------|
 | 1 | Add ToolResult variant and ID tracking | Done |
 | 2 | Parse StreamEvent::User and emit ToolResult | Done |
-| 3 | Update frontend types and event merging | Not Started |
+| 3 | Update frontend types and event merging | Done |
 | 4 | Render tool output in IterationGroup | Not Started |
-| 5 | Update event formatting for tool_result | Not Started |
+| 5 | Update event formatting for tool_result | Done |
 | 6 | Rust unit tests | Done |
-| 7 | Frontend tests for event merging | Not Started |
+| 7 | Frontend tests for event merging | Done |
