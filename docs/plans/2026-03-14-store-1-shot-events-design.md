@@ -118,9 +118,9 @@ If `oneshot-entries.json` gets corrupted or lost, all oneshot history is gone ev
 
 ### Checklist
 
-- [ ] After `loadOneShotEntries()` completes, call `list_traces({ repoId: null })` to get all traces.
-- [ ] Filter for traces where `session_type === "one_shot"` and `repo_id` starts with `"oneshot-"`.
-- [ ] For each oneshot trace not already in `oneShotEntries`, create a stub entry:
+- [x] After `loadOneShotEntries()` completes, call `list_traces({ repoId: null })` to get all traces.
+- [x] Filter for traces where `session_type === "one_shot"` and `repo_id` starts with `"oneshot-"`.
+- [x] For each oneshot trace not already in `oneShotEntries`, create a stub entry:
   ```typescript
   const stub: OneShotEntry = {
     id: trace.repo_id!,
@@ -135,8 +135,8 @@ If `oneshot-entries.json` gets corrupted or lost, all oneshot history is gone ev
     session_id: trace.session_id,
   };
   ```
-- [ ] Persist the updated entries to `oneShotStore`.
-- [ ] This is a best-effort reconciliation — the stub won't have `worktreePath` or `branch`, but it gives visibility into historical oneshots.
+- [x] Persist the updated entries to `oneShotStore`.
+- [x] This is a best-effort reconciliation — the stub won't have `worktreePath` or `branch`, but it gives visibility into historical oneshots.
 
 ---
 
@@ -163,7 +163,7 @@ If `oneshot-entries.json` gets corrupted or lost, all oneshot history is gone ev
 | 3. Remove aggressive pruning | Done | `src/store.ts` — pruning block removed |
 | 4. History → OneShotDetail navigation | Done | `src/pages/History.tsx` — uses `trace.repo_id` directly for oneshot, not `traceRepoId` |
 | 5. OneShotDetail disk fallback | Done | `src/pages/OneShotDetail.tsx` — loads trace+events from disk when entry not in store |
-| 6. Reconcile entries from disk on startup | Not Started | `src/store.ts` — lower priority |
+| 6. Reconcile entries from disk on startup | Done | `src/store.ts` — reconciles oneshot traces from disk after loadOneShotEntries |
 | 7. Add tests | Not Started | Multiple test files |
 
 ## Priority Order

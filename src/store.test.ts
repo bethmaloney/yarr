@@ -3189,3 +3189,240 @@ describe("resumeOneShot", () => {
     );
   });
 });
+
+// ===========================================================================
+// Oneshot entry reconciliation from disk traces
+// ===========================================================================
+
+describe("oneshot entry reconciliation from disk traces", () => {
+  function setupInvokeForReconciliation(
+    traces: SessionTrace[],
+    latestTraces: Record<string, SessionTrace> = {},
+  ) {
+    mockInvoke.mockImplementation(
+      (cmd: string, _args?: Record<string, unknown>) => {
+        if (cmd === "list_traces") return Promise.resolve(traces);
+        if (cmd === "get_trace_events") return Promise.resolve([]);
+        if (cmd === "list_latest_traces") return Promise.resolve(latestTraces);
+        return Promise.resolve(undefined);
+      },
+    );
+  }
+
+  it("creates stub entries for oneshot traces not in oneShotEntries", async () => {
+    const trace = makeTrace({
+      session_id: "sess-xyz",
+      repo_id: "oneshot-xyz",
+      session_type: "one_shot",
+      prompt: "Fix the login bug",
+      outcome: "completed",
+      start_time: "2026-03-10T12:00:00Z",
+    });
+    setupInvokeForReconciliation([trace]);
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-xyz")).toBe(true);
+    });
+
+    const entry = useAppStore.getState().oneShotEntries.get("oneshot-xyz")!;
+    expect(entry.id).toBe("oneshot-xyz");
+    expect(entry.parentRepoId).toBe("unknown");
+    expect(entry.parentRepoName).toBe("Unknown");
+    expect(entry.title).toBe("Fix the login bug");
+    expect(entry.prompt).toBe("Fix the login bug");
+    expect(entry.model).toBe("unknown");
+    expect(entry.mergeStrategy).toBe("branch");
+    expect(entry.status).toBe("completed");
+    expect(entry.startedAt).toBe(new Date("2026-03-10T12:00:00Z").getTime());
+    expect(entry.session_id).toBe("sess-xyz");
+  });
+
+  it("does not overwrite existing entries", async () => {
+    const existingEntry = makeOneShotEntry({
+      id: "oneshot-abc",
+      title: "Original title",
+      prompt: "Original prompt",
+      status: "completed",
+      session_id: "orig-sess",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", existingEntry]]);
+
+    const trace = makeTrace({
+      session_id: "different-sess",
+      repo_id: "oneshot-abc",
+      session_type: "one_shot",
+      prompt: "Different prompt from disk",
+      outcome: "failed",
+    });
+    setupInvokeForReconciliation([trace]);
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-abc")).toBe(true);
+    });
+
+    const entry = useAppStore.getState().oneShotEntries.get("oneshot-abc")!;
+    expect(entry.title).toBe("Original title");
+    expect(entry.prompt).toBe("Original prompt");
+    expect(entry.status).toBe("completed");
+  });
+
+  it("filters out non-oneshot traces", async () => {
+    const ralphTrace = makeTrace({
+      session_id: "sess-ralph",
+      repo_id: "repo-1",
+      session_type: "ralph",
+      prompt: "Ralph session",
+    });
+    const noOneshotPrefix = makeTrace({
+      session_id: "sess-other",
+      repo_id: "regular-repo",
+      session_type: "one_shot",
+      prompt: "No oneshot prefix",
+    });
+    const nullRepoId = makeTrace({
+      session_id: "sess-null",
+      repo_id: null,
+      session_type: "one_shot",
+      prompt: "Null repo_id",
+    });
+    setupInvokeForReconciliation([ralphTrace, noOneshotPrefix, nullRepoId]);
+
+    useAppStore.getState().initialize();
+
+    // Wait for list_traces to be called, then verify no entries were created
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("list_traces", { repoId: null });
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.size).toBe(0);
+  });
+
+  it("handles completed and failed outcomes", async () => {
+    const completedTrace = makeTrace({
+      session_id: "sess-completed",
+      repo_id: "oneshot-completed",
+      session_type: "one_shot",
+      prompt: "Completed task",
+      outcome: "completed",
+      start_time: "2026-03-10T12:00:00Z",
+    });
+    const failedTrace = makeTrace({
+      session_id: "sess-failed",
+      repo_id: "oneshot-failed",
+      session_type: "one_shot",
+      prompt: "Failed task",
+      outcome: "failed",
+      start_time: "2026-03-10T13:00:00Z",
+    });
+    setupInvokeForReconciliation([completedTrace, failedTrace]);
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-completed")).toBe(true);
+      expect(entries.has("oneshot-failed")).toBe(true);
+    });
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.get("oneshot-completed")!.status).toBe("completed");
+    expect(entries.get("oneshot-failed")!.status).toBe("failed");
+  });
+
+  it("persists reconciled entries to oneShotStore", async () => {
+    const trace = makeTrace({
+      session_id: "sess-persist",
+      repo_id: "oneshot-persist",
+      session_type: "one_shot",
+      prompt: "Persist me",
+      outcome: "completed",
+      start_time: "2026-03-10T12:00:00Z",
+    });
+    setupInvokeForReconciliation([trace]);
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-persist")).toBe(true);
+    });
+
+    // Verify persistence to mockData (simulated LazyStore)
+    await vi.waitFor(() => {
+      const persisted = mockData.get("oneshot-entries") as
+        | [string, OneShotEntry][]
+        | undefined;
+      expect(persisted).toBeDefined();
+      const persistedMap = new Map(persisted);
+      expect(persistedMap.has("oneshot-persist")).toBe(true);
+    });
+  });
+
+  it("handles list_traces failure gracefully", async () => {
+    mockInvoke.mockImplementation(
+      (cmd: string, _args?: Record<string, unknown>) => {
+        if (cmd === "list_traces")
+          return Promise.reject(new Error("disk error"));
+        if (cmd === "get_trace_events") return Promise.resolve([]);
+        if (cmd === "list_latest_traces") return Promise.resolve({});
+        return Promise.resolve(undefined);
+      },
+    );
+
+    // Pre-populate an existing entry
+    const existingEntry = makeOneShotEntry({
+      id: "oneshot-existing",
+      status: "completed",
+    });
+    mockData.set("oneshot-entries", [["oneshot-existing", existingEntry]]);
+
+    useAppStore.getState().initialize();
+
+    // Wait for list_traces to be called (it will reject), then flush
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("list_traces", { repoId: null });
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Existing entries should be preserved, no crash
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.has("oneshot-existing")).toBe(true);
+    expect(entries.get("oneshot-existing")!.status).toBe("completed");
+  });
+
+  it("truncates long prompts to 80 chars for title", async () => {
+    const longPrompt =
+      "A".repeat(100) +
+      " - this part should be truncated because the title is limited to 80 characters";
+    const trace = makeTrace({
+      session_id: "sess-long",
+      repo_id: "oneshot-long",
+      session_type: "one_shot",
+      prompt: longPrompt,
+      outcome: "completed",
+      start_time: "2026-03-10T12:00:00Z",
+    });
+    setupInvokeForReconciliation([trace]);
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-long")).toBe(true);
+    });
+
+    const entry = useAppStore.getState().oneShotEntries.get("oneshot-long")!;
+    expect(entry.title.length).toBe(80);
+    expect(entry.title).toBe(longPrompt.slice(0, 80));
+    // The full prompt should be preserved
+    expect(entry.prompt).toBe(longPrompt);
+  });
+});

@@ -216,6 +216,42 @@ export const useAppStore = create<AppStore>((set, get) => {
               console.warn("Failed to load one-shot trace for", entryId, e);
             });
         }
+
+        // Reconcile: discover oneshot traces on disk not in oneShotEntries
+        invoke<SessionTrace[]>("list_traces", { repoId: null })
+          .then((traces) => {
+            if (!traces || traces.length === 0) return;
+            const currentEntries = get().oneShotEntries;
+            const reconciled = new Map(currentEntries);
+            let changed = false;
+            for (const trace of traces) {
+              if (
+                trace.session_type !== "one_shot" ||
+                !trace.repo_id ||
+                !trace.repo_id.startsWith("oneshot-") ||
+                reconciled.has(trace.repo_id)
+              ) continue;
+              const stub: OneShotEntry = {
+                id: trace.repo_id,
+                parentRepoId: "unknown",
+                parentRepoName: "Unknown",
+                title: trace.prompt.slice(0, 80),
+                prompt: trace.prompt,
+                model: "unknown",
+                mergeStrategy: "branch",
+                status: trace.outcome === "completed" ? "completed" : "failed",
+                startedAt: new Date(trace.start_time).getTime(),
+                session_id: trace.session_id,
+              };
+              reconciled.set(trace.repo_id, stub);
+              changed = true;
+            }
+            if (changed) {
+              set({ oneShotEntries: reconciled });
+              oneShotStore.set("oneshot-entries", [...reconciled]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist reconciled oneshot entries:", e));
+            }
+          })
+          .catch((e) => console.warn("[store] failed to reconcile oneshot traces from disk:", e));
       }).catch((e: unknown) => console.warn("[store] failed to load oneshot entries:", e));
 
       // 3. Load latest traces
