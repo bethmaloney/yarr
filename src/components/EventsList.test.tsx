@@ -317,7 +317,7 @@ describe("EventsList", () => {
 
     // Find the event button
     const label = eventLabel(events[0]!);
-    const button = screen.getByText(label).closest("button")!;
+    const button = screen.getByText(label).closest("[role='button']")!;
     const li = button.closest("li")!;
 
     // Initially not expanded
@@ -353,7 +353,7 @@ describe("EventsList", () => {
     render(<EventsList events={events} />);
 
     const label = eventLabel(events[1]!);
-    const button = screen.getByText(label).closest("button")!;
+    const button = screen.getByText(label).closest("[role='button']")!;
     const li = button.closest("li")!;
 
     // Initially not expanded
@@ -412,7 +412,7 @@ describe("EventsList", () => {
       new RegExp(gitSyncLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     );
     if (btn) {
-      const button = btn.closest("button");
+      const button = btn.closest("[role='button']");
       if (button) fireEvent.click(button);
 
       // Now the error detail should be visible
@@ -441,7 +441,7 @@ describe("EventsList", () => {
 
     // Click to expand the session_started event
     const label = eventLabel(events[0]!);
-    const button = screen.getByText(label).closest("button")!;
+    const button = screen.getByText(label).closest("[role='button']")!;
     fireEvent.click(button);
 
     // Verify the li has expanded class
@@ -471,7 +471,7 @@ describe("EventsList", () => {
 
     // Click to expand session_complete
     const label = eventLabel(events[1]!);
-    const button = screen.getByText(label).closest("button")!;
+    const button = screen.getByText(label).closest("[role='button']")!;
     fireEvent.click(button);
 
     const preElements = container.querySelectorAll("pre.tool-input-detail");

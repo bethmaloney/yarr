@@ -62,6 +62,7 @@ import {
   Square,
   Terminal,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import type { Check, SessionState } from "../types";
 import type { RepoConfig } from "../repos";
@@ -124,6 +125,7 @@ export default function RepoDetail() {
   const gitStatus = gitStatusEntry?.status ?? null;
   const [branches, setBranches] = useState<string[]>([]);
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
+  const [fastForwarding, setFastForwarding] = useState(false);
   const [branchSearch, setBranchSearch] = useState("");
 
   // Plan state
@@ -142,6 +144,8 @@ export default function RepoDetail() {
     excerpt: string;
   } | null>(null);
 
+  const [effortLevel, setEffortLevel] = useState("medium");
+
   // 1-shot form state
   const [oneShotOpen, setOneShotOpen] = useState(false);
   const [oneShotTitle, setOneShotTitle] = useState("");
@@ -149,6 +153,8 @@ export default function RepoDetail() {
   const [oneShotModel, setOneShotModel] = useState("");
   const [oneShotMergeStrategy, setOneShotMergeStrategy] =
     useState("merge_to_main");
+  const [oneShotEffortLevel, setOneShotEffortLevel] = useState("medium");
+  const [oneShotDesignEffortLevel, setOneShotDesignEffortLevel] = useState("high");
   const [oneShotSubmitting, setOneShotSubmitting] = useState(false);
 
   // Connection test state
@@ -166,6 +172,7 @@ export default function RepoDetail() {
     setNameInput(repo.name);
     setEditingName(false);
     setModel(repo.model);
+    setEffortLevel(repo.effortLevel ?? "medium");
     setMaxIterations(repo.maxIterations);
     setCompletionSignal(repo.completionSignal);
     setEnvVars(
@@ -184,6 +191,8 @@ export default function RepoDetail() {
     setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
     setGitSyncPrompt(repo.gitSync?.conflictPrompt ?? "");
     setOneShotModel(repo.model);
+    setOneShotDesignEffortLevel(repo.designEffortLevel ?? "high");
+    setOneShotEffortLevel(repo.effortLevel ?? "medium");
   }, [repo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build repo payload for invoke calls
@@ -244,7 +253,8 @@ export default function RepoDetail() {
           setPreviewLoading(false);
         }
       })
-      .catch(() => {
+      .catch((e) => {
+        console.warn("[RepoDetail] failed to load file preview:", e);
         if (currentFile === planFile) {
           setPreviewContent("");
           setPreviewLoading(false);
@@ -281,7 +291,8 @@ export default function RepoDetail() {
           setSessionPlanParsed(parsePlanPreview(content));
         }
       })
-      .catch(() => {
+      .catch((e) => {
+        console.warn("[RepoDetail] failed to load file preview:", e);
         if (currentPath === sessionPlanFile) {
           setSessionPlanParsed(null);
         }
@@ -371,6 +382,7 @@ export default function RepoDetail() {
     updateRepo({
       ...repo!,
       model,
+      effortLevel,
       maxIterations,
       completionSignal,
       envVars: envVarsRecord,
@@ -463,10 +475,12 @@ export default function RepoDetail() {
       unlistenComplete();
     };
 
+    console.debug("[RepoDetail] invoking test_ssh_connection_steps", { sshHost: ssh.sshHost });
     invoke("test_ssh_connection_steps", {
       sshHost: ssh.sshHost,
       remotePath: ssh.remotePath,
-    }).catch(() => {
+    }).catch((e) => {
+      console.warn("[RepoDetail] SSH connection test failed:", e);
       setConnectionTest((prev) => (prev ? { ...prev, running: false } : null));
       unlistenStep();
       unlistenComplete();
@@ -476,12 +490,14 @@ export default function RepoDetail() {
   async function fetchBranches() {
     const payload = buildRepoPayload();
     if (!payload) return;
+    console.debug("[RepoDetail] invoking list_local_branches");
     try {
       const result = await invoke<string[]>("list_local_branches", {
         repo: payload,
       });
       setBranches(result);
-    } catch {
+    } catch (e) {
+      console.warn("[RepoDetail] failed to list branches:", e);
       setBranches([]);
     }
   }
@@ -489,15 +505,18 @@ export default function RepoDetail() {
   async function handleFastForward() {
     const payload = buildRepoPayload();
     if (!payload) return;
+    setFastForwarding(true);
     try {
       await invoke("fast_forward_branch", { repo: payload });
+      if (repoId && repo) await fetchGitStatus(repoId, repo, false);
       setBranchDropdownOpen(false);
       setBranchSearch("");
-      if (repoId && repo) fetchGitStatus(repoId, repo, true);
       toast.success("Branch fast-forwarded");
     } catch (e) {
       console.error("Failed to fast-forward:", e);
       toast.error(`Failed to fast-forward: ${e}`);
+    } finally {
+      setFastForwarding(false);
     }
   }
 
@@ -526,9 +545,13 @@ export default function RepoDetail() {
         oneShotPrompt.trim(),
         oneShotModel,
         oneShotMergeStrategy,
+        oneShotEffortLevel,
+        oneShotDesignEffortLevel,
       );
       if (oneshotId) {
         navigate(`/oneshot/${oneshotId}`);
+      } else {
+        toast.error("Failed to launch 1-shot");
       }
     } finally {
       setOneShotSubmitting(false);
@@ -690,8 +713,16 @@ export default function RepoDetail() {
                           size="sm"
                           className="w-full"
                           onClick={handleFastForward}
+                          disabled={fastForwarding}
                         >
-                          Fast-forward
+                          {fastForwarding ? (
+                            <>
+                              <Loader2 className="size-3.5 animate-spin" />
+                              Fast-forwarding…
+                            </>
+                          ) : (
+                            "Fast-forward"
+                          )}
                         </Button>
                       </div>
                     )}
@@ -860,6 +891,20 @@ export default function RepoDetail() {
                     disabled={session.running}
                     className="font-mono"
                   />
+                </Label>
+                <Label className="flex flex-col gap-1">
+                  Effort Level
+                  <Select value={effortLevel} onValueChange={setEffortLevel} disabled={session.running}>
+                    <SelectTrigger className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">low</SelectItem>
+                      <SelectItem value="medium">medium</SelectItem>
+                      <SelectItem value="high">high</SelectItem>
+                      <SelectItem value="max">max</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </Label>
                 <Label className="flex flex-col gap-1">
                   Max Iterations
@@ -1383,7 +1428,6 @@ export default function RepoDetail() {
                 size="lg"
                 variant="secondary"
                 onClick={() => setOneShotOpen(!oneShotOpen)}
-                disabled={session.running}
               >
                 1-Shot
               </Button>
@@ -1395,7 +1439,7 @@ export default function RepoDetail() {
             </>
           )}
         </div>
-        {oneShotOpen && !session.running && (
+        {oneShotOpen && (
           <div className="mt-4 pt-4 border-t border-border flex flex-col gap-3">
             <div>
               <Label
@@ -1441,6 +1485,38 @@ export default function RepoDetail() {
                 disabled={oneShotSubmitting}
                 className="font-mono"
               />
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground">
+                Design Effort Level
+              </Label>
+              <Select value={oneShotDesignEffortLevel} onValueChange={setOneShotDesignEffortLevel} disabled={oneShotSubmitting}>
+                <SelectTrigger className="font-mono">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">low</SelectItem>
+                  <SelectItem value="medium">medium</SelectItem>
+                  <SelectItem value="high">high</SelectItem>
+                  <SelectItem value="max">max</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground">
+                Implementation Effort Level
+              </Label>
+              <Select value={oneShotEffortLevel} onValueChange={setOneShotEffortLevel} disabled={oneShotSubmitting}>
+                <SelectTrigger className="font-mono">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">low</SelectItem>
+                  <SelectItem value="medium">medium</SelectItem>
+                  <SelectItem value="high">high</SelectItem>
+                  <SelectItem value="max">max</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-sm text-muted-foreground">

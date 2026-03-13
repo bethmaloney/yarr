@@ -44,6 +44,8 @@ export type SessionEvent = {
   reason?: string;
   files?: string[];
   error?: string;
+  status?: string;
+  rate_limit_type?: string;
   _ts?: number;
 };
 
@@ -52,6 +54,7 @@ export type SessionTrace = {
   repo_path: string;
   prompt: string;
   plan_file: string | null;
+  plan_content?: string | null;
   repo_id?: string | null;
   session_type?: string;
   start_time: string;
@@ -99,6 +102,8 @@ export type OneShotEntry = {
   title: string;
   prompt: string;
   model: string;
+  effortLevel: string;
+  designEffortLevel: string;
   mergeStrategy: string;
   status: "running" | "completed" | "failed";
   startedAt: number;

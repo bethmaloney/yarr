@@ -4,6 +4,7 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
+use tracing::instrument;
 
 use super::{
     get_or_init_local_env, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess,
@@ -37,6 +38,7 @@ impl RuntimeProvider for LocalRuntime {
         super::get_local_env_warning()
     }
 
+    #[instrument(skip(self, invocation), fields(working_dir = %invocation.working_dir.display()))]
     async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess> {
         let env = self.resolve_env().await?;
         let prompt = invocation.prompt.clone();
@@ -60,6 +62,11 @@ impl RuntimeProvider for LocalRuntime {
             args.push(model.clone());
         }
 
+        if let Some(ref effort) = invocation.effort_level {
+            args.push("--effort".to_string());
+            args.push(effort.clone());
+        }
+
         args.extend(invocation.extra_args.clone());
 
         let mut cmd = Command::new(&self.claude_bin);
@@ -72,12 +79,18 @@ impl RuntimeProvider for LocalRuntime {
         cmd.envs(&env);
         cmd.envs(&invocation.env_vars);
         let mut child = cmd.spawn()?;
+        tracing::info!(pid = child.id(), "claude process spawned");
 
         // Pipe prompt via stdin, then close it
         let mut stdin = child.stdin.take().expect("stdin was piped");
         let stdin_task = tokio::spawn(async move {
-            let _ = stdin.write_all(prompt.as_bytes()).await;
-            let _ = stdin.shutdown().await;
+            tracing::debug!(bytes = prompt.len(), "writing prompt to stdin");
+            if let Err(e) = stdin.write_all(prompt.as_bytes()).await {
+                tracing::warn!("failed to write prompt to stdin: {}", e);
+            }
+            if let Err(e) = stdin.shutdown().await {
+                tracing::warn!("failed to shutdown stdin: {}", e);
+            }
         });
 
         let stdout = child.stdout.take().expect("stdout was piped");
@@ -104,29 +117,37 @@ impl RuntimeProvider for LocalRuntime {
                     }
                 }
             }
+            tracing::debug!("stdout reader finished");
         });
 
         // Spawn a task that waits for process exit
         let completion = tokio::spawn(async move {
             let _ = stdin_task.await;
+            tracing::debug!("stdin task completed");
 
             let mut stderr_buf = String::new();
             let mut stderr_reader = BufReader::new(stderr);
             let mut stderr_line = String::new();
+            let mut stderr_line_count: usize = 0;
             while let Ok(n) = stderr_reader.read_line(&mut stderr_line).await {
                 if n == 0 {
                     break;
                 }
                 stderr_buf.push_str(&stderr_line);
                 stderr_line.clear();
+                stderr_line_count += 1;
             }
+            tracing::debug!(lines = stderr_line_count, "stderr collection completed");
 
             let status = child.wait().await?;
+            let exit_code = status.code().unwrap_or(-1);
+            tracing::debug!(exit_code = exit_code, "child process wait completed");
             let _ = reader_task.await;
             let elapsed = start.elapsed();
 
+            tracing::debug!(exit_code = exit_code, wall_time_ms = elapsed.as_millis() as u64, "process completed successfully");
             Ok(ProcessExit {
-                exit_code: status.code().unwrap_or(-1),
+                exit_code,
                 wall_time_ms: elapsed.as_millis() as u64,
                 stderr: stderr_buf,
             })
@@ -140,6 +161,7 @@ impl RuntimeProvider for LocalRuntime {
         })
     }
 
+    #[instrument(skip(self))]
     async fn health_check(&self) -> Result<()> {
         let env = self.resolve_env().await?;
         tracing::debug!(claude_bin = %self.claude_bin, "checking for claude binary");
@@ -160,6 +182,7 @@ impl RuntimeProvider for LocalRuntime {
         Ok(())
     }
 
+    #[instrument(skip(self, command), fields(timeout_secs = timeout.as_secs()))]
     async fn run_command(
         &self,
         command: &str,

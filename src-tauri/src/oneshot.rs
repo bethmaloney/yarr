@@ -6,11 +6,14 @@ use std::time::Duration;
 use anyhow::Result;
 use chrono::Utc;
 use tokio_util::sync::CancellationToken;
+use tracing::instrument;
 
 use crate::git_merge::{git_merge_push, GitMergeConfig, GitMergeEvent};
 use crate::prompt;
+use crate::runtime::ssh::SshRuntime;
 use crate::runtime::RuntimeProvider;
 use crate::session::{AbortRegistry, GitSyncConfig, OnSessionEvent, SessionConfig, SessionEvent, SessionRunner};
+use crate::ssh_orchestrator::SshSessionOrchestrator;
 use crate::trace::{SessionOutcome, SessionTrace, TraceCollector};
 
 /// Strategy for integrating 1-shot work back into the repository.
@@ -29,6 +32,8 @@ pub struct OneShotConfig {
     pub title: String,
     pub prompt: String,
     pub model: String,
+    pub effort_level: String,
+    pub design_effort_level: String,
     pub merge_strategy: MergeStrategy,
     pub env_vars: HashMap<String, String>,
     pub max_iterations: u32,
@@ -36,6 +41,8 @@ pub struct OneShotConfig {
     pub checks: Vec<crate::session::Check>,
     pub git_sync: Option<crate::session::GitSyncConfig>,
     pub plans_dir: String,
+    pub move_plans_to_completed: bool,
+    pub ssh_host: Option<String>,
 }
 
 /// State for resuming an interrupted one-shot session.
@@ -139,6 +146,41 @@ pub fn worktree_path(repo_id: &str, short_id: &str) -> PathBuf {
     ))
 }
 
+/// Compute the worktree path on a remote machine via SSH.
+///
+/// Runs `echo $HOME` on the remote to discover the home directory, then
+/// returns `<home>/.yarr/worktrees/<repo_id>-oneshot-<short_id>`.
+pub async fn worktree_path_remote(
+    runtime: &dyn RuntimeProvider,
+    repo_id: &str,
+    short_id: &str,
+    repo_path: &std::path::Path,
+) -> Result<PathBuf> {
+    let output = runtime
+        .run_command("echo $HOME", repo_path, Duration::from_secs(10))
+        .await?;
+    if output.exit_code != 0 {
+        return Err(anyhow::anyhow!(
+            "Failed to resolve remote home directory: {}",
+            output.stderr
+        ));
+    }
+    let home = output.stdout.trim();
+    if home.is_empty() {
+        return Err(anyhow::anyhow!("Remote $HOME is empty"));
+    }
+    if !home.starts_with('/') {
+        return Err(anyhow::anyhow!(
+            "Remote $HOME is not an absolute path: {}",
+            home
+        ));
+    }
+    tracing::debug!(home, "Resolved remote home directory");
+    Ok(PathBuf::from(format!(
+        "{home}/.yarr/worktrees/{repo_id}-oneshot-{short_id}"
+    )))
+}
+
 /// Get the Unix home directory path.
 /// On Windows, queries WSL for `$HOME`. On Unix, uses the `HOME` env var.
 fn resolve_unix_home() -> String {
@@ -162,6 +204,65 @@ fn resolve_unix_home() -> String {
 /// Compute the branch name: `oneshot/<slug>-<short_id>`
 pub fn branch_name(slug: &str, short_id: &str) -> String {
     format!("oneshot/{}-{}", slug, short_id)
+}
+
+/// Detect the default branch for the remote `origin`.
+///
+/// Tries `git symbolic-ref refs/remotes/origin/HEAD` first, then falls back
+/// to `git rev-parse --verify origin/main` and `origin/master`.
+/// Returns a ref like `"origin/main"` or `"origin/master"`.
+async fn detect_default_branch(runtime: &dyn RuntimeProvider, repo_path: &std::path::Path) -> String {
+    // Try symbolic-ref first
+    if let Ok(output) = runtime
+        .run_command(
+            "git symbolic-ref refs/remotes/origin/HEAD",
+            repo_path,
+            Duration::from_secs(30),
+        )
+        .await
+    {
+        if output.exit_code == 0 && !output.stdout.trim().is_empty() {
+            let trimmed = output.stdout.trim();
+            if let Some(rest) = trimmed.strip_prefix("refs/remotes/") {
+                tracing::info!(detected_branch = %rest, "detected default branch via symbolic-ref");
+                return rest.to_string();
+            }
+        }
+    }
+
+    // Fallback: try origin/main
+    if let Ok(output) = runtime
+        .run_command(
+            "git rev-parse --verify origin/main",
+            repo_path,
+            Duration::from_secs(30),
+        )
+        .await
+    {
+        if output.exit_code == 0 {
+            tracing::info!("detected default branch via rev-parse: origin/main");
+            return "origin/main".to_string();
+        }
+    }
+
+    // Fallback: try origin/master
+    if let Ok(output) = runtime
+        .run_command(
+            "git rev-parse --verify origin/master",
+            repo_path,
+            Duration::from_secs(30),
+        )
+        .await
+    {
+        if output.exit_code == 0 {
+            tracing::info!("detected default branch via rev-parse: origin/master");
+            return "origin/master".to_string();
+        }
+    }
+
+    // All failed, default to origin/main
+    tracing::debug!("all detection methods failed, defaulting to origin/main");
+    "origin/main".to_string()
 }
 
 /// Detect which phases have been completed by scanning persisted events.
@@ -214,6 +315,8 @@ pub struct OneShotRunner {
     accumulated_events: Arc<std::sync::Mutex<Vec<SessionEvent>>>,
     session_id: Arc<std::sync::Mutex<Option<String>>>,
     resume_state: Option<ResumeState>,
+    pub(crate) ssh_runtime: Option<SshRuntime>,
+    pub(crate) reconnect_notify: Arc<tokio::sync::Notify>,
 }
 
 impl OneShotRunner {
@@ -231,6 +334,8 @@ impl OneShotRunner {
             accumulated_events: Arc::new(std::sync::Mutex::new(Vec::new())),
             session_id: Arc::new(std::sync::Mutex::new(None)),
             resume_state: None,
+            ssh_runtime: None,
+            reconnect_notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -247,6 +352,20 @@ impl OneShotRunner {
     pub fn with_resume_state(mut self, state: ResumeState) -> Self {
         self.resume_state = Some(state);
         self
+    }
+
+    pub fn with_ssh_runtime(mut self, runtime: SshRuntime) -> Self {
+        self.ssh_runtime = Some(runtime);
+        self
+    }
+
+    pub fn with_reconnect_notify(mut self, notify: Arc<tokio::sync::Notify>) -> Self {
+        self.reconnect_notify = notify;
+        self
+    }
+
+    pub fn reconnect_notify(&self) -> Arc<tokio::sync::Notify> {
+        self.reconnect_notify.clone()
     }
 
     pub fn with_session_id(self, id: String) -> Self {
@@ -287,6 +406,60 @@ impl OneShotRunner {
         })
     }
 
+    /// Run a phase (design or implementation) routing to either local `SessionRunner`
+    /// or remote `SshSessionOrchestrator` depending on whether `ssh_runtime` is set.
+    ///
+    /// Returns the collected phase-specific events.
+    async fn run_phase(
+        &self,
+        config: SessionConfig,
+        phase_collector: TraceCollector,
+        runtime: &dyn RuntimeProvider,
+        trace: &mut SessionTrace,
+    ) -> Result<Vec<SessionEvent>> {
+        let phase_events: Arc<std::sync::Mutex<Vec<SessionEvent>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let phase_events_clone = phase_events.clone();
+
+        let forwarder = self.make_event_forwarder();
+        let phase_cb: OnSessionEvent = Box::new(move |event: &SessionEvent| {
+            phase_events_clone.lock().unwrap().push(event.clone());
+            forwarder(event);
+        });
+
+        if let Some(ref ssh_rt) = self.ssh_runtime {
+            // SSH path: create a new SshRuntime instance (SshRuntime is not Clone)
+            let ssh_runtime_new = SshRuntime::new(
+                &ssh_rt.ssh_host,
+                &ssh_rt.remote_path,
+                ssh_rt.env_cache.clone(),
+            );
+            let orchestrator =
+                SshSessionOrchestrator::new(ssh_runtime_new, config, phase_collector, self.cancel_token.clone())
+                    .with_reconnect_notify(self.reconnect_notify.clone())
+                    .on_event(phase_cb);
+
+            let ssh_trace = orchestrator.run().await?;
+
+            // Copy relevant trace data from SSH trace into the caller's trace
+            trace.outcome = ssh_trace.outcome;
+            trace.failure_reason = ssh_trace.failure_reason;
+        } else {
+            // Local path
+            let runner = SessionRunner::new(config, phase_collector, self.cancel_token.clone())
+                .on_event(phase_cb);
+            let runner = if let Some(ref registry) = self.abort_registry {
+                runner.abort_registry(registry.clone())
+            } else {
+                runner
+            };
+            runner.run_with_trace(runtime, trace).await?;
+        }
+
+        let collected = phase_events.lock().unwrap().clone();
+        Ok(collected)
+    }
+
     fn strategy_string(&self) -> String {
         match self.config.merge_strategy {
             MergeStrategy::MergeToMain => "merge_to_main".to_string(),
@@ -295,6 +468,7 @@ impl OneShotRunner {
     }
 
     /// Attempt best-effort cleanup of the worktree.
+    #[instrument(skip(self, runtime), fields(oneshot_id = %self.config.repo_id))]
     async fn cleanup_worktree(&self, runtime: &dyn RuntimeProvider, wt_path: &PathBuf) {
         tracing::info!(oneshot_id = %self.config.repo_id, worktree = %wt_path.display(), "cleaning up worktree");
         match runtime
@@ -325,10 +499,12 @@ impl OneShotRunner {
     /// Extract a plan file path from the design phase output text.
     /// Looks for references to `docs/plans/*.md` in the text.
     fn extract_plan_file_from_output(&self, text: &str, plans_dir: &str) -> Option<String> {
+        tracing::debug!(oneshot_id = %self.config.repo_id, plans_dir = %plans_dir, "extracting plan file from output text");
         // Look for a path like docs/plans/something.md
         for word in text.split_whitespace() {
             let cleaned = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '-' && c != '_' && c != '.');
             if cleaned.contains(plans_dir) && cleaned.ends_with(".md") {
+                tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %cleaned, "found plan file in output text (whitespace scan)");
                 return Some(cleaned.to_string());
             }
         }
@@ -336,13 +512,16 @@ impl OneShotRunner {
         for segment in text.split('`') {
             let trimmed = segment.trim();
             if trimmed.contains(plans_dir) && trimmed.ends_with(".md") {
+                tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %trimmed, "found plan file in output text (backtick scan)");
                 return Some(trimmed.to_string());
             }
         }
+        tracing::debug!(oneshot_id = %self.config.repo_id, plans_dir = %plans_dir, "no plan file found in output text");
         None
     }
 
     /// Run the full 1-shot lifecycle.
+    #[instrument(skip(self, runtime), fields(oneshot_id = %self.config.repo_id))]
     pub async fn run(&self, runtime: &dyn RuntimeProvider) -> Result<SessionTrace> {
         let repo_str = self.config.repo_path.to_string_lossy().to_string();
         tracing::info!(
@@ -379,7 +558,17 @@ impl OneShotRunner {
         } else {
             let slug = slugify(&self.config.title);
             let short_id = generate_short_id();
-            let wt = worktree_path(&self.config.repo_id, &short_id);
+            let wt = if self.config.ssh_host.is_some() {
+                worktree_path_remote(runtime, &self.config.repo_id, &short_id, &self.config.repo_path).await
+                    .map_err(|e| {
+                        self.emit(SessionEvent::OneShotFailed {
+                            reason: format!("Failed to resolve remote worktree path: {}", e),
+                        });
+                        e
+                    })?
+            } else {
+                worktree_path(&self.config.repo_id, &short_id)
+            };
             let br = branch_name(&slug, &short_id);
             tracing::info!(
                 oneshot_id = %self.config.repo_id,
@@ -408,8 +597,29 @@ impl OneShotRunner {
             trace.outcome = SessionOutcome::Cancelled;
             trace.end_time = Some(Utc::now());
             let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-            let _ = self.collector.finalize(&mut trace, &events).await;
+            if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+            }
             return Err(anyhow::anyhow!("Cancelled"));
+        }
+
+        // Detect the default branch for this repo
+        let default_branch_ref = detect_default_branch(runtime, &self.config.repo_path).await;
+        let default_branch_short = default_branch_ref.strip_prefix("origin/").unwrap_or(&default_branch_ref);
+        tracing::info!(
+            oneshot_id = %self.config.repo_id,
+            default_branch_ref = %default_branch_ref,
+            "detected default branch"
+        );
+        if self.resume_state.is_none() {
+            // Fetch the default branch to ensure ref is up to date
+            let _ = runtime
+                .run_command(
+                    &format!("git fetch origin {} --quiet", default_branch_short),
+                    &self.config.repo_path,
+                    Duration::from_secs(30),
+                )
+                .await;
         }
 
         // 1. Create worktree (ensure parent directory exists first)
@@ -427,7 +637,7 @@ impl OneShotRunner {
 
             let output = runtime
                 .run_command(
-                    &format!("git worktree add {} -b {}", wt_path.display(), branch),
+                    &format!("git worktree add {} -b {} {}", wt_path.display(), branch, default_branch_ref),
                     &self.config.repo_path,
                     Duration::from_secs(60),
                 )
@@ -450,7 +660,9 @@ impl OneShotRunner {
                 trace.outcome = SessionOutcome::Failed;
                 trace.end_time = Some(Utc::now());
                 let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                let _ = self.collector.finalize(&mut trace, &events).await;
+                if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                    tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                }
                 return Err(anyhow::anyhow!("Worktree creation failed"));
             }
             tracing::info!(oneshot_id = %self.config.repo_id, "worktree created successfully");
@@ -465,7 +677,9 @@ impl OneShotRunner {
             trace.outcome = SessionOutcome::Cancelled;
             trace.end_time = Some(Utc::now());
             let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-            let _ = self.collector.finalize(&mut trace, &events).await;
+            if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+            }
             return Err(anyhow::anyhow!("Cancelled"));
         }
 
@@ -487,11 +701,6 @@ impl OneShotRunner {
 
             let design_prompt = prompt::build_design_prompt(&self.config.prompt, &self.config.title, &self.config.plans_dir);
 
-            // Collect design events separately so we can extract plan file from them
-            let design_events: Arc<std::sync::Mutex<Vec<SessionEvent>>> =
-                Arc::new(std::sync::Mutex::new(Vec::new()));
-            let design_events_clone = design_events.clone();
-
             let design_config = SessionConfig {
                 repo_path: self.config.repo_path.clone(),
                 working_dir: Some(wt_path.clone()),
@@ -499,6 +708,7 @@ impl OneShotRunner {
                 max_iterations: 1,
                 completion_signal: String::new(),
                 model: Some(self.config.model.clone()),
+                effort_level: Some(self.config.design_effort_level.clone()),
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 env_vars: self.config.env_vars.clone(),
                 checks: vec![],
@@ -508,23 +718,8 @@ impl OneShotRunner {
 
             let design_collector = TraceCollector::new(&self.config.repo_path, &self.config.repo_id);
 
-            // Create a forwarding callback that also collects design events
-            let forwarder = self.make_event_forwarder();
-            let design_cb: OnSessionEvent = Box::new(move |event: &SessionEvent| {
-                design_events_clone.lock().unwrap().push(event.clone());
-                forwarder(event);
-            });
-
-            let design_runner = SessionRunner::new(design_config, design_collector, self.cancel_token.clone())
-                .on_event(design_cb);
-            let design_runner = if let Some(ref registry) = self.abort_registry {
-                design_runner.abort_registry(registry.clone())
-            } else {
-                design_runner
-            };
-
-            tracing::info!("Starting design phase for '{}'", self.config.title);
-            design_runner.run_with_trace(runtime, &mut trace).await?;
+            tracing::info!(oneshot_id = %self.config.repo_id, title = %self.config.title, "starting design phase runner");
+            let design_evts = self.run_phase(design_config, design_collector, runtime, &mut trace).await?;
 
             // Check design phase outcome
             match trace.outcome {
@@ -537,7 +732,9 @@ impl OneShotRunner {
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Design phase failed"));
                 }
                 SessionOutcome::Cancelled => {
@@ -547,7 +744,9 @@ impl OneShotRunner {
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Cancelled"));
                 }
                 _ => {
@@ -556,7 +755,6 @@ impl OneShotRunner {
             }
 
             // Extract plan file from design events
-            let design_evts = design_events.lock().unwrap().clone();
             let plan_file_from_events = extract_plan_file_from_events(&design_evts, &self.config.plans_dir);
             tracing::debug!("Plan file from events extraction: {:?}", plan_file_from_events);
 
@@ -572,7 +770,7 @@ impl OneShotRunner {
 
             // Determine the plan file path
             let pfp = if let Some(p) = plan_file_from_events {
-                tracing::info!("Using plan file from events: {}", p);
+                tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %p, "plan file extracted from design events");
                 // Make path relative if it's absolute and within the worktree
                 let wt_prefix = format!("{}/", wt_path.display());
                 if p.starts_with(&wt_prefix) {
@@ -581,7 +779,7 @@ impl OneShotRunner {
                     p
                 }
             } else if let Some(p) = plan_file_from_text {
-                tracing::info!("Using plan file from text: {}", p);
+                tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %p, "plan file extracted from design output text");
                 p
             } else if collected_text.contains("<promise>COMPLETE</promise>") {
                 tracing::warn!(
@@ -599,7 +797,9 @@ impl OneShotRunner {
                 trace.outcome = SessionOutcome::Failed;
                 trace.end_time = Some(Utc::now());
                 let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                let _ = self.collector.finalize(&mut trace, &events).await;
+                if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                    tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                }
                 return Err(anyhow::anyhow!("Design phase did not produce a plan file"));
             } else {
                 let slug = slugify(&self.config.title);
@@ -617,6 +817,19 @@ impl OneShotRunner {
             pfp
         };
 
+        // Snapshot plan content into trace
+        trace.plan_file = Some(plan_file_path.clone());
+        let plan_file_abs = format!("{}/{}", wt_path.display(), plan_file_path);
+        match tokio::fs::read_to_string(&plan_file_abs).await {
+            Ok(content) => {
+                tracing::info!(plan_file = %plan_file_abs, "plan content snapshot captured");
+                trace.plan_content = Some(content);
+            }
+            Err(e) => {
+                tracing::warn!(plan_file = %plan_file_abs, error = %e, "failed to read plan file, continuing without plan content");
+            }
+        }
+
         // Check cancellation
         if self.cancel_token.is_cancelled() {
             self.cleanup_worktree(runtime, &wt_path).await;
@@ -626,7 +839,9 @@ impl OneShotRunner {
             trace.outcome = SessionOutcome::Cancelled;
             trace.end_time = Some(Utc::now());
             let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-            let _ = self.collector.finalize(&mut trace, &events).await;
+            if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+            }
             return Err(anyhow::anyhow!("Cancelled"));
         }
 
@@ -651,6 +866,7 @@ impl OneShotRunner {
                 max_iterations: self.config.max_iterations,
                 completion_signal: self.config.completion_signal.clone(),
                 model: Some(self.config.model.clone()),
+                effort_level: Some(self.config.effort_level.clone()),
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 env_vars: self.config.env_vars.clone(),
                 checks: self.config.checks.clone(),
@@ -661,18 +877,9 @@ impl OneShotRunner {
             };
 
             let impl_collector = TraceCollector::new(&self.config.repo_path, &self.config.repo_id);
-            let impl_forwarder = self.make_event_forwarder();
 
-            let impl_runner = SessionRunner::new(impl_config, impl_collector, self.cancel_token.clone())
-                .on_event(impl_forwarder);
-            let impl_runner = if let Some(ref registry) = self.abort_registry {
-                impl_runner.abort_registry(registry.clone())
-            } else {
-                impl_runner
-            };
-
-            tracing::info!("Starting implementation phase");
-            impl_runner.run_with_trace(runtime, &mut trace).await?;
+            tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %plan_file_path, "starting implementation phase runner");
+            let _impl_events = self.run_phase(impl_config, impl_collector, runtime, &mut trace).await?;
 
             // Check implementation phase outcome
             match trace.outcome {
@@ -685,7 +892,9 @@ impl OneShotRunner {
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Implementation phase failed"));
                 }
                 SessionOutcome::Cancelled => {
@@ -695,7 +904,9 @@ impl OneShotRunner {
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Cancelled"));
                 }
                 _ => {
@@ -704,6 +915,69 @@ impl OneShotRunner {
             }
 
             self.emit(SessionEvent::ImplementationPhaseComplete);
+
+            // Move plan to completed (best-effort, inside worktree before git finalize)
+            if self.config.move_plans_to_completed {
+                let plan_filename = plan_file_path.rsplit('/').next().unwrap_or(&plan_file_path);
+                if plan_filename.is_empty() {
+                    tracing::warn!(
+                        oneshot_id = %self.config.repo_id,
+                        plan_file = %plan_file_path,
+                        "plan_file_path has no filename component, skipping move to completed"
+                    );
+                } else {
+                    // For local oneshots, check if the plan file exists before attempting
+                    // the move. For SSH oneshots, skip this check since the worktree is on
+                    // a remote machine and local filesystem checks are non-functional.
+                    let should_attempt = if self.config.ssh_host.is_some() {
+                        true
+                    } else {
+                        let plan_abs = wt_path.join(&plan_file_path);
+                        if plan_abs.exists() {
+                            true
+                        } else {
+                            tracing::debug!(
+                                oneshot_id = %self.config.repo_id,
+                                plan_file = %plan_filename,
+                                plan_path = %plan_abs.display(),
+                                "plan file not found in worktree, skipping move to completed"
+                            );
+                            false
+                        }
+                    };
+
+                    if should_attempt {
+                        tracing::info!(
+                            oneshot_id = %self.config.repo_id,
+                            plan_file = %plan_filename,
+                            "moving plan to completed folder"
+                        );
+                        match crate::move_plan_to_completed_impl(
+                            runtime,
+                            &wt_path,
+                            &self.config.plans_dir,
+                            plan_filename,
+                            false, // don't commit — will be included in git finalize
+                        ).await {
+                            Ok(()) => {
+                                tracing::info!(
+                                    oneshot_id = %self.config.repo_id,
+                                    plan_file = %plan_filename,
+                                    "plan moved to completed successfully"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    oneshot_id = %self.config.repo_id,
+                                    plan_file = %plan_filename,
+                                    error = %e,
+                                    "failed to move plan to completed (best-effort, continuing)"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             tracing::info!(oneshot_id = %self.config.repo_id, "skipping implementation phase (resume)");
         }
@@ -717,7 +991,9 @@ impl OneShotRunner {
             trace.outcome = SessionOutcome::Cancelled;
             trace.end_time = Some(Utc::now());
             let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-            let _ = self.collector.finalize(&mut trace, &events).await;
+            if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+            }
             return Err(anyhow::anyhow!("Cancelled"));
         }
 
@@ -733,9 +1009,22 @@ impl OneShotRunner {
                 // Use shared git_merge_push for robust merge-with-retry logic.
                 // This handles fetch, rebase, conflict resolution via Claude,
                 // and push retries automatically.
-                let push_cmd = format!("git push origin {}:main", branch);
-                let fetch_cmd = "git fetch origin main".to_string();
-                let rebase_cmd = "git rebase origin/main".to_string();
+                let default_branch_short = default_branch_ref.strip_prefix("origin/").unwrap_or(&default_branch_ref);
+                let push_cmd = format!("git push origin {}:{}", branch, default_branch_short);
+                let fetch_cmd = format!("git fetch origin {}", default_branch_short);
+                let rebase_cmd = format!("git rebase {}", default_branch_ref);
+
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, fetch_cmd = %fetch_cmd, "git finalize: fetch step");
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, rebase_cmd = %rebase_cmd, "git finalize: rebase step");
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, push_cmd = %push_cmd, "git finalize: push step");
+
+                // Pre-fetch and rebase before pushing to ensure we're up to date
+                let _ = runtime
+                    .run_command(&fetch_cmd, &wt_path, Duration::from_secs(120))
+                    .await;
+                let _ = runtime
+                    .run_command(&rebase_cmd, &wt_path, Duration::from_secs(120))
+                    .await;
 
                 let git_sync_config = self.config.git_sync.clone().unwrap_or(GitSyncConfig {
                     enabled: true,
@@ -789,7 +1078,9 @@ impl OneShotRunner {
                     trace.outcome = SessionOutcome::Failed;
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Merge to main failed"));
                 }
 
@@ -816,6 +1107,10 @@ impl OneShotRunner {
                 let push_u_cmd = format!("git push -u origin {}", branch);
                 let fetch_cmd = format!("git fetch origin {}", branch);
                 let rebase_cmd = format!("git pull --rebase origin {}", branch);
+
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, fetch_cmd = %fetch_cmd, "git finalize: fetch step");
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, rebase_cmd = %rebase_cmd, "git finalize: rebase step");
+                tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, push_cmd = %push_cmd, "git finalize: push step");
 
                 let git_sync_config = self.config.git_sync.clone().unwrap_or(GitSyncConfig {
                     enabled: true,
@@ -869,7 +1164,9 @@ impl OneShotRunner {
                     trace.outcome = SessionOutcome::Failed;
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
-                    let _ = self.collector.finalize(&mut trace, &events).await;
+                    if let Err(e) = self.collector.finalize(&mut trace, &events).await {
+                        tracing::warn!(oneshot_id = %self.config.repo_id, error = %e, "failed to finalize trace");
+                    }
                     return Err(anyhow::anyhow!("Push to branch failed"));
                 }
 
@@ -918,6 +1215,8 @@ mod tests {
             title: "Add login feature".to_string(),
             prompt: "Implement user login with email and password".to_string(),
             model: "claude-sonnet".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
             merge_strategy,
             env_vars: HashMap::new(),
             max_iterations: 10,
@@ -925,7 +1224,21 @@ mod tests {
             checks: Vec::new(),
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
+            move_plans_to_completed: true,
         }
+    }
+
+    #[test]
+    fn test_config_move_plans_to_completed_field() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::Branch);
+        assert!(config.move_plans_to_completed);
+
+        // Test with false
+        let mut config2 = make_config(&tmp, MergeStrategy::Branch);
+        config2.move_plans_to_completed = false;
+        assert!(!config2.move_plans_to_completed);
     }
 
     // =========================================================================
@@ -1088,6 +1401,104 @@ mod tests {
     }
 
     // =========================================================================
+    // worktree_path_remote tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_resolves_home() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "/home/remoteuser".to_string(),
+            stderr: String::new(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        let path = result.expect("should resolve remote home");
+        assert_eq!(
+            path,
+            PathBuf::from("/home/remoteuser/.yarr/worktrees/test-repo-oneshot-abc123")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_trims_whitespace() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "/home/remoteuser\n".to_string(),
+            stderr: String::new(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        let path = result.expect("should resolve remote home even with trailing newline");
+        assert_eq!(
+            path,
+            PathBuf::from("/home/remoteuser/.yarr/worktrees/test-repo-oneshot-abc123")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_command_failure() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: "command failed".to_string(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        assert!(result.is_err(), "should return error when command fails");
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_empty_home() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "".to_string(),
+            stderr: String::new(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        assert!(result.is_err(), "should return error when $HOME is empty");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Remote $HOME is empty"),
+            "error should mention empty $HOME, got: {}",
+            err_msg
+        );
+    }
+
+    // =========================================================================
     // branch_name tests
     // =========================================================================
 
@@ -1129,6 +1540,8 @@ mod tests {
             title: "Implement OAuth".to_string(),
             prompt: "Add OAuth2 support with Google provider".to_string(),
             model: "claude-opus".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
             merge_strategy: MergeStrategy::MergeToMain,
             env_vars: HashMap::from([("API_KEY".to_string(), "test-key".to_string())]),
             max_iterations: 15,
@@ -1149,6 +1562,8 @@ mod tests {
                 max_push_retries: 3,
             }),
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
+            move_plans_to_completed: true,
         };
 
         assert_eq!(config.repo_id, "repo-123");
@@ -1175,6 +1590,8 @@ mod tests {
             title: "Fix bug #42".to_string(),
             prompt: "Fix the null pointer in auth handler".to_string(),
             model: "claude-sonnet".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
             merge_strategy: MergeStrategy::Branch,
             env_vars: HashMap::new(),
             max_iterations: 10,
@@ -1182,6 +1599,8 @@ mod tests {
             checks: Vec::new(),
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
+            move_plans_to_completed: true,
         };
 
         assert_eq!(config.merge_strategy, MergeStrategy::Branch);
@@ -1326,46 +1745,65 @@ mod tests {
         // So completing_after(1) provides enough scenarios for 2 spawn_claude calls
 
         // Command results in order:
-        // 1. mkdir -p (success, ignored)
-        // 2. git worktree add (success)
-        // 3. git fetch origin main (success)
-        // 4. git rebase origin/main (success)
-        // 5. git push origin <branch>:main (success)
-        // 6. git branch -d <branch> (success)
-        // 7. git worktree remove <path> (success)
-        // MockRuntime returns success by default when command_results is
-        // exhausted, so we only need to provide the first few explicitly.
+        // 1. git symbolic-ref refs/remotes/origin/HEAD (detect default branch)
+        // 2. git fetch origin main --quiet (fetch before worktree creation)
+        // 3. mkdir -p (success)
+        // 4. git worktree add {path} -b {branch} origin/main (includes start-point)
+        // 5. git fetch origin main (finalize fetch)
+        // 6. git rebase origin/main (finalize rebase)
+        // 7. git push origin <branch>:main (finalize push)
+        // 8. git branch -d <branch> (cleanup)
+        // 9. git worktree remove <path> (cleanup)
         runtime.command_results = vec![
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
+            // 5. git fetch origin main
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 6. git rebase origin/main
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 7. git push origin <branch>:main
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
+            // 8. git branch -d
             CommandOutput {
                 exit_code: 0,
                 stdout: "Deleted branch".to_string(),
                 stderr: String::new(),
             },
+            // 9. git worktree remove
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -1573,20 +2011,51 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command results in order for Branch strategy:
-        // 1. git worktree add (success)
-        // 2. git push -u origin <branch> (success)
-        // 3. git worktree remove <path> (success)
+        // 1. git symbolic-ref refs/remotes/origin/HEAD (detect default branch)
+        // 2. git fetch origin main --quiet (fetch before worktree creation)
+        // 3. git worktree add {path} -b {branch} origin/main (includes start-point)
+        // 4. git fetch origin <branch> (finalize fetch)
+        // 5. git pull --rebase origin <branch> (finalize rebase)
+        // 6. git push -u origin <branch> (finalize push)
+        // 7. git worktree remove <path> (cleanup)
         runtime.command_results = vec![
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
+            // 4. git fetch origin <branch>
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git pull --rebase origin <branch>
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. git push -u origin <branch>
             CommandOutput {
                 exit_code: 0,
                 stdout: "Branch pushed".to_string(),
                 stderr: String::new(),
             },
+            // 7. git worktree remove
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -1869,82 +2338,86 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command results for the git_merge_push flow:
-        // 1. mkdir -p (success)
-        // 2. git worktree add (success)
+        // 1. detect default branch (symbolic-ref succeeds)
+        // 2. git fetch origin main --quiet
+        // 3. mkdir -p (success)
+        // 4. git worktree add (success)
+        // 5. pre-fetch origin main (success)
+        // 6. pre-rebase origin/main (success)
         // --- git_merge_push begins ---
-        // 3. git push (optimistic) — FAIL (rejected)
+        // 7. git push (optimistic) — FAIL (rejected)
         // --- retry loop attempt 1/3 ---
-        // 4. git fetch origin main — success
-        // 5. git rebase origin/main — FAIL (non-conflict, e.g. diverged)
-        // 6. git status — no "Unmerged paths" (not a conflict)
-        // 7. git rebase --abort
-        // --- retry loop attempt 2/3 ---
         // 8. git fetch origin main — success
-        // 9. git rebase origin/main — FAIL again
-        // 10. git status — no "Unmerged paths"
+        // 9. git rebase origin/main — FAIL (non-conflict, e.g. diverged)
+        // 10. git status — no "Unmerged paths" (not a conflict)
         // 11. git rebase --abort
-        // --- retry loop attempt 3/3 ---
+        // --- retry loop attempt 2/3 ---
         // 12. git fetch origin main — success
         // 13. git rebase origin/main — FAIL again
         // 14. git status — no "Unmerged paths"
         // 15. git rebase --abort
+        // --- retry loop attempt 3/3 ---
+        // 16. git fetch origin main — success
+        // 17. git rebase origin/main — FAIL again
+        // 18. git status — no "Unmerged paths"
+        // 19. git rebase --abort
         // --- git_merge_push returns Err (all retries exhausted) ---
         runtime.command_results = vec![
-            // 1. mkdir -p
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 2. git worktree add
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
-            // 3. git push (optimistic) — FAIL
+            // 5. pre-fetch origin main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. pre-rebase origin/main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push (optimistic) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected: non-fast-forward".to_string(),
             },
-            // 4. git fetch (attempt 1) — success
+            // 8. git fetch (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 5. git rebase (attempt 1) — FAIL (non-conflict)
+            // 9. git rebase (attempt 1) — FAIL (non-conflict)
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "error: cannot rebase".to_string(),
             },
-            // 6. git status (conflict check) — no conflict markers
-            CommandOutput {
-                exit_code: 0,
-                stdout: "On branch oneshot/test\nnothing to commit".to_string(),
-                stderr: String::new(),
-            },
-            // 7. git rebase --abort
-            CommandOutput {
-                exit_code: 0,
-                stdout: String::new(),
-                stderr: String::new(),
-            },
-            // 8. git fetch (attempt 2) — success
-            CommandOutput {
-                exit_code: 0,
-                stdout: String::new(),
-                stderr: String::new(),
-            },
-            // 9. git rebase (attempt 2) — FAIL
-            CommandOutput {
-                exit_code: 1,
-                stdout: String::new(),
-                stderr: "error: cannot rebase".to_string(),
-            },
-            // 10. git status — no conflict
+            // 10. git status (conflict check) — no conflict markers
             CommandOutput {
                 exit_code: 0,
                 stdout: "On branch oneshot/test\nnothing to commit".to_string(),
@@ -1956,13 +2429,13 @@ mod tests {
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 12. git fetch (attempt 3) — success
+            // 12. git fetch (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 13. git rebase (attempt 3) — FAIL
+            // 13. git rebase (attempt 2) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
@@ -1975,6 +2448,30 @@ mod tests {
                 stderr: String::new(),
             },
             // 15. git rebase --abort
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 16. git fetch (attempt 3) — success
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 17. git rebase (attempt 3) — FAIL
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "error: cannot rebase".to_string(),
+            },
+            // 18. git status — no conflict
+            CommandOutput {
+                exit_code: 0,
+                stdout: "On branch oneshot/test\nnothing to commit".to_string(),
+                stderr: String::new(),
+            },
+            // 19. git rebase --abort
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -2176,6 +2673,83 @@ mod tests {
             assert_eq!(
                 trace.session_type, "one_shot",
                 "session_type should be 'one_shot' for oneshot sessions"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_trace_plan_file_set_after_design() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Branch pushed".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        if let Ok(trace) = result {
+            assert!(
+                trace.plan_file.is_some(),
+                "trace.plan_file should be set after design phase completes"
+            );
+            let plan_file = trace.plan_file.unwrap();
+            assert!(
+                plan_file.contains("docs/plans/"),
+                "plan_file should contain the plans directory, got: '{}'",
+                plan_file
+            );
+            assert!(
+                plan_file.ends_with("-design.md"),
+                "plan_file should end with '-design.md', got: '{}'",
+                plan_file
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_trace_plan_content_none_when_file_missing() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Branch pushed".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        if let Ok(trace) = result {
+            assert!(
+                trace.plan_content.is_none(),
+                "trace.plan_content should be None when plan file doesn't exist on disk"
             );
         }
     }
@@ -2390,6 +2964,8 @@ mod tests {
             title: "Add feature X".to_string(),
             prompt: "Implement feature X".to_string(),
             model: "claude-sonnet".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
             merge_strategy: MergeStrategy::Branch,
             env_vars: HashMap::new(),
             max_iterations: 20,
@@ -2421,6 +2997,8 @@ mod tests {
                 max_push_retries: 5,
             }),
             plans_dir: "custom/plans/".to_string(),
+            ssh_host: None,
+            move_plans_to_completed: true,
         };
 
         assert_eq!(config.max_iterations, 20);
@@ -2463,86 +3041,114 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command sequence:
-        // 1. mkdir -p (worktree parent dir)               -> success
-        // 2. git worktree add                              -> success
+        // 1. detect default branch (symbolic-ref succeeds)
+        // 2. git fetch origin main --quiet
+        // 3. mkdir -p (worktree parent dir)               -> success
+        // 4. git worktree add                              -> success
         //    [design phase — spawn_claude #1]
         //    [implementation phase — spawn_claude #2]
+        // 5. pre-fetch origin main                         -> success
+        // 6. pre-rebase origin/main                        -> success
         // --- git_merge_push begins ---
-        // 3. git push origin {branch}:main (optimistic)   -> FAIL (rejected)
+        // 7. git push origin {branch}:main (optimistic)   -> FAIL (rejected)
         // --- retry loop attempt 1 ---
-        // 4. git fetch origin main                         -> success
-        // 5. git rebase origin/main                        -> FAIL (conflict)
-        // 6. git status (conflict check)                   -> "Unmerged paths" + "both modified"
-        // 7. git diff --name-only --diff-filter=U          -> conflict file list
+        // 8. git fetch origin main                         -> success
+        // 9. git rebase origin/main                        -> FAIL (conflict)
+        // 10. git status (conflict check)                  -> "Unmerged paths" + "both modified"
+        // 11. git diff --name-only --diff-filter=U         -> conflict file list
         //    [conflict resolution — spawn_claude #3]
-        // 8. git status (post-resolution check)            -> clean (no "rebase in progress")
-        // 9. git push origin {branch}:main (after resolve) -> success
+        // 12. git status (post-resolution check)           -> clean (no "rebase in progress")
+        // 13. git push origin {branch}:main (after resolve) -> success
         // --- git_merge_push ends ---
-        // 10. git branch -d {branch}                       -> success
-        // 11. git worktree remove                          -> success
+        // 14. git branch -d {branch}                       -> success
+        // 15. git worktree remove                          -> success
         runtime.command_results = vec![
-            // 1. mkdir -p
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 2. git worktree add
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
-            // 3. git push (optimistic) — FAIL
+            // 5. pre-fetch origin main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. pre-rebase origin/main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push (optimistic) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected: non-fast-forward".to_string(),
             },
-            // 4. git fetch origin main — success
+            // 8. git fetch origin main — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 5. git rebase origin/main — FAIL (conflict)
+            // 9. git rebase origin/main — FAIL (conflict)
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "CONFLICT (content): Merge conflict in src/main.rs".to_string(),
             },
-            // 6. git status — shows unmerged paths
+            // 10. git status — shows unmerged paths
             CommandOutput {
                 exit_code: 0,
                 stdout: "Unmerged paths:\n  both modified: src/main.rs".to_string(),
                 stderr: String::new(),
             },
-            // 7. git diff --name-only --diff-filter=U — conflict file list
+            // 11. git diff --name-only --diff-filter=U — conflict file list
             CommandOutput {
                 exit_code: 0,
                 stdout: "src/main.rs\n".to_string(),
                 stderr: String::new(),
             },
             // [spawn_claude #3 for conflict resolution happens here]
-            // 8. git status (post-resolution) — clean, no "rebase in progress"
+            // 12. git status (post-resolution) — clean, no "rebase in progress"
             CommandOutput {
                 exit_code: 0,
                 stdout: "On branch oneshot/add-login-feature\nnothing to commit".to_string(),
                 stderr: String::new(),
             },
-            // 9. git push (after conflict resolution) — success
+            // 13. git push (after conflict resolution) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 10. git branch -d
+            // 14. git branch -d
             CommandOutput {
                 exit_code: 0,
                 stdout: "Deleted branch".to_string(),
                 stderr: String::new(),
             },
-            // 11. git worktree remove
+            // 15. git worktree remove
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
@@ -2635,94 +3241,122 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command sequence:
-        // 1. mkdir -p (worktree parent dir)               -> success
-        // 2. git worktree add                              -> success
+        // 1. detect default branch (symbolic-ref succeeds)
+        // 2. git fetch origin main --quiet
+        // 3. mkdir -p (worktree parent dir)               -> success
+        // 4. git worktree add                              -> success
         //    [design phase — spawn_claude #1]
         //    [implementation phase — spawn_claude #2]
+        // 5. pre-fetch origin main                         -> success
+        // 6. pre-rebase origin/main                        -> success
         // --- git_merge_push begins ---
-        // 3. git push origin {branch}:main (optimistic)   -> FAIL
+        // 7. git push origin {branch}:main (optimistic)   -> FAIL
         // --- retry loop attempt 1/3 ---
-        // 4. git fetch origin main                         -> success
-        // 5. git rebase origin/main                        -> success
-        // 6. git push origin {branch}:main                 -> FAIL
+        // 8. git fetch origin main                         -> success
+        // 9. git rebase origin/main                        -> success
+        // 10. git push origin {branch}:main                -> FAIL
         // --- retry loop attempt 2/3 ---
-        // 7. git fetch origin main                         -> success
-        // 8. git rebase origin/main                        -> success
-        // 9. git push origin {branch}:main                 -> FAIL
+        // 11. git fetch origin main                        -> success
+        // 12. git rebase origin/main                       -> success
+        // 13. git push origin {branch}:main                -> FAIL
         // --- retry loop attempt 3/3 ---
-        // 10. git fetch origin main                        -> success
-        // 11. git rebase origin/main                       -> success
-        // 12. git push origin {branch}:main                -> FAIL
+        // 14. git fetch origin main                        -> success
+        // 15. git rebase origin/main                       -> success
+        // 16. git push origin {branch}:main                -> FAIL
         // --- git_merge_push returns Err (all retries exhausted) ---
         // NO git branch -d or git worktree remove should follow
         runtime.command_results = vec![
-            // 1. mkdir -p
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 2. git worktree add
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
-            // 3. git push (optimistic) — FAIL
+            // 5. pre-fetch origin main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. pre-rebase origin/main (success)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push (optimistic) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected: non-fast-forward".to_string(),
             },
-            // 4. git fetch (attempt 1) — success
+            // 8. git fetch (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 5. git rebase (attempt 1) — success
+            // 9. git rebase (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 6. git push (attempt 1) — FAIL
+            // 10. git push (attempt 1) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected again".to_string(),
             },
-            // 7. git fetch (attempt 2) — success
+            // 11. git fetch (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 8. git rebase (attempt 2) — success
+            // 12. git rebase (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 9. git push (attempt 2) — FAIL
+            // 13. git push (attempt 2) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected again".to_string(),
             },
-            // 10. git fetch (attempt 3) — success
+            // 14. git fetch (attempt 3) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 11. git rebase (attempt 3) — success
+            // 15. git rebase (attempt 3) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 12. git push (attempt 3) — FAIL (last retry)
+            // 16. git push (attempt 3) — FAIL (last retry)
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
@@ -2949,101 +3583,115 @@ mod tests {
         let mut runtime = MockRuntime::completing_after(1);
 
         // Command sequence:
-        // 1. mkdir -p (worktree parent dir)                     -> success
-        // 2. git worktree add -b {branch}                       -> success
+        // 1. detect default branch (symbolic-ref succeeds)
+        // 2. git fetch origin main --quiet
+        // 3. mkdir -p (worktree parent dir)                     -> success
+        // 4. git worktree add -b {branch} origin/main           -> success
         //    [design phase — spawn_claude #1]
         //    [implementation phase — spawn_claude #2]
         // --- git_merge_push begins ---
-        // 3. git push origin {branch} (initial push)            -> FAIL
-        // 4. git push -u origin {branch} (push_u fallback)      -> FAIL
+        // 5. git push origin {branch} (initial push)            -> FAIL
+        // 6. git push -u origin {branch} (push_u fallback)      -> FAIL
         // --- retry loop attempt 1/3 ---
-        // 5. git fetch origin {branch}                          -> success
-        // 6. git pull --rebase origin {branch}                  -> success
-        // 7. git push origin {branch}                           -> FAIL
+        // 7. git fetch origin {branch}                          -> success
+        // 8. git pull --rebase origin {branch}                  -> success
+        // 9. git push origin {branch}                           -> FAIL
         // --- retry loop attempt 2/3 ---
-        // 8. git fetch origin {branch}                          -> success
-        // 9. git pull --rebase origin {branch}                  -> success
-        // 10. git push origin {branch}                          -> FAIL
+        // 10. git fetch origin {branch}                         -> success
+        // 11. git pull --rebase origin {branch}                 -> success
+        // 12. git push origin {branch}                          -> FAIL
         // --- retry loop attempt 3/3 ---
-        // 11. git fetch origin {branch}                         -> success
-        // 12. git pull --rebase origin {branch}                 -> success
-        // 13. git push origin {branch}                          -> FAIL
+        // 13. git fetch origin {branch}                         -> success
+        // 14. git pull --rebase origin {branch}                 -> success
+        // 15. git push origin {branch}                          -> FAIL
         // --- git_merge_push returns Err (all retries exhausted) ---
         // NO git worktree remove should follow (worktree preserved)
         runtime.command_results = vec![
-            // 1. mkdir -p
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 2. git worktree add
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
             CommandOutput {
                 exit_code: 0,
                 stdout: "Preparing worktree".to_string(),
                 stderr: String::new(),
             },
-            // 3. git push origin {branch} (initial) — FAIL
+            // 5. git push origin {branch} (initial) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "error: failed to push some refs".to_string(),
             },
-            // 4. git push -u origin {branch} (push_u fallback) — FAIL
+            // 6. git push -u origin {branch} (push_u fallback) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected: non-fast-forward".to_string(),
             },
-            // 5. git fetch (attempt 1) — success
+            // 7. git fetch (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 6. git rebase (attempt 1) — success
+            // 8. git rebase (attempt 1) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 7. git push (attempt 1) — FAIL
+            // 9. git push (attempt 1) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected again".to_string(),
             },
-            // 8. git fetch (attempt 2) — success
+            // 10. git fetch (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 9. git rebase (attempt 2) — success
+            // 11. git rebase (attempt 2) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 10. git push (attempt 2) — FAIL
+            // 12. git push (attempt 2) — FAIL
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: "rejected again".to_string(),
             },
-            // 11. git fetch (attempt 3) — success
+            // 13. git fetch (attempt 3) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             },
-            // 12. git rebase (attempt 3) — success
+            // 14. git rebase (attempt 3) — success
             CommandOutput {
                 exit_code: 0,
                 stdout: "Successfully rebased".to_string(),
                 stderr: String::new(),
             },
-            // 13. git push (attempt 3) — FAIL (last retry)
+            // 15. git push (attempt 3) — FAIL (last retry)
             CommandOutput {
                 exit_code: 1,
                 stdout: String::new(),
@@ -3618,5 +4266,1489 @@ mod tests {
             state.branch, branch,
             "branch should be passed through to ResumeState"
         );
+    }
+
+    // =========================================================================
+    // detect_default_branch tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_detect_default_branch_symbolic_ref_works() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref refs/remotes/origin/HEAD succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/main");
+    }
+
+    #[tokio::test]
+    async fn test_detect_default_branch_symbolic_ref_returns_master() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref refs/remotes/origin/HEAD returns master
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/master\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/master");
+    }
+
+    #[tokio::test]
+    async fn test_detect_default_branch_fallback_to_rev_parse_main() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "fatal: ref refs/remotes/origin/HEAD is not a symbolic ref".to_string(),
+            },
+            // git rev-parse --verify origin/main succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: "abc123\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/main");
+    }
+
+    #[tokio::test]
+    async fn test_detect_default_branch_fallback_to_rev_parse_master() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "fatal: ref refs/remotes/origin/HEAD is not a symbolic ref".to_string(),
+            },
+            // git rev-parse --verify origin/main fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "fatal: Needed a single revision".to_string(),
+            },
+            // git rev-parse --verify origin/master succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: "def456\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/master");
+    }
+
+    #[tokio::test]
+    async fn test_detect_default_branch_all_fail_defaults_to_origin_main() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // git symbolic-ref fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // git rev-parse --verify origin/main fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // git rev-parse --verify origin/master fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = detect_default_branch(&runtime, tmp.path()).await;
+        assert_eq!(result, "origin/main");
+    }
+
+    #[tokio::test]
+    async fn test_worktree_add_includes_start_point() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::MergeToMain);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. detect default branch (symbolic-ref succeeds)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 5. git fetch origin main
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. git rebase origin/main
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push origin <branch>:main
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 8. git branch -d
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Deleted branch".to_string(),
+                stderr: String::new(),
+            },
+            // 9. git worktree remove
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_ok(), "run should succeed, got: {:?}", result.err());
+
+        let commands = runtime.captured_commands.lock().unwrap();
+
+        // Verify git fetch origin main --quiet appears before worktree add
+        let fetch_quiet_idx = commands
+            .iter()
+            .position(|c| c.contains("git fetch origin main") && c.contains("--quiet"))
+            .expect("should have a 'git fetch origin main --quiet' command");
+
+        let worktree_add_idx = commands
+            .iter()
+            .position(|c| c.contains("git worktree add"))
+            .expect("should have a 'git worktree add' command");
+
+        assert!(
+            fetch_quiet_idx < worktree_add_idx,
+            "git fetch should appear before git worktree add, fetch at {}, worktree at {}",
+            fetch_quiet_idx,
+            worktree_add_idx,
+        );
+
+        // Verify worktree add includes the start-point (origin/main)
+        let worktree_cmd = &commands[worktree_add_idx];
+        assert!(
+            worktree_cmd.contains("origin/main"),
+            "git worktree add should include origin/main as start-point, got: {}",
+            worktree_cmd,
+        );
+    }
+
+    #[tokio::test]
+    async fn test_merge_to_main_finalize_uses_detected_branch() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::MergeToMain);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. detect default branch — symbolic-ref returns master
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/master\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git fetch origin master --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git worktree add {path} -b {branch} origin/master
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 5. git fetch origin master (finalize)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 6. git rebase origin/master (finalize)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push origin <branch>:master (finalize)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 8. git branch -d
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Deleted branch".to_string(),
+                stderr: String::new(),
+            },
+            // 9. git worktree remove
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_ok(), "run should succeed, got: {:?}", result.err());
+
+        let commands = runtime.captured_commands.lock().unwrap();
+
+        // Verify the worktree add uses origin/master as start-point
+        let worktree_cmd = commands
+            .iter()
+            .find(|c| c.contains("git worktree add"))
+            .expect("should have a git worktree add command");
+        assert!(
+            worktree_cmd.contains("origin/master"),
+            "git worktree add should use origin/master as start-point, got: {}",
+            worktree_cmd,
+        );
+
+        // Verify finalize fetch references master
+        let finalize_fetch = commands
+            .iter()
+            .filter(|c| c.contains("git fetch origin master") || c.contains("git fetch origin main"))
+            .collect::<Vec<_>>();
+        assert!(
+            finalize_fetch.iter().any(|c| c.contains("master")),
+            "finalize fetch should reference master, got commands: {:?}",
+            finalize_fetch,
+        );
+
+        // Verify rebase references origin/master
+        let rebase_cmd = commands
+            .iter()
+            .find(|c| c.contains("git rebase"))
+            .expect("should have a git rebase command");
+        assert!(
+            rebase_cmd.contains("origin/master"),
+            "git rebase should use origin/master, got: {}",
+            rebase_cmd,
+        );
+
+        // Verify push references master (push origin <branch>:master)
+        let push_cmd = commands
+            .iter()
+            .find(|c| c.contains("git push origin"))
+            .expect("should have a git push command");
+        assert!(
+            push_cmd.contains(":master"),
+            "git push should push to master, got: {}",
+            push_cmd,
+        );
+    }
+
+    // =========================================================================
+    // Tests for ssh_runtime field and with_ssh_runtime builder
+    // =========================================================================
+
+    #[test]
+    fn test_oneshot_runner_ssh_runtime_is_none_by_default() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        assert!(
+            runner.ssh_runtime.is_none(),
+            "ssh_runtime should be None when not explicitly set"
+        );
+    }
+
+    #[test]
+    fn test_with_ssh_runtime_sets_ssh_runtime() {
+        use crate::runtime::SshRuntime;
+
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let ssh_runtime =
+            SshRuntime::new("myhost", "/home/user/project", Arc::new(dashmap::DashMap::new()));
+
+        let runner =
+            OneShotRunner::new(config, collector, cancel_token).with_ssh_runtime(ssh_runtime);
+
+        assert!(
+            runner.ssh_runtime.is_some(),
+            "ssh_runtime should be Some after calling with_ssh_runtime"
+        );
+    }
+
+    #[test]
+    fn test_ssh_mode_detection_with_ssh_host_and_runtime() {
+        use crate::runtime::SshRuntime;
+
+        let tmp = TempDir::new().unwrap();
+        let mut config = make_config(&tmp, MergeStrategy::MergeToMain);
+        config.ssh_host = Some("myhost".to_string());
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let ssh_runtime =
+            SshRuntime::new("myhost", "/home/user/project", Arc::new(dashmap::DashMap::new()));
+
+        let runner =
+            OneShotRunner::new(config, collector, cancel_token).with_ssh_runtime(ssh_runtime);
+
+        assert!(
+            runner.ssh_runtime.is_some(),
+            "ssh_runtime should be Some when SSH mode is configured"
+        );
+        assert_eq!(
+            runner.config.ssh_host.as_deref(),
+            Some("myhost"),
+            "ssh_host should be set in config"
+        );
+    }
+
+    #[test]
+    fn test_ssh_host_config_without_ssh_runtime_stays_local() {
+        let tmp = TempDir::new().unwrap();
+        let mut config = make_config(&tmp, MergeStrategy::MergeToMain);
+        config.ssh_host = Some("myhost".to_string());
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        assert!(
+            runner.ssh_runtime.is_none(),
+            "ssh_runtime should be None when with_ssh_runtime is not called, even if ssh_host is set in config"
+        );
+        assert_eq!(
+            runner.config.ssh_host.as_deref(),
+            Some("myhost"),
+            "ssh_host should still be present in config"
+        );
+    }
+
+    // =========================================================================
+    // Tests for reconnect_notify field and accessors
+    // =========================================================================
+
+    #[test]
+    fn test_reconnect_notify_default() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        // reconnect_notify should be initialized to a new Arc<Notify> by default
+        let notify = &runner.reconnect_notify;
+        assert!(
+            Arc::strong_count(notify) >= 1,
+            "reconnect_notify should be a valid Arc<Notify> by default"
+        );
+    }
+
+    #[test]
+    fn test_reconnect_notify_accessor_returns_shared_arc() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        let notify1 = runner.reconnect_notify();
+        let notify2 = runner.reconnect_notify();
+
+        // Both calls should return clones of the same Arc
+        assert!(
+            Arc::ptr_eq(&notify1, &notify2),
+            "reconnect_notify() should return the same Arc<Notify> on each call"
+        );
+    }
+
+    #[test]
+    fn test_with_reconnect_notify_builder() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let custom_notify = Arc::new(tokio::sync::Notify::new());
+        let custom_notify_clone = custom_notify.clone();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token)
+            .with_reconnect_notify(custom_notify);
+
+        let runner_notify = runner.reconnect_notify();
+        assert!(
+            Arc::ptr_eq(&runner_notify, &custom_notify_clone),
+            "with_reconnect_notify() should set the runner's reconnect_notify to the provided Arc<Notify>"
+        );
+    }
+
+    #[test]
+    fn test_reconnect_notify_field_exists_on_runner() {
+        // Structural test: verify the reconnect_notify field exists and is Arc<Notify>.
+        // This ensures that run_phase can pass it to SshSessionOrchestrator.
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        // Access the field directly to confirm it exists with the expected type
+        let notify: &Arc<tokio::sync::Notify> = &runner.reconnect_notify;
+        // Verify it's a usable Notify — notifying shouldn't panic
+        notify.notify_one();
+    }
+
+    // =========================================================================
+    // SSH oneshot helpers
+    // =========================================================================
+
+    fn make_ssh_config(tmp: &TempDir, merge_strategy: MergeStrategy) -> OneShotConfig {
+        OneShotConfig {
+            repo_id: "test-repo".to_string(),
+            repo_path: tmp.path().to_path_buf(),
+            title: "Add login feature".to_string(),
+            prompt: "Implement user login with email and password".to_string(),
+            model: "claude-sonnet".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
+            merge_strategy,
+            env_vars: HashMap::new(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            checks: Vec::new(),
+            git_sync: None,
+            plans_dir: "docs/plans/".to_string(),
+            ssh_host: Some("testhost".to_string()),
+        }
+    }
+
+    fn setup_ssh_runner_with_events(
+        tmp: &TempDir,
+        merge_strategy: MergeStrategy,
+    ) -> (OneShotRunner, Arc<Mutex<Vec<SessionEvent>>>) {
+        let config = make_ssh_config(tmp, merge_strategy);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token).on_event(Box::new(
+            move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            },
+        ));
+
+        (runner, events)
+    }
+
+    // =========================================================================
+    // SSH oneshot: remote worktree path generation
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_ssh_worktree_path_remote_calls_echo_home() {
+        // When ssh_host is set, run() should call `echo $HOME` first via
+        // worktree_path_remote and use the result to build the worktree path.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME (worktree_path_remote)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git symbolic-ref refs/remotes/origin/HEAD (detect default branch)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 6. git fetch origin main (finalize)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push origin <branch> (finalize for Branch strategy)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 8. git worktree remove (cleanup)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let _result = runner.run(&runtime).await;
+
+        // Verify the first command was `echo $HOME`
+        let cmds = runtime.captured_commands.lock().unwrap();
+        assert!(
+            !cmds.is_empty(),
+            "should have captured at least one command"
+        );
+        assert_eq!(
+            cmds[0], "echo $HOME",
+            "first command should be 'echo $HOME' for SSH worktree path resolution"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ssh_oneshot_started_event_contains_remote_worktree_path() {
+        // When ssh_host is set, OneShotStarted should contain a worktree path
+        // rooted at the remote home directory (from echo $HOME).
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME (worktree_path_remote)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git symbolic-ref refs/remotes/origin/HEAD
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 6-8: finalize + cleanup
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let _result = runner.run(&runtime).await;
+
+        let captured = events.lock().unwrap();
+        let started = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotStarted { .. }));
+        assert!(
+            started.is_some(),
+            "should emit OneShotStarted, events: {:?}",
+            *captured
+        );
+        match started.unwrap() {
+            SessionEvent::OneShotStarted {
+                worktree_path, ..
+            } => {
+                assert!(
+                    worktree_path.starts_with("/home/remoteuser/.yarr/worktrees/"),
+                    "worktree_path should start with the remote home dir, got: {}",
+                    worktree_path
+                );
+                assert!(
+                    worktree_path.contains("test-repo-oneshot-"),
+                    "worktree_path should contain repo_id and oneshot prefix, got: {}",
+                    worktree_path
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    // =========================================================================
+    // SSH phase execution routing
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_ssh_host_set_without_ssh_runtime_uses_local_session_runner() {
+        // When ssh_host is Some but ssh_runtime is None, phases use the local
+        // SessionRunner since ssh_runtime is None. The run should proceed
+        // normally without panicking.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        // Confirm ssh_runtime is None (setup_ssh_runner_with_events does not set it)
+        assert!(
+            runner.ssh_runtime.is_none(),
+            "ssh_runtime should be None in this test"
+        );
+        assert!(
+            runner.config.ssh_host.is_some(),
+            "ssh_host should be Some in this test"
+        );
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME (worktree_path_remote)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git symbolic-ref refs/remotes/origin/HEAD
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 6-8: finalize + cleanup
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        // Should not panic — run_phase uses local SessionRunner when ssh_runtime is None
+        let _result = runner.run(&runtime).await;
+
+        let captured = events.lock().unwrap();
+
+        // Should have started at minimum
+        assert!(
+            captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotStarted { .. })),
+            "should emit OneShotStarted even when ssh_runtime is None, events: {:?}",
+            *captured
+        );
+
+        // Design phase should have been attempted (local SessionRunner)
+        assert!(
+            captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::DesignPhaseStarted)),
+            "should attempt design phase via local SessionRunner when ssh_runtime is None, events: {:?}",
+            *captured
+        );
+    }
+
+    // =========================================================================
+    // SSH oneshot: cancellation
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_ssh_cancellation_before_worktree_creation() {
+        // Cancel before worktree creation with ssh_host set.
+        // Should emit OneShotFailed and not run worktree commands.
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_ssh_config(&tmp, MergeStrategy::Branch);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token.clone()).on_event(
+            Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }),
+        );
+
+        // Cancel immediately before run
+        cancel_token.cancel();
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME (worktree_path_remote)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let _result = runner.run(&runtime).await;
+
+        let captured = events.lock().unwrap();
+
+        // Should have OneShotFailed
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed on cancellation with ssh_host, events: {:?}",
+            *captured
+        );
+
+        // Should NOT have OneShotComplete
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should not emit OneShotComplete when cancelled with ssh_host"
+        );
+
+        // Worktree add command should NOT have been run
+        let cmds = runtime.captured_commands.lock().unwrap();
+        assert!(
+            !cmds.iter().any(|c| c.contains("git worktree add")),
+            "should not run 'git worktree add' when cancelled before worktree creation, commands: {:?}",
+            *cmds
+        );
+
+        // Only echo $HOME should have been captured
+        assert_eq!(
+            cmds.len(),
+            1,
+            "should have captured exactly one command, got: {:?}",
+            *cmds
+        );
+        assert_eq!(
+            cmds[0], "echo $HOME",
+            "only captured command should be 'echo $HOME', got: {:?}",
+            *cmds
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ssh_cancellation_during_design_phase_triggers_cleanup() {
+        // Cancel during design phase with ssh_host set.
+        // Should cleanup the remote worktree and emit OneShotFailed.
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_ssh_config(&tmp, MergeStrategy::Branch);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        // Cancel when design phase starts — this ensures worktree was already
+        // created and the runner must clean it up.
+        let cancel_clone = cancel_token.clone();
+        let runner = OneShotRunner::new(config, collector, cancel_token).on_event(Box::new(
+            move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+                if matches!(event, SessionEvent::DesignPhaseStarted) {
+                    cancel_clone.cancel();
+                }
+            },
+        ));
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git symbolic-ref
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git fetch
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 6. git worktree remove (cleanup after cancel)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let _result = runner.run(&runtime).await;
+
+        let captured = events.lock().unwrap();
+
+        // Should have OneShotFailed with cancellation reason
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed when cancelled during design phase with ssh_host, events: {:?}",
+            *captured
+        );
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.contains("Cancelled") || reason.contains("cancel"),
+                "failure reason should mention cancellation, got: {}",
+                reason
+            );
+        }
+
+        // Should NOT have OneShotComplete
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should not emit OneShotComplete when cancelled during design phase"
+        );
+
+        // The worktree path should have been based on the remote home
+        let started = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotStarted { .. }));
+        if let Some(SessionEvent::OneShotStarted { worktree_path, .. }) = started {
+            assert!(
+                worktree_path.starts_with("/home/remoteuser/.yarr/worktrees/"),
+                "worktree path should use remote home dir, got: {}",
+                worktree_path
+            );
+        }
+
+        // Verify cleanup actually ran
+        let cmds = runtime.captured_commands.lock().unwrap();
+        assert!(
+            cmds.iter().any(|c| c.contains("git worktree remove")),
+            "should run 'git worktree remove' as cleanup after cancel during design phase, commands: {:?}",
+            *cmds
+        );
+    }
+
+    // =========================================================================
+    // SSH oneshot: failure when worktree_path_remote fails
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_ssh_worktree_path_remote_failure_echo_home_nonzero() {
+        // When echo $HOME returns non-zero, worktree_path_remote fails,
+        // and the runner should emit OneShotFailed with a reason about
+        // remote worktree path and NOT proceed to design phase.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "bash: command not found".to_string(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_err(), "run should fail when echo $HOME fails");
+
+        let captured = events.lock().unwrap();
+
+        // Should emit OneShotFailed with a reason about remote worktree path
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed when worktree_path_remote fails, events: {:?}",
+            *captured
+        );
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.contains("remote worktree path") || reason.contains("remote home"),
+                "failure reason should mention remote worktree path, got: {}",
+                reason
+            );
+        }
+
+        // Should NOT proceed to design phase
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::DesignPhaseStarted)),
+            "should not start design phase when worktree_path_remote fails"
+        );
+
+        // Should NOT have OneShotComplete
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should not emit OneShotComplete when worktree_path_remote fails"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ssh_worktree_path_remote_failure_empty_home() {
+        // When echo $HOME returns only whitespace, worktree_path_remote treats it as empty after trimming.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME returns empty
+            CommandOutput {
+                exit_code: 0,
+                stdout: "   \n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_err(), "run should fail when $HOME is empty");
+
+        let captured = events.lock().unwrap();
+
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed when remote $HOME is empty, events: {:?}",
+            *captured
+        );
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.contains("remote worktree path") || reason.contains("Remote $HOME"),
+                "failure reason should mention remote worktree path issue, got: {}",
+                reason
+            );
+        }
+
+        // Should NOT proceed to design phase
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::DesignPhaseStarted)),
+            "should not start design phase when remote $HOME is empty"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ssh_worktree_path_remote_failure_relative_home() {
+        // When echo $HOME returns a relative path, worktree_path_remote fails.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME returns relative path
+            CommandOutput {
+                exit_code: 0,
+                stdout: "relative/path\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_err(), "run should fail when $HOME is relative");
+
+        let captured = events.lock().unwrap();
+
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed when remote $HOME is relative, events: {:?}",
+            *captured
+        );
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.contains("remote worktree path") || reason.contains("not an absolute path"),
+                "failure reason should mention path issue, got: {}",
+                reason
+            );
+        }
+
+        // Should NOT have OneShotComplete
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should not emit OneShotComplete when worktree_path_remote fails with relative path"
+        );
+    }
+
+    // =========================================================================
+    // move_plan_to_completed_impl with commit=false tests (plan-move in run())
+    // =========================================================================
+
+    #[tokio::test]
+    async fn move_plan_to_completed_no_commit_skips_commit_and_push() {
+        // Test that calling move_plan_to_completed_impl with commit=false
+        // only issues mkdir+mv and git add — no git commit or git push.
+        use crate::move_plan_to_completed_impl;
+
+        let runtime = MockRuntime::completing_after(1);
+        let working_dir = std::path::PathBuf::from("/fake/worktree");
+
+        let result = move_plan_to_completed_impl(
+            &runtime,
+            &working_dir,
+            "docs/plans",
+            "2024-03-14-add-login-feature-design.md",
+            false,
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "move_plan_to_completed_impl with commit=false should succeed, got: {:?}",
+            result
+        );
+
+        let commands = runtime.captured_commands.lock().unwrap();
+
+        // Should have exactly 2 commands: mkdir+mv and git add
+        assert_eq!(
+            commands.len(),
+            2,
+            "with commit=false should issue 2 commands (mkdir+mv, git add), got: {:?}",
+            *commands
+        );
+
+        // First command: mkdir -p + mv
+        assert!(
+            commands[0].contains("mkdir -p") && commands[0].contains("mv"),
+            "first command should contain mkdir+mv, got: {}",
+            commands[0]
+        );
+        assert!(
+            commands[0].contains("2024-03-14-add-login-feature-design.md"),
+            "mkdir+mv should reference the plan filename, got: {}",
+            commands[0]
+        );
+
+        // Second command: git add
+        assert!(
+            commands[1].starts_with("git add"),
+            "second command should be git add, got: {}",
+            commands[1]
+        );
+
+        // No commit or push commands should be present
+        for cmd in commands.iter() {
+            assert!(
+                !cmd.starts_with("git commit"),
+                "should NOT issue git commit with commit=false, but found: {}",
+                cmd
+            );
+            assert!(
+                !cmd.contains("git push"),
+                "should NOT issue git push with commit=false, but found: {}",
+                cmd
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_no_commit_git_add_failure_still_returns_ok() {
+        // When the file move succeeds but git add fails, the function should
+        // still return Ok — git operations are best-effort after the mv.
+        use crate::move_plan_to_completed_impl;
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // mkdir+mv succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // git add fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "fatal: not a git repository".to_string(),
+            },
+        ];
+
+        let working_dir = std::path::PathBuf::from("/fake/worktree");
+
+        let result = move_plan_to_completed_impl(
+            &runtime,
+            &working_dir,
+            "docs/plans",
+            "my-plan.md",
+            false,
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "should still succeed when git add fails (best-effort), got: {:?}",
+            result
+        );
+
+        let commands = runtime.captured_commands.lock().unwrap();
+        assert_eq!(
+            commands.len(),
+            2,
+            "should have attempted mkdir+mv and git add, got: {:?}",
+            *commands
+        );
+    }
+
+    #[test]
+    fn plan_filename_extraction_from_path() {
+        // Test the filename extraction logic that will be used in run() to
+        // extract the basename from plan_file_path before passing to
+        // move_plan_to_completed_impl.
+        // The pattern is: plan_file_path.rsplit('/').next()
+
+        let plan_file_path = "docs/plans/2024-03-14-add-login-feature-design.md";
+        let filename = plan_file_path.rsplit('/').next().unwrap();
+        assert_eq!(
+            filename, "2024-03-14-add-login-feature-design.md",
+            "should extract the basename from a plans dir path"
+        );
+
+        // Edge case: no directory separator (just a bare filename)
+        let bare_path = "my-plan.md";
+        let filename = bare_path.rsplit('/').next().unwrap();
+        assert_eq!(
+            filename, "my-plan.md",
+            "should handle a bare filename without directory"
+        );
+
+        // Edge case: trailing slash (would produce empty string)
+        let trailing_slash = "docs/plans/";
+        let filename = trailing_slash.rsplit('/').next().unwrap();
+        assert_eq!(
+            filename, "",
+            "trailing slash should produce an empty basename — caller must guard against this"
+        );
+
+        // Edge case: deeply nested path
+        let deep_path = "a/b/c/d/my-plan.md";
+        let filename = deep_path.rsplit('/').next().unwrap();
+        assert_eq!(
+            filename, "my-plan.md",
+            "should extract basename from deeply nested path"
+        );
+    }
+
+    // =========================================================================
+    // plan-move integration tests (Task 5)
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_oneshot_run_moves_plan_when_enabled() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_config(&tmp, MergeStrategy::Branch);
+        // move_plans_to_completed defaults to true in make_config
+        assert!(config.move_plans_to_completed);
+
+        let wt_dir = TempDir::new().unwrap();
+        // Create the plan file so the existence check passes
+        let plan_dir = wt_dir.path().join("docs/plans");
+        std::fs::create_dir_all(&plan_dir).unwrap();
+        std::fs::write(plan_dir.join("test-plan.md"), "# Test Plan\n").unwrap();
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let state = ResumeState {
+            worktree_path: wt_dir.path().to_path_buf(),
+            branch: "oneshot/test-branch-abc123".to_string(),
+            plan_file: Some("docs/plans/test-plan.md".to_string()),
+            skip_design: true,
+            skip_implementation: false,
+        };
+
+        let runner = OneShotRunner::new(config, collector, cancel_token)
+            .with_resume_state(state)
+            .on_event(Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }));
+
+        let mut runtime = MockRuntime::completing_after(1);
+
+        // Command results:
+        // 1. detect_default_branch: git symbolic-ref succeeds
+        // 2. mkdir -p + mv (plan move)
+        // 3. git add (plan move)
+        // 4. git push -u origin <branch> (git finalize)
+        // 5. git worktree remove (cleanup)
+        runtime.command_results = vec![
+            CommandOutput { exit_code: 0, stdout: "refs/remotes/origin/main\n".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: "Branch pushed".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_ok(), "oneshot with plan move enabled should succeed, got: {:?}", result.err());
+
+        let commands = runtime.captured_commands.lock().unwrap();
+        // Verify mkdir+mv command was issued
+        let has_mv_cmd = commands.iter().any(|c| c.contains("mkdir -p") && c.contains("mv "));
+        assert!(has_mv_cmd, "should have issued mkdir+mv command for plan move, got commands: {:?}", *commands);
+
+        // Verify git add command was issued for the completed path
+        let has_git_add = commands.iter().any(|c| c.contains("git add") && c.contains("completed"));
+        assert!(has_git_add, "should have issued git add for completed plan, got commands: {:?}", *commands);
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_run_skips_plan_move_when_disabled() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut config = make_config(&tmp, MergeStrategy::Branch);
+        config.move_plans_to_completed = false;
+
+        let wt_dir = TempDir::new().unwrap();
+        // Create the plan file anyway — it should NOT be moved
+        let plan_dir = wt_dir.path().join("docs/plans");
+        std::fs::create_dir_all(&plan_dir).unwrap();
+        std::fs::write(plan_dir.join("test-plan.md"), "# Test Plan\n").unwrap();
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let state = ResumeState {
+            worktree_path: wt_dir.path().to_path_buf(),
+            branch: "oneshot/test-branch-abc123".to_string(),
+            plan_file: Some("docs/plans/test-plan.md".to_string()),
+            skip_design: true,
+            skip_implementation: false,
+        };
+
+        let runner = OneShotRunner::new(config, collector, cancel_token)
+            .with_resume_state(state)
+            .on_event(Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }));
+
+        let mut runtime = MockRuntime::completing_after(1);
+
+        // Command results: detect_default_branch + git finalize (no plan move commands)
+        // 1. detect_default_branch: git symbolic-ref succeeds
+        // 2. git push -u origin <branch>
+        // 3. git worktree remove
+        runtime.command_results = vec![
+            CommandOutput { exit_code: 0, stdout: "refs/remotes/origin/main\n".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: "Branch pushed".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_ok(), "oneshot with plan move disabled should succeed, got: {:?}", result.err());
+
+        let commands = runtime.captured_commands.lock().unwrap();
+        // Verify NO mkdir+mv command was issued
+        let has_mv_cmd = commands.iter().any(|c| c.contains("mkdir -p") && c.contains("mv "));
+        assert!(!has_mv_cmd, "should NOT have issued mv command when move_plans_to_completed is false, got commands: {:?}", *commands);
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_run_plan_move_failure_is_best_effort() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_config(&tmp, MergeStrategy::Branch);
+        assert!(config.move_plans_to_completed);
+
+        let wt_dir = TempDir::new().unwrap();
+        // Create the plan file so the existence check passes
+        let plan_dir = wt_dir.path().join("docs/plans");
+        std::fs::create_dir_all(&plan_dir).unwrap();
+        std::fs::write(plan_dir.join("test-plan.md"), "# Test Plan\n").unwrap();
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let state = ResumeState {
+            worktree_path: wt_dir.path().to_path_buf(),
+            branch: "oneshot/test-branch-abc123".to_string(),
+            plan_file: Some("docs/plans/test-plan.md".to_string()),
+            skip_design: true,
+            skip_implementation: false,
+        };
+
+        let runner = OneShotRunner::new(config, collector, cancel_token)
+            .with_resume_state(state)
+            .on_event(Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }));
+
+        let mut runtime = MockRuntime::completing_after(1);
+
+        // Command results:
+        // 1. detect_default_branch: git symbolic-ref succeeds
+        // 2. mkdir -p + mv FAILS (plan move failure — git add is NOT called after mv failure)
+        // 3. git push -u origin <branch> (git finalize should still proceed)
+        // 4. git worktree remove (cleanup)
+        runtime.command_results = vec![
+            CommandOutput { exit_code: 0, stdout: "refs/remotes/origin/main\n".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 1, stdout: String::new(), stderr: "mv: cannot move file".to_string() },
+            CommandOutput { exit_code: 0, stdout: "Branch pushed".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(
+            result.is_ok(),
+            "oneshot should succeed even when plan move fails (best-effort), got: {:?}",
+            result.err()
+        );
+
+        // Verify the mkdir+mv command was actually attempted (and consumed the failure result)
+        let commands = runtime.captured_commands.lock().unwrap();
+        let has_mv_cmd = commands.iter().any(|c| c.contains("mkdir -p") && c.contains("mv "));
+        assert!(has_mv_cmd, "should have attempted mkdir+mv command for plan move, got commands: {:?}", *commands);
+        drop(commands);
+
+        // Verify the oneshot completed fully (git finalize happened)
+        let captured = events.lock().unwrap();
+        let has_complete = captured.iter().any(|e| matches!(e, SessionEvent::OneShotComplete));
+        assert!(has_complete, "oneshot should have completed despite plan move failure");
+
+        let has_git_finalize = captured.iter().any(|e| matches!(e, SessionEvent::GitFinalizeComplete));
+        assert!(has_git_finalize, "git finalize should have completed despite plan move failure");
     }
 }

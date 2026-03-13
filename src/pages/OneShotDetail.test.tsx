@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router";
 
 import type { RepoConfig } from "../repos";
@@ -43,6 +43,24 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("../store", () => ({
   useAppStore: mockUseAppStore,
+}));
+
+// Mock PlanPanel to avoid Sheet complexity
+vi.mock("../PlanPanel", () => ({
+  PlanPanel: ({
+    open,
+    planContent,
+    planFile,
+  }: {
+    open: boolean;
+    planContent: string;
+    planFile: string;
+  }) =>
+    open ? (
+      <div data-testid="plan-panel" data-plan-file={planFile}>
+        {planContent}
+      </div>
+    ) : null,
 }));
 
 // Mock EventsList to avoid complexity
@@ -91,6 +109,20 @@ function makeLocalRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
   } as RepoConfig;
 }
 
+function makeSshRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
+  return {
+    type: "ssh",
+    id: "repo-ssh-1",
+    sshHost: "devbox",
+    remotePath: "/home/user/repos/remote-project",
+    name: "remote-project",
+    model: "opus",
+    maxIterations: 40,
+    completionSignal: "ALL TODO ITEMS COMPLETE",
+    checks: [],
+    ...overrides,
+  } as RepoConfig;
+}
 
 function makeEntry(overrides: Partial<OneShotEntry> = {}): OneShotEntry {
   return {
@@ -100,6 +132,8 @@ function makeEntry(overrides: Partial<OneShotEntry> = {}): OneShotEntry {
     title: "Fix login bug",
     prompt: "Fix the login bug where users get redirected incorrectly",
     model: "opus",
+    effortLevel: "medium",
+    designEffortLevel: "high",
     mergeStrategy: "merge_to_main",
     status: "running",
     startedAt: Date.now(),
@@ -113,6 +147,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
     repo_path: "/home/beth/repos/my-project",
     prompt: "Fix the login bug where users get redirected incorrectly",
     plan_file: null,
+    plan_content: null,
     repo_id: "repo-1",
     session_type: "one_shot",
     start_time: "2026-03-10T10:00:00Z",
@@ -197,20 +232,24 @@ describe("OneShotDetail", () => {
   // =========================================================================
 
   describe("not found state", () => {
-    it('shows "Not found" when oneshotId does not match any entry', () => {
+    it('shows "Not found" when oneshotId does not match any entry', async () => {
       setupMockState({
         oneShotEntries: new Map([["oneshot-other", makeEntry({ id: "oneshot-other" })]]),
       });
       renderOneShotDetail("oneshot-nonexistent");
 
-      expect(screen.getByText(/not found/i)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText(/not found/i)).toBeInTheDocument();
+      });
     });
 
-    it('shows "Not found" when oneShotEntries is empty', () => {
+    it('shows "Not found" when oneShotEntries is empty', async () => {
       setupMockState({ oneShotEntries: new Map() });
       renderOneShotDetail();
 
-      expect(screen.getByText(/not found/i)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText(/not found/i)).toBeInTheDocument();
+      });
     });
   });
 
@@ -1225,6 +1264,425 @@ describe("OneShotDetail", () => {
       // sessionContextColor(90) → "#f87171" (red, since >85%)
       const percentSpan = screen.getByText(/90%/);
       expect(percentSpan).toHaveStyle({ color: "#f87171" });
+    });
+  });
+
+  // =========================================================================
+  // 10. Disk fallback (no entry in store)
+  // =========================================================================
+
+  describe("disk fallback (no entry in store)", () => {
+    const diskTrace = makeTrace({
+      session_id: "sess-disk-001",
+      repo_id: "oneshot-abc123",
+      prompt: "Fix the login bug where users get redirected incorrectly",
+      outcome: "completed",
+      total_iterations: 3,
+      total_cost_usd: 0.8765,
+    });
+
+    const diskEvents: SessionEvent[] = [
+      { kind: "one_shot_started", session_id: "sess-disk-001" },
+      { kind: "design_phase_started", session_id: "sess-disk-001" },
+      { kind: "design_phase_complete", session_id: "sess-disk-001" },
+      { kind: "implementation_phase_started", session_id: "sess-disk-001" },
+      { kind: "one_shot_complete", session_id: "sess-disk-001" },
+    ];
+
+    function setupDiskFallbackMocks(
+      traces: ReturnType<typeof makeTrace>[] = [diskTrace],
+      events: SessionEvent[] = diskEvents,
+    ) {
+      mockInvoke.mockImplementation(
+        (cmd: string, _args?: Record<string, unknown>) => {
+          if (cmd === "list_traces") return Promise.resolve(traces);
+          if (cmd === "get_trace_events") return Promise.resolve(events);
+          return Promise.resolve(null);
+        },
+      );
+    }
+
+    it("calls list_traces when entry is missing from store", async () => {
+      setupMockState({ oneShotEntries: new Map() });
+      setupDiskFallbackMocks();
+
+      renderOneShotDetail("oneshot-abc123");
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("list_traces", {
+          repoId: "oneshot-abc123",
+        });
+      });
+    });
+
+    it("calls get_trace_events after list_traces returns traces", async () => {
+      setupMockState({ oneShotEntries: new Map() });
+      setupDiskFallbackMocks();
+
+      renderOneShotDetail("oneshot-abc123");
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("get_trace_events", {
+          repoId: "oneshot-abc123",
+          sessionId: "sess-disk-001",
+        });
+      });
+    });
+
+    it("renders trace result section with fallback data", async () => {
+      setupMockState({ oneShotEntries: new Map() });
+      setupDiskFallbackMocks();
+
+      renderOneShotDetail("oneshot-abc123");
+
+      await waitFor(() => {
+        expect(screen.getByText("Result")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("completed")).toBeInTheDocument();
+      expect(screen.getByText("3")).toBeInTheDocument();
+      expect(screen.getByText(/\$0\.8765/)).toBeInTheDocument();
+      expect(screen.getByText("sess-disk-001")).toBeInTheDocument();
+    });
+
+    it("renders events list with fallback events", async () => {
+      setupMockState({ oneShotEntries: new Map() });
+      setupDiskFallbackMocks();
+
+      renderOneShotDetail("oneshot-abc123");
+
+      await waitFor(() => {
+        const eventsList = screen.getByTestId("events-list");
+        expect(eventsList).toHaveAttribute(
+          "data-event-count",
+          String(diskEvents.length),
+        );
+      });
+    });
+
+    it("shows header info from trace data (prompt and derived title)", async () => {
+      setupMockState({ oneShotEntries: new Map() });
+      setupDiskFallbackMocks([
+        makeTrace({
+          prompt:
+            "Fix the login bug where users get redirected incorrectly",
+        }),
+      ]);
+
+      renderOneShotDetail("oneshot-abc123");
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            "Fix the login bug where users get redirected incorrectly",
+          ),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("shows loading state while fetching from disk", () => {
+      setupMockState({ oneShotEntries: new Map() });
+      // Use a never-resolving promise to keep it in loading state
+      mockInvoke.mockImplementation(() => new Promise(() => {}));
+
+      renderOneShotDetail("oneshot-abc123");
+
+      // Should NOT show "Not found" while loading
+      expect(screen.queryByText(/not found/i)).not.toBeInTheDocument();
+    });
+
+    it('shows "Not found" only when list_traces returns empty array', async () => {
+      setupMockState({ oneShotEntries: new Map() });
+      setupDiskFallbackMocks([], []);
+
+      renderOneShotDetail("oneshot-abc123");
+
+      await waitFor(() => {
+        expect(screen.getByText(/not found/i)).toBeInTheDocument();
+      });
+    });
+
+    it('shows "Not found" when list_traces rejects with an error', async () => {
+      setupMockState({ oneShotEntries: new Map() });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "list_traces")
+          return Promise.reject(new Error("Disk read failed"));
+        return Promise.resolve(null);
+      });
+
+      renderOneShotDetail("oneshot-abc123");
+
+      await waitFor(() => {
+        expect(screen.getByText(/not found/i)).toBeInTheDocument();
+      });
+    });
+
+    it("does NOT call list_traces when entry exists in store", () => {
+      setupMockState({
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry()],
+        ]),
+      });
+      setupDiskFallbackMocks();
+
+      renderOneShotDetail("oneshot-abc123");
+
+      expect(mockInvoke).not.toHaveBeenCalledWith(
+        "list_traces",
+        expect.anything(),
+      );
+    });
+  });
+
+  // =========================================================================
+  // 11. PlanPanel integration
+  // =========================================================================
+
+  describe("PlanPanel integration", () => {
+    it('"View Plan" button is visible when trace has plan_content', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: "# My Plan\nDo the thing.",
+                plan_file: "/home/beth/repos/my-project/plan.md",
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.getByRole("button", { name: /view plan/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('"View Plan" button is NOT visible when trace has no plan_content', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: null,
+                plan_file: null,
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.queryByRole("button", { name: /view plan/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('"View Plan" button is NOT visible when session is running', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "running" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: true,
+              trace: makeTrace({
+                plan_content: "# My Plan\nDo the thing.",
+                plan_file: "/home/beth/repos/my-project/plan.md",
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.queryByRole("button", { name: /view plan/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('clicking "View Plan" opens PlanPanel', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: "# My Plan\nDo the thing.",
+                plan_file: "/home/beth/repos/my-project/plan.md",
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // PlanPanel should not be visible before clicking
+      expect(screen.queryByTestId("plan-panel")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /view plan/i }));
+
+      expect(screen.getByTestId("plan-panel")).toBeInTheDocument();
+      expect(screen.getByTestId("plan-panel")).toHaveTextContent(
+        "# My Plan Do the thing.",
+      );
+    });
+
+    it("PlanPanel is not rendered when plan_content is null", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: null,
+                plan_file: null,
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(screen.queryByTestId("plan-panel")).not.toBeInTheDocument();
+    });
+
+    it("PlanPanel receives correct planFile and planContent props", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace({
+                plan_content: "## Step 1\nRefactor the module.",
+                plan_file: "/home/beth/repos/my-project/design.md",
+              }),
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /view plan/i }));
+
+      const panel = screen.getByTestId("plan-panel");
+      expect(panel).toHaveAttribute(
+        "data-plan-file",
+        "/home/beth/repos/my-project/design.md",
+      );
+      expect(panel).toHaveTextContent("## Step 1 Refactor the module.");
+    });
+  });
+
+  // =========================================================================
+  // SSH host prefix on worktree path
+  // =========================================================================
+
+  describe("SSH host prefix on worktree path", () => {
+    it("displays worktree path as-is for local parent repo", () => {
+      setupMockState({
+        repos: [makeLocalRepo({ id: "repo-1" })],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              parentRepoId: "repo-1",
+              worktreePath: "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const eventsList = screen.getByTestId("events-list");
+      expect(eventsList).toHaveAttribute(
+        "data-repo-path",
+        "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+      );
+    });
+
+    it("prefixes worktree path with sshHost: for SSH parent repo", () => {
+      setupMockState({
+        repos: [makeSshRepo({ id: "repo-ssh-1" })],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              parentRepoId: "repo-ssh-1",
+              worktreePath: "/home/user/.yarr/worktrees/abc123-oneshot-def/",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const eventsList = screen.getByTestId("events-list");
+      expect(eventsList).toHaveAttribute(
+        "data-repo-path",
+        "devbox:/home/user/.yarr/worktrees/abc123-oneshot-def/",
+      );
+    });
+
+    it("displays worktree path as-is when parent repo is not found in repos list", () => {
+      setupMockState({
+        repos: [], // no repos — parent repo not found
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              parentRepoId: "repo-nonexistent",
+              worktreePath: "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const eventsList = screen.getByTestId("events-list");
+      expect(eventsList).toHaveAttribute(
+        "data-repo-path",
+        "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+      );
     });
   });
 });

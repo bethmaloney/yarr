@@ -140,6 +140,11 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         self
     }
 
+    pub fn with_reconnect_notify(mut self, notify: Arc<Notify>) -> Self {
+        self.reconnect_notify = notify;
+        self
+    }
+
     /// Get a handle to signal reconnection from an external caller
     pub fn reconnect_notify(&self) -> Arc<Notify> {
         self.reconnect_notify.clone()
@@ -162,6 +167,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             prompt: self.config.prompt.clone(),
             working_dir: self.config.effective_working_dir().to_path_buf(),
             model: self.config.model.clone(),
+            effort_level: self.config.effort_level.clone(),
             extra_args: self.config.extra_args.clone(),
             env_vars: self.config.env_vars.clone(),
         }
@@ -744,6 +750,7 @@ mod tests {
             max_iterations: 5,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,

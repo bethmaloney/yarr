@@ -3,6 +3,7 @@ use chrono::Utc;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
+use tracing::instrument;
 
 use crate::git_merge::{git_merge_push, GitMergeConfig, GitMergeEvent};
 use crate::output::{ContentBlock, ResultEvent, StreamEvent};
@@ -62,6 +63,7 @@ pub struct SessionConfig {
     pub max_iterations: u32,
     pub completion_signal: String,
     pub model: Option<String>,
+    pub effort_level: Option<String>,
     pub extra_args: Vec<String>,
     /// Plan file path (if any)
     pub plan_file: Option<String>,
@@ -85,6 +87,7 @@ impl Default for SessionConfig {
             max_iterations: 20,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: Vec::new(),
             plan_file: None,
             inter_iteration_delay_ms: 1000,
@@ -183,6 +186,8 @@ pub enum SessionEvent {
     GitSyncConflictResolveComplete { iteration: u32, attempt: u32, success: bool },
     /// Git sync failed after all retries
     GitSyncFailed { iteration: u32, error: String },
+    /// Claude API rate limit hit (non-"allowed" status only)
+    RateLimited { iteration: u32, status: String, rate_limit_type: String },
 }
 
 /// Callback for receiving session events (Tauri IPC hookpoint)
@@ -279,8 +284,46 @@ impl SessionRunner {
     }
 
     fn emit(&self, event: SessionEvent) {
+        let session_id = self.session_id.lock().unwrap().clone();
+        let event_kind = match &event {
+            SessionEvent::SessionStarted { .. } => "session_started",
+            SessionEvent::IterationStarted { .. } => "iteration_started",
+            SessionEvent::ToolUse { .. } => "tool_use",
+            SessionEvent::AssistantText { .. } => "assistant_text",
+            SessionEvent::IterationComplete { .. } => "iteration_complete",
+            SessionEvent::IterationFailed { .. } => "iteration_failed",
+            SessionEvent::SessionComplete { .. } => "session_complete",
+            SessionEvent::Disconnected { .. } => "disconnected",
+            SessionEvent::Reconnecting { .. } => "reconnecting",
+            SessionEvent::CheckStarted { .. } => "check_started",
+            SessionEvent::CheckPassed { .. } => "check_passed",
+            SessionEvent::CheckFailed { .. } => "check_failed",
+            SessionEvent::CheckFixStarted { .. } => "check_fix_started",
+            SessionEvent::CheckFixComplete { .. } => "check_fix_complete",
+            SessionEvent::OneShotStarted { .. } => "oneshot_started",
+            SessionEvent::DesignPhaseStarted => "design_phase_started",
+            SessionEvent::DesignPhaseComplete { .. } => "design_phase_complete",
+            SessionEvent::ImplementationPhaseStarted => "implementation_phase_started",
+            SessionEvent::ImplementationPhaseComplete => "implementation_phase_complete",
+            SessionEvent::GitFinalizeStarted { .. } => "git_finalize_started",
+            SessionEvent::GitFinalizeComplete => "git_finalize_complete",
+            SessionEvent::OneShotComplete => "oneshot_complete",
+            SessionEvent::OneShotFailed { .. } => "oneshot_failed",
+            SessionEvent::GitSyncStarted { .. } => "git_sync_started",
+            SessionEvent::GitSyncPushSucceeded { .. } => "git_sync_push_succeeded",
+            SessionEvent::GitSyncConflict { .. } => "git_sync_conflict",
+            SessionEvent::GitSyncConflictResolveStarted { .. } => "git_sync_conflict_resolve_started",
+            SessionEvent::GitSyncConflictResolveComplete { .. } => "git_sync_conflict_resolve_complete",
+            SessionEvent::GitSyncFailed { .. } => "git_sync_failed",
+            SessionEvent::RateLimited { .. } => "rate_limited",
+        };
+        tracing::debug!(
+            session_id = session_id.as_deref().unwrap_or("<none>"),
+            event_kind,
+            "emitting session event"
+        );
         self.accumulated_events.lock().unwrap().push(event.clone());
-        if let Some(ref sid) = *self.session_id.lock().unwrap() {
+        if let Some(ref sid) = session_id {
             if let Err(e) = self.collector.append_event(sid, &event) {
                 tracing::warn!("Failed to append event to disk: {e}");
             }
@@ -295,11 +338,13 @@ impl SessionRunner {
             prompt: self.config.prompt.clone(),
             working_dir: self.config.effective_working_dir().to_path_buf(),
             model: self.config.model.clone(),
+            effort_level: self.config.effort_level.clone(),
             extra_args: self.config.extra_args.clone(),
             env_vars: self.config.env_vars.clone(),
         }
     }
 
+    #[instrument(skip(self, runtime, checks), fields(iteration))]
     async fn run_checks(
         &self,
         runtime: &dyn RuntimeProvider,
@@ -308,6 +353,8 @@ impl SessionRunner {
         checks: &[Check],
     ) {
         let matching: Vec<&Check> = checks.iter().filter(|c| &c.when == when).collect();
+
+        tracing::info!(iteration, when = ?when, count = matching.len(), "checks starting");
 
         for check in matching {
             if self.cancel_token.is_cancelled() {
@@ -343,6 +390,7 @@ impl SessionRunner {
             };
 
             if cmd_output.exit_code == 0 {
+                tracing::info!(iteration, check_name = %check_name, "check passed");
                 self.emit(SessionEvent::CheckPassed {
                     iteration,
                     check_name: check_name.clone(),
@@ -376,6 +424,7 @@ impl SessionRunner {
                     prompt: fix_prompt,
                     working_dir: self.config.effective_working_dir().to_path_buf(),
                     model: check.model.clone().or_else(|| self.config.model.clone()),
+                    effort_level: self.config.effort_level.clone(),
                     extra_args: vec!["--dangerously-skip-permissions".to_string()],
                     env_vars: self.config.env_vars.clone(),
                 };
@@ -387,6 +436,7 @@ impl SessionRunner {
                         // Wait for completion
                         let _ = process.completion.await;
 
+                        tracing::info!(iteration, check_name = %check_name, attempt, "fix agent succeeded");
                         self.emit(SessionEvent::CheckFixComplete {
                             iteration,
                             check_name: check_name.clone(),
@@ -418,6 +468,7 @@ impl SessionRunner {
                 match recheck {
                     Ok(recheck_output) => {
                         if recheck_output.exit_code == 0 {
+                            tracing::info!(iteration, check_name = %check_name, attempt, "check now passing after fix");
                             self.emit(SessionEvent::CheckPassed {
                                 iteration,
                                 check_name: check_name.clone(),
@@ -457,7 +508,10 @@ impl SessionRunner {
                 .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '/' || c == '-')
     }
 
+    #[instrument(skip(self, runtime), fields(iteration))]
     async fn git_sync(&self, runtime: &dyn RuntimeProvider, iteration: u32) {
+        tracing::info!(iteration, "git_sync entered");
+
         let git_sync_config = match &self.config.git_sync {
             Some(cfg) => cfg,
             None => return,
@@ -480,7 +534,11 @@ impl SessionRunner {
             .run_command("git branch --show-current", self.config.effective_working_dir(), timeout)
             .await
         {
-            Ok(output) if output.exit_code == 0 => output.stdout.trim().to_string(),
+            Ok(output) if output.exit_code == 0 => {
+                let b = output.stdout.trim().to_string();
+                tracing::debug!(iteration, branch = %b, "detected current branch");
+                b
+            }
             Ok(output) => {
                 let error = combine_output(&output.stdout, &output.stderr);
                 self.emit(SessionEvent::GitSyncFailed {
@@ -548,6 +606,7 @@ impl SessionRunner {
     }
 
     /// Execute the Ralph loop. Returns the finalized trace.
+    #[instrument(skip(self, runtime), fields(repo_path = %self.config.effective_working_dir().display(), max_iterations = self.config.max_iterations))]
     pub async fn run(
         &self,
         runtime: &dyn RuntimeProvider,
@@ -561,6 +620,19 @@ impl SessionRunner {
             Some(sid) => self.collector.start_session_with_id(sid, &repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
             None => self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
         };
+
+        // Snapshot plan content if plan_file is configured
+        if let Some(ref plan_path) = self.config.plan_file {
+            match tokio::fs::read_to_string(plan_path).await {
+                Ok(content) => {
+                    tracing::info!(plan_file = %plan_path, "plan content snapshot captured");
+                    trace.plan_content = Some(content);
+                }
+                Err(e) => {
+                    tracing::warn!(plan_file = %plan_path, error = %e, "failed to read plan file, continuing without plan content");
+                }
+            }
+        }
 
         tracing::info!(repo = %repo_str, max_iterations = self.config.max_iterations, "starting Ralph loop");
         tracing::info!(runtime = runtime.name(), "runtime selected");
@@ -603,6 +675,7 @@ impl SessionRunner {
     ///
     /// It **does** run checks, git_sync, record iterations, emit iteration-level
     /// events, and set `trace.outcome` / `trace.failure_reason`.
+    #[instrument(skip(self, runtime, trace), fields(max_iterations = self.config.max_iterations))]
     pub async fn run_with_trace(
         &self,
         runtime: &dyn RuntimeProvider,
@@ -793,6 +866,7 @@ impl SessionRunner {
     }
 
     /// Run a single iteration: spawn Claude, consume streaming events, return the final result.
+    #[instrument(skip(self, runtime, invocation), fields(iteration, working_dir = %invocation.working_dir.display()))]
     async fn run_iteration(
         &self,
         runtime: &dyn RuntimeProvider,
@@ -804,6 +878,9 @@ impl SessionRunner {
         tracing::info!(iteration, "claude process spawned");
         let mut result_event: Option<ResultEvent> = None;
         let mut last_context_tokens: u64 = 0;
+        let mut last_assistant_text = String::new();
+        let mut event_count: u32 = 0;
+        let mut event_summary = Vec::<String>::new();
 
         // Register abort handle so it can be called on app exit
         let abort_arc: std::sync::Arc<dyn crate::runtime::AbortHandle> = std::sync::Arc::from(process.abort_handle);
@@ -816,8 +893,14 @@ impl SessionRunner {
             tokio::select! {
                 event = process.events.recv() => {
                     let Some(event) = event else { break };
+                    event_count += 1;
                     match &event {
                         StreamEvent::System(sys) => {
+                            if let Some(ref subtype) = sys.subtype {
+                                event_summary.push(format!("system:{subtype}"));
+                            } else {
+                                event_summary.push("system:init".to_string());
+                            }
                             if let Some(ref model) = sys.model {
                                 tracing::debug!("Iteration {iteration}: model={model}");
                             }
@@ -841,6 +924,7 @@ impl SessionRunner {
                                             text.clone()
                                         };
                                         tracing::debug!(iteration, preview, "text output");
+                                        last_assistant_text = text.clone();
                                         self.emit(SessionEvent::AssistantText {
                                             iteration,
                                             text: text.clone(),
@@ -858,6 +942,17 @@ impl SessionRunner {
                         }
                         StreamEvent::RateLimit(rl) => {
                             if let Some(ref info) = rl.rate_limit_info {
+                                let status = info.status.as_deref().unwrap_or("unknown");
+                                let rl_type = info.rate_limit_type.as_deref().unwrap_or("unknown");
+                                // Only surface non-"allowed" rate limits — "allowed" fires every turn
+                                if status != "allowed" {
+                                    event_summary.push(format!("rate_limit:{status}/{rl_type}"));
+                                    self.emit(SessionEvent::RateLimited {
+                                        iteration,
+                                        status: status.to_string(),
+                                        rate_limit_type: rl_type.to_string(),
+                                    });
+                                }
                                 tracing::debug!(
                                     "Rate limit: status={:?} type={:?}",
                                     info.status,
@@ -894,12 +989,25 @@ impl SessionRunner {
         );
 
         if exit.exit_code != 0 && result_event.is_none() {
-            tracing::error!(iteration, exit_code = exit.exit_code, stderr = %exit.stderr.trim(), "claude process failed with no result");
-            anyhow::bail!(
-                "Claude process exited with code {} (stderr: {})",
-                exit.exit_code,
-                exit.stderr.trim()
-            );
+            let stderr = exit.stderr.trim();
+            let output = combine_output(last_assistant_text.trim(), stderr);
+            let events_desc = if event_summary.is_empty() {
+                "no events received".to_string()
+            } else {
+                format!("{event_count} events: [{}]", event_summary.join(", "))
+            };
+            tracing::error!(iteration, exit_code = exit.exit_code, stderr = %stderr, last_output = %last_assistant_text.trim(), events = %events_desc, "claude process failed with no result");
+            if output.is_empty() {
+                anyhow::bail!(
+                    "Claude process exited with code {} ({events_desc})",
+                    exit.exit_code,
+                );
+            } else {
+                anyhow::bail!(
+                    "Claude process exited with code {} — {output}",
+                    exit.exit_code,
+                );
+            }
         }
 
         if result_event.is_none() {
@@ -932,6 +1040,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0, // no delay for tests
@@ -1261,6 +1370,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -1501,6 +1611,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -1569,6 +1680,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -1646,6 +1758,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -1937,6 +2050,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -1989,6 +2103,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -2444,6 +2559,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -2605,6 +2721,7 @@ mod tests {
             max_iterations: 2,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -2881,6 +2998,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -2959,6 +3077,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: Some("docs/plans/my-plan.md".to_string()),
             inter_iteration_delay_ms: 0,
@@ -3007,6 +3126,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -3039,5 +3159,118 @@ mod tests {
             }
             _ => unreachable!(),
         }
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_snapshot_happy_path() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // Create a plan file on disk with known content
+        let plan_dir = tmp.path().join("plans");
+        std::fs::create_dir_all(&plan_dir).expect("create plans dir");
+        let plan_path = plan_dir.join("my-plan.md");
+        let plan_text = "# My Plan\n\nThis is the plan content.\n";
+        std::fs::write(&plan_path, plan_text).expect("write plan file");
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            plan_file: Some(plan_path.to_string_lossy().to_string()),
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        assert_eq!(
+            trace.plan_content,
+            Some(plan_text.to_string()),
+            "trace.plan_content should contain the plan file contents"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_snapshot_file_not_found() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            plan_file: Some("/nonexistent/path/plan.md".to_string()),
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed even when plan file is missing");
+
+        assert_eq!(
+            trace.plan_content, None,
+            "trace.plan_content should be None when the plan file does not exist"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_snapshot_no_plan_file() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        assert_eq!(
+            trace.plan_content, None,
+            "trace.plan_content should be None when no plan_file is configured"
+        );
     }
 }

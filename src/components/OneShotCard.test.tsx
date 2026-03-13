@@ -20,6 +20,8 @@ function makeEntry(overrides: Partial<OneShotEntry> = {}): OneShotEntry {
     title: "Fix login bug",
     prompt: "Fix the login bug where users get redirected incorrectly",
     model: "opus",
+    effortLevel: "medium",
+    designEffortLevel: "high",
     mergeStrategy: "merge",
     status: "running",
     startedAt: Date.now(),

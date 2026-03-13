@@ -9,6 +9,8 @@ type LocalRepoConfig = {
   path: string;
   name: string;
   model: string;
+  effortLevel?: string;
+  designEffortLevel?: string;
   maxIterations: number;
   completionSignal: string;
   envVars?: Record<string, string>;
@@ -27,6 +29,8 @@ type SshRepoConfig = {
   remotePath: string;
   name: string;
   model: string;
+  effortLevel?: string;
+  designEffortLevel?: string;
   maxIterations: number;
   completionSignal: string;
   envVars?: Record<string, string>;
@@ -67,6 +71,8 @@ export async function addLocalRepo(path: string): Promise<RepoConfig> {
     path,
     name,
     model: "opus",
+    effortLevel: "medium",
+    designEffortLevel: "high",
     maxIterations: 40,
     completionSignal: "ALL TODO ITEMS COMPLETE",
     checks: [],
@@ -90,6 +96,8 @@ export async function addSshRepo(
     remotePath,
     name,
     model: "opus",
+    effortLevel: "medium",
+    designEffortLevel: "high",
     maxIterations: 40,
     completionSignal: "ALL TODO ITEMS COMPLETE",
     checks: [],

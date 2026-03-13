@@ -44,8 +44,8 @@ export interface AppStore {
 
   // --- 1-Shot ---
   oneShotEntries: Map<string, OneShotEntry>;
-  runOneShot: (repoId: string, title: string, prompt: string, model: string, mergeStrategy: string) => Promise<string | undefined>;
-
+  runOneShot: (repoId: string, title: string, prompt: string, model: string, mergeStrategy: string, effortLevel: string, designEffortLevel: string) => Promise<string | undefined>;
+  dismissOneShot: (oneshotId: string) => Promise<void>;
   saveOneShotEntries: () => Promise<void>;
   loadOneShotEntries: () => Promise<void>;
   resumeOneShot: (oneshotId: string) => Promise<void>;
@@ -58,6 +58,7 @@ export const useAppStore = create<AppStore>((set, get) => {
   const recoveryInFlight = new Set<string>();
 
   async function syncActiveSession() {
+    console.debug("[store] invoking get_active_sessions");
     const activePairs =
       (await invoke<[string, string][]>("get_active_sessions")) ?? [];
     const activeMap = new Map<string, string>(activePairs);
@@ -101,14 +102,13 @@ export const useAppStore = create<AppStore>((set, get) => {
     }
     if (oneShotChanged) {
       set({ oneShotEntries: nextOneShot });
-      oneShotStore.set("oneshot-entries", [...nextOneShot]).then(() => oneShotStore.save()).catch(() => {});
+      oneShotStore.set("oneshot-entries", [...nextOneShot]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist oneshot entries:", e));
     }
 
-    // Event recovery: load historical events from disk for running sessions with empty events
+    // Event recovery: load historical events from disk for running sessions
     for (const [repoId, session] of next) {
       if (
         session.running &&
-        session.events.length === 0 &&
         session.session_id &&
         !recoveryInFlight.has(repoId)
       ) {
@@ -120,7 +120,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             if (events && events.length > 0) {
               const s = new Map(get().sessions);
               const current = s.get(repoId);
-              if (current && current.events.length === 0) {
+              if (current && events.length > current.events.length) {
                 s.set(repoId, { ...current, events });
                 set({ sessions: s });
               }
@@ -147,7 +147,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         .then((repos) => {
           set({ repos });
         })
-        .catch(() => {});
+        .catch((e) => console.warn("[store] failed to load repos:", e));
 
       // 2. Load 1-shot entries, then recover events for entries with session_id
       get().loadOneShotEntries().then(() => {
@@ -206,7 +206,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                   if (currentEntry && currentEntry.status !== trace.outcome) {
                     oneshotEntries.set(entryId, { ...currentEntry, status: trace.outcome as "completed" | "failed" });
                     set({ oneShotEntries: oneshotEntries });
-                    oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch(() => {});
+                    oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist oneshot entries:", e));
                   }
                 }
               }
@@ -215,7 +215,45 @@ export const useAppStore = create<AppStore>((set, get) => {
               console.warn("Failed to load one-shot trace for", entryId, e);
             });
         }
-      }).catch(() => {});
+
+        // Reconcile: discover oneshot traces on disk not in oneShotEntries
+        invoke<SessionTrace[]>("list_traces", { repoId: null })
+          .then((traces) => {
+            if (!traces || traces.length === 0) return;
+            const currentEntries = get().oneShotEntries;
+            const reconciled = new Map(currentEntries);
+            let changed = false;
+            for (const trace of traces) {
+              if (
+                trace.session_type !== "one_shot" ||
+                !trace.repo_id ||
+                !trace.repo_id.startsWith("oneshot-") ||
+                reconciled.has(trace.repo_id)
+              ) continue;
+              const stub: OneShotEntry = {
+                id: trace.repo_id,
+                parentRepoId: "unknown",
+                parentRepoName: "Unknown",
+                title: trace.prompt.slice(0, 80),
+                prompt: trace.prompt,
+                model: "unknown",
+                effortLevel: "medium",
+                designEffortLevel: "high",
+                mergeStrategy: "branch",
+                status: trace.outcome === "completed" ? "completed" : "failed",
+                startedAt: new Date(trace.start_time).getTime(),
+                session_id: trace.session_id,
+              };
+              reconciled.set(trace.repo_id, stub);
+              changed = true;
+            }
+            if (changed) {
+              set({ oneShotEntries: reconciled });
+              oneShotStore.set("oneshot-entries", [...reconciled]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist reconciled oneshot entries:", e));
+            }
+          })
+          .catch((e) => console.warn("[store] failed to reconcile oneshot traces from disk:", e));
+      }).catch((e: unknown) => console.warn("[store] failed to load oneshot entries:", e));
 
       // 3. Load latest traces
       invoke<Record<string, SessionTrace>>("list_latest_traces")
@@ -227,7 +265,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             set({ latestTraces: tracesMap });
           }
         })
-        .catch(() => {});
+        .catch((e) => console.warn("[store] failed to load latest traces:", e));
 
       // 4. Listen for session events
       const listenPromise = listen<TaggedSessionEvent>(
@@ -235,6 +273,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         (event) => {
           const { repo_id, event: sessionEvent } = event.payload;
           sessionEvent._ts = Date.now();
+          console.debug("[store] session-event received", { repo_id, kind: sessionEvent.kind });
 
           const session = get().sessions.get(repo_id) ?? {
             running: true,
@@ -250,13 +289,17 @@ export const useAppStore = create<AppStore>((set, get) => {
           };
 
           if (sessionEvent.kind === "disconnected") {
+            console.debug("[store] session disconnected", { repo_id });
             updates.disconnected = true;
             updates.reconnecting = false;
             updates.disconnectReason = sessionEvent.reason;
           } else if (sessionEvent.kind === "reconnecting") {
+            console.debug("[store] session reconnecting", { repo_id });
             updates.reconnecting = true;
             updates.disconnected = false;
           } else if (sessionEvent.kind === "session_complete") {
+            console.debug("[store] session complete", { repo_id });
+            console.debug("[store] session running state changed", { repoId: repo_id, running: false });
             updates.running = false;
             updates.disconnected = false;
             updates.reconnecting = false;
@@ -344,7 +387,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 branch: sessionEvent.branch,
               });
               set({ oneShotEntries: oneshotEntries });
-              oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch(() => {});
+              oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist oneshot entries:", e));
             }
           }
 
@@ -354,7 +397,27 @@ export const useAppStore = create<AppStore>((set, get) => {
             const entry = oneshotEntries.get(repo_id);
             if (entry) {
               const newStatus = sessionEvent.kind === "one_shot_complete" ? "completed" : "failed";
+              console.debug("[store] oneshot status changed", { repoId: repo_id, status: newStatus });
               oneshotEntries.set(repo_id, { ...entry, status: newStatus as "completed" | "failed" });
+
+              // Fetch trace on oneshot completion
+              if (newStatus === "completed") {
+                const sessionId = session.session_id ?? entry?.session_id;
+                if (sessionId) {
+                  invoke<SessionTrace>("get_trace", { repoId: repo_id, sessionId })
+                    .then((trace) => {
+                      const s = new Map(get().sessions);
+                      const current = s.get(repo_id);
+                      if (current) {
+                        s.set(repo_id, { ...current, trace });
+                        const lt = new Map(get().latestTraces);
+                        lt.set(repo_id, trace);
+                        set({ sessions: s, latestTraces: lt });
+                      }
+                    })
+                    .catch((e) => console.warn("Failed to fetch oneshot trace:", repo_id, e));
+                }
+              }
 
               // Prune completed/failed to keep last 50
               const finished = [...oneshotEntries.entries()]
@@ -367,59 +430,20 @@ export const useAppStore = create<AppStore>((set, get) => {
               }
 
               set({ oneShotEntries: oneshotEntries });
-              oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch(() => {});
+              oneShotStore.set("oneshot-entries", [...oneshotEntries]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist oneshot entries:", e));
             }
           }
 
-          // Auto-move plan to completed directory on successful 1-shot completion
+          // Plan move for oneshots is handled in the Rust backend (OneShotRunner::run)
           if (sessionEvent.kind === "one_shot_complete") {
-            const entry = get().oneShotEntries.get(repo_id);
-            if (entry) {
-              const repo = get().repos.find((r) => r.id === entry.parentRepoId);
-              if (repo && (repo.movePlansToCompleted ?? true)) {
-                // Find the design_phase_complete event to get plan_file
-                const session = get().sessions.get(repo_id);
-                const designComplete = session?.events.find(
-                  (e) => e.kind === "design_phase_complete" && e.plan_file,
-                );
-                if (designComplete?.plan_file) {
-                  const plansDir = repo.plansDir || "docs/plans/";
-                  const filename =
-                    designComplete.plan_file.split("/").pop() ||
-                    designComplete.plan_file;
-                  const repoPayload =
-                    repo.type === "local"
-                      ? { type: "local" as const, path: repo.path }
-                      : {
-                          type: "ssh" as const,
-                          sshHost: (
-                            repo as Extract<RepoConfig, { type: "ssh" }>
-                          ).sshHost,
-                          remotePath: (
-                            repo as Extract<RepoConfig, { type: "ssh" }>
-                          ).remotePath,
-                        };
-                  console.log("1-shot plan move triggered:", { repo_id, filename, plansDir });
-                  invoke("move_plan_to_completed", {
-                    repo: repoPayload,
-                    plansDir,
-                    filename,
-                  }).catch((e) => console.warn("Failed to move 1-shot plan:", e));
-                } else {
-                  console.log("1-shot plan move skipped: no design_phase_complete event with plan_file", { repo_id });
-                }
-              } else if (!repo) {
-                console.log("1-shot plan move skipped: parent repo not found", { repo_id, parentRepoId: entry.parentRepoId });
-              }
-            } else {
-              console.log("1-shot plan move skipped: oneshot entry not found", { repo_id });
-            }
+            console.debug("1-shot complete", { repo_id });
           }
         },
       );
 
       // 4b. Listen for env warning events
       const envWarningPromise = listen<string>("env-warning", (event) => {
+        console.warn("[store] env-warning received:", event.payload);
         toast.warning(event.payload, { id: "env-warning" });
       });
 
@@ -525,7 +549,7 @@ export const useAppStore = create<AppStore>((set, get) => {
       set({ repos });
     },
 
-    runOneShot: async (repoId, title, prompt, model, mergeStrategy) => {
+    runOneShot: async (repoId, title, prompt, model, mergeStrategy, effortLevel, designEffortLevel) => {
       const repo = get().repos.find((r) => r.id === repoId);
       if (!repo) return undefined;
 
@@ -538,6 +562,8 @@ export const useAppStore = create<AppStore>((set, get) => {
         title,
         prompt,
         model,
+        effortLevel,
+        designEffortLevel,
         mergeStrategy,
         status: "running",
         startedAt: Date.now(),
@@ -558,6 +584,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath,
               };
 
+        console.debug("[store] invoking run_oneshot", { repoId, title });
         const result = await invoke<{ oneshot_id: string; session_id: string }>("run_oneshot", {
           repoId,
           repo: repoPayload,
@@ -565,21 +592,36 @@ export const useAppStore = create<AppStore>((set, get) => {
           prompt,
           model,
           mergeStrategy,
+          effortLevel,
+          designEffortLevel,
           envVars: repo.envVars ?? {},
           maxIterations: repo.maxIterations,
           completionSignal: repo.completionSignal,
           checks: repo.checks ?? [],
           gitSync: repo.gitSync,
           plansDir: repo.plansDir || "docs/plans/",
+          movePlansToCompleted: repo.movePlansToCompleted ?? true,
         });
 
         // Replace temp entry with real oneshot_id
+        console.debug("[store] oneshot ID swapped", { tempId, realId: result.oneshot_id });
         const entries = new Map(get().oneShotEntries);
         entries.delete(tempId);
         const realEntry = { ...entry, id: result.oneshot_id, session_id: result.session_id };
         entries.set(result.oneshot_id, realEntry);
-        set({ oneShotEntries: entries });
-        oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch(() => {});
+        // Initialize session state (matches resumeOneShot pattern)
+        const s = new Map(get().sessions);
+        s.set(result.oneshot_id, {
+          running: true,
+          session_id: result.session_id,
+          disconnected: false,
+          reconnecting: false,
+          events: [],
+          trace: null,
+          error: null,
+        });
+        set({ oneShotEntries: entries, sessions: s });
+        oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist oneshot entries:", e));
 
         return result.oneshot_id;
       } catch (e) {
@@ -591,7 +633,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         if (current) {
           entries.set(tempId, { ...current, status: "failed" });
           set({ oneShotEntries: entries });
-          oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch(() => {});
+          oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist oneshot entries:", e));
         }
         return undefined;
       }
@@ -609,6 +651,14 @@ export const useAppStore = create<AppStore>((set, get) => {
       if (raw) {
         set({ oneShotEntries: new Map(raw) });
       }
+    },
+
+    dismissOneShot: async (oneshotId: string) => {
+      const entries = new Map(get().oneShotEntries);
+      entries.delete(oneshotId);
+      set({ oneShotEntries: entries });
+      await oneShotStore.set("oneshot-entries", [...entries]);
+      await oneShotStore.save();
     },
 
     async resumeOneShot(oneshotId: string) {
@@ -637,6 +687,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             };
 
       try {
+        console.debug("[store] invoking resume_oneshot", { repoId: entry.parentRepoId });
         const result = await invoke<{ oneshot_id: string; session_id: string }>("resume_oneshot", {
           oneshotId,
           repoId: entry.parentRepoId,
@@ -644,6 +695,8 @@ export const useAppStore = create<AppStore>((set, get) => {
           title: entry.title,
           prompt: entry.prompt,
           model: entry.model,
+          effortLevel: entry.effortLevel,
+          designEffortLevel: entry.designEffortLevel,
           mergeStrategy: entry.mergeStrategy,
           envVars: repo.envVars ?? {},
           maxIterations: repo.maxIterations,
@@ -651,6 +704,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           checks: repo.checks ?? [],
           gitSync: repo.gitSync,
           plansDir: repo.plansDir || "docs/plans/",
+          movePlansToCompleted: repo.movePlansToCompleted ?? true,
           worktreePath: entry.worktreePath,
           branch: entry.branch,
           oldSessionId: entry.session_id ?? "",
@@ -662,7 +716,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         if (current) {
           entries.set(oneshotId, { ...current, status: "running", session_id: result.session_id });
           set({ oneShotEntries: entries });
-          oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch(() => {});
+          oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist oneshot entries:", e));
         }
 
         // Set up session state
@@ -695,6 +749,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         trace: null,
         error: null,
       });
+      console.debug("[store] session running state changed", { repoId, running: true });
       set({ sessions: next });
 
       try {
@@ -707,11 +762,13 @@ export const useAppStore = create<AppStore>((set, get) => {
                 remotePath: repo.remotePath,
               };
 
+        console.debug("[store] invoking run_session", { repoId });
         const { session_id } = await invoke<{ session_id: string }>("run_session", {
           repoId,
           repo: repoPayload,
           planFile,
           model: repo.model,
+          effortLevel: repo.effortLevel ?? "medium",
           maxIterations: repo.maxIterations,
           completionSignal: repo.completionSignal,
           envVars: repo.envVars ?? {},
@@ -729,6 +786,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         const s2 = new Map(get().sessions);
         const current = s2.get(repoId);
         if (!current) return;
+        console.debug("[store] session running state changed", { repoId, running: false });
         s2.set(repoId, {
           ...current,
           running: false,
@@ -739,6 +797,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     stopSession: async (repoId: string) => {
+      console.debug("[store] invoking stop_session", { repoId });
       await invoke("stop_session", { repoId });
     },
 
@@ -755,6 +814,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         set({ sessions: next });
       }
       try {
+        console.debug("[store] invoking reconnect_session", { repoId });
         await invoke("reconnect_session", { repoId });
       } catch (e) {
         const session = get().sessions.get(repoId);

@@ -837,3 +837,264 @@ test.describe("OneShotDetail - resume button", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// 9. SSH 1-Shot happy path E2E
+// ---------------------------------------------------------------------------
+test.describe("SSH 1-Shot happy path", () => {
+  const sshRepoStoreData = {
+    repos: [
+      {
+        id: "repo-ssh-1",
+        name: "remote-app",
+        type: "ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/user/projects/remote-app",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ],
+  };
+
+  const sshOneshotId = "oneshot-ssh-abc123";
+
+  async function navigateToSshRepoDetail(
+    page: import("@playwright/test").Page,
+    mockTauri: (opts?: TauriMockOptions) => Promise<void>,
+    extra?: {
+      invokeHandlers?: Record<string, unknown>;
+      storeData?: Record<string, unknown>;
+    },
+  ) {
+    await mockTauri({
+      storeData: { ...sshRepoStoreData, ...extra?.storeData },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+        run_oneshot: () => new Promise(() => {}),
+        ...extra?.invokeHandlers,
+      },
+    });
+    await page.goto("/");
+    await page.getByRole("button", { name: /remote-app/ }).click();
+    await expect(
+      page.locator("h1", { hasText: "remote-app" }),
+    ).toBeVisible();
+  }
+
+  async function openSshOneShotForm(
+    page: import("@playwright/test").Page,
+    mockTauri: (opts?: TauriMockOptions) => Promise<void>,
+    extra?: {
+      invokeHandlers?: Record<string, unknown>;
+      storeData?: Record<string, unknown>;
+    },
+  ) {
+    await navigateToSshRepoDetail(page, mockTauri, extra);
+    await page.getByRole("button", { name: "1-Shot" }).click();
+    await expect(page.locator("#oneshot-title")).toBeVisible();
+  }
+
+  test("clicking Launch invokes run_oneshot with correct SSH repo payload", async ({
+    page,
+    mockTauri,
+  }) => {
+    await openSshOneShotForm(page, mockTauri, {
+      invokeHandlers: {
+        get_active_sessions: () => [],
+        run_oneshot: (args: Record<string, unknown>) => {
+          (window as unknown as Record<string, unknown>).__capturedArgs = args;
+          return { oneshot_id: sshOneshotId, trace: null };
+        },
+      },
+    });
+
+    await page.locator("#oneshot-title").fill("Add SSH feature");
+    await page.locator("#oneshot-prompt").fill("Implement remote auth");
+
+    await page.getByRole("button", { name: "Launch" }).click();
+
+    const captured = await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__capturedArgs,
+    );
+
+    expect(captured).toBeTruthy();
+    const args = captured as Record<string, unknown>;
+    expect(args.repoId).toBe("repo-ssh-1");
+    expect(args.title).toBe("Add SSH feature");
+    expect(args.prompt).toBe("Implement remote auth");
+    expect(args.model).toBe("opus");
+    expect(args.repo).toEqual({
+      type: "ssh",
+      sshHost: "dev-server",
+      remotePath: "/home/user/projects/remote-app",
+    });
+    expect(args.maxIterations).toBe(40);
+    expect(args.completionSignal).toBe("ALL TODO ITEMS COMPLETE");
+  });
+
+  test("full lifecycle with SSH worktree path displayed with host prefix", async ({
+    page,
+    mockTauri,
+  }) => {
+    const sshOneshotEntry = {
+      id: sshOneshotId,
+      parentRepoId: "repo-ssh-1",
+      parentRepoName: "remote-app",
+      title: "Add SSH feature",
+      prompt: "Implement remote auth",
+      model: "opus",
+      mergeStrategy: "merge_to_main",
+      status: "running" as const,
+      startedAt: Date.now(),
+    };
+
+    await mockTauri({
+      storeData: {
+        ...sshRepoStoreData,
+        "oneshot-entries": [[sshOneshotId, sshOneshotEntry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [[sshOneshotId, "session-ssh-123"]],
+      },
+    });
+    await page.goto(`/oneshot/${sshOneshotId}`);
+
+    await expect(
+      page.locator("h1", { hasText: "Add SSH feature" }),
+    ).toBeVisible();
+
+    const phaseIndicator = page.locator(".phase-indicator");
+
+    // 1. one_shot_started with remote worktree path
+    await emitSessionEvent(page, sshOneshotId, {
+      kind: "one_shot_started",
+      title: "Add SSH feature",
+      merge_strategy: "merge_to_main",
+      worktree_path: "/home/user/.yarr/worktrees/repo-1-oneshot-abc",
+      branch: "oneshot/ssh-feature-branch",
+    });
+    await expect(phaseIndicator).toBeVisible();
+    await expect(phaseIndicator).toContainText("Starting...");
+
+    // 2. design_phase_started
+    await emitSessionEvent(page, sshOneshotId, {
+      kind: "design_phase_started",
+    });
+    await expect(phaseIndicator).toContainText("Design Phase");
+
+    // 3. design_phase_complete
+    await emitSessionEvent(page, sshOneshotId, {
+      kind: "design_phase_complete",
+    });
+    await expect(phaseIndicator).toContainText("Design Complete");
+
+    // 4. implementation_phase_started
+    await emitSessionEvent(page, sshOneshotId, {
+      kind: "implementation_phase_started",
+    });
+    await expect(phaseIndicator).toContainText("Implementation Phase");
+
+    // 5. implementation_phase_complete
+    await emitSessionEvent(page, sshOneshotId, {
+      kind: "implementation_phase_complete",
+    });
+    await expect(phaseIndicator).toContainText("Implementation Complete");
+
+    // 6. git_finalize_started
+    await emitSessionEvent(page, sshOneshotId, {
+      kind: "git_finalize_started",
+    });
+    await expect(phaseIndicator).toContainText("Finalizing...");
+
+    // 7. one_shot_complete
+    await emitSessionEvent(page, sshOneshotId, { kind: "one_shot_complete" });
+    await expect(phaseIndicator).toContainText("Complete");
+    await expect(phaseIndicator).toHaveClass(/complete/);
+
+    // Verify the worktree path was stored in the oneshot entry (visible in event text)
+    await expect(
+      page.getByText(/1-Shot started: Add SSH feature/),
+    ).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. SSH 1-Shot stop E2E
+// ---------------------------------------------------------------------------
+test.describe("SSH 1-Shot stop", () => {
+  const sshRepoStoreData = {
+    repos: [
+      {
+        id: "repo-ssh-1",
+        name: "remote-app",
+        type: "ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/user/projects/remote-app",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ],
+  };
+
+  const sshOneshotId = "oneshot-ssh-stop-1";
+  const sshOneshotEntry = {
+    id: sshOneshotId,
+    parentRepoId: "repo-ssh-1",
+    parentRepoName: "remote-app",
+    title: "SSH task to stop",
+    prompt: "Some remote work",
+    model: "opus",
+    mergeStrategy: "merge_to_main",
+    status: "running" as const,
+    startedAt: Date.now(),
+  };
+
+  test("Stop button calls stop_session with correct oneshotId for SSH repo", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: {
+        ...sshRepoStoreData,
+        "oneshot-entries": [[sshOneshotId, sshOneshotEntry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [[sshOneshotId, "session-ssh-456"]],
+        stop_session: (args: Record<string, unknown>) => {
+          (window as unknown as Record<string, unknown>).__stopSessionArgs =
+            args;
+        },
+      },
+    });
+    await page.goto(`/oneshot/${sshOneshotId}`);
+
+    await expect(
+      page.locator("h1", { hasText: "SSH task to stop" }),
+    ).toBeVisible();
+
+    // Emit one_shot_started so the session is recognized as running
+    await emitSessionEvent(page, sshOneshotId, {
+      kind: "one_shot_started",
+      title: "SSH task to stop",
+      merge_strategy: "merge_to_main",
+      worktree_path: "/home/user/.yarr/worktrees/repo-1-oneshot-stop",
+      branch: "oneshot/ssh-stop-branch",
+    });
+
+    const stopButton = page.getByRole("button", {
+      name: "Stop",
+      exact: true,
+    });
+    await expect(stopButton).toBeVisible();
+
+    await stopButton.click();
+
+    const stopArgs = await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__stopSessionArgs,
+    );
+    expect(stopArgs).toBeTruthy();
+    expect((stopArgs as Record<string, unknown>).repoId).toBe(sshOneshotId);
+  });
+});

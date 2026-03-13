@@ -44,6 +44,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
     repo_path: "/home/beth/repos/my-project",
     prompt: "test prompt",
     plan_file: null,
+    plan_content: null,
     start_time: new Date().toISOString(),
     end_time: null,
     outcome: "completed",
@@ -814,5 +815,169 @@ describe("RepoCard", () => {
     const excerptEl = screen.getByText(longText);
     expect(excerptEl).toBeInTheDocument();
     expect(excerptEl.classList.contains("truncate")).toBe(true);
+  });
+
+  // =========================================================================
+  // 15. Plan click behavior
+  // =========================================================================
+
+  it("calls onPlanClick (not onClick) when plan filename is clicked", () => {
+    const handleClick = vi.fn();
+    const handlePlanClick = vi.fn();
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+      plan_content: "some plan content",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        onClick={handleClick}
+        onPlanClick={handlePlanClick}
+      />,
+    );
+    const planFilename = screen.getByRole("button", { name: "deploy-fix.md" });
+    fireEvent.click(planFilename);
+    expect(handlePlanClick).toHaveBeenCalledTimes(1);
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it("calls onPlanClick (not onClick) when plan excerpt is clicked", () => {
+    const handleClick = vi.fn();
+    const handlePlanClick = vi.fn();
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+      plan_content: "some plan content",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        planExcerpt="This is the excerpt text."
+        onClick={handleClick}
+        onPlanClick={handlePlanClick}
+      />,
+    );
+    const excerptEl = screen.getByRole("button", {
+      name: "This is the excerpt text.",
+    });
+    fireEvent.click(excerptEl);
+    expect(handlePlanClick).toHaveBeenCalledTimes(1);
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it("plan filename has cursor-pointer class when onPlanClick is provided", () => {
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+      plan_content: "some plan content",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        onClick={vi.fn()}
+        onPlanClick={vi.fn()}
+      />,
+    );
+    const planFilename = screen.getByRole("button", { name: "deploy-fix.md" });
+    expect(planFilename.classList.contains("cursor-pointer")).toBe(true);
+  });
+
+  it("plan excerpt has cursor-pointer class when onPlanClick is provided", () => {
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+      plan_content: "some plan content",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        planExcerpt="Excerpt for cursor check."
+        onClick={vi.fn()}
+        onPlanClick={vi.fn()}
+      />,
+    );
+    const excerptEl = screen.getByRole("button", {
+      name: "Excerpt for cursor check.",
+    });
+    expect(excerptEl.classList.contains("cursor-pointer")).toBe(true);
+  });
+
+  it("plan filename is NOT clickable when onPlanClick is not provided", () => {
+    const handleClick = vi.fn();
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+      plan_content: "some plan content",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        onClick={handleClick}
+      />,
+    );
+    // Should render as plain text, not as a role="button" element
+    expect(
+      screen.queryByRole("button", { name: "deploy-fix.md" }),
+    ).not.toBeInTheDocument();
+    // Click on the plan filename text — should bubble up to card onClick
+    const planText = screen.getByText("deploy-fix.md");
+    fireEvent.click(planText);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("plan excerpt is NOT clickable when onPlanClick is not provided", () => {
+    const handleClick = vi.fn();
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+      plan_content: "some plan content",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        planExcerpt="Plain excerpt text."
+        onClick={handleClick}
+      />,
+    );
+    // Should render as plain text, not as a role="button" element
+    expect(
+      screen.queryByRole("button", { name: "Plain excerpt text." }),
+    ).not.toBeInTheDocument();
+    // Click on the excerpt text — should bubble up to card onClick
+    const excerptText = screen.getByText("Plain excerpt text.");
+    fireEvent.click(excerptText);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("clicking card area still calls onClick when onPlanClick is provided", () => {
+    const handleClick = vi.fn();
+    const handlePlanClick = vi.fn();
+    const trace = makeTrace({
+      plan_file: "/home/beth/plans/deploy-fix.md",
+      plan_content: "some plan content",
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        onClick={handleClick}
+        onPlanClick={handlePlanClick}
+      />,
+    );
+    // Click the card button itself (the outer button with aria-label)
+    const cardButton = screen.getByRole("button", {
+      name: "my-project — COMPLETED",
+    });
+    fireEvent.click(cardButton);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+    expect(handlePlanClick).not.toHaveBeenCalled();
   });
 });

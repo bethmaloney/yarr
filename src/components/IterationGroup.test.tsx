@@ -153,7 +153,7 @@ describe("IterationGroupComponent", () => {
   it("calls onToggle when the header is clicked", () => {
     const onToggle = vi.fn();
     renderComponent({ onToggle });
-    const header = screen.getByText(/Iteration/).closest("button")!;
+    const header = screen.getByText(/Iteration/).closest("[role='button']")!;
     fireEvent.click(header);
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
@@ -472,14 +472,14 @@ describe("IterationGroupComponent", () => {
     const label0 = eventLabel(events[0]!);
     const button0 = screen
       .getByText(new RegExp(label0.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
-      .closest("button");
+      .closest("[role='button']");
     if (button0) fireEvent.click(button0);
     expect(toggleEvent).toHaveBeenCalledWith(10);
 
     const label1 = eventLabel(events[1]!);
     const button1 = screen
       .getByText(new RegExp(label1.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
-      .closest("button");
+      .closest("[role='button']");
     if (button1) fireEvent.click(button1);
     expect(toggleEvent).toHaveBeenCalledWith(11);
   });

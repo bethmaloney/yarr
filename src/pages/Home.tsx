@@ -7,6 +7,7 @@ import { useGitStatus } from "../hooks/useGitStatus";
 import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
 import { parsePlanPreview } from "../plan-preview";
 import { timeAgo } from "../time";
+import { PlanPanel } from "../PlanPanel";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { OneShotCard } from "@/components/OneShotCard";
 import { RepoCard } from "@/components/RepoCard";
@@ -37,6 +38,10 @@ export default function Home() {
     new Map(),
   );
 
+  const [planPanelOpen, setPlanPanelOpen] = useState(false);
+  const [planPanelContent, setPlanPanelContent] = useState<string | null>(null);
+  const [planPanelFile, setPlanPanelFile] = useState<string | null>(null);
+
   useGitStatus(repos, sessions);
   const gitStatus = useAppStore((s) => s.gitStatus);
   const navigate = useNavigate();
@@ -55,8 +60,8 @@ export default function Home() {
           if (parsed.excerpt) {
             newMap.set(repoId, parsed.excerpt);
           }
-        } catch {
-          // Skip entries that fail to read
+        } catch (e) {
+          console.warn("[Home] failed to load plan preview:", e);
         }
       }
       setPlanPreviews(newMap);
@@ -135,6 +140,16 @@ export default function Home() {
   completedOneShots.sort((a, b) => b.timestamp - a.timestamp);
 
   const [completedOpen, setCompletedOpen] = useState(true);
+
+  function openPlanPanel(repoId: string): (() => void) | undefined {
+    const trace = latestTraces.get(repoId);
+    if (!trace?.plan_content || !trace?.plan_file) return undefined;
+    return () => {
+      setPlanPanelContent(trace.plan_content!);
+      setPlanPanelFile(trace.plan_file!);
+      setPlanPanelOpen(true);
+    };
+  }
 
   function handleAddRepo() {
     setAddMode("choosing");
@@ -249,6 +264,7 @@ export default function Home() {
                   gitStatus={gitStatus[item.repo.id]}
                   planExcerpt={planPreviews.get(item.repo.id)}
                   onClick={() => navigate(`/repo/${item.repo.id}`)}
+                  onPlanClick={openPlanPanel(item.repo.id)}
                 />
               ) : (
                 <OneShotCard
@@ -256,7 +272,7 @@ export default function Home() {
                   entry={item.entry}
                   phase={item.phase}
                   onClick={() => navigate(`/oneshot/${item.entry.id}`)}
-                  />
+                />
               ),
             )}
           </div>
@@ -332,6 +348,14 @@ export default function Home() {
             </Collapsible>
           )}
         </>
+      )}
+      {planPanelContent && planPanelFile && (
+        <PlanPanel
+          open={planPanelOpen}
+          onOpenChange={setPlanPanelOpen}
+          planContent={planPanelContent}
+          planFile={planPanelFile}
+        />
       )}
     </main>
   );
