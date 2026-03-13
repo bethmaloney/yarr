@@ -946,14 +946,18 @@ describe("syncActiveSessions", () => {
     });
   });
 
-  it("does NOT call get_trace_events when session already has events", async () => {
+  it("calls get_trace_events but does NOT replace events when disk has fewer", async () => {
+    const existingEvents: SessionEvent[] = [
+      { kind: "iteration_started", iteration: 1 },
+      { kind: "tool_use", iteration: 1, tool_name: "Bash" },
+    ];
     useAppStore.setState({
       sessions: new Map([
         [
           "repo-1",
           {
             running: true,
-            events: [{ kind: "iteration_start", iteration: 1 }],
+            events: existingEvents,
             trace: null,
             error: null,
           },
@@ -961,18 +965,20 @@ describe("syncActiveSessions", () => {
       ]),
     });
 
+    const fewerEvents: SessionEvent[] = [
+      { kind: "iteration_started", iteration: 1 },
+    ];
+
     mockInvoke.mockImplementation(async (cmd: string) => {
       if (cmd === "get_active_sessions") return [["repo-1", "sess-123"]];
-      if (cmd === "get_trace_events") {
-        throw new Error("get_trace_events should not have been called");
-      }
+      if (cmd === "get_trace_events") return fewerEvents;
       return undefined;
     });
 
     useAppStore.getState().initialize();
     vi.advanceTimersByTime(5000);
 
-    // Wait for the sync to complete, then verify get_trace_events was never called
+    // Wait for sync to complete
     await vi.waitFor(() => {
       const calls = mockInvoke.mock.calls.filter(
         (c) => c[0] === "get_active_sessions",
@@ -980,10 +986,15 @@ describe("syncActiveSessions", () => {
       expect(calls.length).toBeGreaterThanOrEqual(1);
     });
 
+    // get_trace_events is called (recovery runs for all running sessions)
     const traceEventCalls = mockInvoke.mock.calls.filter(
       (c) => c[0] === "get_trace_events",
     );
-    expect(traceEventCalls).toHaveLength(0);
+    expect(traceEventCalls).toHaveLength(1);
+
+    // But events should NOT be replaced since disk has fewer
+    const session = useAppStore.getState().sessions.get("repo-1");
+    expect(session!.events).toEqual(existingEvents);
   });
 
   it("handles get_trace_events failure gracefully without crashing", async () => {

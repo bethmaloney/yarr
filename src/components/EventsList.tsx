@@ -89,6 +89,22 @@ export function EventsList({
 
   if (events.length === 0) return null;
 
+  function handleSelectableClick(callback: () => void) {
+    return () => {
+      if (window.getSelection()?.isCollapsed === false) return;
+      callback();
+    };
+  }
+
+  function handleKeyDown(callback: () => void) {
+    return (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        callback();
+      }
+    };
+  }
+
   function toggleIteration(iteration: number) {
     setExpandedIterations((prev) => {
       const next = new Set(prev);
@@ -159,9 +175,12 @@ export function EventsList({
                   key={`before-${i}`}
                   className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}
                 >
-                  <button
-                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left"
-                    onClick={() => toggleEvent(i)}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text"
+                    onClick={handleSelectableClick(() => toggleEvent(i))}
+                    onKeyDown={handleKeyDown(() => toggleEvent(i))}
                   >
                     <span className="event-emoji shrink-0">
                       {eventEmoji(standalone.event.kind)}
@@ -174,7 +193,7 @@ export function EventsList({
                     <span className="event-time shrink-0 text-[#555] text-xs">
                       {formatTime(standalone.event._ts)}
                     </span>
-                  </button>
+                  </div>
                   {isExpanded &&
                     standalone.event.kind === "git_sync_failed" &&
                     standalone.event.error && (
@@ -215,9 +234,12 @@ export function EventsList({
                   key={`after-${i}`}
                   className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}
                 >
-                  <button
-                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left"
-                    onClick={() => toggleEvent(globalIndex)}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text"
+                    onClick={handleSelectableClick(() => toggleEvent(globalIndex))}
+                    onKeyDown={handleKeyDown(() => toggleEvent(globalIndex))}
                   >
                     <span className="event-emoji shrink-0">
                       {eventEmoji(standalone.event.kind)}
@@ -230,7 +252,7 @@ export function EventsList({
                     <span className="event-time shrink-0 text-[#555] text-xs">
                       {formatTime(standalone.event._ts)}
                     </span>
-                  </button>
+                  </div>
                   {isExpanded &&
                     standalone.event.kind === "git_sync_failed" &&
                     standalone.event.error && (

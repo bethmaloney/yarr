@@ -43,6 +43,22 @@ const eventKindColor: Record<string, string> = {
   rate_limited: "text-[#f59e0b]",
 };
 
+function handleSelectableClick(callback: () => void) {
+  return () => {
+    if (window.getSelection()?.isCollapsed === false) return;
+    callback();
+  };
+}
+
+function handleKeyDown(callback: () => void) {
+  return (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      callback();
+    }
+  };
+}
+
 export function IterationGroupComponent({
   group,
   expanded,
@@ -60,7 +76,7 @@ export function IterationGroupComponent({
 
   return (
     <div className={`iteration-group${expanded ? " expanded" : ""}`}>
-      <button className="iteration-header flex items-baseline gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-[#1e1e38]" onClick={onToggle}>
+      <div role="button" tabIndex={0} className="iteration-header flex items-baseline gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-[#1e1e38] select-text" onClick={handleSelectableClick(onToggle)} onKeyDown={handleKeyDown(onToggle)}>
         <span className="iteration-toggle shrink-0">
           {expanded ? "\u25BC" : "\u25B6"}
         </span>
@@ -79,7 +95,7 @@ export function IterationGroupComponent({
             <> · {formatDuration(group.endTs - group.startTs)}</>
           ) : null}
         </span>
-      </button>
+      </div>
 
       {group.contextWindow > 0 && (
         <div className="context-bar flex items-center gap-2 px-3 py-1">
@@ -111,14 +127,17 @@ export function IterationGroupComponent({
                 key={i}
                 className={`event ${ev.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}
               >
-                <button
-                  className="event-btn flex items-baseline gap-2 w-full px-3 py-1 pl-8 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left"
-                  onClick={() => toggleEvent(globalIndex)}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="event-btn flex items-baseline gap-2 w-full px-3 py-1 pl-8 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text"
+                  onClick={handleSelectableClick(() => toggleEvent(globalIndex))}
+                  onKeyDown={handleKeyDown(() => toggleEvent(globalIndex))}
                 >
                   <span className="event-emoji shrink-0">{eventEmoji(ev.kind)}</span>
                   <span className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}>{eventLabel(ev, repoPath)}</span>
                   <span className="event-time shrink-0 text-[#555] text-xs">{formatTime(ev._ts)}</span>
-                </button>
+                </div>
 
                 {isExpanded && ev.kind === "tool_use" && ev.tool_input && ev.tool_name === "Agent" && (
                   <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded text-xs text-[#9ca3af]">
