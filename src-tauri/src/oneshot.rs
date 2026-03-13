@@ -41,6 +41,7 @@ pub struct OneShotConfig {
     pub checks: Vec<crate::session::Check>,
     pub git_sync: Option<crate::session::GitSyncConfig>,
     pub plans_dir: String,
+    pub move_plans_to_completed: bool,
     pub ssh_host: Option<String>,
 }
 
@@ -1161,7 +1162,20 @@ mod tests {
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
             ssh_host: None,
+            move_plans_to_completed: true,
         }
+    }
+
+    #[test]
+    fn test_config_move_plans_to_completed_field() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::Branch);
+        assert!(config.move_plans_to_completed);
+
+        // Test with false
+        let mut config2 = make_config(&tmp, MergeStrategy::Branch);
+        config2.move_plans_to_completed = false;
+        assert!(!config2.move_plans_to_completed);
     }
 
     // =========================================================================
@@ -1486,6 +1500,7 @@ mod tests {
             }),
             plans_dir: "docs/plans/".to_string(),
             ssh_host: None,
+            move_plans_to_completed: true,
         };
 
         assert_eq!(config.repo_id, "repo-123");
@@ -1522,6 +1537,7 @@ mod tests {
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
             ssh_host: None,
+            move_plans_to_completed: true,
         };
 
         assert_eq!(config.merge_strategy, MergeStrategy::Branch);
@@ -2919,6 +2935,7 @@ mod tests {
             }),
             plans_dir: "custom/plans/".to_string(),
             ssh_host: None,
+            move_plans_to_completed: true,
         };
 
         assert_eq!(config.max_iterations, 20);

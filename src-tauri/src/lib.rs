@@ -430,6 +430,7 @@ async fn run_oneshot(
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
     plans_dir: Option<String>,
+    move_plans_to_completed: Option<bool>,
 ) -> Result<OneShotResult, String> {
     let oneshot_id = oneshot::generate_oneshot_id();
     let cancel_token = CancellationToken::new();
@@ -479,6 +480,7 @@ async fn run_oneshot(
                 checks: checks.unwrap_or_default(),
                 git_sync,
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+                move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
                 ssh_host: None,
             };
 
@@ -567,6 +569,7 @@ async fn run_oneshot(
                 checks: checks.unwrap_or_default(),
                 git_sync,
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+                move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
                 ssh_host: Some(ssh_host.clone()),
             };
 
@@ -673,6 +676,7 @@ async fn resume_oneshot(
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
     plans_dir: Option<String>,
+    move_plans_to_completed: Option<bool>,
     worktree_path: String,
     branch: String,
     old_session_id: String,
@@ -783,6 +787,7 @@ async fn resume_oneshot(
                 checks: checks.unwrap_or_default(),
                 git_sync,
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+                move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
                 ssh_host: None,
             };
 
@@ -933,6 +938,7 @@ async fn resume_oneshot(
                 checks: checks.unwrap_or_default(),
                 git_sync,
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+                move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
                 ssh_host: Some(ssh_host.clone()),
             };
 
@@ -1907,6 +1913,7 @@ mod tests {
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
             ssh_host: None,
+            move_plans_to_completed: true,
         };
 
         assert_eq!(config.repo_id, "repo-123");

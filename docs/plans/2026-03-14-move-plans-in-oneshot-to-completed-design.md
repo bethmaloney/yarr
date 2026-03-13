@@ -38,9 +38,9 @@ The fix is to move the plan to completed **in the Rust backend** (`OneShotRunner
 **Pattern reference:** Look at how `plans_dir` is already passed through `OneShotConfig` (oneshot.rs line 28-45) and how `movePlansToCompleted` is read from the repo config in `store.ts:313`.
 
 **Checklist:**
-- [ ] Add `move_plans_to_completed: bool` to `OneShotConfig` (default `true`)
-- [ ] Wire it through from the `run_oneshot` and `resume_oneshot` Tauri commands in `lib.rs`
-- [ ] Pass `repo.movePlansToCompleted ?? true` from the frontend when invoking `run_oneshot` / `resume_oneshot`
+- [x] Add `move_plans_to_completed: bool` to `OneShotConfig` (default `true`)
+- [x] Wire it through from the `run_oneshot` and `resume_oneshot` Tauri commands in `lib.rs`
+- [x] Pass `repo.movePlansToCompleted ?? true` from the frontend when invoking `run_oneshot` / `resume_oneshot`
 
 ### Task 3: Create a lightweight plan-move helper for worktree context
 
@@ -89,7 +89,7 @@ The fix is to move the plan to completed **in the Rust backend** (`OneShotRunner
 | Task | Status | Notes |
 |------|--------|-------|
 | 1. Add plan move to OneShotRunner | Not started | Core change |
-| 2. Add config field | Not started | Plumbing |
+| 2. Add config field | **Done** | Added `move_plans_to_completed: bool` to OneShotConfig, wired through run_oneshot/resume_oneshot and frontend |
 | 3. Lightweight helper | **Done** | Added `commit: bool` param to `move_plan_to_completed_impl` |
 | 4. Remove frontend handler | Not started | Cleanup |
 | 5. Tests | Not started | Verification |

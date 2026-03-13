@@ -630,6 +630,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           checks: repo.checks ?? [],
           gitSync: repo.gitSync,
           plansDir: repo.plansDir || "docs/plans/",
+          movePlansToCompleted: repo.movePlansToCompleted ?? true,
         });
 
         // Replace temp entry with real oneshot_id
@@ -734,6 +735,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           checks: repo.checks ?? [],
           gitSync: repo.gitSync,
           plansDir: repo.plansDir || "docs/plans/",
+          movePlansToCompleted: repo.movePlansToCompleted ?? true,
           worktreePath: entry.worktreePath,
           branch: entry.branch,
           oldSessionId: entry.session_id ?? "",
