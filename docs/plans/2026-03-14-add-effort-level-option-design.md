@@ -46,10 +46,10 @@ Valid levels: `low`, `medium`, `high`, `max`.
 **Pattern reference:** How `model: Option<String>` is defined in `SessionConfig` (session.rs:30) and `model: String` in `OneShotConfig` (oneshot.rs:32).
 
 **Checklist:**
-- [ ] Add `pub effort_level: Option<String>` to `SessionConfig` (session.rs ~line 30)
-- [ ] Update `SessionConfig::default()` to set `effort_level: None`
-- [ ] Add `pub effort_level: String` to `OneShotConfig` (for implementation phase effort)
-- [ ] Add `pub design_effort_level: String` to `OneShotConfig` (for design phase effort)
+- [x] Add `pub effort_level: Option<String>` to `SessionConfig` (session.rs ~line 30)
+- [x] Update `SessionConfig::default()` to set `effort_level: None`
+- [x] Add `pub effort_level: String` to `OneShotConfig` (for implementation phase effort)
+- [x] Add `pub design_effort_level: String` to `OneShotConfig` (for design phase effort)
 
 ## Task 4: Thread effort through ClaudeInvocation and runtimes
 
@@ -68,28 +68,28 @@ Valid levels: `low`, `medium`, `high`, `max`.
 - `session.rs:331-338` — `build_invocation` maps config fields to `ClaudeInvocation`
 
 **Checklist:**
-- [ ] Add `pub effort_level: Option<String>` to `ClaudeInvocation` (mod.rs ~line 23)
-- [ ] In `LocalRuntime::spawn_claude` (local.rs ~line 60), add after model block:
+- [x] Add `pub effort_level: Option<String>` to `ClaudeInvocation` (mod.rs ~line 23)
+- [x] In `LocalRuntime::spawn_claude` (local.rs ~line 60), add after model block:
   ```rust
   if let Some(ref effort) = invocation.effort_level {
       args.push("--effort".to_string());
       args.push(effort.clone());
   }
   ```
-- [ ] In `WslRuntime::build_command` (wsl.rs ~line 97), add after model block:
+- [x] In `WslRuntime::build_command` (wsl.rs ~line 97), add after model block:
   ```rust
   if let Some(ref effort) = invocation.effort_level {
       cmd_parts.push(format!("--effort {}", shell_escape(effort)));
   }
   ```
-- [ ] In `SshRuntime::build_tmux_command` (ssh.rs ~line 173), add after model block:
+- [x] In `SshRuntime::build_tmux_command` (ssh.rs ~line 173), add after model block:
   ```rust
   if let Some(ref effort) = invocation.effort_level {
       claude_cmd.push_str(&format!(" --effort {}", shell_escape(effort)));
   }
   ```
-- [ ] In `SessionRunner::build_invocation` (session.rs ~line 331), add `effort_level: self.config.effort_level.clone()`
-- [ ] Update all existing `ClaudeInvocation { ... }` literals in tests (ssh.rs tests) to include `effort_level: None`
+- [x] In `SessionRunner::build_invocation` (session.rs ~line 331), add `effort_level: self.config.effort_level.clone()`
+- [x] Update all existing `ClaudeInvocation { ... }` literals in tests (ssh.rs tests) to include `effort_level: None`
 
 ## Task 5: Thread effort through Tauri commands
 
@@ -102,13 +102,13 @@ Valid levels: `low`, `medium`, `high`, `max`.
 - `resume_oneshot` (lib.rs:536-554) → `OneShotConfig { model, ... }`
 
 **Checklist:**
-- [ ] Add `effort_level: Option<String>` parameter to `run_session` command (lib.rs ~line 85)
-- [ ] Pass `effort_level` into `SessionConfig` in `run_session` (lib.rs ~line 173)
-- [ ] Add `effort_level: Option<String>` and `design_effort_level: Option<String>` parameters to `run_oneshot` command (lib.rs ~line 420)
-- [ ] Pass effort levels into `OneShotConfig` in `run_oneshot` (lib.rs ~line 453), defaulting: `effort_level.unwrap_or_else(|| "medium".to_string())` and `design_effort_level.unwrap_or_else(|| "high".to_string())`
-- [ ] Add same effort parameters to `resume_oneshot` command (lib.rs ~line 543)
-- [ ] Pass effort levels into `OneShotConfig` in `resume_oneshot` with same defaults
-- [ ] Add `tracing::info!` fields for effort_level in each command's entry log
+- [x] Add `effort_level: Option<String>` parameter to `run_session` command (lib.rs ~line 85)
+- [x] Pass `effort_level` into `SessionConfig` in `run_session` (lib.rs ~line 173)
+- [x] Add `effort_level: Option<String>` and `design_effort_level: Option<String>` parameters to `run_oneshot` command (lib.rs ~line 420)
+- [x] Pass effort levels into `OneShotConfig` in `run_oneshot` (lib.rs ~line 453), defaulting: `effort_level.unwrap_or_else(|| "medium".to_string())` and `design_effort_level.unwrap_or_else(|| "high".to_string())`
+- [x] Add same effort parameters to `resume_oneshot` command (lib.rs ~line 543)
+- [x] Pass effort levels into `OneShotConfig` in `resume_oneshot` with same defaults
+- [x] Add `tracing::info!` fields for effort_level in each command's entry log
 
 ## Task 6: Use effort in OneShot design and implementation phases
 
@@ -120,8 +120,8 @@ Valid levels: `low`, `medium`, `high`, `max`.
 - Implementation phase: `model: Some(self.config.model.clone())` (oneshot.rs:674)
 
 **Checklist:**
-- [ ] In the design phase `SessionConfig` (oneshot.rs ~line 508), set `effort_level: Some(self.config.design_effort_level.clone())`
-- [ ] In the implementation phase `SessionConfig` (oneshot.rs ~line 668), set `effort_level: Some(self.config.effort_level.clone())`
+- [x] In the design phase `SessionConfig` (oneshot.rs ~line 508), set `effort_level: Some(self.config.design_effort_level.clone())`
+- [x] In the implementation phase `SessionConfig` (oneshot.rs ~line 668), set `effort_level: Some(self.config.effort_level.clone())`
 
 ## Task 7: Thread effort through frontend store → Tauri invoke
 
@@ -187,10 +187,10 @@ Valid levels: `low`, `medium`, `high`, `max`.
 **Pattern reference:** Existing SSH runtime tests that verify `--model` flag (ssh.rs ~lines 1132-1170).
 
 **Checklist:**
-- [ ] Add `effort_level: None` to all existing `ClaudeInvocation` literals in tests to fix compilation
-- [ ] Add a test `build_tmux_command_includes_effort_level` that verifies `--effort high` appears in the command when `effort_level: Some("high".to_string())`
-- [ ] Add a test `build_tmux_command_excludes_effort_when_none` that verifies no `--effort` flag when `effort_level: None`
-- [ ] Run `cd src-tauri && cargo test` to verify all Rust tests pass
+- [x] Add `effort_level: None` to all existing `ClaudeInvocation` literals in tests to fix compilation
+- [x] Add a test `build_tmux_command_includes_effort_level` that verifies `--effort high` appears in the command when `effort_level: Some("high".to_string())`
+- [x] Add a test `build_tmux_command_excludes_effort_when_none` that verifies no `--effort` flag when `effort_level: None`
+- [x] Run `cd src-tauri && cargo test` to verify all Rust tests pass
 - [ ] Run `npx tsc --noEmit` to verify TypeScript compiles
 
 ## Progress Tracking
@@ -199,10 +199,10 @@ Valid levels: `low`, `medium`, `high`, `max`.
 |------|--------|-------|
 | 1. RepoConfig fields | Done | Frontend persistence |
 | 2. OneShotEntry type | Done | TypeScript type |
-| 3. Rust backend configs | Not started | SessionConfig + OneShotConfig |
-| 4. ClaudeInvocation + runtimes | Not started | All 3 runtimes + build_invocation |
-| 5. Tauri commands | Not started | run_session, run_oneshot, resume_oneshot |
-| 6. OneShot phase configs | Not started | design vs implementation effort |
+| 3. Rust backend configs | Done | SessionConfig + OneShotConfig |
+| 4. ClaudeInvocation + runtimes | Done | All 3 runtimes + build_invocation |
+| 5. Tauri commands | Done | run_session, run_oneshot, resume_oneshot |
+| 6. OneShot phase configs | Done | design vs implementation effort |
 | 7. Frontend store | Not started | Zustand store invoke calls |
 | 8. UI controls | Not started | Select dropdowns in RepoDetail |
-| 9. Tests | Not started | SSH runtime tests + compilation |
+| 9. Tests | Done | SSH runtime tests + compilation (487 pass) |

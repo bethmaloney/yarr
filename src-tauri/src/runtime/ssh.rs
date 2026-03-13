@@ -173,6 +173,10 @@ impl SshRuntime {
             claude_cmd.push_str(&format!(" --model {}", shell_escape(model)));
         }
 
+        if let Some(ref effort) = invocation.effort_level {
+            claude_cmd.push_str(&format!(" --effort {}", shell_escape(effort)));
+        }
+
         for arg in &invocation.extra_args {
             claude_cmd.push_str(&format!(" {}", shell_escape(arg)));
         }
@@ -970,6 +974,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -994,6 +999,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1018,6 +1024,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1045,6 +1052,7 @@ mod tests {
             prompt: "do something".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1080,6 +1088,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1105,6 +1114,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1129,6 +1139,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: Some("claude-sonnet-4-20250514".to_string()),
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1153,6 +1164,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1177,6 +1189,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![
                 "--max-turns".to_string(),
                 "5".to_string(),
@@ -1209,6 +1222,7 @@ mod tests {
             prompt: "Fix the bug in main.rs".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1313,6 +1327,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/my project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1341,6 +1356,7 @@ mod tests {
             prompt: "Fix the bug in it's parser".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1372,6 +1388,7 @@ mod tests {
             prompt: r#"Fix the "broken" function"#.to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1396,6 +1413,7 @@ mod tests {
             prompt: "Run $(whoami) && echo $HOME | cat".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1422,6 +1440,7 @@ mod tests {
             prompt: "".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1446,6 +1465,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1504,6 +1524,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: Some("claude-opus-4-6".to_string()),
+            effort_level: None,
             extra_args: vec![
                 "--allowedTools".to_string(),
                 "Bash,Read,Write".to_string(),
@@ -1538,6 +1559,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/srv/app"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1563,6 +1585,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1606,6 +1629,7 @@ mod tests {
             prompt: "Fix the bug.\nThen run the tests.\nReport results.".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -1636,6 +1660,7 @@ mod tests {
             prompt: "Explain what `main()` does".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: std::collections::HashMap::new(),
         };
@@ -2465,6 +2490,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: HashMap::new(),
         };
@@ -2495,6 +2521,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: HashMap::new(),
         };
@@ -2519,6 +2546,7 @@ mod tests {
             prompt: "hello".to_string(),
             working_dir: PathBuf::from("/home/user/project"),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: HashMap::from([("MY_VAR".to_string(), "my_value".to_string())]),
         };
@@ -2688,6 +2716,52 @@ mod tests {
         assert!(
             !msg.is_empty(),
             "warning message should not be empty"
+        );
+    }
+
+    #[test]
+    fn build_tmux_command_includes_effort_level() {
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let invocation = ClaudeInvocation {
+            prompt: "hello".to_string(),
+            working_dir: PathBuf::from("/home/user/project"),
+            model: None,
+            effort_level: Some("high".to_string()),
+            extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
+        };
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
+        let std_cmd = cmd.as_std();
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+        assert!(
+            all_args.contains("--effort") && all_args.contains("high"),
+            "expected '--effort high' in command, got: {}",
+            all_args
+        );
+    }
+
+    #[test]
+    fn build_tmux_command_excludes_effort_when_none() {
+        let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
+        let invocation = ClaudeInvocation {
+            prompt: "hello".to_string(),
+            working_dir: PathBuf::from("/home/user/project"),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            env_vars: std::collections::HashMap::new(),
+        };
+        let cmd = rt.build_tmux_command("sess-1", &invocation, &HashMap::new());
+        let std_cmd = cmd.as_std();
+        let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
+        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
+        let all_args = args_str.join(" ");
+        assert!(
+            !all_args.contains("--effort"),
+            "expected no '--effort' flag when effort_level is None, got: {}",
+            all_args
         );
     }
 }

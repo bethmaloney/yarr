@@ -21,6 +21,7 @@ pub struct ClaudeInvocation {
     pub prompt: String,
     pub working_dir: std::path::PathBuf,
     pub model: Option<String>,
+    pub effort_level: Option<String>,
     pub extra_args: Vec<String>,
     pub env_vars: std::collections::HashMap<String, String>,
 }
