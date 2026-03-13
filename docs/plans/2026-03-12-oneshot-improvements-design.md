@@ -364,12 +364,12 @@ Update existing tests and add new ones for the changed behavior.
 - Update existing tests that assert on `OneShotEntry` shape or `OneShotStarted` event fields
 
 **Checklist:**
-- [ ] Update store tests for reconciliation
-- [ ] Add store tests for event recovery
-- [ ] Update E2E tests for empty state
-- [ ] Add E2E test for resume button
-- [ ] Update Rust tests for `ResumeState`
-- [ ] Run `npm test`, `npm run test:e2e`, `cd src-tauri && cargo test`
+- [x] Update store tests for reconciliation
+- [x] Add store tests for event recovery
+- [x] Update E2E tests for empty state
+- [x] Add E2E test for resume button
+- [x] Update Rust tests for `ResumeState`
+- [x] Run `npm test`, `npm run test:e2e`, `cd src-tauri && cargo test`
 
 ---
 
@@ -387,4 +387,4 @@ Update existing tests and add new ones for the changed behavior.
 | 8 | Add `ResumeState` and refactor runner | Done |
 | 9 | Add `resume_oneshot` Tauri command | Done |
 | 10 | Add `resumeOneShot` store action and wire UI | Done |
-| 11 | Update tests | Not Started |
+| 11 | Update tests | Done |
