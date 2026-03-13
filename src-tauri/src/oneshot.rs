@@ -5567,4 +5567,188 @@ mod tests {
             "should extract basename from deeply nested path"
         );
     }
+
+    // =========================================================================
+    // plan-move integration tests (Task 5)
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_oneshot_run_moves_plan_when_enabled() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_config(&tmp, MergeStrategy::Branch);
+        // move_plans_to_completed defaults to true in make_config
+        assert!(config.move_plans_to_completed);
+
+        let wt_dir = TempDir::new().unwrap();
+        // Create the plan file so the existence check passes
+        let plan_dir = wt_dir.path().join("docs/plans");
+        std::fs::create_dir_all(&plan_dir).unwrap();
+        std::fs::write(plan_dir.join("test-plan.md"), "# Test Plan\n").unwrap();
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let state = ResumeState {
+            worktree_path: wt_dir.path().to_path_buf(),
+            branch: "oneshot/test-branch-abc123".to_string(),
+            plan_file: Some("docs/plans/test-plan.md".to_string()),
+            skip_design: true,
+            skip_implementation: false,
+        };
+
+        let runner = OneShotRunner::new(config, collector, cancel_token)
+            .with_resume_state(state)
+            .on_event(Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }));
+
+        let mut runtime = MockRuntime::completing_after(1);
+
+        // Command results:
+        // 1. detect_default_branch: git symbolic-ref succeeds
+        // 2. mkdir -p + mv (plan move)
+        // 3. git add (plan move)
+        // 4. git push -u origin <branch> (git finalize)
+        // 5. git worktree remove (cleanup)
+        runtime.command_results = vec![
+            CommandOutput { exit_code: 0, stdout: "refs/remotes/origin/main\n".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: "Branch pushed".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_ok(), "oneshot with plan move enabled should succeed, got: {:?}", result.err());
+
+        let commands = runtime.captured_commands.lock().unwrap();
+        // Verify mkdir+mv command was issued
+        let has_mv_cmd = commands.iter().any(|c| c.contains("mkdir -p") && c.contains("mv "));
+        assert!(has_mv_cmd, "should have issued mkdir+mv command for plan move, got commands: {:?}", *commands);
+
+        // Verify git add command was issued for the completed path
+        let has_git_add = commands.iter().any(|c| c.contains("git add") && c.contains("completed"));
+        assert!(has_git_add, "should have issued git add for completed plan, got commands: {:?}", *commands);
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_run_skips_plan_move_when_disabled() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut config = make_config(&tmp, MergeStrategy::Branch);
+        config.move_plans_to_completed = false;
+
+        let wt_dir = TempDir::new().unwrap();
+        // Create the plan file anyway — it should NOT be moved
+        let plan_dir = wt_dir.path().join("docs/plans");
+        std::fs::create_dir_all(&plan_dir).unwrap();
+        std::fs::write(plan_dir.join("test-plan.md"), "# Test Plan\n").unwrap();
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let state = ResumeState {
+            worktree_path: wt_dir.path().to_path_buf(),
+            branch: "oneshot/test-branch-abc123".to_string(),
+            plan_file: Some("docs/plans/test-plan.md".to_string()),
+            skip_design: true,
+            skip_implementation: false,
+        };
+
+        let runner = OneShotRunner::new(config, collector, cancel_token)
+            .with_resume_state(state)
+            .on_event(Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }));
+
+        let mut runtime = MockRuntime::completing_after(1);
+
+        // Command results: detect_default_branch + git finalize (no plan move commands)
+        // 1. detect_default_branch: git symbolic-ref succeeds
+        // 2. git push -u origin <branch>
+        // 3. git worktree remove
+        runtime.command_results = vec![
+            CommandOutput { exit_code: 0, stdout: "refs/remotes/origin/main\n".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: "Branch pushed".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_ok(), "oneshot with plan move disabled should succeed, got: {:?}", result.err());
+
+        let commands = runtime.captured_commands.lock().unwrap();
+        // Verify NO mkdir+mv command was issued
+        let has_mv_cmd = commands.iter().any(|c| c.contains("mkdir -p") && c.contains("mv "));
+        assert!(!has_mv_cmd, "should NOT have issued mv command when move_plans_to_completed is false, got commands: {:?}", *commands);
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_run_plan_move_failure_is_best_effort() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_config(&tmp, MergeStrategy::Branch);
+        assert!(config.move_plans_to_completed);
+
+        let wt_dir = TempDir::new().unwrap();
+        // Create the plan file so the existence check passes
+        let plan_dir = wt_dir.path().join("docs/plans");
+        std::fs::create_dir_all(&plan_dir).unwrap();
+        std::fs::write(plan_dir.join("test-plan.md"), "# Test Plan\n").unwrap();
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let state = ResumeState {
+            worktree_path: wt_dir.path().to_path_buf(),
+            branch: "oneshot/test-branch-abc123".to_string(),
+            plan_file: Some("docs/plans/test-plan.md".to_string()),
+            skip_design: true,
+            skip_implementation: false,
+        };
+
+        let runner = OneShotRunner::new(config, collector, cancel_token)
+            .with_resume_state(state)
+            .on_event(Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }));
+
+        let mut runtime = MockRuntime::completing_after(1);
+
+        // Command results:
+        // 1. detect_default_branch: git symbolic-ref succeeds
+        // 2. mkdir -p + mv FAILS (plan move failure — git add is NOT called after mv failure)
+        // 3. git push -u origin <branch> (git finalize should still proceed)
+        // 4. git worktree remove (cleanup)
+        runtime.command_results = vec![
+            CommandOutput { exit_code: 0, stdout: "refs/remotes/origin/main\n".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 1, stdout: String::new(), stderr: "mv: cannot move file".to_string() },
+            CommandOutput { exit_code: 0, stdout: "Branch pushed".to_string(), stderr: String::new() },
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(
+            result.is_ok(),
+            "oneshot should succeed even when plan move fails (best-effort), got: {:?}",
+            result.err()
+        );
+
+        // Verify the mkdir+mv command was actually attempted (and consumed the failure result)
+        let commands = runtime.captured_commands.lock().unwrap();
+        let has_mv_cmd = commands.iter().any(|c| c.contains("mkdir -p") && c.contains("mv "));
+        assert!(has_mv_cmd, "should have attempted mkdir+mv command for plan move, got commands: {:?}", *commands);
+        drop(commands);
+
+        // Verify the oneshot completed fully (git finalize happened)
+        let captured = events.lock().unwrap();
+        let has_complete = captured.iter().any(|e| matches!(e, SessionEvent::OneShotComplete));
+        assert!(has_complete, "oneshot should have completed despite plan move failure");
+
+        let has_git_finalize = captured.iter().any(|e| matches!(e, SessionEvent::GitFinalizeComplete));
+        assert!(has_git_finalize, "git finalize should have completed despite plan move failure");
+    }
 }

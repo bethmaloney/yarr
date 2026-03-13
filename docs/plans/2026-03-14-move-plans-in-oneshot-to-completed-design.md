@@ -72,9 +72,9 @@ The fix is to move the plan to completed **in the Rust backend** (`OneShotRunner
 **Pattern reference:** Existing oneshot tests starting at line 1134. Look at how `MockRuntime` is used to verify commands.
 
 **Checklist:**
-- [ ] Add test: successful oneshot with `move_plans_to_completed: true` — verify the `mkdir -p` + `mv` + `git add` commands are issued against the worktree
-- [ ] Add test: successful oneshot with `move_plans_to_completed: false` — verify no move commands are issued
-- [ ] Add test: plan move failure doesn't fail the overall oneshot (best-effort)
+- [x] Add test: successful oneshot with `move_plans_to_completed: true` — verify the `mkdir -p` + `mv` + `git add` commands are issued against the worktree
+- [x] Add test: successful oneshot with `move_plans_to_completed: false` — verify no move commands are issued
+- [x] Add test: plan move failure doesn't fail the overall oneshot (best-effort)
 
 ## Implementation Order
 
@@ -92,4 +92,4 @@ The fix is to move the plan to completed **in the Rust backend** (`OneShotRunner
 | 2. Add config field | **Done** | Added `move_plans_to_completed: bool` to OneShotConfig, wired through run_oneshot/resume_oneshot and frontend |
 | 3. Lightweight helper | **Done** | Added `commit: bool` param to `move_plan_to_completed_impl` |
 | 4. Remove frontend handler | **Done** | Removed `invoke("move_plan_to_completed")` from oneshot handler, kept `console.debug` log, updated tests |
-| 5. Tests | Not started | Verification |
+| 5. Tests | **Done** | 3 integration tests: move-enabled, move-disabled, best-effort failure |
