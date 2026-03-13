@@ -245,6 +245,7 @@ pub async fn git_merge_push(
                             .conflict_model
                             .clone()
                             .or(Some("sonnet".to_string())),
+                        effort_level: None,
                         extra_args: vec![
                             "--dangerously-skip-permissions".to_string(),
                         ],

@@ -247,11 +247,13 @@ export default function History() {
             <button
               key={trace.session_id}
               className="trace-row flex items-center gap-4 px-3 py-2.5 bg-card border border-border rounded-md cursor-pointer text-foreground font-mono text-sm text-left w-full hover:bg-accent hover:border-accent"
-              onClick={() =>
-                navigate(
-                  `/run/${traceRepoId(trace, repoId)}/${trace.session_id}`,
-                )
-              }
+              onClick={() => {
+                if (trace.session_type === "one_shot") {
+                  navigate(`/oneshot/${trace.repo_id ?? "unknown"}`);
+                } else {
+                  navigate(`/run/${traceRepoId(trace, repoId)}/${trace.session_id}`);
+                }
+              }}
             >
               <span className="flex-shrink-0 min-w-28 text-muted-foreground">
                 {formatDate(trace.start_time)}

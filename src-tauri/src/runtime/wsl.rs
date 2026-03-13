@@ -97,6 +97,9 @@ impl WslRuntime {
         if let Some(ref model) = invocation.model {
             cmd_parts.push(format!("--model {}", shell_escape(model)));
         }
+        if let Some(ref effort) = invocation.effort_level {
+            cmd_parts.push(format!("--effort {}", shell_escape(effort)));
+        }
         for arg in &invocation.extra_args {
             cmd_parts.push(shell_escape(arg));
         }
@@ -447,6 +450,7 @@ mod tests {
             prompt: "test prompt".to_string(),
             working_dir: "/home/beth/project".into(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: HashMap::new(),
         };
@@ -477,6 +481,7 @@ mod tests {
             prompt: "test prompt".to_string(),
             working_dir: "/home/beth/project".into(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             env_vars: inv_env,
         };

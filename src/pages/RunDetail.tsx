@@ -3,7 +3,9 @@ import { useParams, useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EventsList } from "@/components/EventsList";
+import { PlanPanel } from "../PlanPanel";
 import { parsePlanPreview, planDisplayName } from "../plan-preview";
 import type { SessionTrace, SessionEvent } from "../types";
 
@@ -68,6 +70,7 @@ export default function RunDetail() {
     name: string;
     excerpt: string;
   } | null>(null);
+  const [planPanelOpen, setPlanPanelOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,14 +219,45 @@ export default function RunDetail() {
 
           <dt className="text-muted-foreground text-sm">Plan</dt>
           <dd className="m-0 text-sm">
-            {planDisplayName(trace.plan_file, planParsed?.name)}
+            {trace.plan_content ? (
+              <span
+                className="cursor-pointer hover:underline"
+                role="button"
+                onClick={() => setPlanPanelOpen(true)}
+              >
+                {planDisplayName(trace.plan_file, planParsed?.name)}
+              </span>
+            ) : (
+              planDisplayName(trace.plan_file, planParsed?.name)
+            )}
           </dd>
 
           {planParsed?.excerpt && (
             <>
               <dt className="text-muted-foreground text-sm">Plan Preview</dt>
               <dd className="m-0 text-sm text-muted-foreground line-clamp-3">
-                {planParsed.excerpt}
+                {trace.plan_content ? (
+                  <span
+                    className="cursor-pointer hover:underline"
+                    role="button"
+                    onClick={() => setPlanPanelOpen(true)}
+                  >
+                    {planParsed.excerpt}
+                  </span>
+                ) : (
+                  planParsed.excerpt
+                )}
+              </dd>
+            </>
+          )}
+
+          {trace.plan_content && (
+            <>
+              <dt className="sr-only">Actions</dt>
+              <dd className="m-0 text-sm">
+                <Button variant="outline" size="sm" onClick={() => setPlanPanelOpen(true)}>
+                  View Plan
+                </Button>
               </dd>
             </>
           )}
@@ -259,6 +293,15 @@ export default function RunDetail() {
       </div>
 
       <EventsList events={events} repoPath={trace.repo_path} />
+
+      {trace.plan_content && trace.plan_file && (
+        <PlanPanel
+          open={planPanelOpen}
+          onOpenChange={setPlanPanelOpen}
+          planContent={trace.plan_content}
+          planFile={trace.plan_file}
+        />
+      )}
     </main>
   );
 }

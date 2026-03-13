@@ -218,6 +218,81 @@ test.describe("Branch display chip", () => {
     ).toBeVisible();
   });
 
+  test("fast-forward button shows loading state and disables during operation", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_repo_git_status: () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any;
+        w.__ffGitStatusCount = (w.__ffGitStatusCount ?? 0) + 1;
+        if (w.__ffGitStatusCount <= 2) {
+          return { branchName: "main", dirtyCount: 0, ahead: 0, behind: 2 };
+        }
+        return { branchName: "main", dirtyCount: 0, ahead: 0, behind: 0 };
+      },
+      list_local_branches: () => ["main", "feature/foo", "develop"],
+      fast_forward_branch: () =>
+        new Promise((resolve) => setTimeout(resolve, 500)),
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await chip.click();
+
+    const dropdown = page.locator(".branch-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const ffButton = dropdown.getByRole("button", { name: /fast-forward/i });
+    await expect(ffButton).toBeVisible();
+
+    // Click the fast-forward button
+    await ffButton.click();
+
+    // Button should be disabled and show loading text during the operation
+    await expect(ffButton).toBeDisabled();
+    await expect(ffButton).toContainText("Fast-forwarding\u2026");
+
+    // After the promise resolves, the dropdown should close
+    await expect(dropdown).not.toBeVisible({ timeout: 5000 });
+  });
+
+  test("fast-forward updates git status before closing dropdown", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(page, mockTauri, localRepo, {
+      get_repo_git_status: () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any;
+        w.__ffRefreshCount = (w.__ffRefreshCount ?? 0) + 1;
+        if (w.__ffRefreshCount <= 2) {
+          return { branchName: "main", dirtyCount: 0, ahead: 0, behind: 2 };
+        }
+        return { branchName: "main", dirtyCount: 0, ahead: 0, behind: 0 };
+      },
+      list_local_branches: () => ["main", "feature/foo", "develop"],
+      fast_forward_branch: () => Promise.resolve(),
+    });
+
+    const chip = page.locator("button.branch-chip");
+    await expect(chip).toContainText("\u21932");
+
+    await chip.click();
+
+    const dropdown = page.locator(".branch-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const ffButton = dropdown.getByRole("button", { name: /fast-forward/i });
+    await ffButton.click();
+
+    // After fast-forward completes, dropdown should close
+    await expect(dropdown).not.toBeVisible({ timeout: 5000 });
+
+    // The behind indicator should be gone — git status was refreshed before closing
+    await expect(chip).not.toContainText("\u21932");
+  });
+
   test("does not show fast-forward button when not behind", async ({
     page,
     mockTauri,

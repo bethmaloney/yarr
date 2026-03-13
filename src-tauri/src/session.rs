@@ -63,6 +63,7 @@ pub struct SessionConfig {
     pub max_iterations: u32,
     pub completion_signal: String,
     pub model: Option<String>,
+    pub effort_level: Option<String>,
     pub extra_args: Vec<String>,
     /// Plan file path (if any)
     pub plan_file: Option<String>,
@@ -86,6 +87,7 @@ impl Default for SessionConfig {
             max_iterations: 20,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: Vec::new(),
             plan_file: None,
             inter_iteration_delay_ms: 1000,
@@ -333,6 +335,7 @@ impl SessionRunner {
             prompt: self.config.prompt.clone(),
             working_dir: self.config.effective_working_dir().to_path_buf(),
             model: self.config.model.clone(),
+            effort_level: self.config.effort_level.clone(),
             extra_args: self.config.extra_args.clone(),
             env_vars: self.config.env_vars.clone(),
         }
@@ -418,6 +421,7 @@ impl SessionRunner {
                     prompt: fix_prompt,
                     working_dir: self.config.effective_working_dir().to_path_buf(),
                     model: check.model.clone().or_else(|| self.config.model.clone()),
+                    effort_level: self.config.effort_level.clone(),
                     extra_args: vec!["--dangerously-skip-permissions".to_string()],
                     env_vars: self.config.env_vars.clone(),
                 };
@@ -613,6 +617,19 @@ impl SessionRunner {
             Some(sid) => self.collector.start_session_with_id(sid, &repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
             None => self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
         };
+
+        // Snapshot plan content if plan_file is configured
+        if let Some(ref plan_path) = self.config.plan_file {
+            match tokio::fs::read_to_string(plan_path).await {
+                Ok(content) => {
+                    tracing::info!(plan_file = %plan_path, "plan content snapshot captured");
+                    trace.plan_content = Some(content);
+                }
+                Err(e) => {
+                    tracing::warn!(plan_file = %plan_path, error = %e, "failed to read plan file, continuing without plan content");
+                }
+            }
+        }
 
         tracing::info!(repo = %repo_str, max_iterations = self.config.max_iterations, "starting Ralph loop");
         tracing::info!(runtime = runtime.name(), "runtime selected");
@@ -858,6 +875,9 @@ impl SessionRunner {
         tracing::info!(iteration, "claude process spawned");
         let mut result_event: Option<ResultEvent> = None;
         let mut last_context_tokens: u64 = 0;
+        let mut last_assistant_text = String::new();
+        let mut event_count: u32 = 0;
+        let mut event_summary = Vec::<String>::new();
 
         // Register abort handle so it can be called on app exit
         let abort_arc: std::sync::Arc<dyn crate::runtime::AbortHandle> = std::sync::Arc::from(process.abort_handle);
@@ -870,8 +890,14 @@ impl SessionRunner {
             tokio::select! {
                 event = process.events.recv() => {
                     let Some(event) = event else { break };
+                    event_count += 1;
                     match &event {
                         StreamEvent::System(sys) => {
+                            if let Some(ref subtype) = sys.subtype {
+                                event_summary.push(format!("system:{subtype}"));
+                            } else {
+                                event_summary.push("system:init".to_string());
+                            }
                             if let Some(ref model) = sys.model {
                                 tracing::debug!("Iteration {iteration}: model={model}");
                             }
@@ -895,6 +921,7 @@ impl SessionRunner {
                                             text.clone()
                                         };
                                         tracing::debug!(iteration, preview, "text output");
+                                        last_assistant_text = text.clone();
                                         self.emit(SessionEvent::AssistantText {
                                             iteration,
                                             text: text.clone(),
@@ -912,6 +939,9 @@ impl SessionRunner {
                         }
                         StreamEvent::RateLimit(rl) => {
                             if let Some(ref info) = rl.rate_limit_info {
+                                let status = info.status.as_deref().unwrap_or("unknown");
+                                let rl_type = info.rate_limit_type.as_deref().unwrap_or("unknown");
+                                event_summary.push(format!("rate_limit:{status}/{rl_type}"));
                                 tracing::debug!(
                                     "Rate limit: status={:?} type={:?}",
                                     info.status,
@@ -948,12 +978,25 @@ impl SessionRunner {
         );
 
         if exit.exit_code != 0 && result_event.is_none() {
-            tracing::error!(iteration, exit_code = exit.exit_code, stderr = %exit.stderr.trim(), "claude process failed with no result");
-            anyhow::bail!(
-                "Claude process exited with code {} (stderr: {})",
-                exit.exit_code,
-                exit.stderr.trim()
-            );
+            let stderr = exit.stderr.trim();
+            let output = combine_output(last_assistant_text.trim(), stderr);
+            let events_desc = if event_summary.is_empty() {
+                "no events received".to_string()
+            } else {
+                format!("{event_count} events: [{}]", event_summary.join(", "))
+            };
+            tracing::error!(iteration, exit_code = exit.exit_code, stderr = %stderr, last_output = %last_assistant_text.trim(), events = %events_desc, "claude process failed with no result");
+            if output.is_empty() {
+                anyhow::bail!(
+                    "Claude process exited with code {} ({events_desc})",
+                    exit.exit_code,
+                );
+            } else {
+                anyhow::bail!(
+                    "Claude process exited with code {} — {output}",
+                    exit.exit_code,
+                );
+            }
         }
 
         if result_event.is_none() {
@@ -986,6 +1029,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0, // no delay for tests
@@ -1315,6 +1359,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -1555,6 +1600,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -1623,6 +1669,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -1700,6 +1747,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -1991,6 +2039,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -2043,6 +2092,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -2498,6 +2548,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -2659,6 +2710,7 @@ mod tests {
             max_iterations: 2,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -2935,6 +2987,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -3013,6 +3066,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: Some("docs/plans/my-plan.md".to_string()),
             inter_iteration_delay_ms: 0,
@@ -3061,6 +3115,7 @@ mod tests {
             max_iterations: 10,
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             model: None,
+            effort_level: None,
             extra_args: vec![],
             plan_file: None,
             inter_iteration_delay_ms: 0,
@@ -3093,5 +3148,115 @@ mod tests {
             }
             _ => unreachable!(),
         }
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_snapshot_happy_path() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // Create a plan file on disk with known content
+        let plan_dir = tmp.path().join("plans");
+        std::fs::create_dir_all(&plan_dir).expect("create plans dir");
+        let plan_path = plan_dir.join("my-plan.md");
+        let plan_text = "# My Plan\n\nThis is the plan content.\n";
+        std::fs::write(&plan_path, plan_text).expect("write plan file");
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: Some(plan_path.to_string_lossy().to_string()),
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        assert_eq!(
+            trace.plan_content,
+            Some(plan_text.to_string()),
+            "trace.plan_content should contain the plan file contents"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_snapshot_file_not_found() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: Some("/nonexistent/path/plan.md".to_string()),
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed even when plan file is missing");
+
+        assert_eq!(
+            trace.plan_content, None,
+            "trace.plan_content should be None when the plan file does not exist"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_snapshot_no_plan_file() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        assert_eq!(
+            trace.plan_content, None,
+            "trace.plan_content should be None when no plan_file is configured"
+        );
     }
 }

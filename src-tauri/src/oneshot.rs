@@ -10,8 +10,10 @@ use tracing::instrument;
 
 use crate::git_merge::{git_merge_push, GitMergeConfig, GitMergeEvent};
 use crate::prompt;
+use crate::runtime::ssh::SshRuntime;
 use crate::runtime::RuntimeProvider;
 use crate::session::{AbortRegistry, GitSyncConfig, OnSessionEvent, SessionConfig, SessionEvent, SessionRunner};
+use crate::ssh_orchestrator::SshSessionOrchestrator;
 use crate::trace::{SessionOutcome, SessionTrace, TraceCollector};
 
 /// Strategy for integrating 1-shot work back into the repository.
@@ -30,6 +32,8 @@ pub struct OneShotConfig {
     pub title: String,
     pub prompt: String,
     pub model: String,
+    pub effort_level: String,
+    pub design_effort_level: String,
     pub merge_strategy: MergeStrategy,
     pub env_vars: HashMap<String, String>,
     pub max_iterations: u32,
@@ -37,6 +41,7 @@ pub struct OneShotConfig {
     pub checks: Vec<crate::session::Check>,
     pub git_sync: Option<crate::session::GitSyncConfig>,
     pub plans_dir: String,
+    pub ssh_host: Option<String>,
 }
 
 /// State for resuming an interrupted one-shot session.
@@ -138,6 +143,41 @@ pub fn worktree_path(repo_id: &str, short_id: &str) -> PathBuf {
         "{home}/.yarr/worktrees/{}-oneshot-{short_id}",
         repo_id
     ))
+}
+
+/// Compute the worktree path on a remote machine via SSH.
+///
+/// Runs `echo $HOME` on the remote to discover the home directory, then
+/// returns `<home>/.yarr/worktrees/<repo_id>-oneshot-<short_id>`.
+pub async fn worktree_path_remote(
+    runtime: &dyn RuntimeProvider,
+    repo_id: &str,
+    short_id: &str,
+    repo_path: &std::path::Path,
+) -> Result<PathBuf> {
+    let output = runtime
+        .run_command("echo $HOME", repo_path, Duration::from_secs(10))
+        .await?;
+    if output.exit_code != 0 {
+        return Err(anyhow::anyhow!(
+            "Failed to resolve remote home directory: {}",
+            output.stderr
+        ));
+    }
+    let home = output.stdout.trim();
+    if home.is_empty() {
+        return Err(anyhow::anyhow!("Remote $HOME is empty"));
+    }
+    if !home.starts_with('/') {
+        return Err(anyhow::anyhow!(
+            "Remote $HOME is not an absolute path: {}",
+            home
+        ));
+    }
+    tracing::debug!(home, "Resolved remote home directory");
+    Ok(PathBuf::from(format!(
+        "{home}/.yarr/worktrees/{repo_id}-oneshot-{short_id}"
+    )))
 }
 
 /// Get the Unix home directory path.
@@ -274,6 +314,7 @@ pub struct OneShotRunner {
     accumulated_events: Arc<std::sync::Mutex<Vec<SessionEvent>>>,
     session_id: Arc<std::sync::Mutex<Option<String>>>,
     resume_state: Option<ResumeState>,
+    pub(crate) ssh_runtime: Option<SshRuntime>,
 }
 
 impl OneShotRunner {
@@ -291,6 +332,7 @@ impl OneShotRunner {
             accumulated_events: Arc::new(std::sync::Mutex::new(Vec::new())),
             session_id: Arc::new(std::sync::Mutex::new(None)),
             resume_state: None,
+            ssh_runtime: None,
         }
     }
 
@@ -306,6 +348,11 @@ impl OneShotRunner {
 
     pub fn with_resume_state(mut self, state: ResumeState) -> Self {
         self.resume_state = Some(state);
+        self
+    }
+
+    pub fn with_ssh_runtime(mut self, runtime: SshRuntime) -> Self {
+        self.ssh_runtime = Some(runtime);
         self
     }
 
@@ -345,6 +392,59 @@ impl OneShotRunner {
                 cb(event);
             }
         })
+    }
+
+    /// Run a phase (design or implementation) routing to either local `SessionRunner`
+    /// or remote `SshSessionOrchestrator` depending on whether `ssh_runtime` is set.
+    ///
+    /// Returns the collected phase-specific events.
+    async fn run_phase(
+        &self,
+        config: SessionConfig,
+        phase_collector: TraceCollector,
+        runtime: &dyn RuntimeProvider,
+        trace: &mut SessionTrace,
+    ) -> Result<Vec<SessionEvent>> {
+        let phase_events: Arc<std::sync::Mutex<Vec<SessionEvent>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let phase_events_clone = phase_events.clone();
+
+        let forwarder = self.make_event_forwarder();
+        let phase_cb: OnSessionEvent = Box::new(move |event: &SessionEvent| {
+            phase_events_clone.lock().unwrap().push(event.clone());
+            forwarder(event);
+        });
+
+        if let Some(ref ssh_rt) = self.ssh_runtime {
+            // SSH path: create a new SshRuntime instance (SshRuntime is not Clone)
+            let ssh_runtime_new = SshRuntime::new(
+                &ssh_rt.ssh_host,
+                &ssh_rt.remote_path,
+                ssh_rt.env_cache.clone(),
+            );
+            let orchestrator =
+                SshSessionOrchestrator::new(ssh_runtime_new, config, phase_collector, self.cancel_token.clone())
+                    .on_event(phase_cb);
+
+            let ssh_trace = orchestrator.run().await?;
+
+            // Copy relevant trace data from SSH trace into the caller's trace
+            trace.outcome = ssh_trace.outcome;
+            trace.failure_reason = ssh_trace.failure_reason;
+        } else {
+            // Local path
+            let runner = SessionRunner::new(config, phase_collector, self.cancel_token.clone())
+                .on_event(phase_cb);
+            let runner = if let Some(ref registry) = self.abort_registry {
+                runner.abort_registry(registry.clone())
+            } else {
+                runner
+            };
+            runner.run_with_trace(runtime, trace).await?;
+        }
+
+        let collected = phase_events.lock().unwrap().clone();
+        Ok(collected)
     }
 
     fn strategy_string(&self) -> String {
@@ -445,7 +545,17 @@ impl OneShotRunner {
         } else {
             let slug = slugify(&self.config.title);
             let short_id = generate_short_id();
-            let wt = worktree_path(&self.config.repo_id, &short_id);
+            let wt = if self.config.ssh_host.is_some() {
+                worktree_path_remote(runtime, &self.config.repo_id, &short_id, &self.config.repo_path).await
+                    .map_err(|e| {
+                        self.emit(SessionEvent::OneShotFailed {
+                            reason: format!("Failed to resolve remote worktree path: {}", e),
+                        });
+                        e
+                    })?
+            } else {
+                worktree_path(&self.config.repo_id, &short_id)
+            };
             let br = branch_name(&slug, &short_id);
             tracing::info!(
                 oneshot_id = %self.config.repo_id,
@@ -578,11 +688,6 @@ impl OneShotRunner {
 
             let design_prompt = prompt::build_design_prompt(&self.config.prompt, &self.config.title, &self.config.plans_dir);
 
-            // Collect design events separately so we can extract plan file from them
-            let design_events: Arc<std::sync::Mutex<Vec<SessionEvent>>> =
-                Arc::new(std::sync::Mutex::new(Vec::new()));
-            let design_events_clone = design_events.clone();
-
             let design_config = SessionConfig {
                 repo_path: self.config.repo_path.clone(),
                 working_dir: Some(wt_path.clone()),
@@ -590,6 +695,7 @@ impl OneShotRunner {
                 max_iterations: 1,
                 completion_signal: String::new(),
                 model: Some(self.config.model.clone()),
+                effort_level: Some(self.config.design_effort_level.clone()),
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 env_vars: self.config.env_vars.clone(),
                 checks: vec![],
@@ -599,23 +705,8 @@ impl OneShotRunner {
 
             let design_collector = TraceCollector::new(&self.config.repo_path, &self.config.repo_id);
 
-            // Create a forwarding callback that also collects design events
-            let forwarder = self.make_event_forwarder();
-            let design_cb: OnSessionEvent = Box::new(move |event: &SessionEvent| {
-                design_events_clone.lock().unwrap().push(event.clone());
-                forwarder(event);
-            });
-
-            let design_runner = SessionRunner::new(design_config, design_collector, self.cancel_token.clone())
-                .on_event(design_cb);
-            let design_runner = if let Some(ref registry) = self.abort_registry {
-                design_runner.abort_registry(registry.clone())
-            } else {
-                design_runner
-            };
-
             tracing::info!(oneshot_id = %self.config.repo_id, title = %self.config.title, "starting design phase runner");
-            design_runner.run_with_trace(runtime, &mut trace).await?;
+            let design_evts = self.run_phase(design_config, design_collector, runtime, &mut trace).await?;
 
             // Check design phase outcome
             match trace.outcome {
@@ -651,7 +742,6 @@ impl OneShotRunner {
             }
 
             // Extract plan file from design events
-            let design_evts = design_events.lock().unwrap().clone();
             let plan_file_from_events = extract_plan_file_from_events(&design_evts, &self.config.plans_dir);
             tracing::debug!("Plan file from events extraction: {:?}", plan_file_from_events);
 
@@ -714,6 +804,19 @@ impl OneShotRunner {
             pfp
         };
 
+        // Snapshot plan content into trace
+        trace.plan_file = Some(plan_file_path.clone());
+        let plan_file_abs = format!("{}/{}", wt_path.display(), plan_file_path);
+        match tokio::fs::read_to_string(&plan_file_abs).await {
+            Ok(content) => {
+                tracing::info!(plan_file = %plan_file_abs, "plan content snapshot captured");
+                trace.plan_content = Some(content);
+            }
+            Err(e) => {
+                tracing::warn!(plan_file = %plan_file_abs, error = %e, "failed to read plan file, continuing without plan content");
+            }
+        }
+
         // Check cancellation
         if self.cancel_token.is_cancelled() {
             self.cleanup_worktree(runtime, &wt_path).await;
@@ -750,6 +853,7 @@ impl OneShotRunner {
                 max_iterations: self.config.max_iterations,
                 completion_signal: self.config.completion_signal.clone(),
                 model: Some(self.config.model.clone()),
+                effort_level: Some(self.config.effort_level.clone()),
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 env_vars: self.config.env_vars.clone(),
                 checks: self.config.checks.clone(),
@@ -760,18 +864,9 @@ impl OneShotRunner {
             };
 
             let impl_collector = TraceCollector::new(&self.config.repo_path, &self.config.repo_id);
-            let impl_forwarder = self.make_event_forwarder();
-
-            let impl_runner = SessionRunner::new(impl_config, impl_collector, self.cancel_token.clone())
-                .on_event(impl_forwarder);
-            let impl_runner = if let Some(ref registry) = self.abort_registry {
-                impl_runner.abort_registry(registry.clone())
-            } else {
-                impl_runner
-            };
 
             tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %plan_file_path, "starting implementation phase runner");
-            impl_runner.run_with_trace(runtime, &mut trace).await?;
+            let _impl_events = self.run_phase(impl_config, impl_collector, runtime, &mut trace).await?;
 
             // Check implementation phase outcome
             match trace.outcome {
@@ -1044,6 +1139,8 @@ mod tests {
             title: "Add login feature".to_string(),
             prompt: "Implement user login with email and password".to_string(),
             model: "claude-sonnet".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
             merge_strategy,
             env_vars: HashMap::new(),
             max_iterations: 10,
@@ -1051,6 +1148,7 @@ mod tests {
             checks: Vec::new(),
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
         }
     }
 
@@ -1214,6 +1312,104 @@ mod tests {
     }
 
     // =========================================================================
+    // worktree_path_remote tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_resolves_home() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "/home/remoteuser".to_string(),
+            stderr: String::new(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        let path = result.expect("should resolve remote home");
+        assert_eq!(
+            path,
+            PathBuf::from("/home/remoteuser/.yarr/worktrees/test-repo-oneshot-abc123")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_trims_whitespace() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "/home/remoteuser\n".to_string(),
+            stderr: String::new(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        let path = result.expect("should resolve remote home even with trailing newline");
+        assert_eq!(
+            path,
+            PathBuf::from("/home/remoteuser/.yarr/worktrees/test-repo-oneshot-abc123")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_command_failure() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: "command failed".to_string(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        assert!(result.is_err(), "should return error when command fails");
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_empty_home() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "".to_string(),
+            stderr: String::new(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        assert!(result.is_err(), "should return error when $HOME is empty");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Remote $HOME is empty"),
+            "error should mention empty $HOME, got: {}",
+            err_msg
+        );
+    }
+
+    // =========================================================================
     // branch_name tests
     // =========================================================================
 
@@ -1255,6 +1451,8 @@ mod tests {
             title: "Implement OAuth".to_string(),
             prompt: "Add OAuth2 support with Google provider".to_string(),
             model: "claude-opus".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
             merge_strategy: MergeStrategy::MergeToMain,
             env_vars: HashMap::from([("API_KEY".to_string(), "test-key".to_string())]),
             max_iterations: 15,
@@ -1275,6 +1473,7 @@ mod tests {
                 max_push_retries: 3,
             }),
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
         };
 
         assert_eq!(config.repo_id, "repo-123");
@@ -1301,6 +1500,8 @@ mod tests {
             title: "Fix bug #42".to_string(),
             prompt: "Fix the null pointer in auth handler".to_string(),
             model: "claude-sonnet".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
             merge_strategy: MergeStrategy::Branch,
             env_vars: HashMap::new(),
             max_iterations: 10,
@@ -1308,6 +1509,7 @@ mod tests {
             checks: Vec::new(),
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
         };
 
         assert_eq!(config.merge_strategy, MergeStrategy::Branch);
@@ -2384,6 +2586,83 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn test_oneshot_trace_plan_file_set_after_design() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Branch pushed".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        if let Ok(trace) = result {
+            assert!(
+                trace.plan_file.is_some(),
+                "trace.plan_file should be set after design phase completes"
+            );
+            let plan_file = trace.plan_file.unwrap();
+            assert!(
+                plan_file.contains("docs/plans/"),
+                "plan_file should contain the plans directory, got: '{}'",
+                plan_file
+            );
+            assert!(
+                plan_file.ends_with("-design.md"),
+                "plan_file should end with '-design.md', got: '{}'",
+                plan_file
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_oneshot_trace_plan_content_none_when_file_missing() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Branch pushed".to_string(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        if let Ok(trace) = result {
+            assert!(
+                trace.plan_content.is_none(),
+                "trace.plan_content should be None when plan file doesn't exist on disk"
+            );
+        }
+    }
+
     // =========================================================================
     // generate_oneshot_id tests
     // =========================================================================
@@ -2594,6 +2873,8 @@ mod tests {
             title: "Add feature X".to_string(),
             prompt: "Implement feature X".to_string(),
             model: "claude-sonnet".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
             merge_strategy: MergeStrategy::Branch,
             env_vars: HashMap::new(),
             max_iterations: 20,
@@ -2625,6 +2906,7 @@ mod tests {
                 max_push_retries: 5,
             }),
             plans_dir: "custom/plans/".to_string(),
+            ssh_host: None,
         };
 
         assert_eq!(config.max_iterations, 20);
@@ -4218,6 +4500,96 @@ mod tests {
             push_cmd.contains(":master"),
             "git push should push to master, got: {}",
             push_cmd,
+        );
+    }
+
+    // =========================================================================
+    // Tests for ssh_runtime field and with_ssh_runtime builder
+    // =========================================================================
+
+    #[test]
+    fn test_oneshot_runner_ssh_runtime_is_none_by_default() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        assert!(
+            runner.ssh_runtime.is_none(),
+            "ssh_runtime should be None when not explicitly set"
+        );
+    }
+
+    #[test]
+    fn test_with_ssh_runtime_sets_ssh_runtime() {
+        use crate::runtime::SshRuntime;
+
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let ssh_runtime =
+            SshRuntime::new("myhost", "/home/user/project", Arc::new(dashmap::DashMap::new()));
+
+        let runner =
+            OneShotRunner::new(config, collector, cancel_token).with_ssh_runtime(ssh_runtime);
+
+        assert!(
+            runner.ssh_runtime.is_some(),
+            "ssh_runtime should be Some after calling with_ssh_runtime"
+        );
+    }
+
+    #[test]
+    fn test_ssh_mode_detection_with_ssh_host_and_runtime() {
+        use crate::runtime::SshRuntime;
+
+        let tmp = TempDir::new().unwrap();
+        let mut config = make_config(&tmp, MergeStrategy::MergeToMain);
+        config.ssh_host = Some("myhost".to_string());
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let ssh_runtime =
+            SshRuntime::new("myhost", "/home/user/project", Arc::new(dashmap::DashMap::new()));
+
+        let runner =
+            OneShotRunner::new(config, collector, cancel_token).with_ssh_runtime(ssh_runtime);
+
+        assert!(
+            runner.ssh_runtime.is_some(),
+            "ssh_runtime should be Some when SSH mode is configured"
+        );
+        assert_eq!(
+            runner.config.ssh_host.as_deref(),
+            Some("myhost"),
+            "ssh_host should be set in config"
+        );
+    }
+
+    #[test]
+    fn test_ssh_host_config_without_ssh_runtime_stays_local() {
+        let tmp = TempDir::new().unwrap();
+        let mut config = make_config(&tmp, MergeStrategy::MergeToMain);
+        config.ssh_host = Some("myhost".to_string());
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        assert!(
+            runner.ssh_runtime.is_none(),
+            "ssh_runtime should be None when with_ssh_runtime is not called, even if ssh_host is set in config"
+        );
+        assert_eq!(
+            runner.config.ssh_host.as_deref(),
+            Some("myhost"),
+            "ssh_host should still be present in config"
         );
     }
 }

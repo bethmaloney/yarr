@@ -33,6 +33,8 @@ pub struct SessionTrace {
     #[serde(default)]
     pub plan_file: Option<String>,
     #[serde(default)]
+    pub plan_content: Option<String>,
+    #[serde(default)]
     pub repo_id: Option<String>,
     #[serde(default = "default_session_type")]
     pub session_type: String,
@@ -129,6 +131,7 @@ impl TraceCollector {
             repo_path: repo_path.to_string(),
             prompt: prompt.to_string(),
             plan_file: plan_file.map(|s| s.to_string()),
+            plan_content: None,
             repo_id: Some(self.repo_id.clone()),
             session_type: "ralph_loop".to_string(),
             start_time: Utc::now(),
@@ -160,6 +163,7 @@ impl TraceCollector {
             repo_path: repo_path.to_string(),
             prompt: prompt.to_string(),
             plan_file: plan_file.map(|s| s.to_string()),
+            plan_content: None,
             repo_id: Some(self.repo_id.clone()),
             session_type: "ralph_loop".to_string(),
             start_time: Utc::now(),
@@ -454,6 +458,7 @@ mod tests {
             repo_path: "/tmp/repo".to_string(),
             prompt: "do the thing".to_string(),
             plan_file,
+            plan_content: None,
             repo_id: Some("test-repo".to_string()),
             session_type: "ralph_loop".to_string(),
             start_time: Utc::now(),
@@ -647,8 +652,9 @@ mod tests {
         let obj = value.as_object_mut().expect("top-level object");
         assert!(obj.remove("plan_file").is_some(), "plan_file key should have been present");
         assert!(obj.remove("repo_id").is_some(), "repo_id key should have been present");
+        assert!(obj.remove("plan_content").is_some(), "plan_content key should have been present");
 
-        let old_format_json = serde_json::to_string(&value).expect("re-serialize without plan_file/repo_id");
+        let old_format_json = serde_json::to_string(&value).expect("re-serialize without plan_file/repo_id/plan_content");
 
         // Deserialize the old-format JSON — this would fail without #[serde(default)]
         let restored: SessionTrace =
@@ -656,6 +662,7 @@ mod tests {
 
         assert_eq!(restored.plan_file, None);
         assert_eq!(restored.repo_id, None);
+        assert!(restored.plan_content.is_none());
         assert_eq!(restored.trace_id, trace.trace_id);
         assert_eq!(restored.session_id, trace.session_id);
         assert_eq!(restored.repo_path, trace.repo_path);

@@ -6,6 +6,7 @@ import { useAppStore } from "../store";
 import { useGitStatus } from "../hooks/useGitStatus";
 import { getPhaseFromEvents } from "../oneshot-helpers";
 import { parsePlanPreview } from "../plan-preview";
+import { PlanPanel } from "../PlanPanel";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { OneShotCard } from "@/components/OneShotCard";
 import { RepoCard } from "@/components/RepoCard";
@@ -30,6 +31,10 @@ export default function Home() {
   const [planPreviews, setPlanPreviews] = useState<Map<string, string>>(
     new Map(),
   );
+
+  const [planPanelOpen, setPlanPanelOpen] = useState(false);
+  const [planPanelContent, setPlanPanelContent] = useState<string | null>(null);
+  const [planPanelFile, setPlanPanelFile] = useState<string | null>(null);
 
   useGitStatus(repos, sessions);
   const gitStatus = useAppStore((s) => s.gitStatus);
@@ -107,6 +112,16 @@ export default function Home() {
     if (a.isRunning !== b.isRunning) return a.isRunning ? -1 : 1;
     return b.timestamp - a.timestamp;
   });
+
+  function openPlanPanel(repoId: string): (() => void) | undefined {
+    const trace = latestTraces.get(repoId);
+    if (!trace?.plan_content || !trace?.plan_file) return undefined;
+    return () => {
+      setPlanPanelContent(trace.plan_content!);
+      setPlanPanelFile(trace.plan_file!);
+      setPlanPanelOpen(true);
+    };
+  }
 
   function handleAddRepo() {
     setAddMode("choosing");
@@ -220,6 +235,7 @@ export default function Home() {
                 gitStatus={gitStatus[item.repo.id]}
                 planExcerpt={planPreviews.get(item.repo.id)}
                 onClick={() => navigate(`/repo/${item.repo.id}`)}
+                onPlanClick={openPlanPanel(item.repo.id)}
               />
             ) : (
               <OneShotCard
@@ -236,6 +252,14 @@ export default function Home() {
             ),
           )}
         </div>
+      )}
+      {planPanelContent && planPanelFile && (
+        <PlanPanel
+          open={planPanelOpen}
+          onOpenChange={setPlanPanelOpen}
+          planContent={planPanelContent}
+          planFile={planPanelFile}
+        />
       )}
     </main>
   );

@@ -62,6 +62,11 @@ impl RuntimeProvider for LocalRuntime {
             args.push(model.clone());
         }
 
+        if let Some(ref effort) = invocation.effort_level {
+            args.push("--effort".to_string());
+            args.push(effort.clone());
+        }
+
         args.extend(invocation.extra_args.clone());
 
         let mut cmd = Command::new(&self.claude_bin);

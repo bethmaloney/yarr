@@ -52,6 +52,7 @@ describe("SessionTrace", () => {
     repo_path: "/home/beth/repos/yarr",
     prompt: "fix the tests",
     plan_file: "/tmp/plan.md",
+    plan_content: null,
     repo_id: "repo-abc",
     start_time: "2026-03-07T10:00:00Z",
     end_time: "2026-03-07T10:05:00Z",
@@ -88,6 +89,7 @@ describe("SessionTrace", () => {
       repo_path: "/home/beth/repos/other",
       prompt: "add feature",
       plan_file: null,
+      plan_content: null,
       start_time: "2026-03-07T11:00:00Z",
       end_time: null,
       outcome: "running",
@@ -110,6 +112,7 @@ describe("SessionTrace", () => {
       repo_path: "/home/beth/repos/yarr",
       prompt: "refactor types",
       plan_file: null,
+      plan_content: null,
       repo_id: null,
       start_time: "2026-03-07T12:00:00Z",
       end_time: null,
@@ -131,6 +134,7 @@ describe("SessionTrace", () => {
       repo_path: "/home/beth/repos/yarr",
       prompt: "add context tracking",
       plan_file: null,
+      plan_content: null,
       start_time: "2026-03-07T13:00:00Z",
       end_time: "2026-03-07T13:10:00Z",
       outcome: "completed",
@@ -154,6 +158,7 @@ describe("SessionTrace", () => {
       repo_path: "/home/beth/repos/other",
       prompt: "fix bug",
       plan_file: null,
+      plan_content: null,
       start_time: "2026-03-07T14:00:00Z",
       end_time: null,
       outcome: "running",
@@ -195,6 +200,7 @@ describe("SessionState", () => {
       repo_path: "/home/beth/repos/yarr",
       prompt: "fix the bug",
       plan_file: null,
+      plan_content: null,
       start_time: "2026-03-07T10:00:00Z",
       end_time: "2026-03-07T10:05:00Z",
       outcome: "completed",
@@ -690,6 +696,8 @@ describe("OneShotEntry", () => {
       title: "Add auth module",
       prompt: "Implement OAuth2 authentication",
       model: "opus",
+      effortLevel: "high",
+      designEffortLevel: "max",
       mergeStrategy: "squash",
       status: "running",
       startedAt: 1709827200000,
@@ -713,6 +721,8 @@ describe("OneShotEntry", () => {
       title: "Fix login bug",
       prompt: "The login form crashes on submit",
       model: "sonnet",
+      effortLevel: "medium",
+      designEffortLevel: "high",
       mergeStrategy: "merge",
       status: "completed",
       startedAt: 1709830800000,
@@ -732,6 +742,8 @@ describe("OneShotEntry", () => {
       title: "Refactor database layer",
       prompt: "Extract the database queries into a repository pattern",
       model: "opus",
+      effortLevel: "medium",
+      designEffortLevel: "high",
       mergeStrategy: "rebase",
       status: "failed",
       startedAt: 1709834400000,
@@ -740,5 +752,23 @@ describe("OneShotEntry", () => {
     expect(entry.session_id).toBe("sess-200");
     expect(entry.worktreePath).toBeUndefined();
     expect(entry.branch).toBeUndefined();
+  });
+
+  it("accepts different effort level combinations", () => {
+    const entry: OneShotEntry = {
+      id: "oneshot-eff-test",
+      parentRepoId: "repo-001",
+      parentRepoName: "yarr",
+      title: "Test effort levels",
+      prompt: "Test",
+      model: "opus",
+      effortLevel: "low",
+      designEffortLevel: "max",
+      mergeStrategy: "squash",
+      status: "running",
+      startedAt: 1709827200000,
+    };
+    expect(entry.effortLevel).toBe("low");
+    expect(entry.designEffortLevel).toBe("max");
   });
 });

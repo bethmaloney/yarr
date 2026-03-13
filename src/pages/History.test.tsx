@@ -74,6 +74,7 @@ function makeTrace(overrides: Partial<SessionTrace> = {}): SessionTrace {
     repo_path: "/home/beth/repos/my-project",
     prompt: "Fix the login bug",
     plan_file: null,
+    plan_content: null,
     repo_id: "repo-1",
     session_type: "ralph_loop",
     start_time: "2026-03-10T10:00:00Z",
@@ -527,6 +528,86 @@ describe("History", () => {
       fireEvent.click(screen.getByText("my-project"));
 
       expect(mockNavigate).toHaveBeenCalledWith("/repo/repo-1");
+    });
+
+    // -----------------------------------------------------------------------
+    // Oneshot trace navigation
+    // -----------------------------------------------------------------------
+
+    describe("oneshot trace navigation", () => {
+      it("clicking a one_shot trace navigates to /oneshot/{repo_id} in global view", async () => {
+        const trace = makeTrace({
+          session_id: "sess-os-1",
+          repo_id: "oneshot-abc123",
+          session_type: "one_shot",
+          prompt: "Run a oneshot task",
+        });
+        mockInvoke.mockResolvedValue([trace]);
+        setupMockState({ repos: [makeLocalRepo()] });
+        renderHistory();
+
+        await waitFor(() => {
+          expect(screen.getByText(/Run a oneshot task/)).toBeInTheDocument();
+        });
+
+        const row =
+          screen.getByText(/Run a oneshot task/).closest("button") ??
+          screen.getByText(/Run a oneshot task/).closest("tr");
+        expect(row).not.toBeNull();
+        fireEvent.click(row!);
+
+        expect(mockNavigate).toHaveBeenCalledWith("/oneshot/oneshot-abc123");
+      });
+
+      it("clicking a ralph_loop trace still navigates to /run/{repoId}/{sessionId}", async () => {
+        const trace = makeTrace({
+          session_id: "sess-rl-1",
+          repo_id: "repo-1",
+          session_type: "ralph_loop",
+          prompt: "Run a ralph loop task",
+        });
+        mockInvoke.mockResolvedValue([trace]);
+        setupMockState({ repos: [makeLocalRepo()] });
+        renderHistory();
+
+        await waitFor(() => {
+          expect(screen.getByText(/Run a ralph loop task/)).toBeInTheDocument();
+        });
+
+        const row =
+          screen.getByText(/Run a ralph loop task/).closest("button") ??
+          screen.getByText(/Run a ralph loop task/).closest("tr");
+        expect(row).not.toBeNull();
+        fireEvent.click(row!);
+
+        expect(mockNavigate).toHaveBeenCalledWith("/run/repo-1/sess-rl-1");
+      });
+
+      it("in repo-filtered view, clicking a oneshot trace navigates using trace.repo_id", async () => {
+        const trace = makeTrace({
+          session_id: "sess-os-2",
+          repo_id: "oneshot-def456",
+          session_type: "one_shot",
+          prompt: "Repo-filtered oneshot task",
+        });
+        mockInvoke.mockResolvedValue([trace]);
+        setupMockState({ repos: [makeLocalRepo({ id: "repo-1" } as Partial<RepoConfig>)] });
+        renderHistory("/history/repo-1");
+
+        await waitFor(() => {
+          expect(
+            screen.getByText(/Repo-filtered oneshot task/),
+          ).toBeInTheDocument();
+        });
+
+        const row =
+          screen.getByText(/Repo-filtered oneshot task/).closest("button") ??
+          screen.getByText(/Repo-filtered oneshot task/).closest("tr");
+        expect(row).not.toBeNull();
+        fireEvent.click(row!);
+
+        expect(mockNavigate).toHaveBeenCalledWith("/oneshot/oneshot-def456");
+      });
     });
   });
 });

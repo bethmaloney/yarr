@@ -56,8 +56,8 @@ Add the new field to the trace struct and ensure it serializes/deserializes.
 - Field should default to `None` for backwards compatibility with existing serialized traces
 
 **Checklist:**
-- [ ] Add field to `SessionTrace`
-- [ ] Verify `cargo check` passes
+- [x] Add field to `SessionTrace`
+- [x] Verify `cargo check` passes
 
 ---
 
@@ -76,11 +76,11 @@ Read the plan file at session start and store the content in the trace.
 - If the file can't be read, log a warning and leave `plan_content` as `None` — don't fail the session
 
 **Checklist:**
-- [ ] Read plan file content at session start
-- [ ] Store in trace
-- [ ] Handle file-read errors gracefully
-- [ ] Verify `cargo check` passes
-- [ ] Verify `cargo test` passes
+- [x] Read plan file content at session start
+- [x] Store in trace
+- [x] Handle file-read errors gracefully
+- [x] Verify `cargo check` passes
+- [x] Verify `cargo test` passes
 
 ---
 
@@ -99,11 +99,11 @@ Populate plan content on the trace after the design phase writes the plan file.
 - Same error handling as Task 2 — log and continue if read fails
 
 **Checklist:**
-- [ ] Read plan file after design phase completes
-- [ ] Store in trace
-- [ ] Handle file-read errors gracefully
-- [ ] Verify `cargo check` passes
-- [ ] Verify `cargo test` passes
+- [x] Read plan file after design phase completes
+- [x] Store in trace
+- [x] Handle file-read errors gracefully
+- [x] Verify `cargo check` passes
+- [x] Verify `cargo test` passes
 
 ---
 
@@ -123,10 +123,10 @@ Build the Sheet-based plan viewer component.
 - Style consistently with existing dark theme
 
 **Checklist:**
-- [ ] Create `PlanPanel.tsx` with Sheet + react-markdown
-- [ ] Header shows filename
-- [ ] Body renders markdown and scrolls
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `PlanPanel.tsx` with Sheet + react-markdown
+- [x] Header shows filename
+- [x] Body renders markdown and scrolls
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -147,11 +147,11 @@ Add the "View Plan" button and make the plan excerpt clickable on the completed 
 - Only show triggers when `trace.plan_content` is present
 
 **Checklist:**
-- [ ] Add PlanPanel state and component
-- [ ] Make plan excerpt clickable
-- [ ] Add "View Plan" button
-- [ ] Hide triggers when no plan content
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Add PlanPanel state and component
+- [x] Make plan excerpt clickable
+- [x] Add "View Plan" button
+- [x] Hide triggers when no plan content
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -170,11 +170,11 @@ Add the "View Plan" button and clickable plan text on the one-shot detail page.
 - Only show triggers after design phase completes (when plan content is available)
 
 **Checklist:**
-- [ ] Add PlanPanel state and component
-- [ ] Make plan info clickable
-- [ ] Add "View Plan" button
-- [ ] Only show after design phase completes
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Add PlanPanel state and component
+- [x] Make plan info clickable
+- [x] Add "View Plan" button
+- [x] Only show after design phase completes
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -191,9 +191,9 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 - Only clickable when plan content is available
 
 **Checklist:**
-- [ ] Make plan excerpt clickable
-- [ ] Open PlanPanel with trace plan content
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Make plan excerpt clickable
+- [x] Open PlanPanel with trace plan content
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -201,10 +201,10 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add `plan_content` to `SessionTrace` | Not Started |
-| 2 | Snapshot plan content in Ralph loop sessions | Not Started |
-| 3 | Snapshot plan content in one-shot sessions | Not Started |
-| 4 | Create PlanPanel component | Not Started |
-| 5 | Wire PlanPanel into RunDetail | Not Started |
-| 6 | Wire PlanPanel into OneShotDetail | Not Started |
-| 7 | Wire PlanPanel into RepoCard | Not Started |
+| 1 | Add `plan_content` to `SessionTrace` | Done |
+| 2 | Snapshot plan content in Ralph loop sessions | Done |
+| 3 | Snapshot plan content in one-shot sessions | Done |
+| 4 | Create PlanPanel component | Done |
+| 5 | Wire PlanPanel into RunDetail | Done |
+| 6 | Wire PlanPanel into OneShotDetail | Done |
+| 7 | Wire PlanPanel into RepoCard | Done |
