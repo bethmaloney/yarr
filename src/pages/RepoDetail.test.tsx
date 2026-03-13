@@ -1960,18 +1960,153 @@ describe("RepoDetail", () => {
           [
             "test-repo",
             makeSessionState({
-              trace: makeTrace({
-                context_window: 200000,
-                final_context_tokens: 160000,
-              }),
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.15,
+                    usage: {
+                      input_tokens: 140000,
+                      cache_read_input_tokens: 20000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 1200,
+                    },
+                    model_usage: {
+                      "claude-sonnet-4-20250514": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
             }),
           ],
         ]),
       });
       renderRepoDetail();
 
-      // 160000/200000 = 80%
+      // inputTokens = 140000 + 20000 + 0 = 160000; 160000/200000 = 80%
       expect(screen.getByText(/80%/)).toBeInTheDocument();
+      expect(screen.getByText(/Peak Context/)).toBeInTheDocument();
+    });
+
+    it("shows peak context from the highest iteration, not the last", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        sessions: new Map([
+          [
+            "test-repo",
+            makeSessionState({
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.10,
+                    usage: {
+                      input_tokens: 170000,
+                      cache_read_input_tokens: 10000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 800,
+                    },
+                    model_usage: {
+                      "claude-sonnet-4-20250514": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+                {
+                  kind: "iteration_started",
+                  iteration: 2,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 2,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.08,
+                    usage: {
+                      input_tokens: 40000,
+                      cache_read_input_tokens: 5000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 600,
+                    },
+                    model_usage: {
+                      "claude-sonnet-4-20250514": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderRepoDetail();
+
+      // Iteration 1: (170000+10000+0)/200000 = 90%
+      // Iteration 2: (40000+5000+0)/200000 = 23%
+      // Peak should be 90%, not 23%
+      expect(screen.getByText(/90%/)).toBeInTheDocument();
+      expect(screen.queryByText(/23%/)).not.toBeInTheDocument();
+    });
+
+    it("does not show peak context when no events have context data", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        sessions: new Map([
+          [
+            "test-repo",
+            makeSessionState({
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.05,
+                    usage: {
+                      input_tokens: 5000,
+                      cache_read_input_tokens: 0,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 500,
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderRepoDetail();
+
+      // No model_usage means no contextWindow, so maxContextPercent returns 0
+      // and ctxPercent should be null — "Peak Context" label should not appear
+      expect(screen.queryByText(/Peak Context/)).not.toBeInTheDocument();
     });
 
     it("shows failure reason when present", () => {
