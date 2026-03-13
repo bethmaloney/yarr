@@ -200,11 +200,12 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                         StreamEvent::Assistant(assistant) => {
                             for block in &assistant.message.content {
                                 match block {
-                                    ContentBlock::ToolUse { name, input, .. } => {
+                                    ContentBlock::ToolUse { id, name, input } => {
                                         self.emit(SessionEvent::ToolUse {
                                             iteration,
                                             tool_name: name.clone(),
                                             tool_input: Some(input.clone()),
+                                            tool_use_id: id.clone(),
                                         });
                                     }
                                     ContentBlock::Text { text } => {

@@ -888,6 +888,7 @@ mod tests {
                 iteration: 1,
                 tool_name: "Bash".to_string(),
                 tool_input: Some(serde_json::json!({"command": "npm test"})),
+                tool_use_id: String::new(),
             },
             SessionEvent::AssistantText {
                 iteration: 1,
@@ -1401,6 +1402,7 @@ mod tests {
                 iteration: 1,
                 tool_name: "Bash".to_string(),
                 tool_input: Some(serde_json::json!({"command": "cargo test"})),
+                tool_use_id: String::new(),
             },
             SessionEvent::AssistantText {
                 iteration: 1,

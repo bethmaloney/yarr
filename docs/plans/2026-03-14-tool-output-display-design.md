@@ -85,12 +85,12 @@ Add the new `ToolResult` variant to the `SessionEvent` enum and update `ToolUse`
 - In the `ContentBlock::ToolUse` match arm (line 911), insert into the HashMap and include `id` in the emitted event
 
 **Checklist:**
-- [ ] Add `tool_use_id` field to `ToolUse` variant
-- [ ] Add `ToolResult` variant to `SessionEvent`
-- [ ] Add `tool_use_ids` HashMap to `SessionRunner`
-- [ ] Initialize HashMap in constructor
-- [ ] Populate HashMap and emit `tool_use_id` in ToolUse arm
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `tool_use_id` field to `ToolUse` variant
+- [x] Add `ToolResult` variant to `SessionEvent`
+- [x] Add `tool_use_ids` HashMap to `SessionRunner`
+- [x] Initialize HashMap in constructor
+- [x] Populate HashMap and emit `tool_use_id` in ToolUse arm
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -244,7 +244,7 @@ Test the merge logic in iteration-groups.ts.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add ToolResult variant and ID tracking | Not Started |
+| 1 | Add ToolResult variant and ID tracking | Done |
 | 2 | Parse StreamEvent::User and emit ToolResult | Not Started |
 | 3 | Update frontend types and event merging | Not Started |
 | 4 | Render tool output in IterationGroup | Not Started |

@@ -133,6 +133,14 @@ pub enum SessionEvent {
         iteration: u32,
         tool_name: String,
         tool_input: Option<serde_json::Value>,
+        tool_use_id: String,
+    },
+    /// Result/output from a tool invocation (Bash/Agent only)
+    ToolResult {
+        iteration: u32,
+        tool_use_id: String,
+        tool_name: String,
+        tool_output: String,
     },
     /// Claude produced text output
     AssistantText { iteration: u32, text: String },
@@ -246,6 +254,7 @@ pub struct SessionRunner {
     accumulated_events: std::sync::Mutex<Vec<SessionEvent>>,
     abort_registry: Option<AbortRegistry>,
     session_id: std::sync::Mutex<Option<String>>,
+    tool_use_ids: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl SessionRunner {
@@ -258,6 +267,7 @@ impl SessionRunner {
             accumulated_events: std::sync::Mutex::new(Vec::new()),
             abort_registry: None,
             session_id: std::sync::Mutex::new(None),
+            tool_use_ids: std::sync::Mutex::new(std::collections::HashMap::new()),
         }
     }
 
@@ -289,6 +299,7 @@ impl SessionRunner {
             SessionEvent::SessionStarted { .. } => "session_started",
             SessionEvent::IterationStarted { .. } => "iteration_started",
             SessionEvent::ToolUse { .. } => "tool_use",
+            SessionEvent::ToolResult { .. } => "tool_result",
             SessionEvent::AssistantText { .. } => "assistant_text",
             SessionEvent::IterationComplete { .. } => "iteration_complete",
             SessionEvent::IterationFailed { .. } => "iteration_failed",
@@ -908,12 +919,14 @@ impl SessionRunner {
                         StreamEvent::Assistant(assistant) => {
                             for block in &assistant.message.content {
                                 match block {
-                                    ContentBlock::ToolUse { name, input, .. } => {
-                                        tracing::debug!(iteration, name, "tool use");
+                                    ContentBlock::ToolUse { id, name, input } => {
+                                        tracing::debug!(iteration, name, id, "tool use");
+                                        self.tool_use_ids.lock().unwrap().insert(id.clone(), name.clone());
                                         self.emit(SessionEvent::ToolUse {
                                             iteration,
                                             tool_name: name.clone(),
                                             tool_input: Some(input.clone()),
+                                            tool_use_id: id.clone(),
                                         });
                                     }
                                     ContentBlock::Text { text } => {

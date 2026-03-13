@@ -2806,6 +2806,7 @@ mod tests {
                     "file_path": "docs/plans/2026-03-10-feature-design.md",
                     "content": "# Design\n..."
                 })),
+                tool_use_id: String::new(),
             },
             SessionEvent::IterationComplete {
                 iteration: 1,
@@ -2843,6 +2844,7 @@ mod tests {
                     "old_string": "old",
                     "new_string": "new"
                 })),
+                tool_use_id: String::new(),
             },
         ];
         let plan_file = extract_plan_file_from_events(&events, "docs/plans/");
@@ -2863,6 +2865,7 @@ mod tests {
                     "file_path": "src/main.rs",
                     "content": "fn main() {}"
                 })),
+                tool_use_id: String::new(),
             },
         ];
         let plan_file = extract_plan_file_from_events(&events, "docs/plans/");
@@ -2882,6 +2885,7 @@ mod tests {
                 tool_input: Some(serde_json::json!({
                     "file_path": "src/lib.rs"
                 })),
+                tool_use_id: String::new(),
             },
             SessionEvent::ToolUse {
                 iteration: 1,
@@ -2890,6 +2894,7 @@ mod tests {
                     "file_path": "src/helper.rs",
                     "content": "// helper"
                 })),
+                tool_use_id: String::new(),
             },
             SessionEvent::ToolUse {
                 iteration: 1,
@@ -2898,6 +2903,7 @@ mod tests {
                     "file_path": "docs/plans/2026-03-10-login-design.md",
                     "content": "# Login Design"
                 })),
+                tool_use_id: String::new(),
             },
             SessionEvent::AssistantText {
                 iteration: 1,
@@ -2922,6 +2928,7 @@ mod tests {
                     "file_path": "plans/2026-01-01-foo.md",
                     "content": "# Foo Plan"
                 })),
+                tool_use_id: String::new(),
             },
         ];
         let plan_file = extract_plan_file_from_events(&events, "plans/");
@@ -2942,6 +2949,7 @@ mod tests {
                     "file_path": "docs/plans/2026-01-01-bar.md",
                     "content": "# Bar Plan"
                 })),
+                tool_use_id: String::new(),
             },
         ];
         let plan_file = extract_plan_file_from_events(&events, "other/plans/");
@@ -4783,6 +4791,7 @@ mod tests {
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
             ssh_host: Some("testhost".to_string()),
+            move_plans_to_completed: true,
         }
     }
 
