@@ -67,16 +67,16 @@ Same change as Task 2 but for the repo card summary.
 **Pattern reference:** Current computation at `src/components/RepoCard.tsx:159-178`.
 
 **Checklist:**
-- [ ] The `RepoCard` receives `lastTrace` but does NOT have access to events — it only has `SessionTrace`
-- [ ] **Decision:** Since `RepoCard` only has the trace (not events), and the trace is persisted to disk, the cleanest approach is to store the max context percentage in the `SessionTrace` on the Rust side. This avoids needing to load all events just to render the card.
-- [ ] **Alternative (simpler, frontend-only):** Pass the max context percentage as a new prop to `RepoCard`. Compute it in the parent component (`RepoDetail` or wherever `RepoCard` is rendered) from the session events. This avoids Rust changes.
-- [ ] **Chosen approach:** Store `max_context_percent` in the Rust `SessionTrace` (Task 5) so it's available on `lastTrace` without needing events. This is the cleanest solution since `RepoCard` is rendered in `src/pages/Home.tsx:215` with only `latestTraces.get(item.repo.id)` from the Zustand store — no events are available at that level.
+- [x] The `RepoCard` receives `lastTrace` but does NOT have access to events — it only has `SessionTrace`
+- [x] **Decision:** Since `RepoCard` only has the trace (not events), and the trace is persisted to disk, the cleanest approach is to store the max context percentage in the `SessionTrace` on the Rust side. This avoids needing to load all events just to render the card.
+- [x] **Alternative (simpler, frontend-only):** Pass the max context percentage as a new prop to `RepoCard`. Compute it in the parent component (`RepoDetail` or wherever `RepoCard` is rendered) from the session events. This avoids Rust changes.
+- [x] **Chosen approach:** Store `max_context_percent` in the Rust `SessionTrace` (Task 5) so it's available on `lastTrace` without needing events. This is the cleanest solution since `RepoCard` is rendered in `src/pages/Home.tsx:215` with only `latestTraces.get(item.repo.id)` from the Zustand store — no events are available at that level.
 
 **Detailed steps (chosen approach):**
-- [ ] After Task 5 adds `max_context_percent` to `SessionTrace`, update `RepoCard.tsx` to use `lastTrace.max_context_percent` instead of computing from `final_context_tokens / context_window`
-- [ ] Fall back to the old `final_context_tokens / context_window` computation when `max_context_percent` is 0 or undefined (backwards compat with old trace files)
-- [ ] Update the frontend `SessionTrace` type in `src/types.ts` to include `max_context_percent?: number`
-- [ ] Update tests in `src/components/RepoCard.test.tsx` to cover both paths
+- [x] After Task 5 adds `max_context_percent` to `SessionTrace`, update `RepoCard.tsx` to use `lastTrace.max_context_percent` instead of computing from `final_context_tokens / context_window`
+- [x] Fall back to the old `final_context_tokens / context_window` computation when `max_context_percent` is 0 or undefined (backwards compat with old trace files)
+- [x] Update the frontend `SessionTrace` type in `src/types.ts` to include `max_context_percent?: number`
+- [x] Update tests in `src/components/RepoCard.test.tsx` to cover both paths
 
 ### Task 4: Update `OneShotDetail.tsx` session-level context display
 
@@ -110,7 +110,7 @@ To support historical traces (loaded from disk) showing the correct max context 
   - Update `trace.max_context_percent = trace.max_context_percent.max(percent as u8)`
 - [x] In `finalize()`, recompute `max_context_percent` from all iterations (not just the last)
 - [x] Add the field to the frontend `SessionTrace` type in `src/types.ts`
-- [ ] Update `RepoCard` to use `lastTrace.max_context_percent` when available (for historical traces), falling back to the events-based computation
+- [x] Update `RepoCard` to use `lastTrace.max_context_percent` when available (for historical traces), falling back to the events-based computation
 - [x] Add Rust unit tests for the new field (5 tests: backward compat, basic computation, max tracking, zero context_window, finalize recomputation)
 
 ### Task 6: Update existing tests
@@ -156,7 +156,7 @@ The recommended implementation order is:
 |------|--------|-------|
 | Task 1: maxContextPercent helper | Complete | Foundation utility |
 | Task 2: RepoDetail.tsx update | Complete | Peak context from max iteration, memoized, label "Peak Context" |
-| Task 3: RepoCard.tsx update | Not Started | Card display |
+| Task 3: RepoCard.tsx update | Complete | Uses max_context_percent with fallback to old computation |
 | Task 4: OneShotDetail.tsx update | Not Started | 1-shot page |
-| Task 5: Rust SessionTrace field | Complete | `max_context_percent: u8` in struct, `record_iteration`, `finalize`, 5 Rust tests, TS type updated |
+| Task 5: Rust SessionTrace field | Complete | `max_context_percent: u8` in struct, `record_iteration`, `finalize`, 5 Rust tests, TS type updated, RepoCard integrated |
 | Task 6: Test verification | Not Started | All tests green |

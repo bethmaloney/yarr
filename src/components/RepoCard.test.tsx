@@ -599,7 +599,24 @@ describe("RepoCard", () => {
   // 11. Last trace — context percentage
   // =========================================================================
 
-  it("shows context percentage when context_window and final_context_tokens are present", () => {
+  it("uses max_context_percent when available", () => {
+    const trace = makeTrace({
+      max_context_percent: 65,
+      context_window: 200000,
+      final_context_tokens: 100000, // would compute to 50%, but max_context_percent wins
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("65%")).toBeInTheDocument();
+  });
+
+  it("falls back to old computation when max_context_percent is missing", () => {
     const trace = makeTrace({
       context_window: 200000,
       final_context_tokens: 100000,
@@ -615,8 +632,9 @@ describe("RepoCard", () => {
     expect(screen.getByText("50%")).toBeInTheDocument();
   });
 
-  it("shows high context percentage correctly", () => {
+  it("falls back to old computation when max_context_percent is 0", () => {
     const trace = makeTrace({
+      max_context_percent: 0,
       context_window: 200000,
       final_context_tokens: 180000,
     });
@@ -629,6 +647,38 @@ describe("RepoCard", () => {
       />,
     );
     expect(screen.getByText("90%")).toBeInTheDocument();
+  });
+
+  it("prefers max_context_percent over computed value even when both are present", () => {
+    const trace = makeTrace({
+      max_context_percent: 73,
+      context_window: 200000,
+      final_context_tokens: 100000, // would compute to 50%
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("73%")).toBeInTheDocument();
+  });
+
+  it("shows no context percentage when neither path has data", () => {
+    const trace = makeTrace({
+      // no max_context_percent, no context_window
+    });
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="completed"
+        lastTrace={trace}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 
   // =========================================================================

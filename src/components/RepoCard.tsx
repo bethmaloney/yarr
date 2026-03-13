@@ -156,13 +156,18 @@ export function RepoCard({
         {lastTrace && (
           <div className="flex items-center gap-1 ml-auto text-xs text-muted-foreground shrink-0">
             <span>${(lastTrace.total_cost_usd ?? 0).toFixed(2)}</span>
-            {lastTrace.context_window &&
-              (() => {
-                const ctxPct = Math.round(
-                  ((lastTrace.final_context_tokens ?? 0) /
-                    lastTrace.context_window) *
-                    100,
-                );
+            {(() => {
+                const ctxPct =
+                  lastTrace.max_context_percent && lastTrace.max_context_percent > 0
+                    ? Math.round(lastTrace.max_context_percent)
+                    : lastTrace.context_window && lastTrace.context_window > 0
+                      ? Math.round(
+                          ((lastTrace.final_context_tokens ?? 0) /
+                            lastTrace.context_window) *
+                            100,
+                        )
+                      : null;
+                if (ctxPct === null) return null;
                 return (
                   <>
                     <span className="separator"> &middot; </span>
