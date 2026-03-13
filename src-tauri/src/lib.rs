@@ -83,6 +83,7 @@ async fn run_session(
     repo: RepoType,
     plan_file: String,
     model: String,
+    effort_level: Option<String>,
     max_iterations: u32,
     completion_signal: String,
     env_vars: Option<HashMap<String, String>>,
@@ -90,7 +91,7 @@ async fn run_session(
     git_sync: Option<session::GitSyncConfig>,
     create_branch: bool,
 ) -> Result<SessionResult, String> {
-    tracing::info!(repo_id = %repo_id, model = %model, repo_type = ?repo, "run_session called");
+    tracing::info!(repo_id = %repo_id, model = %model, effort_level = ?effort_level, repo_type = ?repo, "run_session called");
     let cancel_token = CancellationToken::new();
     let session_id = Uuid::new_v4().to_string();
     {
@@ -177,6 +178,7 @@ async fn run_session(
                 max_iterations,
                 completion_signal,
                 model: Some(model),
+                effort_level,
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 plan_file: Some(plan_file),
                 inter_iteration_delay_ms: 1000,
@@ -293,6 +295,7 @@ async fn run_session(
                 max_iterations,
                 completion_signal,
                 model: Some(model),
+                effort_level,
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 plan_file: Some(plan_file),
                 inter_iteration_delay_ms: 1000,
@@ -418,6 +421,8 @@ async fn run_oneshot(
     title: String,
     prompt: String,
     model: String,
+    effort_level: Option<String>,
+    design_effort_level: Option<String>,
     merge_strategy: oneshot::MergeStrategy,
     env_vars: Option<HashMap<String, String>>,
     max_iterations: u32,
@@ -430,7 +435,7 @@ async fn run_oneshot(
     let cancel_token = CancellationToken::new();
     let session_id = Uuid::new_v4().to_string();
     let session_id_for_result = session_id.clone();
-    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, repo_type = ?repo, "run_oneshot called");
+    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, effort_level = ?effort_level, design_effort_level = ?design_effort_level, repo_type = ?repo, "run_oneshot called");
     {
         let active = app.state::<ActiveSessions>();
         tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, session_id = %session_id, "inserting oneshot into ActiveSessions (placeholder)");
@@ -456,6 +461,8 @@ async fn run_oneshot(
                 title,
                 prompt,
                 model,
+                effort_level: effort_level.unwrap_or_else(|| "medium".to_string()),
+                design_effort_level: design_effort_level.unwrap_or_else(|| "high".to_string()),
                 merge_strategy,
                 env_vars: env_vars.unwrap_or_default(),
                 max_iterations,
@@ -542,6 +549,8 @@ async fn resume_oneshot(
     title: String,
     prompt: String,
     model: String,
+    effort_level: Option<String>,
+    design_effort_level: Option<String>,
     merge_strategy: oneshot::MergeStrategy,
     env_vars: Option<HashMap<String, String>>,
     max_iterations: u32,
@@ -556,7 +565,7 @@ async fn resume_oneshot(
     let session_id = Uuid::new_v4().to_string();
     let session_id_for_result = session_id.clone();
     let cancel_token = CancellationToken::new();
-    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, repo_type = ?repo, "resume_oneshot called");
+    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, repo_type = ?repo, effort_level = ?effort_level, design_effort_level = ?design_effort_level, "resume_oneshot called");
     {
         let active = app.state::<ActiveSessions>();
         tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, session_id = %session_id, "inserting resume oneshot into ActiveSessions (placeholder)");
@@ -650,6 +659,8 @@ async fn resume_oneshot(
                 title,
                 prompt,
                 model,
+                effort_level: effort_level.unwrap_or_else(|| "medium".to_string()),
+                design_effort_level: design_effort_level.unwrap_or_else(|| "high".to_string()),
                 merge_strategy,
                 env_vars: env_vars.unwrap_or_default(),
                 max_iterations,
@@ -1601,6 +1612,8 @@ mod tests {
             title: "Add login feature".to_string(),
             prompt: "Implement OAuth2 login flow".to_string(),
             model: "claude-sonnet-4-20250514".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
             merge_strategy: MergeStrategy::MergeToMain,
             env_vars: env,
             max_iterations: 20,

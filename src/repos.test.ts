@@ -237,6 +237,12 @@ describe("addLocalRepo", () => {
     expect(stored[1].name).toBe("second");
   });
 
+  it("applies effort level defaults", async () => {
+    const repo = await addLocalRepo("/home/beth/repos/yarr");
+    expect(repo).toHaveProperty("effortLevel", "medium");
+    expect(repo).toHaveProperty("designEffortLevel", "high");
+  });
+
   it("returns the created RepoConfig", async () => {
     const repo = await addLocalRepo("/home/beth/repos/yarr");
     expect(repo).toEqual({
@@ -245,6 +251,8 @@ describe("addLocalRepo", () => {
       path: "/home/beth/repos/yarr",
       name: "yarr",
       model: "opus",
+      effortLevel: "medium",
+      designEffortLevel: "high",
       maxIterations: 40,
       completionSignal: "ALL TODO ITEMS COMPLETE",
       checks: [],
@@ -316,6 +324,12 @@ describe("addSshRepo", () => {
     expect(stored[1].name).toBe("second");
   });
 
+  it("applies effort level defaults", async () => {
+    const repo = await addSshRepo("dev-server", "/home/beth/repos/project");
+    expect(repo).toHaveProperty("effortLevel", "medium");
+    expect(repo).toHaveProperty("designEffortLevel", "high");
+  });
+
   it("returns the created RepoConfig", async () => {
     const repo = await addSshRepo("dev-server", "/home/beth/repos/project");
     expect(repo).toEqual({
@@ -325,6 +339,8 @@ describe("addSshRepo", () => {
       remotePath: "/home/beth/repos/project",
       name: "project",
       model: "opus",
+      effortLevel: "medium",
+      designEffortLevel: "high",
       maxIterations: 40,
       completionSignal: "ALL TODO ITEMS COMPLETE",
       checks: [],
@@ -1280,5 +1296,56 @@ describe("updateRepo preserves movePlansToCompleted", () => {
     if (stored[0].type === "local") {
       expect(stored[0].movePlansToCompleted).toBe(true);
     }
+  });
+});
+
+describe("RepoConfig with effortLevel fields", () => {
+  it("local RepoConfig with effortLevel and designEffortLevel is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-eff-1",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      effortLevel: "high",
+      designEffortLevel: "max",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+    } satisfies RepoConfig;
+    expect(repo.effortLevel).toBe("high");
+    expect(repo.designEffortLevel).toBe("max");
+  });
+
+  it("local RepoConfig without effort fields (undefined) is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-no-eff",
+      path: "/home/beth/repos/other",
+      name: "other",
+      model: "opus",
+      maxIterations: 20,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+    expect(repo.type).toBe("local");
+    expect((repo as RepoConfig & { effortLevel?: string }).effortLevel).toBeUndefined();
+    expect((repo as RepoConfig & { designEffortLevel?: string }).designEffortLevel).toBeUndefined();
+  });
+
+  it("SSH RepoConfig with effort fields is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-eff-1",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      effortLevel: "low",
+      designEffortLevel: "medium",
+      maxIterations: 30,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+    } satisfies RepoConfig;
+    expect(repo.type).toBe("ssh");
+    expect(repo.effortLevel).toBe("low");
+    expect(repo.designEffortLevel).toBe("medium");
   });
 });

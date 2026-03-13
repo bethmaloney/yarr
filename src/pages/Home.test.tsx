@@ -145,6 +145,8 @@ function makeOneShotEntry(
     title: "Fix login bug",
     prompt: "Fix the login validation issue",
     model: "opus",
+    effortLevel: "medium",
+    designEffortLevel: "high",
     mergeStrategy: "branch",
     status: "running",
     startedAt: Date.now(),

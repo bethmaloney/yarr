@@ -696,6 +696,8 @@ describe("OneShotEntry", () => {
       title: "Add auth module",
       prompt: "Implement OAuth2 authentication",
       model: "opus",
+      effortLevel: "high",
+      designEffortLevel: "max",
       mergeStrategy: "squash",
       status: "running",
       startedAt: 1709827200000,
@@ -719,6 +721,8 @@ describe("OneShotEntry", () => {
       title: "Fix login bug",
       prompt: "The login form crashes on submit",
       model: "sonnet",
+      effortLevel: "medium",
+      designEffortLevel: "high",
       mergeStrategy: "merge",
       status: "completed",
       startedAt: 1709830800000,
@@ -738,6 +742,8 @@ describe("OneShotEntry", () => {
       title: "Refactor database layer",
       prompt: "Extract the database queries into a repository pattern",
       model: "opus",
+      effortLevel: "medium",
+      designEffortLevel: "high",
       mergeStrategy: "rebase",
       status: "failed",
       startedAt: 1709834400000,
@@ -746,5 +752,23 @@ describe("OneShotEntry", () => {
     expect(entry.session_id).toBe("sess-200");
     expect(entry.worktreePath).toBeUndefined();
     expect(entry.branch).toBeUndefined();
+  });
+
+  it("accepts different effort level combinations", () => {
+    const entry: OneShotEntry = {
+      id: "oneshot-eff-test",
+      parentRepoId: "repo-001",
+      parentRepoName: "yarr",
+      title: "Test effort levels",
+      prompt: "Test",
+      model: "opus",
+      effortLevel: "low",
+      designEffortLevel: "max",
+      mergeStrategy: "squash",
+      status: "running",
+      startedAt: 1709827200000,
+    };
+    expect(entry.effortLevel).toBe("low");
+    expect(entry.designEffortLevel).toBe("max");
   });
 });

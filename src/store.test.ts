@@ -165,6 +165,8 @@ function makeOneShotEntry(
     title: "Fix the bug",
     prompt: "Fix the flaky test in store.test.ts",
     model: "opus",
+    effortLevel: "medium",
+    designEffortLevel: "high",
     mergeStrategy: "fast-forward",
     status: "running",
     startedAt: 1000,

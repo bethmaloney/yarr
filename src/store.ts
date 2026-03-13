@@ -591,6 +591,8 @@ export const useAppStore = create<AppStore>((set, get) => {
         title,
         prompt,
         model,
+        effortLevel: "medium",
+        designEffortLevel: "high",
         mergeStrategy,
         status: "running",
         startedAt: Date.now(),
