@@ -1748,6 +1748,8 @@ describe("RepoDetail", () => {
           "Please fix the login bug",
           "opus",
           "merge_to_main",
+          "medium",
+          "high",
         );
       });
 

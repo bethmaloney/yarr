@@ -1318,6 +1318,36 @@ describe("runSession", () => {
     expect(session!.error).toBe("Session already running for this repo");
     expect(session!.running).toBe(false);
   });
+
+  it("passes effortLevel from repo config to invoke", async () => {
+    const repoWithEffort = makeLocalRepo({ effortLevel: "high" });
+    useAppStore.setState({ repos: [repoWithEffort] });
+    mockInvoke.mockResolvedValue({ session_id: "test-session-id" });
+
+    await useAppStore.getState().runSession("repo-1", "plan.md");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_session",
+      expect.objectContaining({
+        effortLevel: "high",
+      }),
+    );
+  });
+
+  it("defaults effortLevel to medium when repo has no effortLevel", async () => {
+    const repoNoEffort = makeLocalRepo({ effortLevel: undefined });
+    useAppStore.setState({ repos: [repoNoEffort] });
+    mockInvoke.mockResolvedValue({ session_id: "test-session-id" });
+
+    await useAppStore.getState().runSession("repo-1", "plan.md");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_session",
+      expect.objectContaining({
+        effortLevel: "medium",
+      }),
+    );
+  });
 });
 
 // ===========================================================================
@@ -1548,7 +1578,7 @@ describe("runOneShot", () => {
 
   it("returns early if repo not found", async () => {
     useAppStore.setState({ repos: [] });
-    await useAppStore.getState().runOneShot("nonexistent", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("nonexistent", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     expect(mockInvoke).not.toHaveBeenCalledWith(
       "run_oneshot",
@@ -1569,7 +1599,7 @@ describe("runOneShot", () => {
       return undefined;
     });
 
-    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     expect(mockInvoke).toHaveBeenCalledWith(
       "run_oneshot",
@@ -1586,7 +1616,7 @@ describe("runOneShot", () => {
   it("passes repo config fields (maxIterations, completionSignal, checks, gitSync) to invoke", async () => {
     mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
 
-    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     expect(mockInvoke).toHaveBeenCalledWith(
       "run_oneshot",
@@ -1612,7 +1642,7 @@ describe("runOneShot", () => {
     useAppStore.setState({ repos: [repoWithPlansDir] });
     mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
 
-    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     expect(mockInvoke).toHaveBeenCalledWith(
       "run_oneshot",
@@ -1631,7 +1661,7 @@ describe("runOneShot", () => {
     useAppStore.setState({ repos: [repoWithoutPlansDir] });
     mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
 
-    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     expect(mockInvoke).toHaveBeenCalledWith(
       "run_oneshot",
@@ -1644,7 +1674,7 @@ describe("runOneShot", () => {
   it("on success: stores entry with returned oneshot_id and updates status", async () => {
     mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
 
-    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     const entries = useAppStore.getState().oneShotEntries;
     expect(entries.has("oneshot-xyz")).toBe(true);
@@ -1664,7 +1694,7 @@ describe("runOneShot", () => {
   it("on error: updates entry status to failed", async () => {
     mockInvoke.mockRejectedValue(new Error("backend crashed"));
 
-    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     const entries = useAppStore.getState().oneShotEntries;
     // There should be an entry with status "failed"
@@ -1676,7 +1706,7 @@ describe("runOneShot", () => {
   it("returns the oneshot_id on success", async () => {
     mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
 
-    const result = await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    const result = await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     expect(result).toBe("oneshot-xyz");
   });
@@ -1688,7 +1718,7 @@ describe("runOneShot", () => {
       trace: makeTrace(),
     });
 
-    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     const entries = useAppStore.getState().oneShotEntries;
     expect(entries.has("oneshot-xyz")).toBe(true);
@@ -1704,7 +1734,7 @@ describe("runOneShot", () => {
       trace: makeTrace(),
     });
 
-    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     const session = useAppStore.getState().sessions.get("oneshot-xyz");
     expect(session).toBeDefined();
@@ -1722,10 +1752,35 @@ describe("runOneShot", () => {
 
     const sessionsBefore = useAppStore.getState().sessions.size;
 
-    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward", "medium", "high");
 
     // No new session entry should have been created
     expect(useAppStore.getState().sessions.size).toBe(sessionsBefore);
+  });
+
+  it("passes effortLevel and designEffortLevel to invoke", async () => {
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix", "fix", "opus", "ff", "high", "max");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_oneshot",
+      expect.objectContaining({
+        effortLevel: "high",
+        designEffortLevel: "max",
+      }),
+    );
+  });
+
+  it("stores effortLevel and designEffortLevel on OneShotEntry", async () => {
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix", "fix", "opus", "ff", "high", "max");
+
+    const entry = useAppStore.getState().oneShotEntries.get("oneshot-xyz");
+    expect(entry).toBeDefined();
+    expect(entry!.effortLevel).toBe("high");
+    expect(entry!.designEffortLevel).toBe("max");
   });
 });
 
@@ -2995,6 +3050,8 @@ describe("resumeOneShot", () => {
       title: "Fix the bug",
       prompt: "Fix the flaky test in store.test.ts",
       model: "opus",
+      effortLevel: "medium",
+      designEffortLevel: "high",
       mergeStrategy: "fast-forward",
       envVars: { MY_VAR: "hello" },
       maxIterations: 40,
@@ -3198,6 +3255,36 @@ describe("resumeOneShot", () => {
       "resume_oneshot",
       expect.objectContaining({
         repo: { type: "ssh", sshHost: "dev-server", remotePath: "/home/beth/repos/other" },
+      }),
+    );
+  });
+
+  it("passes effortLevel and designEffortLevel from entry to invoke", async () => {
+    const repo = makeLocalRepo();
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+      effortLevel: "low",
+      designEffortLevel: "max",
+    });
+    useAppStore.setState({
+      repos: [repo],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.objectContaining({
+        effortLevel: "low",
+        designEffortLevel: "max",
       }),
     );
   });

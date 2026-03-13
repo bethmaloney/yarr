@@ -151,6 +151,8 @@ export default function RepoDetail() {
   const [oneShotModel, setOneShotModel] = useState("");
   const [oneShotMergeStrategy, setOneShotMergeStrategy] =
     useState("merge_to_main");
+  const [oneShotEffortLevel, setOneShotEffortLevel] = useState("medium");
+  const [oneShotDesignEffortLevel, setOneShotDesignEffortLevel] = useState("high");
   const [oneShotSubmitting, setOneShotSubmitting] = useState(false);
 
   // Connection test state
@@ -537,6 +539,8 @@ export default function RepoDetail() {
         oneShotPrompt.trim(),
         oneShotModel,
         oneShotMergeStrategy,
+        oneShotEffortLevel,
+        oneShotDesignEffortLevel,
       );
       if (oneshotId) {
         navigate(`/oneshot/${oneshotId}`);

@@ -133,11 +133,11 @@ Valid levels: `low`, `medium`, `high`, `max`.
 - `runSession` invoke call (store.ts:734-744)
 
 **Checklist:**
-- [ ] Update `runOneShot` signature to accept `effortLevel: string` and `designEffortLevel: string` parameters (store.ts:47)
-- [ ] Pass `effortLevel` and `designEffortLevel` in the `invoke("run_oneshot", {...})` call (store.ts:572)
-- [ ] Store `effortLevel` and `designEffortLevel` in the `OneShotEntry` created (store.ts:544)
-- [ ] In `runSession` invoke call (store.ts:734), pass `effortLevel: repo.effortLevel ?? "medium"`
-- [ ] In `resumeOneShot`, pass `effortLevel` and `designEffortLevel` from the stored entry to the `invoke("resume_oneshot", {...})` call
+- [x] Update `runOneShot` signature to accept `effortLevel: string` and `designEffortLevel: string` parameters (store.ts:47)
+- [x] Pass `effortLevel` and `designEffortLevel` in the `invoke("run_oneshot", {...})` call (store.ts:572)
+- [x] Store `effortLevel` and `designEffortLevel` in the `OneShotEntry` created (store.ts:544)
+- [x] In `runSession` invoke call (store.ts:734), pass `effortLevel: repo.effortLevel ?? "medium"`
+- [x] In `resumeOneShot`, pass `effortLevel` and `designEffortLevel` from the stored entry to the `invoke("resume_oneshot", {...})` call
 
 ## Task 8: Add effort level UI controls to RepoDetail page
 
@@ -191,7 +191,7 @@ Valid levels: `low`, `medium`, `high`, `max`.
 - [x] Add a test `build_tmux_command_includes_effort_level` that verifies `--effort high` appears in the command when `effort_level: Some("high".to_string())`
 - [x] Add a test `build_tmux_command_excludes_effort_when_none` that verifies no `--effort` flag when `effort_level: None`
 - [x] Run `cd src-tauri && cargo test` to verify all Rust tests pass
-- [ ] Run `npx tsc --noEmit` to verify TypeScript compiles
+- [x] Run `npx tsc --noEmit` to verify TypeScript compiles
 
 ## Progress Tracking
 
@@ -203,6 +203,6 @@ Valid levels: `low`, `medium`, `high`, `max`.
 | 4. ClaudeInvocation + runtimes | Done | All 3 runtimes + build_invocation |
 | 5. Tauri commands | Done | run_session, run_oneshot, resume_oneshot |
 | 6. OneShot phase configs | Done | design vs implementation effort |
-| 7. Frontend store | Not started | Zustand store invoke calls |
+| 7. Frontend store | Done | Zustand store invoke calls |
 | 8. UI controls | Not started | Select dropdowns in RepoDetail |
 | 9. Tests | Done | SSH runtime tests + compilation (487 pass) |

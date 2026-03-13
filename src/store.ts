@@ -44,7 +44,7 @@ export interface AppStore {
 
   // --- 1-Shot ---
   oneShotEntries: Map<string, OneShotEntry>;
-  runOneShot: (repoId: string, title: string, prompt: string, model: string, mergeStrategy: string) => Promise<string | undefined>;
+  runOneShot: (repoId: string, title: string, prompt: string, model: string, mergeStrategy: string, effortLevel: string, designEffortLevel: string) => Promise<string | undefined>;
   dismissOneShot: (oneshotId: string) => Promise<void>;
   saveOneShotEntries: () => Promise<void>;
   loadOneShotEntries: () => Promise<void>;
@@ -237,6 +237,8 @@ export const useAppStore = create<AppStore>((set, get) => {
                 title: trace.prompt.slice(0, 80),
                 prompt: trace.prompt,
                 model: "unknown",
+                effortLevel: "medium",
+                designEffortLevel: "high",
                 mergeStrategy: "branch",
                 status: trace.outcome === "completed" ? "completed" : "failed",
                 startedAt: new Date(trace.start_time).getTime(),
@@ -577,7 +579,7 @@ export const useAppStore = create<AppStore>((set, get) => {
       set({ repos });
     },
 
-    runOneShot: async (repoId, title, prompt, model, mergeStrategy) => {
+    runOneShot: async (repoId, title, prompt, model, mergeStrategy, effortLevel, designEffortLevel) => {
       const repo = get().repos.find((r) => r.id === repoId);
       if (!repo) return undefined;
 
@@ -590,8 +592,8 @@ export const useAppStore = create<AppStore>((set, get) => {
         title,
         prompt,
         model,
-        effortLevel: "medium",
-        designEffortLevel: "high",
+        effortLevel,
+        designEffortLevel,
         mergeStrategy,
         status: "running",
         startedAt: Date.now(),
@@ -620,6 +622,8 @@ export const useAppStore = create<AppStore>((set, get) => {
           prompt,
           model,
           mergeStrategy,
+          effortLevel,
+          designEffortLevel,
           envVars: repo.envVars ?? {},
           maxIterations: repo.maxIterations,
           completionSignal: repo.completionSignal,
@@ -721,6 +725,8 @@ export const useAppStore = create<AppStore>((set, get) => {
           title: entry.title,
           prompt: entry.prompt,
           model: entry.model,
+          effortLevel: entry.effortLevel,
+          designEffortLevel: entry.designEffortLevel,
           mergeStrategy: entry.mergeStrategy,
           envVars: repo.envVars ?? {},
           maxIterations: repo.maxIterations,
@@ -791,6 +797,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           repo: repoPayload,
           planFile,
           model: repo.model,
+          effortLevel: repo.effortLevel ?? "medium",
           maxIterations: repo.maxIterations,
           completionSignal: repo.completionSignal,
           envVars: repo.envVars ?? {},
