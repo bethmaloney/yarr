@@ -120,6 +120,8 @@ export function eventEmoji(kind: string): string {
       return "\u{1F3C1}";
     case "git_sync_failed":
       return "\u274C";
+    case "rate_limited":
+      return "\u23F3";
     default:
       return "\u{1F4CB}";
   }
@@ -207,6 +209,8 @@ export function eventLabel(ev: SessionEvent, repoPath?: string): string {
         : `[${ev.iteration}] Conflict resolution failed (attempt ${ev.attempt})`;
     case "git_sync_failed":
       return `[${ev.iteration}] Git sync failed${ev.error ? ": " + ev.error : ""}`;
+    case "rate_limited":
+      return `[${ev.iteration}] Rate limited (${ev.status ?? "unknown"}/${ev.rate_limit_type ?? "unknown"})`;
     default:
       return JSON.stringify(ev);
   }

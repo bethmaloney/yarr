@@ -44,6 +44,8 @@ export type SessionEvent = {
   reason?: string;
   files?: string[];
   error?: string;
+  status?: string;
+  rate_limit_type?: string;
   _ts?: number;
 };
 

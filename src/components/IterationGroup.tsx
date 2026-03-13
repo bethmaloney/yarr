@@ -40,6 +40,7 @@ const eventKindColor: Record<string, string> = {
   git_sync_conflict_resolve_started: "text-[#a78bfa]",
   git_sync_conflict_resolve_complete: "text-[#34d399]",
   git_sync_failed: "text-[#ef4444]",
+  rate_limited: "text-[#f59e0b]",
 };
 
 export function IterationGroupComponent({

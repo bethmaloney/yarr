@@ -186,6 +186,8 @@ pub enum SessionEvent {
     GitSyncConflictResolveComplete { iteration: u32, attempt: u32, success: bool },
     /// Git sync failed after all retries
     GitSyncFailed { iteration: u32, error: String },
+    /// Claude API rate limit hit (non-"allowed" status only)
+    RateLimited { iteration: u32, status: String, rate_limit_type: String },
 }
 
 /// Callback for receiving session events (Tauri IPC hookpoint)
@@ -313,6 +315,7 @@ impl SessionRunner {
             SessionEvent::GitSyncConflictResolveStarted { .. } => "git_sync_conflict_resolve_started",
             SessionEvent::GitSyncConflictResolveComplete { .. } => "git_sync_conflict_resolve_complete",
             SessionEvent::GitSyncFailed { .. } => "git_sync_failed",
+            SessionEvent::RateLimited { .. } => "rate_limited",
         };
         tracing::debug!(
             session_id = session_id.as_deref().unwrap_or("<none>"),
@@ -941,7 +944,15 @@ impl SessionRunner {
                             if let Some(ref info) = rl.rate_limit_info {
                                 let status = info.status.as_deref().unwrap_or("unknown");
                                 let rl_type = info.rate_limit_type.as_deref().unwrap_or("unknown");
-                                event_summary.push(format!("rate_limit:{status}/{rl_type}"));
+                                // Only surface non-"allowed" rate limits — "allowed" fires every turn
+                                if status != "allowed" {
+                                    event_summary.push(format!("rate_limit:{status}/{rl_type}"));
+                                    self.emit(SessionEvent::RateLimited {
+                                        iteration,
+                                        status: status.to_string(),
+                                        rate_limit_type: rl_type.to_string(),
+                                    });
+                                }
                                 tracing::debug!(
                                     "Rate limit: status={:?} type={:?}",
                                     info.status,
