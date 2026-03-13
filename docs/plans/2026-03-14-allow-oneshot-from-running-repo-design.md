@@ -83,8 +83,8 @@ Currently `git worktree add <path> -b <branch>` (oneshot.rs:439) branches off HE
 **Pattern reference:** Existing `tracing::info!` calls in the same function (lib.rs:433).
 
 **Checklist:**
-- [ ] After inserting the oneshot into `ActiveSessions`, check if a ralph loop session exists for the same `repo_id` and log an info message: `"launching oneshot while ralph loop is active for repo"`
-- [ ] Include structured fields: `oneshot_id`, `repo_id`, `existing_session_id`
+- [x] After inserting the oneshot into `ActiveSessions`, check if a ralph loop session exists for the same `repo_id` and log an info message: `"launching oneshot while ralph loop is active for repo"`
+- [x] Include structured fields: `oneshot_id`, `repo_id`, `existing_session_id`
 
 ---
 
@@ -96,4 +96,4 @@ Currently `git worktree add <path> -b <branch>` (oneshot.rs:439) branches off HE
 | 2. Worktree branches off main/master | Done | detect_default_branch + worktree start-point + dynamic finalize |
 | 3. Update frontend tests | Done | Replaced guard test with two new assertions |
 | 4. Add Rust tests for branch detection | Done | 7 new tests + MockRuntime captured_commands |
-| 5. Add concurrent launch logging | Not started | Independent |
+| 5. Add concurrent launch logging | Done | Log when oneshot launches alongside active ralph loop |

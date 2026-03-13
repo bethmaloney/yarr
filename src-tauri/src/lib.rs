@@ -434,7 +434,16 @@ async fn run_oneshot(
     {
         let active = app.state::<ActiveSessions>();
         tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, session_id = %session_id, "inserting oneshot into ActiveSessions (placeholder)");
-        active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
+        let mut sessions = active.tokens.lock().await;
+        sessions.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
+        if let Some(existing_handle) = sessions.get(&repo_id) {
+            tracing::info!(
+                oneshot_id = %oneshot_id,
+                repo_id = %repo_id,
+                existing_session_id = %existing_handle.session_id,
+                "launching oneshot while ralph loop is active for repo"
+            );
+        }
     }
 
     match &repo {
@@ -3532,6 +3541,83 @@ mod tests {
             recv_result.is_err(),
             "no SessionComplete should be emitted on the success path, but got: {:?}",
             recv_result.ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_detects_concurrent_ralph_loop_for_oneshot() {
+        use std::sync::Arc;
+
+        let active_sessions = Arc::new(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        });
+
+        let repo_id = "my-repo".to_string();
+        let oneshot_id = "oneshot-abc123".to_string();
+
+        // Insert a ralph loop session keyed by repo_id
+        active_sessions.tokens.lock().await.insert(
+            repo_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "ralph-sess-1".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        // Insert a oneshot session keyed by oneshot_id
+        active_sessions.tokens.lock().await.insert(
+            oneshot_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "oneshot-sess-1".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        let sessions = active_sessions.tokens.lock().await;
+
+        // Verify we can detect the concurrent ralph loop session
+        assert!(
+            sessions.contains_key(&repo_id),
+            "should detect a ralph loop session for the repo"
+        );
+
+        // Verify we can retrieve the existing_session_id for logging
+        let existing_handle = sessions.get(&repo_id).expect("ralph loop session should exist");
+        assert_eq!(
+            existing_handle.session_id, "ralph-sess-1",
+            "should be able to retrieve the existing ralph loop session_id"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_concurrent_session_detected_when_no_ralph_loop() {
+        use std::sync::Arc;
+
+        let active_sessions = Arc::new(ActiveSessions {
+            tokens: Mutex::new(HashMap::new()),
+        });
+
+        let repo_id = "my-repo".to_string();
+        let oneshot_id = "oneshot-abc123".to_string();
+
+        // Insert only a oneshot session — no ralph loop for this repo
+        active_sessions.tokens.lock().await.insert(
+            oneshot_id.clone(),
+            SessionHandle {
+                cancel_token: CancellationToken::new(),
+                session_id: "oneshot-sess-1".to_string(),
+                join_handle: tokio::spawn(async {}),
+            },
+        );
+
+        let sessions = active_sessions.tokens.lock().await;
+
+        // Verify no ralph loop session is detected
+        assert!(
+            !sessions.contains_key(&repo_id),
+            "should not detect a ralph loop session when none is running"
         );
     }
 }
