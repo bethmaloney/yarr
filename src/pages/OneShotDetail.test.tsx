@@ -91,20 +91,6 @@ function makeLocalRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
   } as RepoConfig;
 }
 
-function makeSshRepo(overrides: Record<string, unknown> = {}): RepoConfig {
-  return {
-    type: "ssh",
-    id: "repo-1",
-    sshHost: "dev-server",
-    remotePath: "/home/beth/repos/remote-project",
-    name: "remote-project",
-    model: "opus",
-    maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
-    checks: [],
-    ...overrides,
-  } as RepoConfig;
-}
 
 function makeEntry(overrides: Partial<OneShotEntry> = {}): OneShotEntry {
   return {
@@ -643,7 +629,32 @@ describe("OneShotDetail", () => {
       expect(eventsList).toHaveAttribute("data-event-count", "3");
     });
 
-    it("passes correct repoPath derived from parent local repo", () => {
+    it("passes worktreePath as repoPath for 1-shot sessions", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              parentRepoId: "repo-1",
+              worktreePath: "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const eventsList = screen.getByTestId("events-list");
+      expect(eventsList).toHaveAttribute(
+        "data-repo-path",
+        "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+      );
+    });
+
+    it("passes undefined repoPath when worktreePath is not set", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         oneShotEntries: new Map([
@@ -659,32 +670,7 @@ describe("OneShotDetail", () => {
       renderOneShotDetail();
 
       const eventsList = screen.getByTestId("events-list");
-      expect(eventsList).toHaveAttribute(
-        "data-repo-path",
-        "/home/beth/repos/my-project",
-      );
-    });
-
-    it("passes remotePath as repoPath for SSH parent repo", () => {
-      setupMockState({
-        repos: [makeSshRepo()],
-        oneShotEntries: new Map([
-          [
-            "oneshot-abc123",
-            makeEntry({ parentRepoId: "repo-1" }),
-          ],
-        ]),
-        sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
-        ]),
-      });
-      renderOneShotDetail();
-
-      const eventsList = screen.getByTestId("events-list");
-      expect(eventsList).toHaveAttribute(
-        "data-repo-path",
-        "/home/beth/repos/remote-project",
-      );
+      expect(eventsList).not.toHaveAttribute("data-repo-path");
     });
   });
 

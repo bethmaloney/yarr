@@ -362,6 +362,15 @@ describe("relativePath", () => {
       ),
     ).toBe("src/file.ts");
   });
+
+  it("strips worktree prefix for 1-shot sessions", () => {
+    expect(
+      relativePath(
+        "/home/beth/.yarr/worktrees/209caef3-oneshot-b775c9/src/components/Foo.tsx",
+        "/home/beth/.yarr/worktrees/209caef3-oneshot-b775c9",
+      ),
+    ).toBe("src/components/Foo.tsx");
+  });
 });
 
 describe("toolSummary with repoPath", () => {
