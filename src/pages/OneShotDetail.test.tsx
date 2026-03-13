@@ -969,4 +969,276 @@ describe("OneShotDetail", () => {
       expect(screen.getByText("Implement feature X")).toBeInTheDocument();
     });
   });
+
+  // =========================================================================
+  // 9. Peak context display
+  // =========================================================================
+
+  describe("peak context display", () => {
+    it('shows "Peak Context" with percentage when events have context data', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.15,
+                    usage: {
+                      input_tokens: 50000,
+                      output_tokens: 1000,
+                      cache_read_input_tokens: 20000,
+                      cache_creation_input_tokens: 5000,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // inputTokens = 50000 + 20000 + 5000 = 75000; 75000/200000 = 37.5 → 38%
+      expect(screen.getByText(/Peak Context/)).toBeInTheDocument();
+      expect(screen.getByText(/38%/)).toBeInTheDocument();
+    });
+
+    it('does not show "Peak Context" when no context data in events', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.05,
+                    usage: {
+                      input_tokens: 5000,
+                      cache_read_input_tokens: 0,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 500,
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // No model_usage means no contextWindow, so maxContextPercent returns 0
+      // and "Peak Context" label should not appear
+      expect(screen.queryByText(/Peak Context/)).not.toBeInTheDocument();
+    });
+
+    it('does not show "Peak Context" when session is running', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "running" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: true,
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.15,
+                    usage: {
+                      input_tokens: 150000,
+                      output_tokens: 1000,
+                      cache_read_input_tokens: 20000,
+                      cache_creation_input_tokens: 5000,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // Result section (and thus Peak Context) should not show when running
+      expect(screen.queryByText("Result")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Peak Context/)).not.toBeInTheDocument();
+    });
+
+    it("shows the maximum across multiple iterations", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.10,
+                    usage: {
+                      input_tokens: 170000,
+                      cache_read_input_tokens: 10000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 800,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+                {
+                  kind: "iteration_started",
+                  iteration: 2,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 2,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.08,
+                    usage: {
+                      input_tokens: 40000,
+                      cache_read_input_tokens: 5000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 600,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // Iteration 1: (170000+10000+0)/200000 = 90%
+      // Iteration 2: (40000+5000+0)/200000 = 23%
+      // Peak should be 90%, not 23%
+      expect(screen.getByText(/90%/)).toBeInTheDocument();
+      expect(screen.queryByText(/23%/)).not.toBeInTheDocument();
+    });
+
+    it("applies correct color styling based on percentage", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.15,
+                    usage: {
+                      input_tokens: 170000,
+                      output_tokens: 1000,
+                      cache_read_input_tokens: 10000,
+                      cache_creation_input_tokens: 0,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // inputTokens = 170000 + 10000 + 0 = 180000; 180000/200000 = 90%
+      // sessionContextColor(90) → "#f87171" (red, since >85%)
+      const percentSpan = screen.getByText(/90%/);
+      expect(percentSpan).toHaveStyle({ color: "#f87171" });
+    });
+  });
 });
