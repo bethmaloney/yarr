@@ -4681,4 +4681,651 @@ mod tests {
         // Verify it's a usable Notify — notifying shouldn't panic
         notify.notify_one();
     }
+
+    // =========================================================================
+    // SSH oneshot helpers
+    // =========================================================================
+
+    fn make_ssh_config(tmp: &TempDir, merge_strategy: MergeStrategy) -> OneShotConfig {
+        OneShotConfig {
+            repo_id: "test-repo".to_string(),
+            repo_path: tmp.path().to_path_buf(),
+            title: "Add login feature".to_string(),
+            prompt: "Implement user login with email and password".to_string(),
+            model: "claude-sonnet".to_string(),
+            effort_level: "medium".to_string(),
+            design_effort_level: "high".to_string(),
+            merge_strategy,
+            env_vars: HashMap::new(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            checks: Vec::new(),
+            git_sync: None,
+            plans_dir: "docs/plans/".to_string(),
+            ssh_host: Some("testhost".to_string()),
+        }
+    }
+
+    fn setup_ssh_runner_with_events(
+        tmp: &TempDir,
+        merge_strategy: MergeStrategy,
+    ) -> (OneShotRunner, Arc<Mutex<Vec<SessionEvent>>>) {
+        let config = make_ssh_config(tmp, merge_strategy);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token).on_event(Box::new(
+            move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            },
+        ));
+
+        (runner, events)
+    }
+
+    // =========================================================================
+    // SSH oneshot: remote worktree path generation
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_ssh_worktree_path_remote_calls_echo_home() {
+        // When ssh_host is set, run() should call `echo $HOME` first via
+        // worktree_path_remote and use the result to build the worktree path.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, _events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME (worktree_path_remote)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git symbolic-ref refs/remotes/origin/HEAD (detect default branch)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 6. git fetch origin main (finalize)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 7. git push origin <branch> (finalize for Branch strategy)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 8. git worktree remove (cleanup)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let _result = runner.run(&runtime).await;
+
+        // Verify the first command was `echo $HOME`
+        let cmds = runtime.captured_commands.lock().unwrap();
+        assert!(
+            !cmds.is_empty(),
+            "should have captured at least one command"
+        );
+        assert_eq!(
+            cmds[0], "echo $HOME",
+            "first command should be 'echo $HOME' for SSH worktree path resolution"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ssh_oneshot_started_event_contains_remote_worktree_path() {
+        // When ssh_host is set, OneShotStarted should contain a worktree path
+        // rooted at the remote home directory (from echo $HOME).
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME (worktree_path_remote)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git symbolic-ref refs/remotes/origin/HEAD
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 6-8: finalize + cleanup
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let _result = runner.run(&runtime).await;
+
+        let captured = events.lock().unwrap();
+        let started = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotStarted { .. }));
+        assert!(
+            started.is_some(),
+            "should emit OneShotStarted, events: {:?}",
+            *captured
+        );
+        match started.unwrap() {
+            SessionEvent::OneShotStarted {
+                worktree_path, ..
+            } => {
+                assert!(
+                    worktree_path.starts_with("/home/remoteuser/.yarr/worktrees/"),
+                    "worktree_path should start with the remote home dir, got: {}",
+                    worktree_path
+                );
+                assert!(
+                    worktree_path.contains("test-repo-oneshot-"),
+                    "worktree_path should contain repo_id and oneshot prefix, got: {}",
+                    worktree_path
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    // =========================================================================
+    // SSH phase execution routing
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_ssh_host_set_without_ssh_runtime_uses_local_session_runner() {
+        // When ssh_host is Some but ssh_runtime is None, phases use the local
+        // SessionRunner since ssh_runtime is None. The run should proceed
+        // normally without panicking.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        // Confirm ssh_runtime is None (setup_ssh_runner_with_events does not set it)
+        assert!(
+            runner.ssh_runtime.is_none(),
+            "ssh_runtime should be None in this test"
+        );
+        assert!(
+            runner.config.ssh_host.is_some(),
+            "ssh_host should be Some in this test"
+        );
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME (worktree_path_remote)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git symbolic-ref refs/remotes/origin/HEAD
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git fetch origin main --quiet
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 6-8: finalize + cleanup
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        // Should not panic — run_phase uses local SessionRunner when ssh_runtime is None
+        let _result = runner.run(&runtime).await;
+
+        let captured = events.lock().unwrap();
+
+        // Should have started at minimum
+        assert!(
+            captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotStarted { .. })),
+            "should emit OneShotStarted even when ssh_runtime is None, events: {:?}",
+            *captured
+        );
+
+        // Design phase should have been attempted (local SessionRunner)
+        assert!(
+            captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::DesignPhaseStarted)),
+            "should attempt design phase via local SessionRunner when ssh_runtime is None, events: {:?}",
+            *captured
+        );
+    }
+
+    // =========================================================================
+    // SSH oneshot: cancellation
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_ssh_cancellation_before_worktree_creation() {
+        // Cancel before worktree creation with ssh_host set.
+        // Should emit OneShotFailed and not run worktree commands.
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_ssh_config(&tmp, MergeStrategy::Branch);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token.clone()).on_event(
+            Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }),
+        );
+
+        // Cancel immediately before run
+        cancel_token.cancel();
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME (worktree_path_remote)
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let _result = runner.run(&runtime).await;
+
+        let captured = events.lock().unwrap();
+
+        // Should have OneShotFailed
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed on cancellation with ssh_host, events: {:?}",
+            *captured
+        );
+
+        // Should NOT have OneShotComplete
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should not emit OneShotComplete when cancelled with ssh_host"
+        );
+
+        // Worktree add command should NOT have been run
+        let cmds = runtime.captured_commands.lock().unwrap();
+        assert!(
+            !cmds.iter().any(|c| c.contains("git worktree add")),
+            "should not run 'git worktree add' when cancelled before worktree creation, commands: {:?}",
+            *cmds
+        );
+
+        // Only echo $HOME should have been captured
+        assert_eq!(
+            cmds.len(),
+            1,
+            "should have captured exactly one command, got: {:?}",
+            *cmds
+        );
+        assert_eq!(
+            cmds[0], "echo $HOME",
+            "only captured command should be 'echo $HOME', got: {:?}",
+            *cmds
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ssh_cancellation_during_design_phase_triggers_cleanup() {
+        // Cancel during design phase with ssh_host set.
+        // Should cleanup the remote worktree and emit OneShotFailed.
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_ssh_config(&tmp, MergeStrategy::Branch);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+        let events: Arc<Mutex<Vec<SessionEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        // Cancel when design phase starts — this ensures worktree was already
+        // created and the runner must clean it up.
+        let cancel_clone = cancel_token.clone();
+        let runner = OneShotRunner::new(config, collector, cancel_token).on_event(Box::new(
+            move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+                if matches!(event, SessionEvent::DesignPhaseStarted) {
+                    cancel_clone.cancel();
+                }
+            },
+        ));
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME
+            CommandOutput {
+                exit_code: 0,
+                stdout: "/home/remoteuser\n".to_string(),
+                stderr: String::new(),
+            },
+            // 2. git symbolic-ref
+            CommandOutput {
+                exit_code: 0,
+                stdout: "refs/remotes/origin/main\n".to_string(),
+                stderr: String::new(),
+            },
+            // 3. git fetch
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. mkdir -p
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 5. git worktree add
+            CommandOutput {
+                exit_code: 0,
+                stdout: "Preparing worktree".to_string(),
+                stderr: String::new(),
+            },
+            // 6. git worktree remove (cleanup after cancel)
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let _result = runner.run(&runtime).await;
+
+        let captured = events.lock().unwrap();
+
+        // Should have OneShotFailed with cancellation reason
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed when cancelled during design phase with ssh_host, events: {:?}",
+            *captured
+        );
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.contains("Cancelled") || reason.contains("cancel"),
+                "failure reason should mention cancellation, got: {}",
+                reason
+            );
+        }
+
+        // Should NOT have OneShotComplete
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should not emit OneShotComplete when cancelled during design phase"
+        );
+
+        // The worktree path should have been based on the remote home
+        let started = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotStarted { .. }));
+        if let Some(SessionEvent::OneShotStarted { worktree_path, .. }) = started {
+            assert!(
+                worktree_path.starts_with("/home/remoteuser/.yarr/worktrees/"),
+                "worktree path should use remote home dir, got: {}",
+                worktree_path
+            );
+        }
+
+        // Verify cleanup actually ran
+        let cmds = runtime.captured_commands.lock().unwrap();
+        assert!(
+            cmds.iter().any(|c| c.contains("git worktree remove")),
+            "should run 'git worktree remove' as cleanup after cancel during design phase, commands: {:?}",
+            *cmds
+        );
+    }
+
+    // =========================================================================
+    // SSH oneshot: failure when worktree_path_remote fails
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_ssh_worktree_path_remote_failure_echo_home_nonzero() {
+        // When echo $HOME returns non-zero, worktree_path_remote fails,
+        // and the runner should emit OneShotFailed with a reason about
+        // remote worktree path and NOT proceed to design phase.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "bash: command not found".to_string(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_err(), "run should fail when echo $HOME fails");
+
+        let captured = events.lock().unwrap();
+
+        // Should emit OneShotFailed with a reason about remote worktree path
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed when worktree_path_remote fails, events: {:?}",
+            *captured
+        );
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.contains("remote worktree path") || reason.contains("remote home"),
+                "failure reason should mention remote worktree path, got: {}",
+                reason
+            );
+        }
+
+        // Should NOT proceed to design phase
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::DesignPhaseStarted)),
+            "should not start design phase when worktree_path_remote fails"
+        );
+
+        // Should NOT have OneShotComplete
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should not emit OneShotComplete when worktree_path_remote fails"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ssh_worktree_path_remote_failure_empty_home() {
+        // When echo $HOME returns only whitespace, worktree_path_remote treats it as empty after trimming.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME returns empty
+            CommandOutput {
+                exit_code: 0,
+                stdout: "   \n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_err(), "run should fail when $HOME is empty");
+
+        let captured = events.lock().unwrap();
+
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed when remote $HOME is empty, events: {:?}",
+            *captured
+        );
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.contains("remote worktree path") || reason.contains("Remote $HOME"),
+                "failure reason should mention remote worktree path issue, got: {}",
+                reason
+            );
+        }
+
+        // Should NOT proceed to design phase
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::DesignPhaseStarted)),
+            "should not start design phase when remote $HOME is empty"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ssh_worktree_path_remote_failure_relative_home() {
+        // When echo $HOME returns a relative path, worktree_path_remote fails.
+        let tmp = TempDir::new().expect("create temp dir");
+        let (runner, events) = setup_ssh_runner_with_events(&tmp, MergeStrategy::Branch);
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. echo $HOME returns relative path
+            CommandOutput {
+                exit_code: 0,
+                stdout: "relative/path\n".to_string(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result = runner.run(&runtime).await;
+        assert!(result.is_err(), "run should fail when $HOME is relative");
+
+        let captured = events.lock().unwrap();
+
+        let failed_event = captured
+            .iter()
+            .find(|e| matches!(e, SessionEvent::OneShotFailed { .. }));
+        assert!(
+            failed_event.is_some(),
+            "should emit OneShotFailed when remote $HOME is relative, events: {:?}",
+            *captured
+        );
+        if let Some(SessionEvent::OneShotFailed { reason }) = failed_event {
+            assert!(
+                reason.contains("remote worktree path") || reason.contains("not an absolute path"),
+                "failure reason should mention path issue, got: {}",
+                reason
+            );
+        }
+
+        // Should NOT have OneShotComplete
+        assert!(
+            !captured
+                .iter()
+                .any(|e| matches!(e, SessionEvent::OneShotComplete)),
+            "should not emit OneShotComplete when worktree_path_remote fails with relative path"
+        );
+    }
 }

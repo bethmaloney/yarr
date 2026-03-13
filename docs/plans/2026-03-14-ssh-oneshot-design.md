@@ -247,11 +247,11 @@ Add unit tests covering the SSH oneshot path using mock runtimes.
 - Test cleanup on failure
 
 **Checklist:**
-- [ ] Test remote worktree path generation
-- [ ] Test SSH phase execution with mock
-- [ ] Test cancellation
-- [ ] Test cleanup on failure
-- [ ] `cargo test` passes
+- [x] Test remote worktree path generation
+- [x] Test SSH phase execution with mock
+- [x] Test cancellation
+- [x] Test cleanup on failure
+- [x] `cargo test` passes
 
 ---
 
@@ -286,5 +286,5 @@ Add E2E test variants for SSH oneshot using mocked Tauri IPC.
 | 3 | Wire up SSH oneshot in run_oneshot command | Done |
 | 4 | Handle reconnect notify for SSH oneshots | Done |
 | 5 | Update OneShotDetail.tsx for SSH host prefix | Done |
-| 6 | Rust unit tests for SSH oneshot | Not Started |
+| 6 | Rust unit tests for SSH oneshot | Done |
 | 7 | E2E tests for SSH oneshot | Not Started |
