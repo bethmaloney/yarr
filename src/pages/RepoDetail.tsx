@@ -144,6 +144,8 @@ export default function RepoDetail() {
     excerpt: string;
   } | null>(null);
 
+  const [effortLevel, setEffortLevel] = useState("medium");
+
   // 1-shot form state
   const [oneShotOpen, setOneShotOpen] = useState(false);
   const [oneShotTitle, setOneShotTitle] = useState("");
@@ -170,6 +172,7 @@ export default function RepoDetail() {
     setNameInput(repo.name);
     setEditingName(false);
     setModel(repo.model);
+    setEffortLevel(repo.effortLevel ?? "medium");
     setMaxIterations(repo.maxIterations);
     setCompletionSignal(repo.completionSignal);
     setEnvVars(
@@ -188,6 +191,8 @@ export default function RepoDetail() {
     setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
     setGitSyncPrompt(repo.gitSync?.conflictPrompt ?? "");
     setOneShotModel(repo.model);
+    setOneShotDesignEffortLevel(repo.designEffortLevel ?? "high");
+    setOneShotEffortLevel(repo.effortLevel ?? "medium");
   }, [repo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build repo payload for invoke calls
@@ -377,6 +382,7 @@ export default function RepoDetail() {
     updateRepo({
       ...repo!,
       model,
+      effortLevel,
       maxIterations,
       completionSignal,
       envVars: envVarsRecord,
@@ -885,6 +891,20 @@ export default function RepoDetail() {
                     disabled={session.running}
                     className="font-mono"
                   />
+                </Label>
+                <Label className="flex flex-col gap-1">
+                  Effort Level
+                  <Select value={effortLevel} onValueChange={setEffortLevel} disabled={session.running}>
+                    <SelectTrigger className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">low</SelectItem>
+                      <SelectItem value="medium">medium</SelectItem>
+                      <SelectItem value="high">high</SelectItem>
+                      <SelectItem value="max">max</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </Label>
                 <Label className="flex flex-col gap-1">
                   Max Iterations
@@ -1465,6 +1485,38 @@ export default function RepoDetail() {
                 disabled={oneShotSubmitting}
                 className="font-mono"
               />
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground">
+                Design Effort Level
+              </Label>
+              <Select value={oneShotDesignEffortLevel} onValueChange={setOneShotDesignEffortLevel} disabled={oneShotSubmitting}>
+                <SelectTrigger className="font-mono">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">low</SelectItem>
+                  <SelectItem value="medium">medium</SelectItem>
+                  <SelectItem value="high">high</SelectItem>
+                  <SelectItem value="max">max</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground">
+                Implementation Effort Level
+              </Label>
+              <Select value={oneShotEffortLevel} onValueChange={setOneShotEffortLevel} disabled={oneShotSubmitting}>
+                <SelectTrigger className="font-mono">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">low</SelectItem>
+                  <SelectItem value="medium">medium</SelectItem>
+                  <SelectItem value="high">high</SelectItem>
+                  <SelectItem value="max">max</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-sm text-muted-foreground">

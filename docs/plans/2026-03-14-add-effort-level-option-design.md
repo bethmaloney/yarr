@@ -147,36 +147,16 @@ Valid levels: `low`, `medium`, `high`, `max`.
 **Pattern reference:** Model input field in the Ralph section (RepoDetail.tsx:860-869) and the oneshot section (RepoDetail.tsx:1442-1449). Use `<Select>` from `src/components/ui/select.tsx`.
 
 **Checklist:**
-- [ ] Import `Select, SelectContent, SelectItem, SelectTrigger, SelectValue` from `@/components/ui/select`
-- [ ] Add state: `const [effortLevel, setEffortLevel] = useState("medium")`
-- [ ] Initialize `effortLevel` from `repo.effortLevel ?? "medium"` when repo loads (follow model pattern ~line 168)
-- [ ] Add a `<Select>` dropdown **directly below the Model input** in the Ralph/standard loop section (~line 869):
-  ```tsx
-  <Label className="flex flex-col gap-1">
-    Effort Level
-    <Select value={effortLevel} onValueChange={setEffortLevel} disabled={session.running}>
-      <SelectTrigger className="font-mono">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="low">low</SelectItem>
-        <SelectItem value="medium">medium</SelectItem>
-        <SelectItem value="high">high</SelectItem>
-        <SelectItem value="max">max</SelectItem>
-      </SelectContent>
-    </Select>
-  </Label>
-  ```
-- [ ] Save `effortLevel` to repo config via `updateRepo({...repo, effortLevel})` — follow the pattern of how `model` is saved (in the existing save/blur handler ~line 375)
-- [ ] Add state: `const [oneShotDesignEffort, setOneShotDesignEffort] = useState("high")`
-- [ ] Add state: `const [oneShotEffort, setOneShotEffort] = useState("medium")`
-- [ ] Initialize both from repo config when repo loads (follow oneShotModel pattern ~line 186):
-  - `setOneShotDesignEffort(repo.designEffortLevel ?? "high")`
-  - `setOneShotEffort(repo.effortLevel ?? "medium")`
-- [ ] Add **two** `<Select>` dropdowns in the 1-shot form, placed directly below the oneshot Model input (~line 1449):
-  - "Design Effort Level" → `oneShotDesignEffort` (default "high")
-  - "Implementation Effort Level" → `oneShotEffort` (default "medium")
-- [ ] Pass `oneShotEffort` and `oneShotDesignEffort` to `runOneShot()` in `handleOneShotSubmit` (~line 529)
+- [x] Import `Select, SelectContent, SelectItem, SelectTrigger, SelectValue` from `@/components/ui/select`
+- [x] Add state: `const [effortLevel, setEffortLevel] = useState("medium")`
+- [x] Initialize `effortLevel` from `repo.effortLevel ?? "medium"` when repo loads (follow model pattern ~line 168)
+- [x] Add a `<Select>` dropdown **directly below the Model input** in the Ralph/standard loop section (~line 869)
+- [x] Save `effortLevel` to repo config via `updateRepo({...repo, effortLevel})` — follow the pattern of how `model` is saved (in the existing save/blur handler ~line 375)
+- [x] Add state: `const [oneShotDesignEffort, setOneShotDesignEffort] = useState("high")`
+- [x] Add state: `const [oneShotEffort, setOneShotEffort] = useState("medium")`
+- [x] Initialize both from repo config when repo loads (follow oneShotModel pattern ~line 186)
+- [x] Add **two** `<Select>` dropdowns in the 1-shot form, placed directly below the oneshot Model input (~line 1449)
+- [x] Pass `oneShotEffort` and `oneShotDesignEffort` to `runOneShot()` in `handleOneShotSubmit` (~line 529)
 
 ## Task 9: Tests
 
@@ -204,5 +184,5 @@ Valid levels: `low`, `medium`, `high`, `max`.
 | 5. Tauri commands | Done | run_session, run_oneshot, resume_oneshot |
 | 6. OneShot phase configs | Done | design vs implementation effort |
 | 7. Frontend store | Done | Zustand store invoke calls |
-| 8. UI controls | Not started | Select dropdowns in RepoDetail |
+| 8. UI controls | Done | Select dropdowns in RepoDetail |
 | 9. Tests | Done | SSH runtime tests + compilation (487 pass) |
