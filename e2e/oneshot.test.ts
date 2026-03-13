@@ -268,7 +268,6 @@ test.describe("1-Shot card on Home page", () => {
     });
     await page.goto("/");
 
-
     const card = page.getByRole("button", {
       name: "Fix the bug \u2014 1-Shot",
     });
@@ -290,7 +289,6 @@ test.describe("1-Shot card on Home page", () => {
       },
     });
     await page.goto("/");
-
 
     await page
       .getByRole("button", { name: "Fix the bug \u2014 1-Shot" })
@@ -314,7 +312,6 @@ test.describe("1-Shot card on Home page", () => {
       },
     });
     await page.goto("/");
-
 
     const card = page.getByRole("button", {
       name: "Fix the bug \u2014 1-Shot",
@@ -340,7 +337,6 @@ test.describe("1-Shot card on Home page", () => {
       },
     });
     await page.goto("/");
-
 
     await expect(page.getByRole("button", { name: /my-app/ })).toBeVisible();
     await expect(
@@ -382,7 +378,6 @@ test.describe("OneShotDetail page - active mode", () => {
       },
     });
     await page.goto(`/oneshot/${oneshotId}`);
-
   }
 
   test("shows entry title, parent repo name, and prompt text", async ({
@@ -413,6 +408,8 @@ test.describe("OneShotDetail page - active mode", () => {
       kind: "one_shot_started",
       title: "Add auth feature",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
     await expect(phaseIndicator).toBeVisible();
     await expect(phaseIndicator).toContainText("Starting...");
@@ -459,6 +456,8 @@ test.describe("OneShotDetail page - active mode", () => {
       kind: "one_shot_started",
       title: "Add auth feature",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
     await expect(phaseIndicator).toBeVisible();
 
@@ -488,6 +487,8 @@ test.describe("OneShotDetail page - active mode", () => {
       kind: "one_shot_started",
       title: "Add auth feature",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
 
     const stopButton = page.getByRole("button", { name: "Stop" });
@@ -535,7 +536,6 @@ test.describe("OneShotDetail page - completed/read-only mode", () => {
     });
     await page.goto(`/oneshot/${oneshotId}`);
 
-
     await expect(
       page.locator("h1", { hasText: "Completed task" }),
     ).toBeVisible();
@@ -545,6 +545,8 @@ test.describe("OneShotDetail page - completed/read-only mode", () => {
       kind: "one_shot_started",
       title: "Completed task",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
     await emitSessionEvent(page, oneshotId, { kind: "design_phase_started" });
     await emitSessionEvent(page, oneshotId, { kind: "design_phase_complete" });
@@ -585,7 +587,6 @@ test.describe("OneShotDetail page - completed/read-only mode", () => {
     });
     await page.goto(`/oneshot/${oneshotId}`);
 
-
     await expect(
       page.locator("h1", { hasText: "Completed task" }),
     ).toBeVisible();
@@ -595,6 +596,8 @@ test.describe("OneShotDetail page - completed/read-only mode", () => {
       kind: "one_shot_started",
       title: "Completed task",
       merge_strategy: "merge_to_main",
+      worktree_path: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
     });
     await emitSessionEvent(page, oneshotId, {
       kind: "one_shot_failed",
@@ -624,5 +627,213 @@ test.describe("OneShotDetail - not found", () => {
     await page.goto("/oneshot/nonexistent");
 
     await expect(page.getByText("Not found")).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. OneShotDetail - empty state
+// ---------------------------------------------------------------------------
+test.describe("OneShotDetail - empty state", () => {
+  const oneshotId = "oneshot-empty-1";
+
+  test('shows "Session starting..." when status is running with no events', async ({
+    page,
+    mockTauri,
+  }) => {
+    const entry = {
+      id: oneshotId,
+      parentRepoId: "repo-1",
+      parentRepoName: "my-app",
+      title: "Starting task",
+      prompt: "Do something",
+      model: "opus",
+      mergeStrategy: "merge_to_main",
+      status: "running" as const,
+      startedAt: Date.now(),
+    };
+
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [[oneshotId, entry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+      },
+    });
+    await page.goto(`/oneshot/${oneshotId}`);
+
+    await expect(
+      page.locator("h1", { hasText: "Starting task" }),
+    ).toBeVisible();
+    await expect(page.getByText("Session starting...")).toBeVisible();
+  });
+
+  test('shows "Session was interrupted" with Resume button when failed with worktreePath', async ({
+    page,
+    mockTauri,
+  }) => {
+    const entry = {
+      id: oneshotId,
+      parentRepoId: "repo-1",
+      parentRepoName: "my-app",
+      title: "Interrupted task",
+      prompt: "Do something",
+      model: "opus",
+      mergeStrategy: "merge_to_main",
+      status: "failed" as const,
+      startedAt: Date.now(),
+      worktreePath: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
+    };
+
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [[oneshotId, entry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+      },
+    });
+    await page.goto(`/oneshot/${oneshotId}`);
+
+    await expect(
+      page.locator("h1", { hasText: "Interrupted task" }),
+    ).toBeVisible();
+    await expect(page.getByText("Session was interrupted")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
+  });
+
+  test('shows "Session failed before starting" when failed without worktreePath', async ({
+    page,
+    mockTauri,
+  }) => {
+    const entry = {
+      id: oneshotId,
+      parentRepoId: "repo-1",
+      parentRepoName: "my-app",
+      title: "Failed task",
+      prompt: "Do something",
+      model: "opus",
+      mergeStrategy: "merge_to_main",
+      status: "failed" as const,
+      startedAt: Date.now(),
+    };
+
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [[oneshotId, entry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+      },
+    });
+    await page.goto(`/oneshot/${oneshotId}`);
+
+    await expect(
+      page.locator("h1", { hasText: "Failed task" }),
+    ).toBeVisible();
+    await expect(page.getByText("Session failed before starting")).toBeVisible();
+  });
+
+  test('shows "No events recorded" when completed with no events', async ({
+    page,
+    mockTauri,
+  }) => {
+    const entry = {
+      id: oneshotId,
+      parentRepoId: "repo-1",
+      parentRepoName: "my-app",
+      title: "Completed task no events",
+      prompt: "Do something",
+      model: "opus",
+      mergeStrategy: "merge_to_main",
+      status: "completed" as const,
+      startedAt: Date.now(),
+    };
+
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [[oneshotId, entry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+      },
+    });
+    await page.goto(`/oneshot/${oneshotId}`);
+
+    await expect(
+      page.locator("h1", { hasText: "Completed task no events" }),
+    ).toBeVisible();
+    await expect(page.getByText("No events recorded")).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. OneShotDetail - resume button
+// ---------------------------------------------------------------------------
+test.describe("OneShotDetail - resume button", () => {
+  const oneshotId = "oneshot-resume-1";
+
+  test("clicking Resume calls resume_oneshot with correct args", async ({
+    page,
+    mockTauri,
+  }) => {
+    const entry = {
+      id: oneshotId,
+      parentRepoId: "repo-1",
+      parentRepoName: "my-app",
+      title: "Interrupted task",
+      prompt: "Implement feature X",
+      model: "opus",
+      mergeStrategy: "merge_to_main",
+      status: "failed" as const,
+      startedAt: Date.now(),
+      worktreePath: "/tmp/worktrees/test-wt",
+      branch: "oneshot/test-branch",
+    };
+
+    await mockTauri({
+      storeData: {
+        ...repoStoreData,
+        "oneshot-entries": [[oneshotId, entry]],
+      },
+      invokeHandlers: {
+        get_active_sessions: () => [],
+        resume_oneshot: (args: Record<string, unknown>) => {
+          (window as unknown as Record<string, unknown>).__capturedArgs = args;
+          return { oneshot_id: oneshotId, session_id: "new-sess-456" };
+        },
+      },
+    });
+    await page.goto(`/oneshot/${oneshotId}`);
+
+    await expect(page.getByText("Session was interrupted")).toBeVisible();
+
+    const resumeBtn = page.getByRole("button", { name: "Resume" });
+    await expect(resumeBtn).toBeVisible();
+    await resumeBtn.click();
+
+    const captured = await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__capturedArgs,
+    );
+
+    expect(captured).toBeTruthy();
+    const args = captured as Record<string, unknown>;
+    expect(args.oneshotId).toBe(oneshotId);
+    expect(args.repoId).toBe("repo-1");
+    expect(args.title).toBe("Interrupted task");
+    expect(args.prompt).toBe("Implement feature X");
+    expect(args.model).toBe("opus");
+    expect(args.mergeStrategy).toBe("merge_to_main");
+    expect(args.worktreePath).toBe("/tmp/worktrees/test-wt");
+    expect(args.branch).toBe("oneshot/test-branch");
+    expect(args.repo).toEqual({
+      type: "local",
+      path: "/home/user/projects/my-app",
+    });
   });
 });

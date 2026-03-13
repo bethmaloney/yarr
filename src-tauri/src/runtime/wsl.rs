@@ -17,18 +17,32 @@ struct WslAbortHandle {
 
 impl AbortHandle for WslAbortHandle {
     fn abort(&self) {
-        // Try to kill the process tree inside WSL before aborting the task
+        // Abort the tokio task immediately — don't wait for WSL kill commands
+        self.task_handle.abort();
+
+        // Fire-and-forget the WSL kill commands in a background thread so they
+        // can't block the runtime if WSL is unresponsive.
         if let Some(pid) = *self.wsl_pid.lock().unwrap() {
             tracing::info!("Killing WSL process tree (pid={pid})");
-            // Use kill with negative PID to kill the process group, fall back to single kill
-            let _ = std::process::Command::new("wsl")
-                .args(["-e", "kill", "--", &format!("-{pid}")])
-                .output();
-            let _ = std::process::Command::new("wsl")
-                .args(["-e", "kill", "-9", &pid.to_string()])
-                .output();
+            std::thread::spawn(move || {
+                // Kill process group, then force-kill the individual process.
+                // Use .output() which blocks, but that's fine — this is a
+                // dedicated thread that won't stall the async runtime.
+                // If WSL is hung these threads will linger but won't block anything.
+                let _ = std::process::Command::new("wsl")
+                    .args(["-e", "kill", "--", &format!("-{pid}")])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .output();
+                let _ = std::process::Command::new("wsl")
+                    .args(["-e", "kill", "-9", &pid.to_string()])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .output();
+            });
         }
-        self.task_handle.abort();
     }
 }
 

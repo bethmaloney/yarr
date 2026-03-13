@@ -39,6 +39,16 @@ const { mockSaveRecent } = vi.hoisted(() => {
   return { mockSaveRecent: vi.fn() };
 });
 
+const { mockToast } = vi.hoisted(() => {
+  return {
+    mockToast: {
+      error: vi.fn(),
+      info: vi.fn(),
+      warning: vi.fn(),
+    },
+  };
+});
+
 const { mockData } = vi.hoisted(() => {
   return { mockData: new Map<string, unknown>() };
 });
@@ -78,6 +88,10 @@ vi.mock("./repos", () => ({
 
 vi.mock("./recents", () => ({
   saveRecent: mockSaveRecent,
+}));
+
+vi.mock("sonner", () => ({
+  toast: mockToast,
 }));
 
 // ---------------------------------------------------------------------------
@@ -675,6 +689,74 @@ describe("session event handling", () => {
 
     expect(mockSaveRecent).not.toHaveBeenCalled();
   });
+
+  it("auto-move: NOT invoked when movePlansToCompleted is false", () => {
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+          movePlansToCompleted: false,
+        } as Partial<RepoConfig>),
+      ],
+    });
+
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "completed",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "move_plan_to_completed",
+      expect.anything(),
+    );
+  });
+
+  it("auto-move: invoked when movePlansToCompleted is true", () => {
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+          movePlansToCompleted: true,
+        } as Partial<RepoConfig>),
+      ],
+    });
+
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "completed",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
+
+  it("auto-move: invoked when movePlansToCompleted is undefined (default true)", () => {
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+        } as Partial<RepoConfig>),
+      ],
+    });
+
+    // movePlansToCompleted is not set on the repo — should default to true
+    emitSessionEvent("repo-1", {
+      kind: "session_complete",
+      outcome: "completed",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
 });
 
 // ===========================================================================
@@ -940,6 +1022,172 @@ describe("syncActiveSessions", () => {
     expect(session).toBeDefined();
     expect(session!.running).toBe(true);
     expect(session!.events).toEqual([]);
+  });
+
+  // -------------------------------------------------------------------------
+  // One-shot entry reconciliation
+  // -------------------------------------------------------------------------
+
+  describe("one-shot entry reconciliation", () => {
+    it("marks running one-shot entry as failed when NOT in active sessions", async () => {
+      const entry = makeOneShotEntry({ id: "oneshot-abc", status: "running" });
+      useAppStore.setState({
+        oneShotEntries: new Map([["oneshot-abc", entry]]),
+      });
+
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions") return [];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const updated = useAppStore.getState().oneShotEntries.get("oneshot-abc");
+        expect(updated).toBeDefined();
+        expect(updated!.status).toBe("failed");
+      });
+    });
+
+    it("keeps running one-shot entry as running when IN active sessions", async () => {
+      const entry = makeOneShotEntry({ id: "oneshot-abc", status: "running" });
+      useAppStore.setState({
+        oneShotEntries: new Map([["oneshot-abc", entry]]),
+      });
+
+      // oneshot-abc IS in the active sessions list
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions")
+          return [["oneshot-abc", "sess-oneshot"]];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const calls = mockInvoke.mock.calls.filter(
+          (c) => c[0] === "get_active_sessions",
+        );
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+      });
+
+      const updated = useAppStore.getState().oneShotEntries.get("oneshot-abc");
+      expect(updated).toBeDefined();
+      expect(updated!.status).toBe("running");
+    });
+
+    it("does not change non-running one-shot entries", async () => {
+      const completed = makeOneShotEntry({
+        id: "oneshot-done",
+        status: "completed",
+      });
+      const failed = makeOneShotEntry({
+        id: "oneshot-fail",
+        status: "failed",
+      });
+      useAppStore.setState({
+        oneShotEntries: new Map([
+          ["oneshot-done", completed],
+          ["oneshot-fail", failed],
+        ]),
+      });
+
+      // No active sessions at all
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions") return [];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const calls = mockInvoke.mock.calls.filter(
+          (c) => c[0] === "get_active_sessions",
+        );
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+      });
+
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.get("oneshot-done")!.status).toBe("completed");
+      expect(entries.get("oneshot-fail")!.status).toBe("failed");
+    });
+
+    it("persists updated entries to oneShotStore after reconciliation", async () => {
+      const entry = makeOneShotEntry({ id: "oneshot-abc", status: "running" });
+      useAppStore.setState({
+        oneShotEntries: new Map([["oneshot-abc", entry]]),
+      });
+
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions") return [];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const updated = useAppStore.getState().oneShotEntries.get("oneshot-abc");
+        expect(updated).toBeDefined();
+        expect(updated!.status).toBe("failed");
+      });
+
+      // Verify persistence
+      const saved = mockData.get("oneshot-entries") as
+        | [string, OneShotEntry][]
+        | undefined;
+      expect(saved).toBeDefined();
+      const restoredMap = new Map(saved);
+      expect(restoredMap.get("oneshot-abc")).toBeDefined();
+      expect(restoredMap.get("oneshot-abc")!.status).toBe("failed");
+    });
+
+    it("only marks stale running entries as failed among multiple entries", async () => {
+      const staleRunning = makeOneShotEntry({
+        id: "oneshot-stale",
+        status: "running",
+      });
+      const activeRunning = makeOneShotEntry({
+        id: "oneshot-active",
+        status: "running",
+      });
+      const completedEntry = makeOneShotEntry({
+        id: "oneshot-done",
+        status: "completed",
+      });
+
+      useAppStore.setState({
+        oneShotEntries: new Map([
+          ["oneshot-stale", staleRunning],
+          ["oneshot-active", activeRunning],
+          ["oneshot-done", completedEntry],
+        ]),
+      });
+
+      // Only oneshot-active is in the active sessions
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        if (cmd === "get_active_sessions")
+          return [["oneshot-active", "sess-active"]];
+        return undefined;
+      });
+
+      useAppStore.getState().initialize();
+      vi.advanceTimersByTime(5000);
+
+      await vi.waitFor(() => {
+        const stale =
+          useAppStore.getState().oneShotEntries.get("oneshot-stale");
+        expect(stale).toBeDefined();
+        expect(stale!.status).toBe("failed");
+      });
+
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.get("oneshot-active")!.status).toBe("running");
+      expect(entries.get("oneshot-done")!.status).toBe("completed");
+    });
   });
 });
 
@@ -1338,6 +1586,47 @@ describe("runOneShot", () => {
     );
   });
 
+  it("passes custom plansDir from repo config to invoke", async () => {
+    const repoWithPlansDir = makeLocalRepo({
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
+      gitSync: { enabled: true, conflictPrompt: undefined, model: undefined, maxPushRetries: 3 },
+      envVars: { MY_VAR: "hello" },
+      plansDir: "custom/plans/",
+    });
+    useAppStore.setState({ repos: [repoWithPlansDir] });
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_oneshot",
+      expect.objectContaining({
+        plansDir: "custom/plans/",
+      }),
+    );
+  });
+
+  it("defaults plansDir to docs/plans/ when repo config has no plansDir", async () => {
+    const repoWithoutPlansDir = makeLocalRepo({
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
+    });
+    useAppStore.setState({ repos: [repoWithoutPlansDir] });
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_oneshot",
+      expect.objectContaining({
+        plansDir: "docs/plans/",
+      }),
+    );
+  });
+
   it("on success: stores entry with returned oneshot_id and updates status", async () => {
     mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-xyz", trace: makeTrace() });
 
@@ -1376,6 +1665,22 @@ describe("runOneShot", () => {
     const result = await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
 
     expect(result).toBe("oneshot-xyz");
+  });
+
+  it("on success: saves session_id from backend result to entry", async () => {
+    mockInvoke.mockResolvedValue({
+      oneshot_id: "oneshot-xyz",
+      session_id: "sess-123",
+      trace: makeTrace(),
+    });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.has("oneshot-xyz")).toBe(true);
+
+    const entry = entries.get("oneshot-xyz")!;
+    expect(entry.session_id).toBe("sess-123");
   });
 });
 
@@ -1745,6 +2050,67 @@ describe("1-shot auto-move plan on completion", () => {
       filename: "my-plan.md",
     });
   });
+
+  it("auto-move: NOT invoked when parent repo has movePlansToCompleted false", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+          movePlansToCompleted: false,
+        } as Partial<RepoConfig>),
+      ],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    // First emit design_phase_complete so plan_file is in session events
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    // Then emit one_shot_complete to trigger the auto-move
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "move_plan_to_completed",
+      expect.anything(),
+    );
+  });
+
+  it("auto-move: invoked when parent repo has movePlansToCompleted true", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+    });
+    useAppStore.setState({
+      repos: [
+        makeLocalRepo({
+          plansDir: "docs/plans/",
+          movePlansToCompleted: true,
+        } as Partial<RepoConfig>),
+      ],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "design_phase_complete",
+      plan_file: "docs/plans/my-plan.md",
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    expect(mockInvoke).toHaveBeenCalledWith("move_plan_to_completed", {
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      plansDir: "docs/plans/",
+      filename: "my-plan.md",
+    });
+  });
 });
 
 // ===========================================================================
@@ -1780,6 +2146,340 @@ describe("1-shot persistence", () => {
     expect(entries.has("oneshot-abc")).toBe(true);
     expect(entries.get("oneshot-abc")!.id).toBe("oneshot-abc");
     expect(entries.get("oneshot-abc")!.status).toBe("completed");
+  });
+});
+
+// ===========================================================================
+// 13b. one_shot_started event: saves worktreePath and branch
+// ===========================================================================
+
+describe("one_shot_started event", () => {
+  beforeEach(() => {
+    useAppStore.getState().initialize();
+  });
+
+  it("saves worktreePath and branch from one_shot_started event", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+    });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "one_shot_started",
+      worktree_path: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+
+    const entries = useAppStore.getState().oneShotEntries;
+    const updated = entries.get("oneshot-abc")!;
+    expect(updated.worktreePath).toBe("/tmp/wt");
+    expect(updated.branch).toBe("oneshot/fix");
+  });
+
+  it("persists entry after saving worktreePath and branch", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+    });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    emitSessionEvent("oneshot-abc", {
+      kind: "one_shot_started",
+      worktree_path: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+
+    // Wait for the async persistence to complete
+    await vi.waitFor(() => {
+      const saved = mockData.get("oneshot-entries") as
+        | [string, OneShotEntry][]
+        | undefined;
+      expect(saved).toBeDefined();
+      const restoredMap = new Map(saved!);
+      expect(restoredMap.get("oneshot-abc")!.worktreePath).toBe("/tmp/wt");
+      expect(restoredMap.get("oneshot-abc")!.branch).toBe("oneshot/fix");
+    });
+  });
+
+  it("ignores one_shot_started for unknown oneshot IDs", () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+    });
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    // Emit for an unknown ID — should not throw or modify existing entries
+    emitSessionEvent("oneshot-unknown", {
+      kind: "one_shot_started",
+      worktree_path: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+
+    const entries = useAppStore.getState().oneShotEntries;
+    expect(entries.size).toBe(1);
+    const existing = entries.get("oneshot-abc")!;
+    expect(existing.worktreePath).toBeUndefined();
+    expect(existing.branch).toBeUndefined();
+  });
+});
+
+// ===========================================================================
+// 13c. One-shot event recovery on startup
+// ===========================================================================
+
+describe("one-shot event recovery on startup", () => {
+  it("recovers events for one-shot entries with session_id on initialize", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "completed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    const recoveredEvents: SessionEvent[] = [
+      { kind: "iteration_start", iteration: 1 },
+      { kind: "tool_use", tool_name: "Bash" },
+    ];
+
+    mockInvoke.mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "get_trace_events") {
+        const typedArgs = args as { repoId: string; sessionId: string };
+        expect(typedArgs.repoId).toBe("oneshot-abc");
+        expect(typedArgs.sessionId).toBe("sess-123");
+        return recoveredEvents;
+      }
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const session = useAppStore.getState().sessions.get("oneshot-abc");
+      expect(session).toBeDefined();
+      expect(session!.events).toEqual(recoveredEvents);
+    });
+  });
+
+  it("recovers trace for one-shot entries with session_id on initialize", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "completed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    const trace = makeTrace({
+      session_id: "sess-123",
+      repo_id: "oneshot-abc",
+      outcome: "completed",
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const session = useAppStore.getState().sessions.get("oneshot-abc");
+      expect(session).toBeDefined();
+      expect(session!.trace).toEqual(trace);
+    });
+  });
+
+  it("updates entry status to completed when trace outcome is completed", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    const trace = makeTrace({
+      session_id: "sess-123",
+      repo_id: "oneshot-abc",
+      outcome: "completed",
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      const updated = entries.get("oneshot-abc");
+      expect(updated).toBeDefined();
+      expect(updated!.status).toBe("completed");
+    });
+  });
+
+  it("updates entry status to failed when trace outcome is failed", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    const trace = makeTrace({
+      session_id: "sess-123",
+      repo_id: "oneshot-abc",
+      outcome: "failed",
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      const updated = entries.get("oneshot-abc");
+      expect(updated).toBeDefined();
+      expect(updated!.status).toBe("failed");
+    });
+  });
+
+  it("skips entries without session_id", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+      // no session_id
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") {
+        throw new Error("get_trace_events should not have been called");
+      }
+      if (cmd === "get_trace") {
+        throw new Error("get_trace should not have been called");
+      }
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    // Wait for loadOneShotEntries to complete
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-abc")).toBe(true);
+    });
+
+    // Verify get_trace_events was never called for this entry
+    const traceEventCalls = mockInvoke.mock.calls.filter(
+      (c) => c[0] === "get_trace_events",
+    );
+    expect(traceEventCalls).toHaveLength(0);
+
+    const traceCalls = mockInvoke.mock.calls.filter(
+      (c) => c[0] === "get_trace",
+    );
+    expect(traceCalls).toHaveLength(0);
+  });
+
+  it("handles get_trace_events failure gracefully", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "completed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") {
+        throw new Error("disk read failed");
+      }
+      if (cmd === "get_trace") return null;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    // Wait for loadOneShotEntries to complete
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-abc")).toBe(true);
+    });
+
+    // Entry should remain unchanged — no crash
+    const entries = useAppStore.getState().oneShotEntries;
+    const unchanged = entries.get("oneshot-abc")!;
+    expect(unchanged.status).toBe("completed");
+  });
+
+  it("handles get_trace failure gracefully", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "completed",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") {
+        throw new Error("trace not found");
+      }
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    // Wait for loadOneShotEntries to complete
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-abc")).toBe(true);
+    });
+
+    // Entry should remain unchanged — no crash
+    const entries = useAppStore.getState().oneShotEntries;
+    const unchanged = entries.get("oneshot-abc")!;
+    expect(unchanged.status).toBe("completed");
+  });
+
+  it("does not update entry status when trace has no outcome", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+      session_id: "sess-123",
+    });
+    mockData.set("oneshot-entries", [["oneshot-abc", entry]]);
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace_events") return [];
+      if (cmd === "get_trace") return null;
+      return undefined;
+    });
+
+    useAppStore.getState().initialize();
+
+    // Wait for loadOneShotEntries to complete and recovery to run
+    await vi.waitFor(() => {
+      const entries = useAppStore.getState().oneShotEntries;
+      expect(entries.has("oneshot-abc")).toBe(true);
+    });
+
+    // Status should remain unchanged since trace was null
+    const entries = useAppStore.getState().oneShotEntries;
+    const unchanged = entries.get("oneshot-abc")!;
+    expect(unchanged.status).toBe("running");
   });
 });
 
@@ -1994,5 +2694,324 @@ describe("clearGitStatusError", () => {
     useAppStore.getState().clearGitStatusError("nonexistent");
     const after = useAppStore.getState().gitStatus;
     expect(after).toEqual(before);
+  });
+});
+
+// ===========================================================================
+// 17. resumeOneShot
+// ===========================================================================
+
+describe("resumeOneShot", () => {
+  it("returns early if entry not found", async () => {
+    await useAppStore.getState().resumeOneShot("nonexistent");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+  });
+
+  it("returns early if parent repo not found", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+    useAppStore.setState({
+      repos: [],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+    expect(mockToast.error).toHaveBeenCalled();
+  });
+
+  it("returns early if entry has no worktreePath", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      branch: "oneshot/fix",
+      // no worktreePath
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+    expect(mockToast.error).toHaveBeenCalled();
+  });
+
+  it("returns early if entry has no branch", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      // no branch
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+    expect(mockToast.error).toHaveBeenCalled();
+  });
+
+  it("calls invoke with correct arguments", async () => {
+    const repo = makeLocalRepo({
+      envVars: { MY_VAR: "hello" },
+      gitSync: { enabled: true, conflictPrompt: undefined, model: undefined, maxPushRetries: 3 },
+      plansDir: "custom/plans/",
+    });
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      title: "Fix the bug",
+      prompt: "Fix the flaky test in store.test.ts",
+      model: "opus",
+      mergeStrategy: "fast-forward",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [repo],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).toHaveBeenCalledWith("resume_oneshot", {
+      oneshotId: "oneshot-abc",
+      repoId: "repo-1",
+      repo: { type: "local", path: "/home/beth/repos/yarr" },
+      title: "Fix the bug",
+      prompt: "Fix the flaky test in store.test.ts",
+      model: "opus",
+      mergeStrategy: "fast-forward",
+      envVars: { MY_VAR: "hello" },
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
+      gitSync: { enabled: true, conflictPrompt: undefined, model: undefined, maxPushRetries: 3 },
+      plansDir: "custom/plans/",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      oldSessionId: "old-sess",
+    });
+  });
+
+  it("on success: updates entry status to running and saves new session_id", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    const entries = useAppStore.getState().oneShotEntries;
+    const updated = entries.get("oneshot-abc")!;
+    expect(updated.status).toBe("running");
+    expect(updated.session_id).toBe("new-sess");
+  });
+
+  it("on success: sets up session in sessions map", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    const session = useAppStore.getState().sessions.get("oneshot-abc");
+    expect(session).toBeDefined();
+    expect(session!.running).toBe(true);
+    expect(session!.events).toEqual([]);
+    expect(session!.session_id).toBe("new-sess");
+  });
+
+  it("on success: persists to oneShotStore", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    const saved = mockData.get("oneshot-entries") as [string, OneShotEntry][];
+    expect(saved).toBeDefined();
+    const restoredMap = new Map(saved);
+    expect(restoredMap.has("oneshot-abc")).toBe(true);
+    expect(restoredMap.get("oneshot-abc")!.status).toBe("running");
+    expect(restoredMap.get("oneshot-abc")!.session_id).toBe("new-sess");
+  });
+
+  it("on error: shows toast.error", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockRejectedValue(new Error("backend crashed"));
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockToast.error).toHaveBeenCalledWith(
+      expect.stringContaining("backend crashed"),
+    );
+  });
+
+  it("on error: does not update entry status", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockRejectedValue(new Error("backend crashed"));
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    const entries = useAppStore.getState().oneShotEntries;
+    const unchanged = entries.get("oneshot-abc")!;
+    expect(unchanged.status).toBe("failed");
+  });
+
+  it("defaults plansDir to docs/plans/ when repo has no plansDir", async () => {
+    const repo = makeLocalRepo({
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      checks: [],
+      // no plansDir
+    });
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [repo],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.objectContaining({
+        plansDir: "docs/plans/",
+      }),
+    );
+  });
+
+  it("returns early if entry is already running", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      status: "running",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+    });
+    useAppStore.setState({
+      repos: [makeLocalRepo()],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.anything(),
+    );
+  });
+
+  it("builds correct repo payload for SSH repos", async () => {
+    const repo = makeSshRepo();
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-2",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [repo],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({ oneshot_id: "oneshot-abc", session_id: "new-sess" });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.objectContaining({
+        repo: { type: "ssh", sshHost: "dev-server", remotePath: "/home/beth/repos/other" },
+      }),
+    );
   });
 });

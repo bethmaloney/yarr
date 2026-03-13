@@ -29,17 +29,20 @@ if (!(window as any).__TAURI_INTERNALS__) {
     },
   ];
 
-  const SAMPLE_ONESHOT_ENTRIES: [string, {
-    id: string;
-    parentRepoId: string;
-    parentRepoName: string;
-    title: string;
-    prompt: string;
-    model: string;
-    mergeStrategy: string;
-    status: "running" | "completed" | "failed";
-    startedAt: number;
-  }][] = [
+  const SAMPLE_ONESHOT_ENTRIES: [
+    string,
+    {
+      id: string;
+      parentRepoId: string;
+      parentRepoName: string;
+      title: string;
+      prompt: string;
+      model: string;
+      mergeStrategy: string;
+      status: "running" | "completed" | "failed";
+      startedAt: number;
+    },
+  ][] = [
     [
       "oneshot-abc-001",
       {
@@ -47,7 +50,8 @@ if (!(window as any).__TAURI_INTERNALS__) {
         parentRepoId: "repo-alpha",
         parentRepoName: "my-project",
         title: "Add dark mode support",
-        prompt: "Add a dark mode toggle to the settings page. Use CSS custom properties for theming and persist the preference in localStorage.",
+        prompt:
+          "Add a dark mode toggle to the settings page. Use CSS custom properties for theming and persist the preference in localStorage.",
         model: "opus",
         mergeStrategy: "branch",
         status: "completed",
@@ -61,7 +65,8 @@ if (!(window as any).__TAURI_INTERNALS__) {
         parentRepoId: "repo-alpha",
         parentRepoName: "my-project",
         title: "Fix CSV export encoding",
-        prompt: "The CSV export is producing garbled output for non-ASCII characters. Fix the encoding to use UTF-8 with BOM.",
+        prompt:
+          "The CSV export is producing garbled output for non-ASCII characters. Fix the encoding to use UTF-8 with BOM.",
         model: "sonnet",
         mergeStrategy: "direct",
         status: "running",
@@ -429,6 +434,8 @@ if (!(window as any).__TAURI_INTERNALS__) {
         kind: "one_shot_started",
         title: "Add dark mode support",
         merge_strategy: "branch",
+        worktree_path: "/home/user/worktrees/dark-mode-abc123",
+        branch: "oneshot/dark-mode-abc123",
         _ts: 1741422600000,
       },
       {
@@ -473,7 +480,12 @@ if (!(window as any).__TAURI_INTERNALS__) {
         _ts: 1741422640000,
       },
       { kind: "tool_use", iteration: 2, tool_name: "Edit", _ts: 1741422645000 },
-      { kind: "tool_use", iteration: 2, tool_name: "Write", _ts: 1741422650000 },
+      {
+        kind: "tool_use",
+        iteration: 2,
+        tool_name: "Write",
+        _ts: 1741422650000,
+      },
       {
         kind: "iteration_complete",
         iteration: 2,
@@ -494,7 +506,12 @@ if (!(window as any).__TAURI_INTERNALS__) {
         text: "Adding the toggle component and localStorage persistence...",
         _ts: 1741422665000,
       },
-      { kind: "tool_use", iteration: 3, tool_name: "Write", _ts: 1741422670000 },
+      {
+        kind: "tool_use",
+        iteration: 3,
+        tool_name: "Write",
+        _ts: 1741422670000,
+      },
       { kind: "tool_use", iteration: 3, tool_name: "Edit", _ts: 1741422675000 },
       { kind: "tool_use", iteration: 3, tool_name: "Bash", _ts: 1741422680000 },
       {
@@ -556,6 +573,8 @@ if (!(window as any).__TAURI_INTERNALS__) {
         kind: "one_shot_started",
         title: "Fix CSV export encoding",
         merge_strategy: "direct",
+        worktree_path: "/home/user/worktrees/csv-export-abc456",
+        branch: "oneshot/csv-export-abc456",
         _ts: 1741509000000,
       },
       {

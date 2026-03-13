@@ -8,6 +8,7 @@ import type {
   TaggedSessionEvent,
   GitSyncConfig,
   RepoGitStatus,
+  OneShotEntry,
 } from "./types";
 
 describe("SessionEvent", () => {
@@ -677,5 +678,67 @@ describe("RepoGitStatus", () => {
       behind: null,
     };
     expect(status.dirtyCount).toBe(0);
+  });
+});
+
+describe("OneShotEntry", () => {
+  it("accepts an entry with all new fields populated", () => {
+    const entry: OneShotEntry = {
+      id: "oneshot-abc123",
+      parentRepoId: "repo-001",
+      parentRepoName: "yarr",
+      title: "Add auth module",
+      prompt: "Implement OAuth2 authentication",
+      model: "opus",
+      mergeStrategy: "squash",
+      status: "running",
+      startedAt: 1709827200000,
+      session_id: "sess-100",
+      worktreePath: "/home/beth/repos/yarr-worktrees/oneshot-abc123",
+      branch: "oneshot/add-auth-module",
+    };
+    expect(entry.id).toBe("oneshot-abc123");
+    expect(entry.session_id).toBe("sess-100");
+    expect(entry.worktreePath).toBe(
+      "/home/beth/repos/yarr-worktrees/oneshot-abc123",
+    );
+    expect(entry.branch).toBe("oneshot/add-auth-module");
+  });
+
+  it("is backward compatible without new optional fields", () => {
+    const entry: OneShotEntry = {
+      id: "oneshot-def456",
+      parentRepoId: "repo-002",
+      parentRepoName: "other-project",
+      title: "Fix login bug",
+      prompt: "The login form crashes on submit",
+      model: "sonnet",
+      mergeStrategy: "merge",
+      status: "completed",
+      startedAt: 1709830800000,
+    };
+    expect(entry.id).toBe("oneshot-def456");
+    expect(entry.status).toBe("completed");
+    expect(entry.session_id).toBeUndefined();
+    expect(entry.worktreePath).toBeUndefined();
+    expect(entry.branch).toBeUndefined();
+  });
+
+  it("accepts an entry with only some new fields set", () => {
+    const entry: OneShotEntry = {
+      id: "oneshot-ghi789",
+      parentRepoId: "repo-003",
+      parentRepoName: "api-service",
+      title: "Refactor database layer",
+      prompt: "Extract the database queries into a repository pattern",
+      model: "opus",
+      mergeStrategy: "rebase",
+      status: "failed",
+      startedAt: 1709834400000,
+      session_id: "sess-200",
+    };
+    expect(entry.session_id).toBe("sess-200");
+    expect(entry.worktreePath).toBeUndefined();
+    expect(entry.branch).toBeUndefined();
   });
 });

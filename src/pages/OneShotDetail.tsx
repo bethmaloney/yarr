@@ -6,6 +6,9 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { EventsList } from "@/components/EventsList";
 import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
+import { groupEventsByIteration, maxContextPercent } from "../iteration-groups";
+import { sessionContextColor } from "../context-bar";
+import { Loader2, AlertTriangle, Terminal } from "lucide-react";
 import type { SessionState } from "../types";
 
 const defaultSession: SessionState = {
@@ -21,7 +24,7 @@ export default function OneShotDetail() {
 
   const entries = useAppStore((s) => s.oneShotEntries);
   const sessions = useAppStore((s) => s.sessions);
-  const repos = useAppStore((s) => s.repos);
+  const resumeOneShot = useAppStore((s) => s.resumeOneShot);
 
   const entry = oneshotId ? entries.get(oneshotId) : undefined;
   const session =
@@ -32,15 +35,13 @@ export default function OneShotDetail() {
     [session.events],
   );
 
-  const parentRepo = entry
-    ? repos.find((r) => r.id === entry.parentRepoId)
-    : undefined;
+  const ctxPeak = useMemo(
+    () => maxContextPercent(groupEventsByIteration(session.events)),
+    [session.events],
+  );
+  const ctxPercent = ctxPeak > 0 ? ctxPeak : null;
 
-  const repoPath = parentRepo
-    ? parentRepo.type === "local"
-      ? parentRepo.path
-      : parentRepo.remotePath
-    : undefined;
+  const repoPath = entry?.worktreePath;
 
   if (!entry) {
     return (
@@ -100,11 +101,45 @@ export default function OneShotDetail() {
         </div>
       )}
 
-      <EventsList
-        events={session.events}
-        isLive={session.running}
-        repoPath={repoPath}
-      />
+      {session.events.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 rounded-md border border-dashed border-border text-center mt-4">
+          {entry.status === "running" ? (
+            <>
+              <Loader2 className="size-8 text-muted-foreground mb-3 animate-spin" />
+              <p className="text-sm font-medium animate-pulse">Session starting...</p>
+            </>
+          ) : entry.status === "failed" && entry.worktreePath ? (
+            <>
+              <AlertTriangle className="size-8 text-muted-foreground mb-3" />
+              <p className="text-sm font-medium">Session was interrupted</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => resumeOneShot(oneshotId!)}
+              >
+                Resume
+              </Button>
+            </>
+          ) : entry.status === "failed" ? (
+            <>
+              <AlertTriangle className="size-8 text-muted-foreground mb-3" />
+              <p className="text-sm font-medium">Session failed before starting</p>
+            </>
+          ) : (
+            <>
+              <Terminal className="size-8 text-muted-foreground mb-3" />
+              <p className="text-sm font-medium">No events recorded</p>
+            </>
+          )}
+        </div>
+      ) : (
+        <EventsList
+          events={session.events}
+          isLive={session.running}
+          repoPath={repoPath}
+        />
+      )}
 
       {session.error && (
         <section>
@@ -141,6 +176,16 @@ export default function OneShotDetail() {
             <dd className="m-0 text-sm font-mono">
               ${session.trace.total_cost_usd.toFixed(4)}
             </dd>
+            {ctxPercent !== null && (
+              <>
+                <dt className="text-muted-foreground text-sm">Peak Context</dt>
+                <dd className="m-0 text-sm font-mono">
+                  <span style={{ color: sessionContextColor(ctxPercent) }}>
+                    {ctxPercent}%
+                  </span>
+                </dd>
+              </>
+            )}
             <dt className="text-muted-foreground text-sm">Session ID</dt>
             <dd className="m-0 text-sm font-mono">
               {session.trace.session_id}

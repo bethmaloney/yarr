@@ -387,6 +387,7 @@ pub(crate) struct SessionResult {
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct OneShotResult {
     pub oneshot_id: String,
+    pub session_id: String,
 }
 
 #[tauri::command]
@@ -403,10 +404,13 @@ async fn run_oneshot(
     completion_signal: String,
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
+    plans_dir: Option<String>,
 ) -> Result<OneShotResult, String> {
     let oneshot_id = oneshot::generate_oneshot_id();
     let cancel_token = CancellationToken::new();
     let session_id = Uuid::new_v4().to_string();
+    let session_id_for_result = session_id.clone();
+    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, repo_type = ?repo, "run_oneshot called");
     {
         let active = app.state::<ActiveSessions>();
         active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
@@ -435,11 +439,13 @@ async fn run_oneshot(
                 completion_signal,
                 checks: checks.unwrap_or_default(),
                 git_sync,
+                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
             };
 
             let base_dir = match app.path().app_data_dir() {
                 Ok(d) => d,
                 Err(e) => {
+                    tracing::error!(oneshot_id = %oneshot_id, error = %e, "failed to resolve app data dir");
                     app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
                     return Err(e.to_string());
                 }
@@ -476,7 +482,9 @@ async fn run_oneshot(
                 });
 
                 let runtime = default_runtime();
-                let _result = runner.run(runtime.as_ref()).await;
+                if let Err(e) = runner.run(runtime.as_ref()).await {
+                    tracing::error!(oneshot_id = %oneshot_id_bg, error = %e, "oneshot runner failed");
+                }
             });
 
             // Update the placeholder with the real JoinHandle
@@ -488,9 +496,190 @@ async fn run_oneshot(
                 }
             }
 
-            Ok(OneShotResult { oneshot_id })
+            Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
         }
         RepoType::Ssh { .. } => {
+            tracing::warn!(oneshot_id = %oneshot_id, repo_id = %repo_id, "1-shot is not supported for SSH repos");
+            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+            Err("1-shot is not supported for SSH repos".to_string())
+        }
+    }
+}
+
+#[tauri::command]
+async fn resume_oneshot(
+    app: tauri::AppHandle,
+    oneshot_id: String,
+    repo_id: String,
+    repo: RepoType,
+    title: String,
+    prompt: String,
+    model: String,
+    merge_strategy: oneshot::MergeStrategy,
+    env_vars: Option<HashMap<String, String>>,
+    max_iterations: u32,
+    completion_signal: String,
+    checks: Option<Vec<session::Check>>,
+    git_sync: Option<session::GitSyncConfig>,
+    plans_dir: Option<String>,
+    worktree_path: String,
+    branch: String,
+    old_session_id: String,
+) -> Result<OneShotResult, String> {
+    let session_id = Uuid::new_v4().to_string();
+    let session_id_for_result = session_id.clone();
+    let cancel_token = CancellationToken::new();
+    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, repo_type = ?repo, "resume_oneshot called");
+    {
+        let active = app.state::<ActiveSessions>();
+        active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
+    }
+
+    match &repo {
+        RepoType::Local { path } => {
+            // Validate worktree_path to prevent shell injection
+            if worktree_path.contains(';') || worktree_path.contains('$') || worktree_path.contains('`')
+                || worktree_path.contains('|') || worktree_path.contains('&') || worktree_path.contains('\n')
+                || worktree_path.contains('\'') || worktree_path.contains('"') || worktree_path.contains('\\')
+                || worktree_path.contains('(') || worktree_path.contains(')') {
+                tracing::warn!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "resume_oneshot: invalid worktree path");
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                return Err("Invalid worktree path".to_string());
+            }
+
+            if branch.contains(';') || branch.contains('$') || branch.contains('`')
+                || branch.contains('|') || branch.contains('&') || branch.contains('\n')
+                || branch.contains('\'') || branch.contains('"') || branch.contains('\\')
+                || branch.contains(' ') || branch.contains('(') || branch.contains(')') {
+                tracing::warn!(oneshot_id = %oneshot_id, branch = %branch, "resume_oneshot: invalid branch name");
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                return Err("Invalid branch name".to_string());
+            }
+
+            let repo_path_buf = PathBuf::from(path);
+
+            // Pre-warm env cache and emit warning if snapshot failed
+            let runtime = default_runtime();
+            let _ = runtime.resolve_env().await;
+            if let Some(warning) = runtime.env_warning() {
+                let _ = app.emit("env-warning", &warning);
+            }
+
+            // Load events from previous session
+            let base_dir = match app.path().app_data_dir() {
+                Ok(d) => d,
+                Err(e) => {
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                    return Err(e.to_string());
+                }
+            };
+            let events = match TraceCollector::read_events(&base_dir, &oneshot_id, &old_session_id) {
+                Ok(events) => {
+                    tracing::info!(oneshot_id = %oneshot_id, event_count = events.len(), "loaded events from previous session");
+                    events
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to read events for resume (oneshot_id={}, session_id={}): {}. Will re-run all phases.", oneshot_id, old_session_id, e);
+                    Vec::new()
+                }
+            };
+
+            // Detect which phases to skip
+            let resume_state = oneshot::detect_resume_phase(
+                &events,
+                PathBuf::from(&worktree_path),
+                branch.clone(),
+            );
+            tracing::info!(
+                oneshot_id = %oneshot_id,
+                skip_design = resume_state.skip_design,
+                skip_implementation = resume_state.skip_implementation,
+                plan_file = ?resume_state.plan_file,
+                "detected resume phase"
+            );
+
+            // Verify worktree still exists on disk
+            tracing::info!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "verifying worktree exists");
+            let wt_check = runtime
+                .run_command(
+                    &format!("test -d {}", worktree_path),
+                    &repo_path_buf,
+                    std::time::Duration::from_secs(10),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            if wt_check.exit_code != 0 {
+                tracing::error!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "worktree no longer exists on disk");
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                return Err("Worktree no longer exists on disk".to_string());
+            }
+
+            let config = oneshot::OneShotConfig {
+                repo_id: repo_id.clone(),
+                repo_path: repo_path_buf,
+                title,
+                prompt,
+                model,
+                merge_strategy,
+                env_vars: env_vars.unwrap_or_default(),
+                max_iterations,
+                completion_signal,
+                checks: checks.unwrap_or_default(),
+                git_sync,
+                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+            };
+
+            let collector = TraceCollector::new(base_dir, &oneshot_id);
+
+            let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
+            let app_handle = app.clone();
+            let oneshot_id_clone = oneshot_id.clone();
+            let runner = OneShotRunner::new(config, collector, cancel_token)
+                .abort_registry(abort_registry)
+                .on_event(Box::new(move |event| {
+                    let _ = app_handle.emit("session-event", TaggedSessionEvent {
+                        repo_id: oneshot_id_clone.clone(),
+                        event: event.clone(),
+                    });
+                }))
+                .with_resume_state(resume_state)
+                .with_session_id(session_id);
+
+            // Spawn as a background task so we return immediately
+            let app_bg = app.clone();
+            let oneshot_id_bg = oneshot_id.clone();
+            let join_handle = tokio::spawn(async move {
+                let _guard = scopeguard::guard((), {
+                    let app = app_bg.clone();
+                    let oneshot_id = oneshot_id_bg.clone();
+                    move |_| {
+                        let app = app.clone();
+                        let oneshot_id = oneshot_id.clone();
+                        tokio::spawn(async move {
+                            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                        });
+                    }
+                });
+
+                let runtime = default_runtime();
+                if let Err(e) = runner.run(runtime.as_ref()).await {
+                    tracing::error!(oneshot_id = %oneshot_id_bg, error = %e, "resume oneshot runner failed");
+                }
+            });
+
+            // Update the placeholder with the real JoinHandle
+            {
+                let active = app.state::<ActiveSessions>();
+                let mut sessions = active.tokens.lock().await;
+                if let Some(handle) = sessions.get_mut(&oneshot_id) {
+                    handle.join_handle = join_handle;
+                }
+            }
+
+            Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
+        }
+        RepoType::Ssh { .. } => {
+            tracing::warn!(oneshot_id = %oneshot_id, repo_id = %repo_id, "resume_oneshot: 1-shot is not supported for SSH repos");
             app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
             Err("1-shot is not supported for SSH repos".to_string())
         }
@@ -900,6 +1089,52 @@ pub(crate) async fn move_plan_to_completed_impl(
     }
 
     tracing::info!(plans_dir = %plans_dir, filename = %filename, "plan moved to completed");
+
+    // Git add both old (deleted) and new (added) paths
+    let add_cmd = format!(
+        "git add {escaped_plans_dir}/{escaped_filename} {escaped_plans_dir}/completed/{escaped_filename}"
+    );
+    let add_output = rt.run_command(&add_cmd, working_dir, timeout).await;
+    if let Ok(output) = &add_output {
+        if output.exit_code != 0 {
+            tracing::warn!(stderr = %output.stderr, "git add for completed plan failed");
+            return Ok(()); // Move succeeded, git commit is best-effort
+        }
+    } else {
+        tracing::warn!("git add command failed for completed plan");
+        return Ok(());
+    }
+
+    // Commit
+    let commit_msg = ssh_shell_escape(&format!("move plan to completed: {}", filename));
+    let commit_cmd = format!("git commit -m {commit_msg} --no-verify");
+    let commit_output = rt.run_command(&commit_cmd, working_dir, timeout).await;
+    if let Ok(output) = &commit_output {
+        if output.exit_code != 0 {
+            tracing::warn!(stderr = %output.stderr, "git commit for completed plan failed");
+            return Ok(());
+        }
+    } else {
+        tracing::warn!("git commit command failed for completed plan");
+        return Ok(());
+    }
+
+    tracing::info!(filename = %filename, "committed completed plan");
+
+    // Push (best-effort)
+    let push_output = rt.run_command("git push", working_dir, timeout).await;
+    match push_output {
+        Ok(output) if output.exit_code == 0 => {
+            tracing::info!(filename = %filename, "pushed completed plan");
+        }
+        Ok(output) => {
+            tracing::warn!(stderr = %output.stderr, filename = %filename, "git push for completed plan failed (will need manual push)");
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, filename = %filename, "git push command failed for completed plan");
+        }
+    }
+
     Ok(())
 }
 
@@ -951,7 +1186,7 @@ pub fn run() {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
         .manage(SshEnvCache::default())
-        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, resume_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
         .build(tauri::generate_context!())
         .expect("error building tauri application")
         .run(|app, event| {
@@ -977,6 +1212,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::{CommandOutput, MockRuntime};
     use session::SessionEvent;
     use trace::SessionOutcome;
 
@@ -1288,6 +1524,7 @@ mod tests {
             completion_signal: "<promise>COMPLETE</promise>".to_string(),
             checks: vec![],
             git_sync: None,
+            plans_dir: "docs/plans/".to_string(),
         };
 
         assert_eq!(config.repo_id, "repo-123");
@@ -1309,6 +1546,8 @@ mod tests {
                 parent_repo_id: "repo-1".to_string(),
                 prompt: "Add feature X".to_string(),
                 merge_strategy: "merge_to_main".to_string(),
+                worktree_path: "/tmp/worktrees/repo-1".to_string(),
+                branch: "yarr/add-feature-x-abc123".to_string(),
             },
         };
         let json = serde_json::to_value(&event).expect("serialization should succeed");
@@ -1316,6 +1555,8 @@ mod tests {
         assert_eq!(json["event"]["kind"], "one_shot_started");
         assert_eq!(json["event"]["title"], "Add feature X");
         assert_eq!(json["event"]["merge_strategy"], "merge_to_main");
+        assert_eq!(json["event"]["worktree_path"], "/tmp/worktrees/repo-1");
+        assert_eq!(json["event"]["branch"], "yarr/add-feature-x-abc123");
 
         // DesignPhaseStarted
         let event = TaggedSessionEvent {
@@ -1926,12 +2167,147 @@ mod tests {
             "should return Err when source file does not exist");
     }
 
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_commits_and_pushes() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. mv succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 2. git add succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. git commit succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git push succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+        ];
+
+        let result =
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md").await;
+
+        assert!(
+            result.is_ok(),
+            "should return Ok when mv, git add, commit, and push all succeed"
+        );
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_ok_when_git_add_fails() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. mv succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 2. git add fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "git add failed".to_string(),
+            },
+        ];
+
+        let result =
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md").await;
+
+        assert!(
+            result.is_ok(),
+            "should return Ok even when git add fails — git steps are best-effort"
+        );
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_ok_when_push_fails() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. mv succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 2. git add succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 3. git commit succeeds
+            CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            // 4. git push fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "push rejected".to_string(),
+            },
+        ];
+
+        let result =
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md").await;
+
+        assert!(
+            result.is_ok(),
+            "should return Ok even when git push fails — git steps are best-effort"
+        );
+    }
+
+    #[tokio::test]
+    async fn move_plan_to_completed_impl_mv_fails_returns_err() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![
+            // 1. mv fails
+            CommandOutput {
+                exit_code: 1,
+                stdout: String::new(),
+                stderr: "No such file or directory".to_string(),
+            },
+        ];
+
+        let result =
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "nonexistent.md").await;
+
+        assert!(
+            result.is_err(),
+            "should return Err when the mv command itself fails"
+        );
+    }
+
     // --- OneShotResult tests ---
 
     #[test]
     fn oneshot_result_serializes_with_oneshot_id() {
         let result = OneShotResult {
             oneshot_id: "oneshot-a1b2c3".to_string(),
+            session_id: "sess-test".to_string(),
         };
 
         let json = serde_json::to_value(&result).expect("serialization should succeed");
@@ -1944,6 +2320,7 @@ mod tests {
     fn oneshot_result_clone_produces_equal_json() {
         let result = OneShotResult {
             oneshot_id: "oneshot-d4e5f6".to_string(),
+            session_id: "sess-test".to_string(),
         };
 
         let cloned = result.clone();
@@ -1961,6 +2338,7 @@ mod tests {
     fn oneshot_result_oneshot_id_is_string() {
         let result = OneShotResult {
             oneshot_id: "oneshot-aabbcc".to_string(),
+            session_id: "sess-test".to_string(),
         };
 
         let json = serde_json::to_value(&result).expect("serialization should succeed");
@@ -1978,6 +2356,8 @@ mod tests {
                 parent_repo_id: "repo-original".to_string(),
                 prompt: "Fix the login bug".to_string(),
                 merge_strategy: "branch".to_string(),
+                worktree_path: "/tmp/worktrees/repo-original".to_string(),
+                branch: "yarr/fix-bug-x1y2z3".to_string(),
             },
         };
 
@@ -1990,6 +2370,8 @@ mod tests {
         assert_eq!(json["event"]["kind"], "one_shot_started");
         assert_eq!(json["event"]["title"], "Fix bug");
         assert_eq!(json["event"]["parent_repo_id"], "repo-original");
+        assert_eq!(json["event"]["worktree_path"], "/tmp/worktrees/repo-original");
+        assert_eq!(json["event"]["branch"], "yarr/fix-bug-x1y2z3");
     }
 
     // --- SessionHandle and ActiveSessions refactor tests ---
@@ -2971,6 +3353,40 @@ mod tests {
             }
             other => panic!("expected SessionComplete, got {:?}", other),
         }
+    }
+
+    // --- OneShotResult session_id tests (TDD — field does not exist yet) ---
+
+    #[test]
+    fn oneshot_result_serializes_with_session_id() {
+        let result = OneShotResult {
+            oneshot_id: "oneshot-a1b2c3".to_string(),
+            session_id: "sess-abc123".to_string(),
+        };
+
+        let json = serde_json::to_value(&result).expect("serialization should succeed");
+
+        assert!(
+            json.get("session_id").is_some(),
+            "JSON should contain 'session_id' field"
+        );
+        assert_eq!(json["session_id"], "sess-abc123");
+    }
+
+    #[test]
+    fn oneshot_result_session_id_is_string() {
+        let result = OneShotResult {
+            oneshot_id: "oneshot-d4e5f6".to_string(),
+            session_id: "sess-xyz789".to_string(),
+        };
+
+        let json = serde_json::to_value(&result).expect("serialization should succeed");
+
+        assert!(
+            json["session_id"].is_string(),
+            "session_id should serialize as a JSON string, got: {:?}",
+            json["session_id"]
+        );
     }
 
     #[tokio::test]

@@ -115,28 +115,36 @@ struct SshAbortHandle {
 
 impl AbortHandle for SshAbortHandle {
     fn abort(&self) {
-        let kill_cmd = format!("tmux kill-session -t yarr-{}", self.session_id);
-        tracing::info!("Killing remote tmux session yarr-{}", self.session_id);
-        if cfg!(target_os = "windows") {
-            let ssh_str = format!(
-                "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} \\$SHELL -lc {}",
-                shell_escape(&self.ssh_host),
-                shell_escape(&kill_cmd)
-            );
-            let _ = std::process::Command::new("wsl")
-                .args(["-e", "bash", "-lc", &ssh_str])
-                .output();
-        } else {
-            let _ = std::process::Command::new("ssh")
-                .arg("-o")
-                .arg("BatchMode=yes")
-                .arg("-o")
-                .arg("StrictHostKeyChecking=accept-new")
-                .arg(&self.ssh_host)
-                .arg(format!("$SHELL -lc {}", shell_escape(&kill_cmd)))
-                .output();
-        }
+        // Abort the tokio task immediately — don't wait for SSH/WSL kill commands
         self.task_handle.abort();
+
+        // Fire-and-forget the kill commands in a background thread so they
+        // can't block the runtime if WSL/SSH is unresponsive.
+        let ssh_host = self.ssh_host.clone();
+        let session_id = self.session_id.clone();
+        std::thread::spawn(move || {
+            let kill_cmd = format!("tmux kill-session -t yarr-{}", session_id);
+            tracing::info!("Killing remote tmux session yarr-{}", session_id);
+            if cfg!(target_os = "windows") {
+                let ssh_str = format!(
+                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} \\$SHELL -lc {}",
+                    shell_escape(&ssh_host),
+                    shell_escape(&kill_cmd)
+                );
+                let _ = std::process::Command::new("wsl")
+                    .args(["-e", "bash", "-lc", &ssh_str])
+                    .output();
+            } else {
+                let _ = std::process::Command::new("ssh")
+                    .arg("-o")
+                    .arg("BatchMode=yes")
+                    .arg("-o")
+                    .arg("StrictHostKeyChecking=accept-new")
+                    .arg(&ssh_host)
+                    .arg(format!("$SHELL -lc {}", shell_escape(&kill_cmd)))
+                    .output();
+            }
+        });
     }
 }
 
@@ -372,9 +380,16 @@ impl RuntimeProvider for SshRuntime {
     }
 
     async fn spawn_claude(&self, invocation: &ClaudeInvocation) -> Result<RunningProcess> {
+        tracing::info!(
+            ssh_host = %self.ssh_host,
+            remote_path = %self.remote_path,
+            model = ?invocation.model,
+            "ssh spawn_claude starting"
+        );
         let env = self.resolve_env().await?;
         let start = std::time::Instant::now();
         let session_id = uuid::Uuid::new_v4().to_string();
+        tracing::info!(ssh_host = %self.ssh_host, tmux_session = %session_id, "setting up remote log directory");
 
         // Create log directory and touch the log file so tail -f doesn't race
         let setup_cmd = format!(
@@ -383,18 +398,22 @@ impl RuntimeProvider for SshRuntime {
         let setup_output = ssh_command(&self.ssh_host, &setup_cmd).output().await?;
         if !setup_output.status.success() {
             let stderr = String::from_utf8_lossy(&setup_output.stderr);
+            tracing::error!(ssh_host = %self.ssh_host, stderr = %stderr, "failed to set up remote log directory");
             anyhow::bail!("Failed to set up remote log directory: {}", stderr);
         }
 
         // Start tmux session with resolved env
+        tracing::info!(ssh_host = %self.ssh_host, tmux_session = %session_id, "starting remote tmux session");
         let tmux_output = self
             .build_tmux_command(&session_id, invocation, &env)
             .output()
             .await?;
         if !tmux_output.status.success() {
             let stderr = String::from_utf8_lossy(&tmux_output.stderr);
+            tracing::error!(ssh_host = %self.ssh_host, tmux_session = %session_id, stderr = %stderr, "failed to start remote tmux session");
             anyhow::bail!("Failed to start remote tmux session: {}", stderr);
         }
+        tracing::info!(ssh_host = %self.ssh_host, tmux_session = %session_id, "remote tmux session started, tailing log");
 
         // Tail the log file
         let mut child = self
@@ -451,21 +470,21 @@ impl RuntimeProvider for SshRuntime {
     }
 
     async fn health_check(&self) -> Result<()> {
+        tracing::debug!(ssh_host = %self.ssh_host, "ssh health check starting");
         let env = self.resolve_env().await?;
         let output = self.build_health_check_command(&env).output().await?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         if !stdout.contains("OK") {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "SSH health check failed on {}: {}",
-                self.ssh_host,
-                if stderr.trim().is_empty() {
-                    "tmux or claude not found".to_string()
-                } else {
-                    stderr.trim().to_string()
-                }
-            );
+            let reason = if stderr.trim().is_empty() {
+                "tmux or claude not found".to_string()
+            } else {
+                stderr.trim().to_string()
+            };
+            tracing::error!(ssh_host = %self.ssh_host, reason = %reason, "ssh health check failed");
+            anyhow::bail!("SSH health check failed on {}: {}", self.ssh_host, reason);
         }
+        tracing::debug!(ssh_host = %self.ssh_host, "ssh health check passed");
         Ok(())
     }
 
@@ -475,6 +494,7 @@ impl RuntimeProvider for SshRuntime {
         working_dir: &std::path::Path,
         timeout: std::time::Duration,
     ) -> Result<CommandOutput> {
+        tracing::debug!(ssh_host = %self.ssh_host, command = %command, working_dir = %working_dir.display(), timeout_secs = timeout.as_secs(), "ssh run_command");
         let env = self.resolve_env().await?;
         let child = self
             .build_run_command(command, working_dir, &env)
@@ -493,6 +513,7 @@ impl RuntimeProvider for SshRuntime {
             Ok(Err(e)) => Err(e.into()),
             Err(_) => {
                 // child is dropped here, kill_on_drop(true) ensures cleanup
+                tracing::warn!(ssh_host = %self.ssh_host, command = %command, timeout_secs = timeout.as_secs(), "ssh command timed out");
                 anyhow::bail!("Command timed out after {:?}", timeout)
             }
         }

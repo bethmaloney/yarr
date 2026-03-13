@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/command";
 import { toast } from "sonner";
 import { sessionContextColor } from "../context-bar";
+import { groupEventsByIteration, maxContextPercent } from "../iteration-groups";
 import { parsePlanPreview, planDisplayName } from "../plan-preview";
 import {
   Cpu,
@@ -109,6 +110,7 @@ export default function RepoDetail() {
   const [createBranch, setCreateBranch] = useState(true);
   const [autoFetch, setAutoFetch] = useState(true);
   const [plansDir, setPlansDir] = useState("");
+  const [movePlansToCompleted, setMovePlansToCompleted] = useState(true);
   const [gitSyncEnabled, setGitSyncEnabled] = useState(false);
   const [gitSyncModel, setGitSyncModel] = useState("");
   const [gitSyncMaxRetries, setGitSyncMaxRetries] = useState(3);
@@ -176,6 +178,7 @@ export default function RepoDetail() {
     setCreateBranch(repo.createBranch ?? true);
     setAutoFetch(repo.autoFetch ?? (repo.type === "local" ? true : false));
     setPlansDir(repo.plansDir ?? "");
+    setMovePlansToCompleted(repo.movePlansToCompleted ?? true);
     setGitSyncEnabled(repo.gitSync?.enabled ?? false);
     setGitSyncModel(repo.gitSync?.model ?? "");
     setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
@@ -374,6 +377,7 @@ export default function RepoDetail() {
       checks,
       createBranch,
       autoFetch,
+      movePlansToCompleted,
       plansDir: plansDir || undefined,
       gitSync: {
         enabled: gitSyncEnabled,
@@ -525,8 +529,6 @@ export default function RepoDetail() {
       );
       if (oneshotId) {
         navigate(`/oneshot/${oneshotId}`);
-      } else {
-        toast.error("Failed to launch 1-shot");
       }
     } finally {
       setOneShotSubmitting(false);
@@ -572,14 +574,12 @@ export default function RepoDetail() {
     setPlanSearch("");
   }
 
-  // Context percentage computation
-  const ctxPercent =
-    session.trace?.context_window && session.trace?.final_context_tokens
-      ? Math.round(
-          (session.trace.final_context_tokens / session.trace.context_window) *
-            100,
-        )
-      : null;
+  // Context percentage computation — peak across all iterations
+  const ctxPeak = useMemo(
+    () => maxContextPercent(groupEventsByIteration(session.events)),
+    [session.events],
+  );
+  const ctxPercent = ctxPeak > 0 ? ctxPeak : null;
 
   return (
     <main className="max-w-[900px] mx-auto p-8">
@@ -918,6 +918,18 @@ export default function RepoDetail() {
                   <span className="text-xs text-muted-foreground font-normal">
                     Automatically fetch from remote every 30 seconds
                   </span>
+                </Label>
+                <Label
+                  htmlFor="move-plans-completed"
+                  className="flex items-center gap-2 text-sm font-normal"
+                >
+                  <Checkbox
+                    id="move-plans-completed"
+                    checked={movePlansToCompleted}
+                    onCheckedChange={(v) => setMovePlansToCompleted(v === true)}
+                    disabled={session.running}
+                  />
+                  Move plans to completed folder after run
                 </Label>
                 <fieldset
                   disabled={session.running}
@@ -1571,7 +1583,7 @@ export default function RepoDetail() {
             <dd>${session.trace.total_cost_usd.toFixed(4)}</dd>
             {ctxPercent !== null && (
               <>
-                <dt className="text-muted-foreground">Context</dt>
+                <dt className="text-muted-foreground">Peak Context</dt>
                 <dd>
                   <span style={{ color: sessionContextColor(ctxPercent) }}>
                     {ctxPercent}%

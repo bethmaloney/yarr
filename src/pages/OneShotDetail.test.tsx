@@ -26,6 +26,8 @@ const { mockUseAppStore } = vi.hoisted(() => ({
   mockUseAppStore: vi.fn(),
 }));
 
+const mockResumeOneShot = vi.fn();
+
 // ---------------------------------------------------------------------------
 // vi.mock declarations
 // ---------------------------------------------------------------------------
@@ -89,20 +91,6 @@ function makeLocalRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
   } as RepoConfig;
 }
 
-function makeSshRepo(overrides: Record<string, unknown> = {}): RepoConfig {
-  return {
-    type: "ssh",
-    id: "repo-1",
-    sshHost: "dev-server",
-    remotePath: "/home/beth/repos/remote-project",
-    name: "remote-project",
-    model: "opus",
-    maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
-    checks: [],
-    ...overrides,
-  } as RepoConfig;
-}
 
 function makeEntry(overrides: Partial<OneShotEntry> = {}): OneShotEntry {
   return {
@@ -157,6 +145,7 @@ interface MockState {
   repos: RepoConfig[];
   sessions: Map<string, SessionState>;
   oneShotEntries: Map<string, OneShotEntry>;
+  resumeOneShot?: ReturnType<typeof vi.fn>;
 }
 
 function setupMockState(overrides: Partial<MockState> = {}): MockState {
@@ -164,6 +153,7 @@ function setupMockState(overrides: Partial<MockState> = {}): MockState {
     repos: [],
     sessions: new Map(),
     oneShotEntries: new Map(),
+    resumeOneShot: mockResumeOneShot,
     ...overrides,
   };
 
@@ -393,7 +383,7 @@ describe("OneShotDetail", () => {
         sessions: new Map([
           [
             "oneshot-abc123",
-            makeSessionState({ running: true, events: [] }),
+            makeSessionState({ running: true, events: [{ kind: "one_shot_started" }] }),
           ],
         ]),
       });
@@ -496,7 +486,7 @@ describe("OneShotDetail", () => {
         sessions: new Map([
           [
             "oneshot-abc123",
-            makeSessionState({ running: false, events: [] }),
+            makeSessionState({ running: false, events: [{ kind: "one_shot_started" }] }),
           ],
         ]),
       });
@@ -639,7 +629,32 @@ describe("OneShotDetail", () => {
       expect(eventsList).toHaveAttribute("data-event-count", "3");
     });
 
-    it("passes correct repoPath derived from parent local repo", () => {
+    it("passes worktreePath as repoPath for 1-shot sessions", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              parentRepoId: "repo-1",
+              worktreePath: "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const eventsList = screen.getByTestId("events-list");
+      expect(eventsList).toHaveAttribute(
+        "data-repo-path",
+        "/home/beth/.yarr/worktrees/abc123-oneshot-def/",
+      );
+    });
+
+    it("passes undefined repoPath when worktreePath is not set", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         oneShotEntries: new Map([
@@ -649,38 +664,13 @@ describe("OneShotDetail", () => {
           ],
         ]),
         sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [] })],
+          ["oneshot-abc123", makeSessionState({ events: [{ kind: "one_shot_started" }] })],
         ]),
       });
       renderOneShotDetail();
 
       const eventsList = screen.getByTestId("events-list");
-      expect(eventsList).toHaveAttribute(
-        "data-repo-path",
-        "/home/beth/repos/my-project",
-      );
-    });
-
-    it("passes remotePath as repoPath for SSH parent repo", () => {
-      setupMockState({
-        repos: [makeSshRepo()],
-        oneShotEntries: new Map([
-          [
-            "oneshot-abc123",
-            makeEntry({ parentRepoId: "repo-1" }),
-          ],
-        ]),
-        sessions: new Map([
-          ["oneshot-abc123", makeSessionState({ events: [] })],
-        ]),
-      });
-      renderOneShotDetail();
-
-      const eventsList = screen.getByTestId("events-list");
-      expect(eventsList).toHaveAttribute(
-        "data-repo-path",
-        "/home/beth/repos/remote-project",
-      );
+      expect(eventsList).not.toHaveAttribute("data-repo-path");
     });
   });
 
@@ -723,6 +713,162 @@ describe("OneShotDetail", () => {
       const errorText = screen.getByText("Process crashed with signal SIGKILL");
       expect(errorText).toBeInTheDocument();
       expect(errorText.tagName).toBe("PRE");
+    });
+  });
+
+  // =========================================================================
+  // Empty state
+  // =========================================================================
+
+  describe("empty state", () => {
+    it("shows 'Session starting...' when running with no events", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "running" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: true, events: [] }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(screen.getByText(/Session starting/)).toBeInTheDocument();
+      expect(screen.queryByTestId("events-list")).not.toBeInTheDocument();
+    });
+
+    it("shows 'Session was interrupted' with Resume button when failed with worktreePath", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              status: "failed",
+              worktreePath: "/tmp/worktrees/oneshot-abc123",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: false, events: [] }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.getByText(/Session was interrupted/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /resume/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("events-list")).not.toBeInTheDocument();
+    });
+
+    it("Resume button calls resumeOneShot with oneshotId", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          [
+            "oneshot-abc123",
+            makeEntry({
+              status: "failed",
+              worktreePath: "/tmp/worktrees/oneshot-abc123",
+            }),
+          ],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: false, events: [] }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      const resumeButton = screen.getByRole("button", { name: /resume/i });
+      fireEvent.click(resumeButton);
+
+      expect(mockResumeOneShot).toHaveBeenCalledWith("oneshot-abc123");
+    });
+
+    it("shows 'Session failed before starting' when failed without worktreePath", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "failed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: false, events: [] }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(
+        screen.getByText(/Session failed before starting/),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("events-list")).not.toBeInTheDocument();
+    });
+
+    it("shows 'No events recorded' for non-running session with no events and no trace", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: false, events: [], trace: null }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(screen.getByText(/No events recorded/)).toBeInTheDocument();
+      expect(screen.queryByTestId("events-list")).not.toBeInTheDocument();
+    });
+
+    it("shows EventsList when events exist (no empty state)", () => {
+      const events: SessionEvent[] = [
+        { kind: "one_shot_started" },
+        { kind: "design_phase_started" },
+      ];
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "running" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({ running: true, events }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      expect(screen.getByTestId("events-list")).toBeInTheDocument();
+      expect(
+        screen.queryByText(/Session starting/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Session was interrupted/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Session failed before starting/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/No events recorded/),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -807,6 +953,278 @@ describe("OneShotDetail", () => {
       renderOneShotDetail();
 
       expect(screen.getByText("Implement feature X")).toBeInTheDocument();
+    });
+  });
+
+  // =========================================================================
+  // 9. Peak context display
+  // =========================================================================
+
+  describe("peak context display", () => {
+    it('shows "Peak Context" with percentage when events have context data', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.15,
+                    usage: {
+                      input_tokens: 50000,
+                      output_tokens: 1000,
+                      cache_read_input_tokens: 20000,
+                      cache_creation_input_tokens: 5000,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // inputTokens = 50000 + 20000 + 5000 = 75000; 75000/200000 = 37.5 → 38%
+      expect(screen.getByText(/Peak Context/)).toBeInTheDocument();
+      expect(screen.getByText(/38%/)).toBeInTheDocument();
+    });
+
+    it('does not show "Peak Context" when no context data in events', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.05,
+                    usage: {
+                      input_tokens: 5000,
+                      cache_read_input_tokens: 0,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 500,
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // No model_usage means no contextWindow, so maxContextPercent returns 0
+      // and "Peak Context" label should not appear
+      expect(screen.queryByText(/Peak Context/)).not.toBeInTheDocument();
+    });
+
+    it('does not show "Peak Context" when session is running', () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "running" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: true,
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.15,
+                    usage: {
+                      input_tokens: 150000,
+                      output_tokens: 1000,
+                      cache_read_input_tokens: 20000,
+                      cache_creation_input_tokens: 5000,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // Result section (and thus Peak Context) should not show when running
+      expect(screen.queryByText("Result")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Peak Context/)).not.toBeInTheDocument();
+    });
+
+    it("shows the maximum across multiple iterations", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.10,
+                    usage: {
+                      input_tokens: 170000,
+                      cache_read_input_tokens: 10000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 800,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+                {
+                  kind: "iteration_started",
+                  iteration: 2,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 2,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.08,
+                    usage: {
+                      input_tokens: 40000,
+                      cache_read_input_tokens: 5000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 600,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // Iteration 1: (170000+10000+0)/200000 = 90%
+      // Iteration 2: (40000+5000+0)/200000 = 23%
+      // Peak should be 90%, not 23%
+      expect(screen.getByText(/90%/)).toBeInTheDocument();
+      expect(screen.queryByText(/23%/)).not.toBeInTheDocument();
+    });
+
+    it("applies correct color styling based on percentage", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        oneShotEntries: new Map([
+          ["oneshot-abc123", makeEntry({ status: "completed" })],
+        ]),
+        sessions: new Map([
+          [
+            "oneshot-abc123",
+            makeSessionState({
+              running: false,
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.15,
+                    usage: {
+                      input_tokens: 170000,
+                      output_tokens: 1000,
+                      cache_read_input_tokens: 10000,
+                      cache_creation_input_tokens: 0,
+                    },
+                    model_usage: {
+                      "claude-opus-4-6": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderOneShotDetail();
+
+      // inputTokens = 170000 + 10000 + 0 = 180000; 180000/200000 = 90%
+      // sessionContextColor(90) → "#f87171" (red, since >85%)
+      const percentSpan = screen.getByText(/90%/);
+      expect(percentSpan).toHaveStyle({ color: "#f87171" });
     });
   });
 });

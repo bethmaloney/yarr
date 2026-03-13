@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { groupEventsByIteration } from "./iteration-groups";
+import { groupEventsByIteration, maxContextPercent } from "./iteration-groups";
+import type { GroupedEvents, IterationGroup } from "./iteration-groups";
 import type { SessionEvent } from "./types";
 
 function makeEvent(overrides: Partial<SessionEvent>): SessionEvent {
@@ -727,5 +728,107 @@ describe("groupEventsByIteration", () => {
       expect(result.iterations[0].iteration).toBe(1);
       expect(result.iterations[0].events).toHaveLength(1);
     });
+  });
+});
+
+function makeIteration(
+  overrides: Partial<IterationGroup>,
+): IterationGroup {
+  return {
+    iteration: 1,
+    events: [],
+    cost: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    contextWindow: 0,
+    startTs: undefined,
+    endTs: undefined,
+    ...overrides,
+  };
+}
+
+function makeGroupedEvents(
+  iterations: IterationGroup[],
+): GroupedEvents {
+  return { standaloneEvents: [], iterations };
+}
+
+describe("maxContextPercent", () => {
+  it("returns 0 for empty iterations array", () => {
+    const groups = makeGroupedEvents([]);
+    expect(maxContextPercent(groups)).toBe(0);
+  });
+
+  it("returns correct max when one iteration has higher usage than others", () => {
+    const groups = makeGroupedEvents([
+      makeIteration({
+        iteration: 1,
+        inputTokens: 50000,
+        contextWindow: 200000,
+      }), // Math.round((50000/200000)*100) = 25
+      makeIteration({
+        iteration: 2,
+        inputTokens: 160000,
+        contextWindow: 200000,
+      }), // Math.round((160000/200000)*100) = 80
+      makeIteration({
+        iteration: 3,
+        inputTokens: 90000,
+        contextWindow: 200000,
+      }), // Math.round((90000/200000)*100) = 45
+    ]);
+
+    expect(maxContextPercent(groups)).toBe(80);
+  });
+
+  it("returns 0 when no iterations have contextWindow > 0", () => {
+    const groups = makeGroupedEvents([
+      makeIteration({
+        iteration: 1,
+        inputTokens: 5000,
+        contextWindow: 0,
+      }),
+      makeIteration({
+        iteration: 2,
+        inputTokens: 10000,
+        contextWindow: 0,
+      }),
+    ]);
+
+    expect(maxContextPercent(groups)).toBe(0);
+  });
+
+  it("handles single iteration correctly", () => {
+    const groups = makeGroupedEvents([
+      makeIteration({
+        iteration: 1,
+        inputTokens: 120000,
+        contextWindow: 200000,
+      }), // Math.round((120000/200000)*100) = 60
+    ]);
+
+    expect(maxContextPercent(groups)).toBe(60);
+  });
+
+  it("skips iterations where contextWindow is 0 (doesn't divide by zero)", () => {
+    const groups = makeGroupedEvents([
+      makeIteration({
+        iteration: 1,
+        inputTokens: 50000,
+        contextWindow: 0,
+      }), // should be skipped
+      makeIteration({
+        iteration: 2,
+        inputTokens: 70000,
+        contextWindow: 200000,
+      }), // Math.round((70000/200000)*100) = 35
+      makeIteration({
+        iteration: 3,
+        inputTokens: 99999,
+        contextWindow: 0,
+      }), // should be skipped
+    ]);
+
+    expect(maxContextPercent(groups)).toBe(35);
   });
 });

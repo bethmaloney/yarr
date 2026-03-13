@@ -823,6 +823,115 @@ describe("RepoDetail", () => {
         });
       });
     });
+
+    describe("movePlansToCompleted setting", () => {
+      it("checkbox shows in settings with correct label", async () => {
+        setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          expect(
+            screen.getByRole("checkbox", { name: /move plans to completed/i }),
+          ).toBeInTheDocument();
+        });
+      });
+
+      it("defaults to checked when movePlansToCompleted is undefined", async () => {
+        setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          const checkbox = screen.getByRole("checkbox", {
+            name: /move plans to completed/i,
+          });
+          expect(checkbox).toBeChecked();
+        });
+      });
+
+      it("shows unchecked when movePlansToCompleted is false", async () => {
+        const repo = makeLocalRepo({
+          movePlansToCompleted: false,
+        } as Partial<RepoConfig>);
+        setupMockState({ repos: [repo] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          const checkbox = screen.getByRole("checkbox", {
+            name: /move plans to completed/i,
+          });
+          expect(checkbox).not.toBeChecked();
+        });
+      });
+
+      it("is disabled when session is running", async () => {
+        setupMockState({
+          repos: [makeLocalRepo()],
+          sessions: new Map([
+            ["test-repo", makeSessionState({ running: true })],
+          ]),
+        });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          const checkbox = screen.getByRole("checkbox", {
+            name: /move plans to completed/i,
+          });
+          expect(checkbox).toBeDisabled();
+        });
+      });
+
+      it("Save includes movePlansToCompleted true by default", async () => {
+        const state = setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          expect(
+            screen.getByRole("checkbox", { name: /move plans to completed/i }),
+          ).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+        expect(state.updateRepo).toHaveBeenCalledWith(
+          expect.objectContaining({ movePlansToCompleted: true }),
+        );
+      });
+
+      it("Save includes movePlansToCompleted false after unchecking", async () => {
+        const state = setupMockState({ repos: [makeLocalRepo()] });
+        renderRepoDetail();
+
+        fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+        await waitFor(() => {
+          expect(
+            screen.getByRole("checkbox", { name: /move plans to completed/i }),
+          ).toBeInTheDocument();
+        });
+
+        // Uncheck the checkbox
+        const checkbox = screen.getByRole("checkbox", {
+          name: /move plans to completed/i,
+        });
+        fireEvent.click(checkbox);
+
+        fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+        expect(state.updateRepo).toHaveBeenCalledWith(
+          expect.objectContaining({ movePlansToCompleted: false }),
+        );
+      });
+    });
   });
 
   // =========================================================================
@@ -1851,18 +1960,153 @@ describe("RepoDetail", () => {
           [
             "test-repo",
             makeSessionState({
-              trace: makeTrace({
-                context_window: 200000,
-                final_context_tokens: 160000,
-              }),
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.15,
+                    usage: {
+                      input_tokens: 140000,
+                      cache_read_input_tokens: 20000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 1200,
+                    },
+                    model_usage: {
+                      "claude-sonnet-4-20250514": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
             }),
           ],
         ]),
       });
       renderRepoDetail();
 
-      // 160000/200000 = 80%
+      // inputTokens = 140000 + 20000 + 0 = 160000; 160000/200000 = 80%
       expect(screen.getByText(/80%/)).toBeInTheDocument();
+      expect(screen.getByText(/Peak Context/)).toBeInTheDocument();
+    });
+
+    it("shows peak context from the highest iteration, not the last", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        sessions: new Map([
+          [
+            "test-repo",
+            makeSessionState({
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.10,
+                    usage: {
+                      input_tokens: 170000,
+                      cache_read_input_tokens: 10000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 800,
+                    },
+                    model_usage: {
+                      "claude-sonnet-4-20250514": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+                {
+                  kind: "iteration_started",
+                  iteration: 2,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 2,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.08,
+                    usage: {
+                      input_tokens: 40000,
+                      cache_read_input_tokens: 5000,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 600,
+                    },
+                    model_usage: {
+                      "claude-sonnet-4-20250514": {
+                        contextWindow: 200000,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderRepoDetail();
+
+      // Iteration 1: (170000+10000+0)/200000 = 90%
+      // Iteration 2: (40000+5000+0)/200000 = 23%
+      // Peak should be 90%, not 23%
+      expect(screen.getByText(/90%/)).toBeInTheDocument();
+      expect(screen.queryByText(/23%/)).not.toBeInTheDocument();
+    });
+
+    it("does not show peak context when no events have context data", () => {
+      setupMockState({
+        repos: [makeLocalRepo()],
+        sessions: new Map([
+          [
+            "test-repo",
+            makeSessionState({
+              trace: makeTrace(),
+              events: [
+                {
+                  kind: "iteration_started",
+                  iteration: 1,
+                  _ts: Date.now(),
+                },
+                {
+                  kind: "iteration_complete",
+                  iteration: 1,
+                  _ts: Date.now(),
+                  result: {
+                    total_cost_usd: 0.05,
+                    usage: {
+                      input_tokens: 5000,
+                      cache_read_input_tokens: 0,
+                      cache_creation_input_tokens: 0,
+                      output_tokens: 500,
+                    },
+                  },
+                },
+              ],
+            }),
+          ],
+        ]),
+      });
+      renderRepoDetail();
+
+      // No model_usage means no contextWindow, so maxContextPercent returns 0
+      // and ctxPercent should be null — "Peak Context" label should not appear
+      expect(screen.queryByText(/Peak Context/)).not.toBeInTheDocument();
     });
 
     it("shows failure reason when present", () => {

@@ -118,8 +118,8 @@ Add `session_id`, `worktreePath`, and `branch` to the TypeScript type.
 - All optional to maintain backward compatibility with existing persisted entries
 
 **Checklist:**
-- [ ] Add three optional fields to `OneShotEntry`
-- [ ] Run `npx tsc --noEmit` to verify
+- [x] Add three optional fields to `OneShotEntry`
+- [x] Run `npx tsc --noEmit` to verify
 
 ---
 
@@ -141,10 +141,10 @@ Add `worktree_path` and `branch` fields to the `OneShotStarted` event variant so
 - Update any frontend event format/display code that destructures this event
 
 **Checklist:**
-- [ ] Add fields to `OneShotStarted` in `session.rs`
-- [ ] Update emit in `oneshot.rs`
-- [ ] Update frontend event format if needed
-- [ ] Run `cd src-tauri && cargo check`
+- [x] Add fields to `OneShotStarted` in `session.rs`
+- [x] Update emit in `oneshot.rs`
+- [x] Update frontend event format if needed
+- [x] Run `cd src-tauri && cargo check`
 
 ---
 
@@ -164,11 +164,11 @@ Save the `session_id` to the one-shot entry when the session starts.
 - Recommended: Option A — update `OneShotResult` to include `session_id`, then save it to the entry in `runOneShot`
 
 **Checklist:**
-- [ ] Add `session_id` to `OneShotResult` struct in `lib.rs`
-- [ ] Return `session_id` from `run_oneshot` command
-- [ ] Save `session_id` to the `OneShotEntry` in `store.ts` `runOneShot`
-- [ ] Persist to store
-- [ ] Run `cd src-tauri && cargo check` and `npx tsc --noEmit`
+- [x] Add `session_id` to `OneShotResult` struct in `lib.rs`
+- [x] Return `session_id` from `run_oneshot` command
+- [x] Save `session_id` to the `OneShotEntry` in `store.ts` `runOneShot`
+- [x] Persist to store
+- [x] Run `cd src-tauri && cargo check` and `npx tsc --noEmit`
 
 ---
 
@@ -187,10 +187,10 @@ When the frontend receives `OneShotStarted` with the new fields, update the one-
 - Persist to `oneShotStore`
 
 **Checklist:**
-- [ ] Add handler for `one_shot_started` in event listener
-- [ ] Update entry with `worktreePath` and `branch`
-- [ ] Persist to store
-- [ ] Run `npx tsc --noEmit`
+- [x] Add handler for `one_shot_started` in event listener
+- [x] Update entry with `worktreePath` and `branch`
+- [x] Persist to store
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -210,9 +210,9 @@ Mark interrupted one-shot entries as failed when the backend process is gone.
 - Persist updated entries to `oneShotStore`
 
 **Checklist:**
-- [ ] Add one-shot reconciliation after sessions reconciliation
-- [ ] Persist changes
-- [ ] Run `npx tsc --noEmit`
+- [x] Add one-shot reconciliation after sessions reconciliation
+- [x] Persist changes
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -233,9 +233,9 @@ Recover event history for one-shot entries that have a `session_id`.
 - Use same `recoveryInFlight` guard pattern to avoid duplicate requests
 
 **Checklist:**
-- [ ] Add one-shot event recovery in `initialize()`
-- [ ] Recover traces and reconcile entry status
-- [ ] Run `npx tsc --noEmit`
+- [x] Add one-shot event recovery in `initialize()`
+- [x] Recover traces and reconcile entry status
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -258,9 +258,9 @@ Show appropriate placeholder when no events are available.
 - Resume button wires to `resumeOneShot()` store action (Task 10)
 
 **Checklist:**
-- [ ] Add conditional empty state rendering
-- [ ] Style consistently with loop empty state
-- [ ] Run `npx tsc --noEmit`
+- [x] Add conditional empty state rendering
+- [x] Style consistently with loop empty state
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -284,11 +284,11 @@ Make the runner accept an optional resume state to skip completed phases.
   - Still emit all phase events so the frontend tracks progress
 
 **Checklist:**
-- [ ] Add `ResumeState` struct
-- [ ] Add field and builder method to `OneShotRunner`
-- [ ] Refactor `run()` with phase skip guards
-- [ ] Run `cd src-tauri && cargo check`
-- [ ] Run `cd src-tauri && cargo test`
+- [x] Add `ResumeState` struct
+- [x] Add field and builder method to `OneShotRunner`
+- [x] Refactor `run()` with phase skip guards
+- [x] Run `cd src-tauri && cargo check`
+- [x] Run `cd src-tauri && cargo test`
 
 ---
 
@@ -314,10 +314,10 @@ Backend command that detects phase and resumes.
 - Register in `ActiveSessions`
 
 **Checklist:**
-- [ ] Add `resume_oneshot` command
-- [ ] Add phase detection logic
-- [ ] Register in `tauri::generate_handler![]`
-- [ ] Run `cd src-tauri && cargo check`
+- [x] Add `resume_oneshot` command
+- [x] Add phase detection logic
+- [x] Register in `tauri::generate_handler![]`
+- [x] Run `cd src-tauri && cargo check`
 
 ---
 
@@ -340,9 +340,9 @@ Frontend action to call `resume_oneshot` and update state.
 - In `OneShotDetail`, wire Resume button `onClick` to `resumeOneShot(oneshotId)`
 
 **Checklist:**
-- [ ] Add `resumeOneShot` action to store
-- [ ] Wire Resume button in `OneShotDetail`
-- [ ] Run `npx tsc --noEmit`
+- [x] Add `resumeOneShot` action to store
+- [x] Wire Resume button in `OneShotDetail`
+- [x] Run `npx tsc --noEmit`
 
 ---
 
@@ -364,12 +364,12 @@ Update existing tests and add new ones for the changed behavior.
 - Update existing tests that assert on `OneShotEntry` shape or `OneShotStarted` event fields
 
 **Checklist:**
-- [ ] Update store tests for reconciliation
-- [ ] Add store tests for event recovery
-- [ ] Update E2E tests for empty state
-- [ ] Add E2E test for resume button
-- [ ] Update Rust tests for `ResumeState`
-- [ ] Run `npm test`, `npm run test:e2e`, `cd src-tauri && cargo test`
+- [x] Update store tests for reconciliation
+- [x] Add store tests for event recovery
+- [x] Update E2E tests for empty state
+- [x] Add E2E test for resume button
+- [x] Update Rust tests for `ResumeState`
+- [x] Run `npm test`, `npm run test:e2e`, `cd src-tauri && cargo test`
 
 ---
 
@@ -377,14 +377,14 @@ Update existing tests and add new ones for the changed behavior.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add fields to `OneShotEntry` type | Not Started |
-| 2 | Extend `OneShotStarted` event with worktree/branch | Not Started |
-| 3 | Persist `session_id` in entry on launch | Not Started |
-| 4 | Save `worktreePath`/`branch` from event | Not Started |
-| 5 | Reconcile one-shot entries in `syncActiveSession()` | Not Started |
-| 6 | Load one-shot events/traces on startup | Not Started |
-| 7 | Add empty state to `OneShotDetail` | Not Started |
-| 8 | Add `ResumeState` and refactor runner | Not Started |
-| 9 | Add `resume_oneshot` Tauri command | Not Started |
-| 10 | Add `resumeOneShot` store action and wire UI | Not Started |
-| 11 | Update tests | Not Started |
+| 1 | Add fields to `OneShotEntry` type | Done |
+| 2 | Extend `OneShotStarted` event with worktree/branch | Done |
+| 3 | Persist `session_id` in entry on launch | Done |
+| 4 | Save `worktreePath`/`branch` from event | Done |
+| 5 | Reconcile one-shot entries in `syncActiveSession()` | Done |
+| 6 | Load one-shot events/traces on startup | Done |
+| 7 | Add empty state to `OneShotDetail` | Done |
+| 8 | Add `ResumeState` and refactor runner | Done |
+| 9 | Add `resume_oneshot` Tauri command | Done |
+| 10 | Add `resumeOneShot` store action and wire UI | Done |
+| 11 | Update tests | Done |

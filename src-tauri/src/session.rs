@@ -154,7 +154,7 @@ pub enum SessionEvent {
     /// A fix agent has completed
     CheckFixComplete { iteration: u32, check_name: String, attempt: u32, success: bool },
     /// 1-shot session has started
-    OneShotStarted { title: String, parent_repo_id: String, prompt: String, merge_strategy: String },
+    OneShotStarted { title: String, parent_repo_id: String, prompt: String, merge_strategy: String, worktree_path: String, branch: String },
     /// Design phase has begun
     DesignPhaseStarted,
     /// Design phase completed, plan file written
@@ -552,7 +552,9 @@ impl SessionRunner {
         &self,
         runtime: &dyn RuntimeProvider,
     ) -> Result<trace::SessionTrace> {
+        tracing::info!(runtime = runtime.name(), "running health check");
         runtime.health_check().await?;
+        tracing::info!("health check passed");
 
         let repo_str = self.config.effective_working_dir().to_string_lossy().to_string();
         let mut trace = match self.session_id.lock().unwrap().as_ref() {
@@ -785,6 +787,8 @@ impl SessionRunner {
             _ => None,
         };
 
+        tracing::info!(outcome = ?trace.outcome, failure_reason = ?trace.failure_reason, "session loop finished");
+
         Ok(())
     }
 
@@ -795,7 +799,9 @@ impl SessionRunner {
         invocation: &ClaudeInvocation,
         iteration: u32,
     ) -> Result<(ResultEvent, u64)> {
+        tracing::info!(iteration, working_dir = %invocation.working_dir.display(), "spawning claude process");
         let mut process = runtime.spawn_claude(invocation).await?;
+        tracing::info!(iteration, "claude process spawned");
         let mut result_event: Option<ResultEvent> = None;
         let mut last_context_tokens: u64 = 0;
 
@@ -879,13 +885,25 @@ impl SessionRunner {
         // Wait for process to exit
         let exit = process.completion.await??;
         self.unregister_abort(&abort_arc);
+        tracing::info!(
+            iteration,
+            exit_code = exit.exit_code,
+            wall_time_ms = exit.wall_time_ms,
+            has_result = result_event.is_some(),
+            "claude process exited"
+        );
 
         if exit.exit_code != 0 && result_event.is_none() {
+            tracing::error!(iteration, exit_code = exit.exit_code, stderr = %exit.stderr.trim(), "claude process failed with no result");
             anyhow::bail!(
                 "Claude process exited with code {} (stderr: {})",
                 exit.exit_code,
                 exit.stderr.trim()
             );
+        }
+
+        if result_event.is_none() {
+            tracing::error!(iteration, "claude process exited without emitting a result event");
         }
 
         result_event
@@ -1678,6 +1696,8 @@ mod tests {
             parent_repo_id: "test-repo".to_string(),
             prompt: "Implement auth".to_string(),
             merge_strategy: "squash".to_string(),
+            worktree_path: "/tmp/worktrees/test".to_string(),
+            branch: "yarr/implement-auth-module-abc123".to_string(),
         };
         let json = serde_json::to_value(&event).expect("serialize OneShotStarted");
         assert_eq!(json["kind"], "one_shot_started");
@@ -1685,6 +1705,8 @@ mod tests {
         assert_eq!(json["parent_repo_id"], "test-repo");
         assert_eq!(json["prompt"], "Implement auth");
         assert_eq!(json["merge_strategy"], "squash");
+        assert_eq!(json["worktree_path"], "/tmp/worktrees/test");
+        assert_eq!(json["branch"], "yarr/implement-auth-module-abc123");
 
         // 2. DesignPhaseStarted
         let event = SessionEvent::DesignPhaseStarted;

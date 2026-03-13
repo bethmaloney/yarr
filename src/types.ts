@@ -37,6 +37,8 @@ export type SessionEvent = {
   success?: boolean;
   title?: string;
   merge_strategy?: string;
+  worktree_path?: string;
+  branch?: string;
   plan_file?: string;
   strategy?: string;
   reason?: string;
@@ -64,6 +66,7 @@ export type SessionTrace = {
   total_cache_creation_tokens: number;
   context_window?: number;
   final_context_tokens?: number;
+  max_context_percent?: number;
 };
 
 export type SessionState = {
@@ -99,4 +102,7 @@ export type OneShotEntry = {
   mergeStrategy: string;
   status: "running" | "completed" | "failed";
   startedAt: number;
+  session_id?: string;
+  worktreePath?: string;
+  branch?: string;
 };
