@@ -9,3 +9,14 @@ import App from "./App";
 attachConsole().catch(() => {});
 
 createRoot(document.getElementById("app")!).render(<App />);
+
+// Work around WebView2 blank-screen bug after laptop sleep/resume on Windows.
+// When the page becomes visible again, nudge the DOM to force a repaint.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    document.body.style.opacity = "0.999";
+    requestAnimationFrame(() => {
+      document.body.style.opacity = "";
+    });
+  }
+});

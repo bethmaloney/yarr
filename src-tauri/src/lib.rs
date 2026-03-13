@@ -19,7 +19,7 @@ use oneshot::OneShotRunner;
 use runtime::{default_runtime, ssh_command, ssh_command_raw, ssh_shell_escape, RuntimeProvider, SshEnvCache, SshRuntime};
 use session::{SessionConfig, SessionEvent, SessionRunner};
 use ssh_orchestrator::SshSessionOrchestrator;
-use tauri::{Emitter, Manager, RunEvent};
+use tauri::{Emitter, Manager, RunEvent, WebviewWindow};
 use trace::TraceCollector;
 
 /// Wraps a `SessionEvent` with a `repo_id` so the frontend can demux events
@@ -1530,6 +1530,18 @@ async fn move_plan_to_completed(app: tauri::AppHandle, repo: RepoType, plans_dir
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Force a webview to repaint by briefly resizing and restoring the window.
+/// This works around a WebView2 bug on Windows where the rendering surface
+/// goes blank after laptop sleep/resume.
+fn force_webview_repaint(window: &WebviewWindow) {
+    if let Ok(size) = window.outer_size() {
+        let tweaked = tauri::PhysicalSize::new(size.width, size.height.wrapping_add(1));
+        let _ = window.set_size(tauri::Size::Physical(tweaked));
+        let original = tauri::PhysicalSize::new(size.width, size.height);
+        let _ = window.set_size(tauri::Size::Physical(original));
+    }
+}
+
 pub fn run() {
     let log_level = std::env::var("RUST_LOG")
         .ok()
@@ -1575,6 +1587,13 @@ pub fn run() {
     tracing::info!("managed state initialized; app build succeeded; entering run loop");
 
     app.run(|app, event| {
+        // Force webview repaint after sleep/resume to avoid blank screen (WebView2 bug on Windows).
+        if let RunEvent::Resumed = event {
+            tracing::info!("app resumed from sleep — forcing webview repaint");
+            if let Some(window) = app.get_webview_window("main") {
+                force_webview_repaint(&window);
+            }
+        }
         if let RunEvent::Exit = event {
             // Cancel all cancellation tokens
             let active = app.state::<ActiveSessions>();
