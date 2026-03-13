@@ -1683,6 +1683,37 @@ describe("runOneShot", () => {
     const entry = entries.get("oneshot-xyz")!;
     expect(entry.session_id).toBe("sess-123");
   });
+
+  it("on success: creates session state entry in sessions map", async () => {
+    mockInvoke.mockResolvedValue({
+      oneshot_id: "oneshot-xyz",
+      session_id: "sess-123",
+      trace: makeTrace(),
+    });
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    const session = useAppStore.getState().sessions.get("oneshot-xyz");
+    expect(session).toBeDefined();
+    expect(session!.running).toBe(true);
+    expect(session!.session_id).toBe("sess-123");
+    expect(session!.disconnected).toBe(false);
+    expect(session!.reconnecting).toBe(false);
+    expect(session!.events).toEqual([]);
+    expect(session!.trace).toBeNull();
+    expect(session!.error).toBeNull();
+  });
+
+  it("on error: does NOT create session state entry in sessions map", async () => {
+    mockInvoke.mockRejectedValue(new Error("backend crashed"));
+
+    const sessionsBefore = useAppStore.getState().sessions.size;
+
+    await useAppStore.getState().runOneShot("repo-1", "Fix bug", "fix it", "opus", "fast-forward");
+
+    // No new session entry should have been created
+    expect(useAppStore.getState().sessions.size).toBe(sessionsBefore);
+  });
 });
 
 // ===========================================================================
@@ -1751,10 +1782,10 @@ describe("1-shot event listener", () => {
     expect(entries.get("oneshot-abc")!.status).toBe("failed");
   });
 
-  it("prunes completed entries to keep last 5 by startedAt", () => {
-    // Create 6 completed entries
+  it("retains all completed entries without pruning", () => {
+    // Create 6 completed entries + 1 running that will complete = 7 total completed
     const entries = new Map<string, OneShotEntry>();
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       entries.set(
         `oneshot-old-${i}`,
         makeOneShotEntry({
@@ -1776,25 +1807,26 @@ describe("1-shot event listener", () => {
 
     useAppStore.setState({ oneShotEntries: entries });
 
-    // Complete the newest one — now there are 6 completed, should prune to 5
+    // Complete the newest one — now there are 7 completed, all should be retained
     emitSessionEvent("oneshot-new", { kind: "one_shot_complete" });
 
     const result = useAppStore.getState().oneShotEntries;
     const completedEntries = [...result.values()].filter(
       (e) => e.status === "completed",
     );
-    expect(completedEntries.length).toBe(5);
+    // All 7 completed entries should be retained (no pruning)
+    expect(completedEntries.length).toBe(7);
 
-    // The oldest entry (startedAt: 1000) should have been pruned
-    expect(result.has("oneshot-old-0")).toBe(false);
-    // The newest entry should still be there
+    // All entries including the oldest should still be present
+    expect(result.has("oneshot-old-0")).toBe(true);
     expect(result.has("oneshot-new")).toBe(true);
+    expect(result.size).toBe(7);
   });
 
-  it("does not prune running or failed entries", () => {
+  it("retains all entries of every status without pruning", () => {
     const entries = new Map<string, OneShotEntry>();
-    // 5 completed entries
-    for (let i = 0; i < 5; i++) {
+    // 6 completed entries
+    for (let i = 0; i < 6; i++) {
       entries.set(
         `oneshot-done-${i}`,
         makeOneShotEntry({
@@ -1825,13 +1857,19 @@ describe("1-shot event listener", () => {
 
     useAppStore.setState({ oneShotEntries: entries });
 
-    // Complete the running one — now 6 completed, should prune to 5
+    // Complete the running one — now 7 completed + 1 failed = 8 total
     emitSessionEvent("oneshot-running", { kind: "one_shot_complete" });
 
     const result = useAppStore.getState().oneShotEntries;
-    // Failed entry should NOT be pruned
+    // All 8 entries should be retained
+    expect(result.size).toBe(8);
     expect(result.has("oneshot-fail")).toBe(true);
     expect(result.get("oneshot-fail")!.status).toBe("failed");
+    // All completed entries should still be there
+    for (let i = 0; i < 6; i++) {
+      expect(result.has(`oneshot-done-${i}`)).toBe(true);
+    }
+    expect(result.has("oneshot-running")).toBe(true);
   });
 
   it("ignores one_shot_complete for unknown oneshot IDs", () => {
@@ -1846,6 +1884,141 @@ describe("1-shot event listener", () => {
     const entries = useAppStore.getState().oneShotEntries;
     expect(entries.size).toBe(1);
     expect(entries.get("oneshot-abc")!.status).toBe("running");
+  });
+
+  it("one_shot_complete: fetches trace when session has session_id", async () => {
+    const trace = makeTrace({ session_id: "sess-123" });
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+      session_id: "sess-123",
+    });
+
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+      sessions: new Map([
+        [
+          "oneshot-abc",
+          {
+            running: true,
+            session_id: "sess-123",
+            disconnected: false,
+            reconnecting: false,
+            events: [],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("get_trace", {
+        repoId: "oneshot-abc",
+        sessionId: "sess-123",
+      });
+    });
+
+    await vi.waitFor(() => {
+      const session = useAppStore.getState().sessions.get("oneshot-abc");
+      expect(session).toBeDefined();
+      expect(session!.trace).toEqual(trace);
+    });
+
+    const latestTraces = useAppStore.getState().latestTraces;
+    expect(latestTraces.get("oneshot-abc")).toEqual(trace);
+  });
+
+  it("one_shot_complete: falls back to entry session_id when session state has none", async () => {
+    const trace = makeTrace({ session_id: "sess-456" });
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+      session_id: "sess-456",
+    });
+
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+      sessions: new Map([
+        [
+          "oneshot-abc",
+          {
+            running: true,
+            // no session_id on session state
+            disconnected: false,
+            reconnecting: false,
+            events: [],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace") return trace;
+      return undefined;
+    });
+
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("get_trace", {
+        repoId: "oneshot-abc",
+        sessionId: "sess-456",
+      });
+    });
+  });
+
+  it("one_shot_complete: trace fetch failure is non-fatal", async () => {
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "running",
+      session_id: "sess-123",
+    });
+
+    useAppStore.setState({
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+      sessions: new Map([
+        [
+          "oneshot-abc",
+          {
+            running: true,
+            session_id: "sess-123",
+            disconnected: false,
+            reconnecting: false,
+            events: [],
+            trace: null,
+            error: null,
+          },
+        ],
+      ]),
+    });
+
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_trace") throw new Error("trace not found");
+      return undefined;
+    });
+
+    // Should not throw
+    emitSessionEvent("oneshot-abc", { kind: "one_shot_complete" });
+
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("get_trace", {
+        repoId: "oneshot-abc",
+        sessionId: "sess-123",
+      });
+    });
   });
 });
 

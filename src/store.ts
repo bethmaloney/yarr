@@ -363,15 +363,22 @@ export const useAppStore = create<AppStore>((set, get) => {
               console.debug("[store] oneshot status changed", { repoId: repo_id, status: newStatus });
               oneshotEntries.set(repo_id, { ...entry, status: newStatus as "completed" | "failed" });
 
-              // Prune completed to keep last 5
+              // Fetch trace on oneshot completion
               if (newStatus === "completed") {
-                const completed = [...oneshotEntries.entries()]
-                  .filter(([, e]) => e.status === "completed")
-                  .sort(([, a], [, b]) => b.startedAt - a.startedAt);
-                if (completed.length > 5) {
-                  for (const [key] of completed.slice(5)) {
-                    oneshotEntries.delete(key);
-                  }
+                const sessionId = session.session_id ?? entry?.session_id;
+                if (sessionId) {
+                  invoke<SessionTrace>("get_trace", { repoId: repo_id, sessionId })
+                    .then((trace) => {
+                      const s = new Map(get().sessions);
+                      const current = s.get(repo_id);
+                      if (current) {
+                        s.set(repo_id, { ...current, trace });
+                        const lt = new Map(get().latestTraces);
+                        lt.set(repo_id, trace);
+                        set({ sessions: s, latestTraces: lt });
+                      }
+                    })
+                    .catch((e) => console.warn("Failed to fetch oneshot trace:", repo_id, e));
                 }
               }
 
@@ -590,7 +597,18 @@ export const useAppStore = create<AppStore>((set, get) => {
         entries.delete(tempId);
         const realEntry = { ...entry, id: result.oneshot_id, session_id: result.session_id };
         entries.set(result.oneshot_id, realEntry);
-        set({ oneShotEntries: entries });
+        // Initialize session state (matches resumeOneShot pattern)
+        const s = new Map(get().sessions);
+        s.set(result.oneshot_id, {
+          running: true,
+          session_id: result.session_id,
+          disconnected: false,
+          reconnecting: false,
+          events: [],
+          trace: null,
+          error: null,
+        });
+        set({ oneShotEntries: entries, sessions: s });
         oneShotStore.set("oneshot-entries", [...entries]).then(() => oneShotStore.save()).catch((e) => console.warn("[store] failed to persist oneshot entries:", e));
 
         return result.oneshot_id;
