@@ -123,11 +123,11 @@ Add the `ssh_host: Option<String>` field to `OneShotConfig` and update `worktree
 - Update all `OneShotConfig` construction sites to pass `ssh_host: None` for local
 
 **Checklist:**
-- [ ] Add `ssh_host` field to `OneShotConfig`
-- [ ] Add `worktree_path_remote()` function
-- [ ] Update `run()` to use remote path when SSH
-- [ ] Update local `OneShotConfig` construction in `lib.rs` to pass `ssh_host: None`
-- [ ] `cargo check` passes
+- [x] Add `ssh_host` field to `OneShotConfig`
+- [x] Add `worktree_path_remote()` function
+- [x] Update `run()` to use remote path when SSH
+- [x] Update local `OneShotConfig` construction in `lib.rs` to pass `ssh_host: None`
+- [x] `cargo check` passes
 
 ---
 
@@ -281,7 +281,7 @@ Add E2E test variants for SSH oneshot using mocked Tauri IPC.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add ssh_host to OneShotConfig and update worktree path | Not Started |
+| 1 | Add ssh_host to OneShotConfig and update worktree path | Done |
 | 2 | Extract phase execution helper (local vs SSH) | Not Started |
 | 3 | Wire up SSH oneshot in run_oneshot command | Not Started |
 | 4 | Handle reconnect notify for SSH oneshots | Not Started |

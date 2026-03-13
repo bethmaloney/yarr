@@ -463,6 +463,7 @@ async fn run_oneshot(
                 checks: checks.unwrap_or_default(),
                 git_sync,
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+                ssh_host: None,
             };
 
             let base_dir = match app.path().app_data_dir() {
@@ -656,6 +657,7 @@ async fn resume_oneshot(
                 checks: checks.unwrap_or_default(),
                 git_sync,
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+                ssh_host: None,
             };
 
             let collector = TraceCollector::new(base_dir, &oneshot_id);
@@ -1606,6 +1608,7 @@ mod tests {
             checks: vec![],
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
         };
 
         assert_eq!(config.repo_id, "repo-123");

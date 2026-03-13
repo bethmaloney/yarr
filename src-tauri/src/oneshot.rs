@@ -37,6 +37,7 @@ pub struct OneShotConfig {
     pub checks: Vec<crate::session::Check>,
     pub git_sync: Option<crate::session::GitSyncConfig>,
     pub plans_dir: String,
+    pub ssh_host: Option<String>,
 }
 
 /// State for resuming an interrupted one-shot session.
@@ -138,6 +139,41 @@ pub fn worktree_path(repo_id: &str, short_id: &str) -> PathBuf {
         "{home}/.yarr/worktrees/{}-oneshot-{short_id}",
         repo_id
     ))
+}
+
+/// Compute the worktree path on a remote machine via SSH.
+///
+/// Runs `echo $HOME` on the remote to discover the home directory, then
+/// returns `<home>/.yarr/worktrees/<repo_id>-oneshot-<short_id>`.
+pub async fn worktree_path_remote(
+    runtime: &dyn RuntimeProvider,
+    repo_id: &str,
+    short_id: &str,
+    repo_path: &std::path::Path,
+) -> Result<PathBuf> {
+    let output = runtime
+        .run_command("echo $HOME", repo_path, Duration::from_secs(10))
+        .await?;
+    if output.exit_code != 0 {
+        return Err(anyhow::anyhow!(
+            "Failed to resolve remote home directory: {}",
+            output.stderr
+        ));
+    }
+    let home = output.stdout.trim();
+    if home.is_empty() {
+        return Err(anyhow::anyhow!("Remote $HOME is empty"));
+    }
+    if !home.starts_with('/') {
+        return Err(anyhow::anyhow!(
+            "Remote $HOME is not an absolute path: {}",
+            home
+        ));
+    }
+    tracing::debug!(home, "Resolved remote home directory");
+    Ok(PathBuf::from(format!(
+        "{home}/.yarr/worktrees/{repo_id}-oneshot-{short_id}"
+    )))
 }
 
 /// Get the Unix home directory path.
@@ -386,7 +422,17 @@ impl OneShotRunner {
         } else {
             let slug = slugify(&self.config.title);
             let short_id = generate_short_id();
-            let wt = worktree_path(&self.config.repo_id, &short_id);
+            let wt = if self.config.ssh_host.is_some() {
+                worktree_path_remote(runtime, &self.config.repo_id, &short_id, &self.config.repo_path).await
+                    .map_err(|e| {
+                        self.emit(SessionEvent::OneShotFailed {
+                            reason: format!("Failed to resolve remote worktree path: {}", e),
+                        });
+                        e
+                    })?
+            } else {
+                worktree_path(&self.config.repo_id, &short_id)
+            };
             let br = branch_name(&slug, &short_id);
             tracing::info!(
                 oneshot_id = %self.config.repo_id,
@@ -977,6 +1023,7 @@ mod tests {
             checks: Vec::new(),
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
         }
     }
 
@@ -1140,6 +1187,104 @@ mod tests {
     }
 
     // =========================================================================
+    // worktree_path_remote tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_resolves_home() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "/home/remoteuser".to_string(),
+            stderr: String::new(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        let path = result.expect("should resolve remote home");
+        assert_eq!(
+            path,
+            PathBuf::from("/home/remoteuser/.yarr/worktrees/test-repo-oneshot-abc123")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_trims_whitespace() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "/home/remoteuser\n".to_string(),
+            stderr: String::new(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        let path = result.expect("should resolve remote home even with trailing newline");
+        assert_eq!(
+            path,
+            PathBuf::from("/home/remoteuser/.yarr/worktrees/test-repo-oneshot-abc123")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_command_failure() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: "command failed".to_string(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        assert!(result.is_err(), "should return error when command fails");
+    }
+
+    #[tokio::test]
+    async fn test_worktree_path_remote_empty_home() {
+        let mut mock = MockRuntime::completing_after(0);
+        mock.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "".to_string(),
+            stderr: String::new(),
+        }];
+
+        let result = worktree_path_remote(
+            &mock,
+            "test-repo",
+            "abc123",
+            std::path::Path::new("/tmp/repo"),
+        )
+        .await;
+
+        assert!(result.is_err(), "should return error when $HOME is empty");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Remote $HOME is empty"),
+            "error should mention empty $HOME, got: {}",
+            err_msg
+        );
+    }
+
+    // =========================================================================
     // branch_name tests
     // =========================================================================
 
@@ -1201,6 +1346,7 @@ mod tests {
                 max_push_retries: 3,
             }),
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
         };
 
         assert_eq!(config.repo_id, "repo-123");
@@ -1234,6 +1380,7 @@ mod tests {
             checks: Vec::new(),
             git_sync: None,
             plans_dir: "docs/plans/".to_string(),
+            ssh_host: None,
         };
 
         assert_eq!(config.merge_strategy, MergeStrategy::Branch);
@@ -2550,6 +2697,7 @@ mod tests {
                 max_push_retries: 5,
             }),
             plans_dir: "custom/plans/".to_string(),
+            ssh_host: None,
         };
 
         assert_eq!(config.max_iterations, 20);
