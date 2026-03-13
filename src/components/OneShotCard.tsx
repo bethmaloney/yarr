@@ -6,7 +6,6 @@ interface OneShotCardProps {
   entry: OneShotEntry;
   phase: string;
   onClick: () => void;
-  onDismiss?: () => void;
 }
 
 function phaseColor(phase: string): string {
@@ -31,11 +30,9 @@ export function OneShotCard({
   entry,
   phase,
   onClick,
-  onDismiss,
 }: OneShotCardProps) {
   const color = phaseColor(phase);
   const label = phaseLabel(phase);
-  const showDismiss = entry.status === "failed" && onDismiss != null;
 
   const dotClassName = [
     "w-2 h-2 rounded-full shrink-0",
@@ -65,18 +62,6 @@ export function OneShotCard({
         <span className="text-[10px] font-semibold uppercase tracking-wider bg-muted text-muted-foreground px-1.5 py-0.5 rounded shrink-0">
           1-Shot
         </span>
-        {showDismiss && (
-          <button
-            className="ml-auto shrink-0 text-muted-foreground hover:text-foreground text-xs"
-            aria-label="Dismiss"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDismiss();
-            }}
-          >
-            &times;
-          </button>
-        )}
       </div>
 
       <span className="text-xs text-muted-foreground truncate">

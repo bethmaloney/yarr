@@ -45,7 +45,7 @@ export interface AppStore {
   // --- 1-Shot ---
   oneShotEntries: Map<string, OneShotEntry>;
   runOneShot: (repoId: string, title: string, prompt: string, model: string, mergeStrategy: string) => Promise<string | undefined>;
-  dismissOneShot: (oneshotId: string) => Promise<void>;
+
   saveOneShotEntries: () => Promise<void>;
   loadOneShotEntries: () => Promise<void>;
   resumeOneShot: (oneshotId: string) => Promise<void>;
@@ -356,15 +356,13 @@ export const useAppStore = create<AppStore>((set, get) => {
               const newStatus = sessionEvent.kind === "one_shot_complete" ? "completed" : "failed";
               oneshotEntries.set(repo_id, { ...entry, status: newStatus as "completed" | "failed" });
 
-              // Prune completed to keep last 5
-              if (newStatus === "completed") {
-                const completed = [...oneshotEntries.entries()]
-                  .filter(([, e]) => e.status === "completed")
-                  .sort(([, a], [, b]) => b.startedAt - a.startedAt);
-                if (completed.length > 5) {
-                  for (const [key] of completed.slice(5)) {
-                    oneshotEntries.delete(key);
-                  }
+              // Prune completed/failed to keep last 50
+              const finished = [...oneshotEntries.entries()]
+                .filter(([, e]) => e.status === "completed" || e.status === "failed")
+                .sort(([, a], [, b]) => b.startedAt - a.startedAt);
+              if (finished.length > 50) {
+                for (const [key] of finished.slice(50)) {
+                  oneshotEntries.delete(key);
                 }
               }
 
@@ -599,15 +597,6 @@ export const useAppStore = create<AppStore>((set, get) => {
       }
     },
 
-    dismissOneShot: async (oneshotId) => {
-      const entries = new Map(get().oneShotEntries);
-      if (!entries.has(oneshotId)) return;
-      entries.delete(oneshotId);
-      set({ oneShotEntries: entries });
-      // Persist
-      await oneShotStore.set("oneshot-entries", [...entries]);
-      await oneShotStore.save();
-    },
 
     saveOneShotEntries: async () => {
       const entries = get().oneShotEntries;

@@ -165,7 +165,7 @@ interface MockState {
   addLocalRepo: ReturnType<typeof vi.fn>;
   addSshRepo: ReturnType<typeof vi.fn>;
   oneShotEntries: Map<string, OneShotEntry>;
-  dismissOneShot: ReturnType<typeof vi.fn>;
+
   gitStatus: Record<string, GitStatusEntry>;
 }
 
@@ -177,7 +177,7 @@ function setupMockState(overrides: Partial<MockState> = {}): MockState {
     addLocalRepo: vi.fn(),
     addSshRepo: vi.fn(),
     oneShotEntries: new Map(),
-    dismissOneShot: vi.fn(),
+
     gitStatus: {},
     ...overrides,
   };
@@ -792,9 +792,8 @@ describe("Home", () => {
       expect(
         screen.getByRole("button", { name: /Fix bug A — 1-Shot/i }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: /Add feature B — 1-Shot/i }),
-      ).toBeInTheDocument();
+      // Completed 1-shot appears in the collapsible completed list
+      expect(screen.getByText("Add feature B")).toBeInTheDocument();
     });
 
     it("sorts running items first, then by timestamp newest first", () => {
@@ -893,61 +892,6 @@ describe("Home", () => {
       expect(running1ShotIdx).toBeLessThan(older1ShotIdx);
     });
 
-    it("calls dismissOneShot when dismiss button is clicked on a failed 1-shot", () => {
-      const entry = makeOneShotEntry({
-        id: "oneshot-fail",
-        title: "Failed task",
-        status: "failed",
-      });
-
-      const mockState = setupMockState({
-        oneShotEntries: new Map([["oneshot-fail", entry]]),
-        sessions: new Map([
-          [
-            "oneshot-fail",
-            makeSessionState({
-              events: [
-                { kind: "one_shot_started" },
-                { kind: "one_shot_failed" },
-              ],
-            }),
-          ],
-        ]),
-      });
-      renderHome();
-
-      // The dismiss button should be present for failed entries
-      const dismissButton = screen.getByRole("button", { name: /dismiss/i });
-      fireEvent.click(dismissButton);
-
-      expect(mockState.dismissOneShot).toHaveBeenCalledWith("oneshot-fail");
-    });
-
-    it("does not show dismiss button for running 1-shot entries", () => {
-      const entry = makeOneShotEntry({
-        id: "oneshot-run",
-        title: "Running task",
-        status: "running",
-      });
-
-      setupMockState({
-        oneShotEntries: new Map([["oneshot-run", entry]]),
-        sessions: new Map([
-          [
-            "oneshot-run",
-            makeSessionState({
-              running: true,
-              events: [{ kind: "one_shot_started" }],
-            }),
-          ],
-        ]),
-      });
-      renderHome();
-
-      expect(
-        screen.queryByRole("button", { name: /dismiss/i }),
-      ).not.toBeInTheDocument();
-    });
 
     it('shows empty state when there are no repos AND no 1-shot entries', () => {
       setupMockState({

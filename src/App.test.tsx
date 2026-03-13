@@ -20,7 +20,7 @@ const { mockInitialize, mockCleanup, stableStore } = vi.hoisted(() => {
     oneShotEntries: new Map(),
     addLocalRepo: vi.fn(),
     addSshRepo: vi.fn(),
-    dismissOneShot: vi.fn(),
+
     runSession: vi.fn(),
     stopSession: vi.fn(),
     reconnectSession: vi.fn(),

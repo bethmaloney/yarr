@@ -4,14 +4,20 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../store";
 import { useGitStatus } from "../hooks/useGitStatus";
-import { getPhaseFromEvents } from "../oneshot-helpers";
+import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
 import { parsePlanPreview } from "../plan-preview";
+import { timeAgo } from "../time";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { OneShotCard } from "@/components/OneShotCard";
 import { RepoCard } from "@/components/RepoCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import type { RepoStatus } from "../types";
 
 export default function Home() {
@@ -21,7 +27,7 @@ export default function Home() {
   const addLocalRepo = useAppStore((s) => s.addLocalRepo);
   const addSshRepo = useAppStore((s) => s.addSshRepo);
   const oneShotEntries = useAppStore((s) => s.oneShotEntries);
-  const dismissOneShot = useAppStore((s) => s.dismissOneShot);
+
 
   const [addMode, setAddMode] = useState<null | "choosing" | "ssh-form">(null);
   const [sshHost, setSshHost] = useState("");
@@ -92,7 +98,10 @@ export default function Home() {
 
   for (const [, entry] of oneShotEntries) {
     const events = sessions.get(entry.id)?.events ?? [];
-    const phase = getPhaseFromEvents(events);
+    let phase = getPhaseFromEvents(events);
+    // When session events are gone (e.g. after restart), fall back to entry.status
+    if (phase === "idle" && entry.status === "completed") phase = "complete";
+    if (phase === "idle" && entry.status === "failed") phase = "failed";
     cardItems.push({
       type: "oneshot",
       key: entry.id,
@@ -103,10 +112,29 @@ export default function Home() {
     });
   }
 
-  cardItems.sort((a, b) => {
+  // Separate completed/failed one-shots from active items
+  const activeItems: CardItem[] = [];
+  const completedOneShots: (CardItem & { type: "oneshot" })[] = [];
+
+  for (const item of cardItems) {
+    if (
+      item.type === "oneshot" &&
+      (item.entry.status === "completed" || item.entry.status === "failed")
+    ) {
+      completedOneShots.push(item);
+    } else {
+      activeItems.push(item);
+    }
+  }
+
+  activeItems.sort((a, b) => {
     if (a.isRunning !== b.isRunning) return a.isRunning ? -1 : 1;
     return b.timestamp - a.timestamp;
   });
+
+  completedOneShots.sort((a, b) => b.timestamp - a.timestamp);
+
+  const [completedOpen, setCompletedOpen] = useState(true);
 
   function handleAddRepo() {
     setAddMode("choosing");
@@ -209,33 +237,101 @@ export default function Home() {
           <p>Click &quot;Add repo&quot; to get started.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
-          {cardItems.map((item) =>
-            item.type === "repo" ? (
-              <RepoCard
-                key={item.key}
-                repo={item.repo}
-                status={item.status}
-                lastTrace={latestTraces.get(item.repo.id)}
-                gitStatus={gitStatus[item.repo.id]}
-                planExcerpt={planPreviews.get(item.repo.id)}
-                onClick={() => navigate(`/repo/${item.repo.id}`)}
-              />
-            ) : (
-              <OneShotCard
-                key={item.key}
-                entry={item.entry}
-                phase={item.phase}
-                onClick={() => navigate(`/oneshot/${item.entry.id}`)}
-                onDismiss={
-                  item.entry.status === "failed"
-                    ? () => dismissOneShot(item.entry.id)
-                    : undefined
-                }
-              />
-            ),
+        <>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
+            {activeItems.map((item) =>
+              item.type === "repo" ? (
+                <RepoCard
+                  key={item.key}
+                  repo={item.repo}
+                  status={item.status}
+                  lastTrace={latestTraces.get(item.repo.id)}
+                  gitStatus={gitStatus[item.repo.id]}
+                  planExcerpt={planPreviews.get(item.repo.id)}
+                  onClick={() => navigate(`/repo/${item.repo.id}`)}
+                />
+              ) : (
+                <OneShotCard
+                  key={item.key}
+                  entry={item.entry}
+                  phase={item.phase}
+                  onClick={() => navigate(`/oneshot/${item.entry.id}`)}
+                  />
+              ),
+            )}
+          </div>
+
+          {completedOneShots.length > 0 && (
+            <Collapsible
+              open={completedOpen}
+              onOpenChange={setCompletedOpen}
+              className="mt-8"
+            >
+              <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none group w-full">
+                <span
+                  className="transition-transform duration-150"
+                  style={{
+                    display: "inline-block",
+                    transform: completedOpen
+                      ? "rotate(90deg)"
+                      : "rotate(0deg)",
+                  }}
+                >
+                  &#x25B6;
+                </span>
+                <span className="uppercase tracking-wider font-medium">
+                  Completed 1-Shots
+                </span>
+                <span className="text-muted-foreground/60">
+                  ({completedOneShots.length})
+                </span>
+                <span className="flex-1 border-t border-border/50 ml-2" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-3 flex flex-col gap-px rounded-md border border-border overflow-hidden">
+                  {completedOneShots.map((item) => {
+                    const isFailed = item.entry.status === "failed";
+                    return (
+                      <button
+                        key={item.key}
+                        className="flex items-center gap-3 px-4 py-2.5 bg-card/50 hover:bg-accent/50 transition-colors text-left cursor-pointer group/row"
+                        onClick={() =>
+                          navigate(`/oneshot/${item.entry.id}`)
+                        }
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{
+                            background: isFailed ? "#f87171" : "#34d399",
+                          }}
+                        />
+                        <span className="text-sm text-foreground/80 truncate min-w-0 flex-1">
+                          {item.entry.title}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/60 truncate max-w-[120px] hidden sm:block">
+                          {item.entry.parentRepoName}
+                        </span>
+                        <span
+                          className="text-[10px] font-medium uppercase tracking-wider shrink-0 w-16 text-right"
+                          style={{
+                            color: isFailed ? "#f87171" : "#34d399",
+                          }}
+                        >
+                          {phaseLabel(item.phase)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/50 shrink-0 w-14 text-right">
+                          {timeAgo(
+                            new Date(item.entry.startedAt).toISOString(),
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           )}
-        </div>
+        </>
       )}
     </main>
   );

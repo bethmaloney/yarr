@@ -1685,40 +1685,7 @@ describe("runOneShot", () => {
 });
 
 // ===========================================================================
-// 11. dismissOneShot
-// ===========================================================================
-
-describe("dismissOneShot", () => {
-  it("removes failed entry from oneShotEntries", async () => {
-    const entry = makeOneShotEntry({ id: "oneshot-abc", status: "failed" });
-    useAppStore.setState({
-      oneShotEntries: new Map([["oneshot-abc", entry]]),
-    });
-
-    await useAppStore.getState().dismissOneShot("oneshot-abc");
-
-    const entries = useAppStore.getState().oneShotEntries;
-    expect(entries.has("oneshot-abc")).toBe(false);
-    expect(entries.size).toBe(0);
-  });
-
-  it("does nothing if entry does not exist", async () => {
-    const entry = makeOneShotEntry({ id: "oneshot-abc", status: "failed" });
-    useAppStore.setState({
-      oneShotEntries: new Map([["oneshot-abc", entry]]),
-    });
-
-    await useAppStore.getState().dismissOneShot("oneshot-nonexistent");
-
-    // Original entry should still be there
-    const entries = useAppStore.getState().oneShotEntries;
-    expect(entries.has("oneshot-abc")).toBe(true);
-    expect(entries.size).toBe(1);
-  });
-});
-
-// ===========================================================================
-// 12. 1-shot event listener
+// 11. 1-shot event listener
 // ===========================================================================
 
 describe("1-shot event listener", () => {
@@ -1750,10 +1717,9 @@ describe("1-shot event listener", () => {
     expect(entries.get("oneshot-abc")!.status).toBe("failed");
   });
 
-  it("prunes completed entries to keep last 5 by startedAt", () => {
-    // Create 6 completed entries
+  it("prunes finished entries to keep last 50 by startedAt", () => {
     const entries = new Map<string, OneShotEntry>();
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 50; i++) {
       entries.set(
         `oneshot-old-${i}`,
         makeOneShotEntry({
@@ -1775,14 +1741,14 @@ describe("1-shot event listener", () => {
 
     useAppStore.setState({ oneShotEntries: entries });
 
-    // Complete the newest one — now there are 6 completed, should prune to 5
+    // Complete the newest one — now there are 51 finished, should prune to 50
     emitSessionEvent("oneshot-new", { kind: "one_shot_complete" });
 
     const result = useAppStore.getState().oneShotEntries;
-    const completedEntries = [...result.values()].filter(
-      (e) => e.status === "completed",
+    const finishedEntries = [...result.values()].filter(
+      (e) => e.status === "completed" || e.status === "failed",
     );
-    expect(completedEntries.length).toBe(5);
+    expect(finishedEntries.length).toBe(50);
 
     // The oldest entry (startedAt: 1000) should have been pruned
     expect(result.has("oneshot-old-0")).toBe(false);
@@ -1790,10 +1756,10 @@ describe("1-shot event listener", () => {
     expect(result.has("oneshot-new")).toBe(true);
   });
 
-  it("does not prune running or failed entries", () => {
+  it("prunes failed entries along with completed when over 50", () => {
     const entries = new Map<string, OneShotEntry>();
-    // 5 completed entries
-    for (let i = 0; i < 5; i++) {
+    // 49 completed entries
+    for (let i = 0; i < 49; i++) {
       entries.set(
         `oneshot-done-${i}`,
         makeOneShotEntry({
@@ -1803,7 +1769,7 @@ describe("1-shot event listener", () => {
         }),
       );
     }
-    // 1 failed entry
+    // 1 failed entry with oldest timestamp
     entries.set(
       "oneshot-fail",
       makeOneShotEntry({
@@ -1824,13 +1790,12 @@ describe("1-shot event listener", () => {
 
     useAppStore.setState({ oneShotEntries: entries });
 
-    // Complete the running one — now 6 completed, should prune to 5
+    // Complete the running one — now 51 finished, should prune oldest (the failed one)
     emitSessionEvent("oneshot-running", { kind: "one_shot_complete" });
 
     const result = useAppStore.getState().oneShotEntries;
-    // Failed entry should NOT be pruned
-    expect(result.has("oneshot-fail")).toBe(true);
-    expect(result.get("oneshot-fail")!.status).toBe("failed");
+    // Failed entry with oldest timestamp should be pruned
+    expect(result.has("oneshot-fail")).toBe(false);
   });
 
   it("ignores one_shot_complete for unknown oneshot IDs", () => {
