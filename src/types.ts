@@ -99,6 +99,8 @@ export type OneShotEntry = {
   title: string;
   prompt: string;
   model: string;
+  effortLevel: string;
+  designEffortLevel: string;
   mergeStrategy: string;
   status: "running" | "completed" | "failed";
   startedAt: number;
