@@ -1437,6 +1437,7 @@ pub(crate) async fn move_plan_to_completed_impl(
     working_dir: &Path,
     plans_dir: &str,
     filename: &str,
+    commit: bool,
 ) -> Result<(), String> {
     tracing::info!(plans_dir = %plans_dir, filename = %filename, "move_plan_to_completed_impl called");
     let escaped_plans_dir = ssh_shell_escape(plans_dir);
@@ -1472,33 +1473,35 @@ pub(crate) async fn move_plan_to_completed_impl(
         return Ok(());
     }
 
-    // Commit
-    let commit_msg = ssh_shell_escape(&format!("move plan to completed: {}", filename));
-    let commit_cmd = format!("git commit -m {commit_msg} --no-verify");
-    let commit_output = rt.run_command(&commit_cmd, working_dir, timeout).await;
-    if let Ok(output) = &commit_output {
-        if output.exit_code != 0 {
-            tracing::warn!(stderr = %output.stderr, "git commit for completed plan failed");
+    if commit {
+        // Commit
+        let commit_msg = ssh_shell_escape(&format!("move plan to completed: {}", filename));
+        let commit_cmd = format!("git commit -m {commit_msg} --no-verify");
+        let commit_output = rt.run_command(&commit_cmd, working_dir, timeout).await;
+        if let Ok(output) = &commit_output {
+            if output.exit_code != 0 {
+                tracing::warn!(stderr = %output.stderr, "git commit for completed plan failed");
+                return Ok(());
+            }
+        } else {
+            tracing::warn!("git commit command failed for completed plan");
             return Ok(());
         }
-    } else {
-        tracing::warn!("git commit command failed for completed plan");
-        return Ok(());
-    }
 
-    tracing::info!(filename = %filename, "committed completed plan");
+        tracing::info!(filename = %filename, "committed completed plan");
 
-    // Push (best-effort)
-    let push_output = rt.run_command("git push", working_dir, timeout).await;
-    match push_output {
-        Ok(output) if output.exit_code == 0 => {
-            tracing::info!(filename = %filename, "pushed completed plan");
-        }
-        Ok(output) => {
-            tracing::warn!(stderr = %output.stderr, filename = %filename, "git push for completed plan failed (will need manual push)");
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, filename = %filename, "git push command failed for completed plan");
+        // Push (best-effort)
+        let push_output = rt.run_command("git push", working_dir, timeout).await;
+        match push_output {
+            Ok(output) if output.exit_code == 0 => {
+                tracing::info!(filename = %filename, "pushed completed plan");
+            }
+            Ok(output) => {
+                tracing::warn!(stderr = %output.stderr, filename = %filename, "git push for completed plan failed (will need manual push)");
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, filename = %filename, "git push command failed for completed plan");
+            }
         }
     }
 
@@ -1517,7 +1520,7 @@ async fn move_plan_to_completed(app: tauri::AppHandle, repo: RepoType, plans_dir
         return Err("Invalid filename".to_string());
     }
     let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
-    move_plan_to_completed_impl(rt.as_ref(), &working_dir, &plans_dir, &filename).await
+    move_plan_to_completed_impl(rt.as_ref(), &working_dir, &plans_dir, &filename, true).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -2513,7 +2516,7 @@ mod tests {
             "completed/ should not exist before the call");
 
         let rt = default_runtime();
-        move_plan_to_completed_impl(rt.as_ref(), dir.path(), "plans", "my-plan.md")
+        move_plan_to_completed_impl(rt.as_ref(), dir.path(), "plans", "my-plan.md", true)
             .await
             .expect("move_plan_to_completed_impl should succeed");
 
@@ -2539,7 +2542,7 @@ mod tests {
 
         // Do NOT create the file -- it doesn't exist
         let rt = default_runtime();
-        let result = move_plan_to_completed_impl(rt.as_ref(), dir.path(), "plans", "nonexistent.md")
+        let result = move_plan_to_completed_impl(rt.as_ref(), dir.path(), "plans", "nonexistent.md", true)
             .await;
 
         assert!(result.is_err(),
@@ -2579,7 +2582,7 @@ mod tests {
         ];
 
         let result =
-            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md").await;
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md", true).await;
 
         assert!(
             result.is_ok(),
@@ -2608,7 +2611,7 @@ mod tests {
         ];
 
         let result =
-            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md").await;
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md", true).await;
 
         assert!(
             result.is_ok(),
@@ -2649,7 +2652,7 @@ mod tests {
         ];
 
         let result =
-            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md").await;
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "my-plan.md", true).await;
 
         assert!(
             result.is_ok(),
@@ -2672,7 +2675,7 @@ mod tests {
         ];
 
         let result =
-            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "nonexistent.md").await;
+            move_plan_to_completed_impl(&runtime, dir.path(), "plans", "nonexistent.md", true).await;
 
         assert!(
             result.is_err(),
@@ -3907,6 +3910,157 @@ mod tests {
         assert!(
             !sessions.contains_key(&repo_id),
             "should not detect a ralph loop session when none is running"
+        );
+    }
+
+    // --- move_plan_to_completed_impl tests ---
+
+    #[tokio::test]
+    async fn test_move_plan_to_completed_with_commit_true() {
+        let runtime = MockRuntime::completing_after(1);
+        let working_dir = std::path::PathBuf::from("/fake/repo");
+
+        let result = move_plan_to_completed_impl(
+            &runtime,
+            &working_dir,
+            "docs/plans",
+            "my-plan.md",
+            true,
+        )
+        .await;
+
+        assert!(result.is_ok(), "move_plan_to_completed_impl should succeed, got: {:?}", result);
+
+        let commands = runtime.captured_commands.lock().unwrap();
+        assert_eq!(
+            commands.len(),
+            4,
+            "with commit=true, should issue 4 commands (mkdir+mv, git add, git commit, git push), got: {:?}",
+            *commands
+        );
+
+        // 1. mkdir + mv
+        assert!(
+            commands[0].contains("mkdir -p") && commands[0].contains("mv"),
+            "first command should be mkdir+mv, got: {}",
+            commands[0]
+        );
+
+        // 2. git add
+        assert!(
+            commands[1].starts_with("git add"),
+            "second command should be git add, got: {}",
+            commands[1]
+        );
+
+        // 3. git commit
+        assert!(
+            commands[2].starts_with("git commit"),
+            "third command should be git commit, got: {}",
+            commands[2]
+        );
+        assert!(
+            commands[2].contains("--no-verify"),
+            "git commit should include --no-verify, got: {}",
+            commands[2]
+        );
+
+        // 4. git push
+        assert!(
+            commands[3].contains("git push"),
+            "fourth command should be git push, got: {}",
+            commands[3]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_move_plan_to_completed_with_commit_false() {
+        let runtime = MockRuntime::completing_after(1);
+        let working_dir = std::path::PathBuf::from("/fake/repo");
+
+        let result = move_plan_to_completed_impl(
+            &runtime,
+            &working_dir,
+            "docs/plans",
+            "my-plan.md",
+            false,
+        )
+        .await;
+
+        assert!(result.is_ok(), "move_plan_to_completed_impl should succeed, got: {:?}", result);
+
+        let commands = runtime.captured_commands.lock().unwrap();
+        assert_eq!(
+            commands.len(),
+            2,
+            "with commit=false, should issue only 2 commands (mkdir+mv, git add), got: {:?}",
+            *commands
+        );
+
+        // 1. mkdir + mv
+        assert!(
+            commands[0].contains("mkdir -p") && commands[0].contains("mv"),
+            "first command should be mkdir+mv, got: {}",
+            commands[0]
+        );
+
+        // 2. git add
+        assert!(
+            commands[1].starts_with("git add"),
+            "second command should be git add, got: {}",
+            commands[1]
+        );
+
+        // Verify no commit or push commands were issued
+        for cmd in commands.iter() {
+            assert!(
+                !cmd.starts_with("git commit"),
+                "should not issue git commit when commit=false, but found: {}",
+                cmd
+            );
+            assert!(
+                !cmd.contains("git push"),
+                "should not issue git push when commit=false, but found: {}",
+                cmd
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_move_plan_to_completed_move_failure() {
+        let mut runtime = MockRuntime::completing_after(1);
+        runtime.command_results = vec![CommandOutput {
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: "No such file or directory".to_string(),
+        }];
+
+        let working_dir = std::path::PathBuf::from("/fake/repo");
+
+        let result = move_plan_to_completed_impl(
+            &runtime,
+            &working_dir,
+            "docs/plans",
+            "nonexistent.md",
+            true,
+        )
+        .await;
+
+        assert!(result.is_err(), "should return error when mkdir+mv fails");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("No such file or directory"),
+            "error message should contain the stderr, got: {}",
+            err
+        );
+
+        // Should have only attempted the first command (mkdir+mv) before bailing
+        let commands = runtime.captured_commands.lock().unwrap();
+        assert_eq!(
+            commands.len(),
+            1,
+            "should only issue 1 command when mkdir+mv fails, got: {:?}",
+            *commands
         );
     }
 }
