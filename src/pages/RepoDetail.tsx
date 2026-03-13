@@ -63,6 +63,8 @@ import {
   Terminal,
   RefreshCw,
   Loader2,
+  ChevronDown,
+  Check as CheckIcon,
 } from "lucide-react";
 import type { Check, SessionState } from "../types";
 import type { RepoConfig } from "../repos";
@@ -642,30 +644,29 @@ export default function RepoDetail() {
 
       {/* Branch selector + git status */}
       {(gitStatus || gitStatusEntry?.error) && (
-        <div className="flex items-center gap-2 mb-6">
+        <div className="flex items-center gap-1.5 mb-6">
           {gitStatus && (
             <>
               {session.running ? (
                 <button
-                  className={`branch-chip inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground${gitStatus.behind && gitStatus.behind > 0 ? " warning border border-warning" : ""}`}
+                  className={`branch-chip inline-flex items-center gap-1.5 pl-2.5 pr-3 py-1 rounded-full text-sm font-mono border transition-colors bg-secondary text-secondary-foreground${gitStatus.behind && gitStatus.behind > 0 ? " warning border-warning" : " border-border"}`}
                   disabled
                 >
+                  <GitBranch className="size-3.5 opacity-60" />
                   {gitStatus.branchName}
                   {gitStatus.dirtyCount != null && gitStatus.dirtyCount > 0 && (
-                    <span className="text-xs opacity-70">
+                    <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">
                       {gitStatus.dirtyCount} dirty
                     </span>
                   )}
                   {gitStatus.ahead != null && gitStatus.ahead > 0 && (
-                    <span className="text-xs opacity-70">
-                      {"\u2191"}
-                      {gitStatus.ahead}
+                    <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-success/15 text-success">
+                      {"\u2191"}{gitStatus.ahead}
                     </span>
                   )}
                   {gitStatus.behind != null && gitStatus.behind > 0 && (
-                    <span className="text-xs opacity-70">
-                      {"\u2193"}
-                      {gitStatus.behind}
+                    <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive">
+                      {"\u2193"}{gitStatus.behind}
                     </span>
                   )}
                 </button>
@@ -676,30 +677,30 @@ export default function RepoDetail() {
                 >
                   <PopoverTrigger asChild>
                     <button
-                      className={`branch-chip inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer${gitStatus.behind && gitStatus.behind > 0 ? " warning border border-warning" : ""}`}
+                      className={`branch-chip inline-flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-full text-sm font-mono border transition-all cursor-pointer bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:border-foreground/20${branchDropdownOpen ? " ring-2 ring-ring/30 border-foreground/20" : ""}${gitStatus.behind && gitStatus.behind > 0 ? " warning border-warning" : " border-border"}`}
                       onClick={() => {
                         if (!branchDropdownOpen) fetchBranches();
                       }}
                     >
+                      <GitBranch className="size-3.5 opacity-60" />
                       {gitStatus.branchName}
                       {gitStatus.dirtyCount != null &&
                         gitStatus.dirtyCount > 0 && (
-                          <span className="text-xs opacity-70">
+                          <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">
                             {gitStatus.dirtyCount} dirty
                           </span>
                         )}
                       {gitStatus.ahead != null && gitStatus.ahead > 0 && (
-                        <span className="text-xs opacity-70">
-                          {"\u2191"}
-                          {gitStatus.ahead}
+                        <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-success/15 text-success">
+                          {"\u2191"}{gitStatus.ahead}
                         </span>
                       )}
                       {gitStatus.behind != null && gitStatus.behind > 0 && (
-                        <span className="text-xs opacity-70">
-                          {"\u2193"}
-                          {gitStatus.behind}
+                        <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive">
+                          {"\u2193"}{gitStatus.behind}
                         </span>
                       )}
+                      <ChevronDown className={`size-3.5 opacity-50 transition-transform ${branchDropdownOpen ? "rotate-180" : ""}`} />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent
@@ -709,12 +710,12 @@ export default function RepoDetail() {
                     }}
                   >
                     {gitStatus.behind != null && gitStatus.behind > 0 && (
-                      <div className="p-2 border-b border-border">
+                      <div className="p-2 border-b border-warning/30 bg-warning/5">
                         <Button
                           type="button"
-                          variant="secondary"
+                          variant="default"
                           size="sm"
-                          className="w-full"
+                          className="w-full bg-warning text-warning-foreground hover:bg-warning/90"
                           onClick={handleFastForward}
                           disabled={fastForwarding}
                         >
@@ -724,7 +725,9 @@ export default function RepoDetail() {
                               Fast-forwarding…
                             </>
                           ) : (
-                            "Fast-forward"
+                            <>
+                              {"\u2193"}{gitStatus.behind} behind — Fast-forward
+                            </>
                           )}
                         </Button>
                       </div>
@@ -744,10 +747,17 @@ export default function RepoDetail() {
                           <CommandItem
                             key={branch}
                             value={branch}
-                            className={`branch-item${branch === gitStatus?.branchName ? " active font-bold" : ""}`}
+                            className={`branch-item${branch === gitStatus?.branchName ? " active" : ""}`}
                             onSelect={() => handleSwitchBranch(branch)}
                           >
-                            {branch}
+                            <span className="flex items-center gap-2 w-full font-mono text-sm">
+                              {branch === gitStatus?.branchName ? (
+                                <CheckIcon className="size-3.5 text-success shrink-0" />
+                              ) : (
+                                <span className="size-3.5 shrink-0" />
+                              )}
+                              <span className="truncate">{branch}</span>
+                            </span>
                           </CommandItem>
                         ))}
                       </CommandList>
@@ -768,10 +778,11 @@ export default function RepoDetail() {
             </span>
           )}
 
-          {/* Refresh button */}
+          {/* Refresh button — timestamp shown in title tooltip */}
           <button
             aria-label="Refresh git status"
-            className="inline-flex items-center justify-center size-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+            title={gitStatusEntry?.lastChecked ? `Last checked: ${timeAgo(gitStatusEntry.lastChecked.toISOString())}` : undefined}
+            className="inline-flex items-center justify-center size-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors cursor-pointer"
             onClick={() => {
               if (repoId && repo) fetchGitStatus(repoId, repo, true);
             }}
@@ -781,13 +792,6 @@ export default function RepoDetail() {
               className={`size-3.5 ${gitStatusEntry?.loading ? "animate-spin" : ""}`}
             />
           </button>
-
-          {/* Last checked timestamp */}
-          {gitStatusEntry?.lastChecked && (
-            <span className="text-xs text-muted-foreground">
-              last checked: {timeAgo(gitStatusEntry.lastChecked.toISOString())}
-            </span>
-          )}
         </div>
       )}
 
