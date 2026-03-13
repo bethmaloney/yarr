@@ -148,10 +148,10 @@ Refactor the design and implementation phase execution in `OneShotRunner::run()`
 - Both paths should support the abort registry and cancel token
 
 **Checklist:**
-- [ ] Extract phase execution into `run_phase()` helper
-- [ ] Add SSH branch that creates `SshSessionOrchestrator`
-- [ ] Verify local path still works (existing behavior preserved)
-- [ ] `cargo check` passes
+- [x] Extract phase execution into `run_phase()` helper
+- [x] Add SSH branch that creates `SshSessionOrchestrator`
+- [x] Verify local path still works (existing behavior preserved)
+- [x] `cargo check` passes
 
 ---
 
@@ -282,7 +282,7 @@ Add E2E test variants for SSH oneshot using mocked Tauri IPC.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add ssh_host to OneShotConfig and update worktree path | Done |
-| 2 | Extract phase execution helper (local vs SSH) | Not Started |
+| 2 | Extract phase execution helper (local vs SSH) | Done |
 | 3 | Wire up SSH oneshot in run_oneshot command | Not Started |
 | 4 | Handle reconnect notify for SSH oneshots | Not Started |
 | 5 | Update OneShotDetail.tsx for SSH host prefix | Not Started |
