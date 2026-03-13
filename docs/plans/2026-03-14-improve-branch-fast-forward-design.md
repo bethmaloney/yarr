@@ -74,12 +74,12 @@ Currently `handleFastForward` calls `fetchGitStatus` *after* closing the dropdow
 
 ### Checklist
 
-- [ ] Add a test (or extend the existing one) that verifies the fast-forward button shows a loading/disabled state while the command is in progress:
+- [x] Add a test (or extend the existing one) that verifies the fast-forward button shows a loading/disabled state while the command is in progress:
   - Mock `fast_forward_branch` with a delayed promise (e.g., `new Promise(resolve => setTimeout(resolve, 500))`)
   - Click the fast-forward button
   - Assert button is disabled during the operation
   - After the promise resolves, assert the dropdown closes and git status updates
-- [ ] Verify existing tests still pass — the `fast_forward_branch` mock currently resolves instantly, so the loading state flashes by; existing tests should still work since the button text still contains "fast-forward" in both states
+- [x] Verify existing tests still pass — the `fast_forward_branch` mock currently resolves instantly, so the loading state flashes by; existing tests should still work since the button text still contains "fast-forward" in both states
 
 ---
 
@@ -89,4 +89,4 @@ Currently `handleFastForward` calls `fetchGitStatus` *after* closing the dropdow
 |------|--------|-------|
 | 1. Inline loading state on fast-forward button | Done | `useState` + `Loader2` spinner |
 | 2. Await git status refresh before closing dropdown | Done | Pass `fetch: false` to avoid redundant network call |
-| 3. E2E test updates | Not started | Verify loading state + immediate status update |
+| 3. E2E test updates | Done | Tests already added with Tasks 1 & 2; all passing |
