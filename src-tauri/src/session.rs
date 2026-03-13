@@ -614,6 +614,19 @@ impl SessionRunner {
             None => self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
         };
 
+        // Snapshot plan content if plan_file is configured
+        if let Some(ref plan_path) = self.config.plan_file {
+            match tokio::fs::read_to_string(plan_path).await {
+                Ok(content) => {
+                    tracing::info!(plan_file = %plan_path, "plan content snapshot captured");
+                    trace.plan_content = Some(content);
+                }
+                Err(e) => {
+                    tracing::warn!(plan_file = %plan_path, error = %e, "failed to read plan file, continuing without plan content");
+                }
+            }
+        }
+
         tracing::info!(repo = %repo_str, max_iterations = self.config.max_iterations, "starting Ralph loop");
         tracing::info!(runtime = runtime.name(), "runtime selected");
         tracing::info!(signal = %self.config.completion_signal, "completion signal");
@@ -3093,5 +3106,115 @@ mod tests {
             }
             _ => unreachable!(),
         }
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_snapshot_happy_path() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // Create a plan file on disk with known content
+        let plan_dir = tmp.path().join("plans");
+        std::fs::create_dir_all(&plan_dir).expect("create plans dir");
+        let plan_path = plan_dir.join("my-plan.md");
+        let plan_text = "# My Plan\n\nThis is the plan content.\n";
+        std::fs::write(&plan_path, plan_text).expect("write plan file");
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: Some(plan_path.to_string_lossy().to_string()),
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        assert_eq!(
+            trace.plan_content,
+            Some(plan_text.to_string()),
+            "trace.plan_content should contain the plan file contents"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_snapshot_file_not_found() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: Some("/nonexistent/path/plan.md".to_string()),
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed even when plan file is missing");
+
+        assert_eq!(
+            trace.plan_content, None,
+            "trace.plan_content should be None when the plan file does not exist"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plan_content_snapshot_no_plan_file() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        assert_eq!(
+            trace.plan_content, None,
+            "trace.plan_content should be None when no plan_file is configured"
+        );
     }
 }

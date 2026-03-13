@@ -76,11 +76,11 @@ Read the plan file at session start and store the content in the trace.
 - If the file can't be read, log a warning and leave `plan_content` as `None` — don't fail the session
 
 **Checklist:**
-- [ ] Read plan file content at session start
-- [ ] Store in trace
-- [ ] Handle file-read errors gracefully
-- [ ] Verify `cargo check` passes
-- [ ] Verify `cargo test` passes
+- [x] Read plan file content at session start
+- [x] Store in trace
+- [x] Handle file-read errors gracefully
+- [x] Verify `cargo check` passes
+- [x] Verify `cargo test` passes
 
 ---
 
@@ -202,7 +202,7 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add `plan_content` to `SessionTrace` | Done |
-| 2 | Snapshot plan content in Ralph loop sessions | Not Started |
+| 2 | Snapshot plan content in Ralph loop sessions | Done |
 | 3 | Snapshot plan content in one-shot sessions | Not Started |
 | 4 | Create PlanPanel component | Not Started |
 | 5 | Wire PlanPanel into RunDetail | Not Started |
