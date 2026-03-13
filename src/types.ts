@@ -66,6 +66,7 @@ export type SessionTrace = {
   total_cache_creation_tokens: number;
   context_window?: number;
   final_context_tokens?: number;
+  max_context_percent?: number;
 };
 
 export type SessionState = {

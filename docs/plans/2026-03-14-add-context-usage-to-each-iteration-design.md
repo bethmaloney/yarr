@@ -104,13 +104,14 @@ To support historical traces (loaded from disk) showing the correct max context 
 **Pattern reference:** The `record_iteration()` method at `src-tauri/src/trace.rs:178-217` and the `SessionTrace` struct at lines 27-55.
 
 **Checklist:**
-- [ ] Add `max_context_percent: u8` field to `SessionTrace` (with `#[serde(default)]` for backwards compatibility)
-- [ ] In `record_iteration()`, after computing context_window and final_context_tokens:
-  - Compute the percentage for this iteration: `(final_context_tokens * 100 / context_window)` (integer division, using the span's values)
+- [x] Add `max_context_percent: u8` field to `SessionTrace` (with `#[serde(default)]` for backwards compatibility)
+- [x] In `record_iteration()`, after computing context_window and final_context_tokens:
+  - Compute the percentage for this iteration: `(final_context_tokens * 100 / context_window).min(100)` (integer division, clamped to 100, using the span's values)
   - Update `trace.max_context_percent = trace.max_context_percent.max(percent as u8)`
-- [ ] Add the field to the frontend `SessionTrace` type in `src/types.ts`
+- [x] In `finalize()`, recompute `max_context_percent` from all iterations (not just the last)
+- [x] Add the field to the frontend `SessionTrace` type in `src/types.ts`
 - [ ] Update `RepoCard` to use `lastTrace.max_context_percent` when available (for historical traces), falling back to the events-based computation
-- [ ] Add Rust unit tests for the new field
+- [x] Add Rust unit tests for the new field (5 tests: backward compat, basic computation, max tracking, zero context_window, finalize recomputation)
 
 ### Task 6: Update existing tests
 
@@ -157,5 +158,5 @@ The recommended implementation order is:
 | Task 2: RepoDetail.tsx update | Not Started | Main session page |
 | Task 3: RepoCard.tsx update | Not Started | Card display |
 | Task 4: OneShotDetail.tsx update | Not Started | 1-shot page |
-| Task 5: Rust SessionTrace field | Not Started | Backend persistence |
+| Task 5: Rust SessionTrace field | Complete | `max_context_percent: u8` in struct, `record_iteration`, `finalize`, 5 Rust tests, TS type updated |
 | Task 6: Test verification | Not Started | All tests green |
