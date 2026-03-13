@@ -22,7 +22,6 @@ export default function OneShotDetail() {
 
   const entries = useAppStore((s) => s.oneShotEntries);
   const sessions = useAppStore((s) => s.sessions);
-  const repos = useAppStore((s) => s.repos);
   const resumeOneShot = useAppStore((s) => s.resumeOneShot);
 
   const entry = oneshotId ? entries.get(oneshotId) : undefined;
@@ -34,15 +33,7 @@ export default function OneShotDetail() {
     [session.events],
   );
 
-  const parentRepo = entry
-    ? repos.find((r) => r.id === entry.parentRepoId)
-    : undefined;
-
-  const repoPath = parentRepo
-    ? parentRepo.type === "local"
-      ? parentRepo.path
-      : parentRepo.remotePath
-    : undefined;
+  const repoPath = entry?.worktreePath;
 
   if (!entry) {
     return (
