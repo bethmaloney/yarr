@@ -532,10 +532,114 @@ async fn run_oneshot(
 
             Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
         }
-        RepoType::Ssh { .. } => {
-            tracing::warn!(oneshot_id = %oneshot_id, repo_id = %repo_id, "1-shot is not supported for SSH repos");
-            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
-            Err("1-shot is not supported for SSH repos".to_string())
+        RepoType::Ssh { ssh_host, remote_path } => {
+            let ssh_runtime = SshRuntime::new(ssh_host, remote_path, app.state::<SshEnvCache>().cache_ref());
+
+            // Pre-warm env cache and emit warning if snapshot failed
+            let _ = ssh_runtime.resolve_env().await;
+            if let Some(warning) = ssh_runtime.env_warning() {
+                if let Err(e) = app.emit("env-warning", &warning) {
+                    tracing::warn!(error = %e, "failed to emit env-warning");
+                }
+            }
+
+            let config = oneshot::OneShotConfig {
+                repo_id: repo_id.clone(),
+                repo_path: PathBuf::from(remote_path),
+                title,
+                prompt,
+                model,
+                merge_strategy,
+                env_vars: env_vars.unwrap_or_default(),
+                max_iterations,
+                completion_signal,
+                checks: checks.unwrap_or_default(),
+                git_sync,
+                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+                ssh_host: Some(ssh_host.clone()),
+            };
+
+            let base_dir = match app.path().app_data_dir() {
+                Ok(d) => d,
+                Err(e) => {
+                    tracing::error!(oneshot_id = %oneshot_id, error = %e, "failed to resolve app data dir");
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                    return Err(e.to_string());
+                }
+            };
+            let collector = TraceCollector::new(base_dir, &oneshot_id);
+
+            let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
+            let app_handle = app.clone();
+            let oneshot_id_clone = oneshot_id.clone();
+
+            // Create a separate SshRuntime for the runner (SshRuntime is not Clone)
+            let ssh_runtime_for_runner = SshRuntime::new(ssh_host, remote_path, app.state::<SshEnvCache>().cache_ref());
+            let runner = OneShotRunner::new(config, collector, cancel_token)
+                .abort_registry(abort_registry)
+                .on_event(Box::new(move |event| {
+                    if let Err(e) = app_handle.emit("session-event", TaggedSessionEvent {
+                        repo_id: oneshot_id_clone.clone(),
+                        event: event.clone(),
+                    }) {
+                        tracing::warn!(error = %e, "failed to emit session-event");
+                    }
+                }))
+                .with_session_id(session_id)
+                .with_ssh_runtime(ssh_runtime_for_runner);
+
+            // Store reconnect notify in ActiveSshSessions
+            // OneShotRunner doesn't expose reconnect_notify yet (Task 4), so create a shared one
+            let reconnect_notify = Arc::new(tokio::sync::Notify::new());
+            {
+                let ssh_sessions = app.state::<ActiveSshSessions>();
+                ssh_sessions.sessions.lock().unwrap().insert(oneshot_id.clone(), reconnect_notify);
+                tracing::debug!(oneshot_id = %oneshot_id, "registered SSH oneshot in ActiveSshSessions");
+            }
+
+            // Spawn as a background task so we return immediately
+            let app_bg = app.clone();
+            let oneshot_id_bg = oneshot_id.clone();
+            let ssh_host_bg = ssh_host.clone();
+            let remote_path_bg = remote_path.clone();
+            let env_cache = app.state::<SshEnvCache>().cache_ref();
+            let join_handle = tokio::spawn(async move {
+                let _guard = scopeguard::guard((), {
+                    let app = app_bg.clone();
+                    let oneshot_id = oneshot_id_bg.clone();
+                    move |_| {
+                        // Clean up ActiveSshSessions (std::sync::Mutex — synchronous)
+                        {
+                            let ssh_sessions = app.state::<ActiveSshSessions>();
+                            ssh_sessions.sessions.lock().unwrap().remove(&oneshot_id);
+                            tracing::debug!(repo_id = %oneshot_id, "unregistered SSH oneshot from ActiveSshSessions");
+                        }
+                        // Clean up ActiveSessions (tokio::sync::Mutex — must spawn)
+                        let app = app.clone();
+                        let oneshot_id = oneshot_id.clone();
+                        tokio::spawn(async move {
+                            tracing::info!(repo_id = %oneshot_id, reason = "ssh oneshot ended", "removing session from ActiveSessions");
+                            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                        });
+                    }
+                });
+
+                let ssh_runtime = SshRuntime::new(&ssh_host_bg, &remote_path_bg, env_cache);
+                if let Err(e) = runner.run(&ssh_runtime).await {
+                    tracing::error!(oneshot_id = %oneshot_id_bg, error = %e, "ssh oneshot runner failed");
+                }
+            });
+
+            // Update the placeholder with the real JoinHandle
+            {
+                let active = app.state::<ActiveSessions>();
+                let mut sessions = active.tokens.lock().await;
+                if let Some(handle) = sessions.get_mut(&oneshot_id) {
+                    handle.join_handle = join_handle;
+                }
+            }
+
+            Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
         }
     }
 }
@@ -723,10 +827,175 @@ async fn resume_oneshot(
 
             Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
         }
-        RepoType::Ssh { .. } => {
-            tracing::warn!(oneshot_id = %oneshot_id, repo_id = %repo_id, "resume_oneshot: 1-shot is not supported for SSH repos");
-            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
-            Err("1-shot is not supported for SSH repos".to_string())
+        RepoType::Ssh { ssh_host, remote_path } => {
+            // Validate worktree_path to prevent shell injection
+            if worktree_path.contains(';') || worktree_path.contains('$') || worktree_path.contains('`')
+                || worktree_path.contains('|') || worktree_path.contains('&') || worktree_path.contains('\n')
+                || worktree_path.contains('\'') || worktree_path.contains('"') || worktree_path.contains('\\')
+                || worktree_path.contains('(') || worktree_path.contains(')') {
+                tracing::warn!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "resume_oneshot: invalid worktree path");
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                return Err("Invalid worktree path".to_string());
+            }
+
+            if branch.contains(';') || branch.contains('$') || branch.contains('`')
+                || branch.contains('|') || branch.contains('&') || branch.contains('\n')
+                || branch.contains('\'') || branch.contains('"') || branch.contains('\\')
+                || branch.contains(' ') || branch.contains('(') || branch.contains(')') {
+                tracing::warn!(oneshot_id = %oneshot_id, branch = %branch, "resume_oneshot: invalid branch name");
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                return Err("Invalid branch name".to_string());
+            }
+
+            let ssh_runtime = SshRuntime::new(ssh_host, remote_path, app.state::<SshEnvCache>().cache_ref());
+
+            // Pre-warm env cache and emit warning if snapshot failed
+            let _ = ssh_runtime.resolve_env().await;
+            if let Some(warning) = ssh_runtime.env_warning() {
+                if let Err(e) = app.emit("env-warning", &warning) {
+                    tracing::warn!(error = %e, "failed to emit env-warning");
+                }
+            }
+
+            // Load events from previous session
+            let base_dir = match app.path().app_data_dir() {
+                Ok(d) => d,
+                Err(e) => {
+                    app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                    return Err(e.to_string());
+                }
+            };
+            let events = match TraceCollector::read_events(&base_dir, &oneshot_id, &old_session_id) {
+                Ok(events) => {
+                    tracing::info!(oneshot_id = %oneshot_id, event_count = events.len(), "loaded events from previous session");
+                    events
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to read events for resume (oneshot_id={}, session_id={}): {}. Will re-run all phases.", oneshot_id, old_session_id, e);
+                    Vec::new()
+                }
+            };
+
+            // Detect which phases to skip
+            let resume_state = oneshot::detect_resume_phase(
+                &events,
+                PathBuf::from(&worktree_path),
+                branch.clone(),
+            );
+            tracing::info!(
+                oneshot_id = %oneshot_id,
+                skip_design = resume_state.skip_design,
+                skip_implementation = resume_state.skip_implementation,
+                plan_file = ?resume_state.plan_file,
+                "detected resume phase (ssh)"
+            );
+
+            // Verify worktree still exists on remote
+            tracing::info!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "verifying worktree exists on remote");
+            let repo_path_buf = PathBuf::from(remote_path);
+            let wt_check = ssh_runtime
+                .run_command(
+                    &format!("test -d {}", worktree_path),
+                    &repo_path_buf,
+                    std::time::Duration::from_secs(10),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            if wt_check.exit_code != 0 {
+                tracing::error!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "worktree no longer exists on remote");
+                app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                return Err("Worktree no longer exists on remote".to_string());
+            }
+
+            let config = oneshot::OneShotConfig {
+                repo_id: repo_id.clone(),
+                repo_path: repo_path_buf,
+                title,
+                prompt,
+                model,
+                merge_strategy,
+                env_vars: env_vars.unwrap_or_default(),
+                max_iterations,
+                completion_signal,
+                checks: checks.unwrap_or_default(),
+                git_sync,
+                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+                ssh_host: Some(ssh_host.clone()),
+            };
+
+            let collector = TraceCollector::new(base_dir, &oneshot_id);
+
+            let abort_registry = app.state::<GlobalAbortRegistry>().inner.clone();
+            let app_handle = app.clone();
+            let oneshot_id_clone = oneshot_id.clone();
+
+            // Create a separate SshRuntime for the runner (SshRuntime is not Clone)
+            let ssh_runtime_for_runner = SshRuntime::new(ssh_host, remote_path, app.state::<SshEnvCache>().cache_ref());
+            let runner = OneShotRunner::new(config, collector, cancel_token)
+                .abort_registry(abort_registry)
+                .on_event(Box::new(move |event| {
+                    if let Err(e) = app_handle.emit("session-event", TaggedSessionEvent {
+                        repo_id: oneshot_id_clone.clone(),
+                        event: event.clone(),
+                    }) {
+                        tracing::warn!(error = %e, "failed to emit session-event");
+                    }
+                }))
+                .with_resume_state(resume_state)
+                .with_session_id(session_id)
+                .with_ssh_runtime(ssh_runtime_for_runner);
+
+            // Store reconnect notify in ActiveSshSessions
+            let reconnect_notify = Arc::new(tokio::sync::Notify::new());
+            {
+                let ssh_sessions = app.state::<ActiveSshSessions>();
+                ssh_sessions.sessions.lock().unwrap().insert(oneshot_id.clone(), reconnect_notify);
+                tracing::debug!(oneshot_id = %oneshot_id, "registered SSH resume oneshot in ActiveSshSessions");
+            }
+
+            // Spawn as a background task so we return immediately
+            let app_bg = app.clone();
+            let oneshot_id_bg = oneshot_id.clone();
+            let ssh_host_bg = ssh_host.clone();
+            let remote_path_bg = remote_path.clone();
+            let env_cache = app.state::<SshEnvCache>().cache_ref();
+            let join_handle = tokio::spawn(async move {
+                let _guard = scopeguard::guard((), {
+                    let app = app_bg.clone();
+                    let oneshot_id = oneshot_id_bg.clone();
+                    move |_| {
+                        // Clean up ActiveSshSessions (std::sync::Mutex — synchronous)
+                        {
+                            let ssh_sessions = app.state::<ActiveSshSessions>();
+                            ssh_sessions.sessions.lock().unwrap().remove(&oneshot_id);
+                            tracing::debug!(repo_id = %oneshot_id, "unregistered SSH resume oneshot from ActiveSshSessions");
+                        }
+                        // Clean up ActiveSessions (tokio::sync::Mutex — must spawn)
+                        let app = app.clone();
+                        let oneshot_id = oneshot_id.clone();
+                        tokio::spawn(async move {
+                            tracing::info!(repo_id = %oneshot_id, reason = "ssh resume oneshot ended", "removing session from ActiveSessions");
+                            app.state::<ActiveSessions>().tokens.lock().await.remove(&oneshot_id);
+                        });
+                    }
+                });
+
+                let ssh_runtime = SshRuntime::new(&ssh_host_bg, &remote_path_bg, env_cache);
+                if let Err(e) = runner.run(&ssh_runtime).await {
+                    tracing::error!(oneshot_id = %oneshot_id_bg, error = %e, "ssh resume oneshot runner failed");
+                }
+            });
+
+            // Update the placeholder with the real JoinHandle
+            {
+                let active = app.state::<ActiveSessions>();
+                let mut sessions = active.tokens.lock().await;
+                if let Some(handle) = sessions.get_mut(&oneshot_id) {
+                    handle.join_handle = join_handle;
+                }
+            }
+
+            Ok(OneShotResult { oneshot_id, session_id: session_id_for_result })
         }
     }
 }

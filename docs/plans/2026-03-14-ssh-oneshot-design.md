@@ -174,13 +174,13 @@ Replace the SSH error path in `run_oneshot` with the full SSH oneshot setup, mir
 - Return `OneShotResult { oneshot_id, session_id }`
 
 **Checklist:**
-- [ ] Replace SSH error arm with full setup
-- [ ] Create SshRuntime and pre-warm env cache
-- [ ] Build OneShotConfig with ssh_host
-- [ ] Set up event forwarding
-- [ ] Register in ActiveSshSessions for reconnection
-- [ ] Spawn background task with cleanup guard
-- [ ] `cargo check` passes
+- [x] Replace SSH error arm with full setup
+- [x] Create SshRuntime and pre-warm env cache
+- [x] Build OneShotConfig with ssh_host
+- [x] Set up event forwarding
+- [x] Register in ActiveSshSessions for reconnection
+- [x] Spawn background task with cleanup guard
+- [x] `cargo check` passes
 
 ---
 
@@ -283,7 +283,7 @@ Add E2E test variants for SSH oneshot using mocked Tauri IPC.
 |------|-------------|--------|
 | 1 | Add ssh_host to OneShotConfig and update worktree path | Done |
 | 2 | Extract phase execution helper (local vs SSH) | Done |
-| 3 | Wire up SSH oneshot in run_oneshot command | Not Started |
+| 3 | Wire up SSH oneshot in run_oneshot command | Done |
 | 4 | Handle reconnect notify for SSH oneshots | Not Started |
 | 5 | Update OneShotDetail.tsx for SSH host prefix | Not Started |
 | 6 | Rust unit tests for SSH oneshot | Not Started |
