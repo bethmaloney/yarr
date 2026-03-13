@@ -140,6 +140,11 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         self
     }
 
+    pub fn with_reconnect_notify(mut self, notify: Arc<Notify>) -> Self {
+        self.reconnect_notify = notify;
+        self
+    }
+
     /// Get a handle to signal reconnection from an external caller
     pub fn reconnect_notify(&self) -> Arc<Notify> {
         self.reconnect_notify.clone()

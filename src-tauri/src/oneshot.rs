@@ -315,6 +315,7 @@ pub struct OneShotRunner {
     session_id: Arc<std::sync::Mutex<Option<String>>>,
     resume_state: Option<ResumeState>,
     pub(crate) ssh_runtime: Option<SshRuntime>,
+    pub(crate) reconnect_notify: Arc<tokio::sync::Notify>,
 }
 
 impl OneShotRunner {
@@ -333,6 +334,7 @@ impl OneShotRunner {
             session_id: Arc::new(std::sync::Mutex::new(None)),
             resume_state: None,
             ssh_runtime: None,
+            reconnect_notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -354,6 +356,15 @@ impl OneShotRunner {
     pub fn with_ssh_runtime(mut self, runtime: SshRuntime) -> Self {
         self.ssh_runtime = Some(runtime);
         self
+    }
+
+    pub fn with_reconnect_notify(mut self, notify: Arc<tokio::sync::Notify>) -> Self {
+        self.reconnect_notify = notify;
+        self
+    }
+
+    pub fn reconnect_notify(&self) -> Arc<tokio::sync::Notify> {
+        self.reconnect_notify.clone()
     }
 
     pub fn with_session_id(self, id: String) -> Self {
@@ -424,6 +435,7 @@ impl OneShotRunner {
             );
             let orchestrator =
                 SshSessionOrchestrator::new(ssh_runtime_new, config, phase_collector, self.cancel_token.clone())
+                    .with_reconnect_notify(self.reconnect_notify.clone())
                     .on_event(phase_cb);
 
             let ssh_trace = orchestrator.run().await?;
@@ -4591,5 +4603,82 @@ mod tests {
             Some("myhost"),
             "ssh_host should still be present in config"
         );
+    }
+
+    // =========================================================================
+    // Tests for reconnect_notify field and accessors
+    // =========================================================================
+
+    #[test]
+    fn test_reconnect_notify_default() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        // reconnect_notify should be initialized to a new Arc<Notify> by default
+        let notify = &runner.reconnect_notify;
+        assert!(
+            Arc::strong_count(notify) >= 1,
+            "reconnect_notify should be a valid Arc<Notify> by default"
+        );
+    }
+
+    #[test]
+    fn test_reconnect_notify_accessor_returns_shared_arc() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        let notify1 = runner.reconnect_notify();
+        let notify2 = runner.reconnect_notify();
+
+        // Both calls should return clones of the same Arc
+        assert!(
+            Arc::ptr_eq(&notify1, &notify2),
+            "reconnect_notify() should return the same Arc<Notify> on each call"
+        );
+    }
+
+    #[test]
+    fn test_with_reconnect_notify_builder() {
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let custom_notify = Arc::new(tokio::sync::Notify::new());
+        let custom_notify_clone = custom_notify.clone();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token)
+            .with_reconnect_notify(custom_notify);
+
+        let runner_notify = runner.reconnect_notify();
+        assert!(
+            Arc::ptr_eq(&runner_notify, &custom_notify_clone),
+            "with_reconnect_notify() should set the runner's reconnect_notify to the provided Arc<Notify>"
+        );
+    }
+
+    #[test]
+    fn test_reconnect_notify_field_exists_on_runner() {
+        // Structural test: verify the reconnect_notify field exists and is Arc<Notify>.
+        // This ensures that run_phase can pass it to SshSessionOrchestrator.
+        let tmp = TempDir::new().unwrap();
+        let config = make_config(&tmp, MergeStrategy::MergeToMain);
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let runner = OneShotRunner::new(config, collector, cancel_token);
+
+        // Access the field directly to confirm it exists with the expected type
+        let notify: &Arc<tokio::sync::Notify> = &runner.reconnect_notify;
+        // Verify it's a usable Notify — notifying shouldn't panic
+        notify.notify_one();
     }
 }

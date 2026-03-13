@@ -558,6 +558,8 @@ async fn run_oneshot(
                 title,
                 prompt,
                 model,
+                effort_level: effort_level.unwrap_or_default(),
+                design_effort_level: design_effort_level.unwrap_or_default(),
                 merge_strategy,
                 env_vars: env_vars.unwrap_or_default(),
                 max_iterations,
@@ -597,9 +599,9 @@ async fn run_oneshot(
                 .with_session_id(session_id)
                 .with_ssh_runtime(ssh_runtime_for_runner);
 
-            // Store reconnect notify in ActiveSshSessions
-            // OneShotRunner doesn't expose reconnect_notify yet (Task 4), so create a shared one
-            let reconnect_notify = Arc::new(tokio::sync::Notify::new());
+            // Store reconnect notify in ActiveSshSessions — use the runner's shared notify
+            // so reconnect_session signals propagate to the SshSessionOrchestrator per phase
+            let reconnect_notify = runner.reconnect_notify();
             {
                 let ssh_sessions = app.state::<ActiveSshSessions>();
                 ssh_sessions.sessions.lock().unwrap().insert(oneshot_id.clone(), reconnect_notify);
@@ -922,6 +924,8 @@ async fn resume_oneshot(
                 title,
                 prompt,
                 model,
+                effort_level: effort_level.unwrap_or_default(),
+                design_effort_level: design_effort_level.unwrap_or_default(),
                 merge_strategy,
                 env_vars: env_vars.unwrap_or_default(),
                 max_iterations,
@@ -954,8 +958,8 @@ async fn resume_oneshot(
                 .with_session_id(session_id)
                 .with_ssh_runtime(ssh_runtime_for_runner);
 
-            // Store reconnect notify in ActiveSshSessions
-            let reconnect_notify = Arc::new(tokio::sync::Notify::new());
+            // Store reconnect notify in ActiveSshSessions — use the runner's shared notify
+            let reconnect_notify = runner.reconnect_notify();
             {
                 let ssh_sessions = app.state::<ActiveSshSessions>();
                 ssh_sessions.sessions.lock().unwrap().insert(oneshot_id.clone(), reconnect_notify);

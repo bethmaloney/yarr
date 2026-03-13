@@ -201,11 +201,11 @@ Ensure the reconnect notification mechanism works for SSH oneshots, so the front
 - The existing `reconnect_ssh` Tauri command should work with oneshot IDs stored in `ActiveSshSessions`
 
 **Checklist:**
-- [ ] Add shared reconnect notify to `OneShotRunner`
-- [ ] Pass it to each `SshSessionOrchestrator` per phase
-- [ ] Register in `ActiveSshSessions` in `run_oneshot`
-- [ ] Verify `reconnect_ssh` command works with oneshot IDs
-- [ ] `cargo check` passes
+- [x] Add shared reconnect notify to `OneShotRunner`
+- [x] Pass it to each `SshSessionOrchestrator` per phase
+- [x] Register in `ActiveSshSessions` in `run_oneshot`
+- [x] Verify `reconnect_ssh` command works with oneshot IDs
+- [x] `cargo check` passes
 
 ---
 
@@ -284,7 +284,7 @@ Add E2E test variants for SSH oneshot using mocked Tauri IPC.
 | 1 | Add ssh_host to OneShotConfig and update worktree path | Done |
 | 2 | Extract phase execution helper (local vs SSH) | Done |
 | 3 | Wire up SSH oneshot in run_oneshot command | Done |
-| 4 | Handle reconnect notify for SSH oneshots | Not Started |
+| 4 | Handle reconnect notify for SSH oneshots | Done |
 | 5 | Update OneShotDetail.tsx for SSH host prefix | Not Started |
 | 6 | Rust unit tests for SSH oneshot | Not Started |
 | 7 | E2E tests for SSH oneshot | Not Started |
