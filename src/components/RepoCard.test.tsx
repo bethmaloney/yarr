@@ -4,6 +4,7 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { RepoCard, type GitStatusInfo } from "./RepoCard";
 import type { RepoConfig } from "../repos";
 import type { SessionTrace, RepoStatus, RepoGitStatus } from "../types";
+import type { PlanProgress } from "../plan-progress";
 
 afterEach(() => {
   cleanup();
@@ -979,5 +980,104 @@ describe("RepoCard", () => {
     fireEvent.click(cardButton);
     expect(handleClick).toHaveBeenCalledTimes(1);
     expect(handlePlanClick).not.toHaveBeenCalled();
+  });
+
+  // =========================================================================
+  // 16. Plan progress bar
+  // =========================================================================
+
+  it("does not render progress bar when planProgress is undefined", () => {
+    render(
+      <RepoCard repo={makeLocalRepo()} status="running" onClick={vi.fn()} />,
+    );
+    // No fraction label like "X/Y" should be present
+    expect(screen.queryByText(/^\d+\/\d+$/)).not.toBeInTheDocument();
+  });
+
+  it("does not render progress bar when planProgress is null", () => {
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="running"
+        planProgress={null}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/^\d+\/\d+$/)).not.toBeInTheDocument();
+  });
+
+  it("renders progress bar with fraction when planProgress is provided", () => {
+    const progress: PlanProgress = {
+      tasks: [],
+      totalItems: 42,
+      completedItems: 14,
+      currentTask: null,
+    };
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="running"
+        planProgress={progress}
+        onClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("14/42")).toBeInTheDocument();
+  });
+
+  it("progress fill uses teal color when incomplete", () => {
+    const progress: PlanProgress = {
+      tasks: [],
+      totalItems: 42,
+      completedItems: 14,
+      currentTask: null,
+    };
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="running"
+        planProgress={progress}
+        onClick={vi.fn()}
+      />,
+    );
+    const fill = screen.getByTestId("repo-progress-fill");
+    expect(fill.classList.contains("bg-[#4ecdc4]")).toBe(true);
+  });
+
+  it("progress fill uses green color when all complete", () => {
+    const progress: PlanProgress = {
+      tasks: [],
+      totalItems: 42,
+      completedItems: 42,
+      currentTask: null,
+    };
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="running"
+        planProgress={progress}
+        onClick={vi.fn()}
+      />,
+    );
+    const fill = screen.getByTestId("repo-progress-fill");
+    expect(fill.classList.contains("bg-[#34d399]")).toBe(true);
+  });
+
+  it("progress fill width is percentage-based", () => {
+    const progress: PlanProgress = {
+      tasks: [],
+      totalItems: 42,
+      completedItems: 21,
+      currentTask: null,
+    };
+    render(
+      <RepoCard
+        repo={makeLocalRepo()}
+        status="running"
+        planProgress={progress}
+        onClick={vi.fn()}
+      />,
+    );
+    const fill = screen.getByTestId("repo-progress-fill");
+    expect(fill.style.width).toBe("50%");
   });
 });

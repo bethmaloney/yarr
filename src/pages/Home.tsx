@@ -263,6 +263,7 @@ export default function Home() {
                   lastTrace={latestTraces.get(item.repo.id)}
                   gitStatus={gitStatus[item.repo.id]}
                   planExcerpt={planPreviews.get(item.repo.id)}
+                  planProgress={sessions.get(item.repo.id)?.planProgress}
                   onClick={() => navigate(`/repo/${item.repo.id}`)}
                   onPlanClick={openPlanPanel(item.repo.id)}
                 />

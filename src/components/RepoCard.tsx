@@ -1,6 +1,7 @@
 import { timeAgo } from "../time";
 import { sessionContextColor } from "../context-bar";
 import type { RepoConfig } from "../repos";
+import type { PlanProgress } from "../plan-progress";
 import type { RepoGitStatus, RepoStatus, SessionTrace } from "../types";
 
 export interface GitStatusInfo {
@@ -16,6 +17,7 @@ interface RepoCardProps {
   lastTrace?: SessionTrace;
   gitStatus?: GitStatusInfo;
   planExcerpt?: string;
+  planProgress?: PlanProgress | null;
   onClick: () => void;
   onPlanClick?: () => void;
 }
@@ -49,6 +51,7 @@ export function RepoCard({
   lastTrace,
   gitStatus,
   planExcerpt,
+  planProgress,
   onClick,
   onPlanClick,
 }: RepoCardProps) {
@@ -169,6 +172,24 @@ export function RepoCard({
         ))}
 
       <div className="flex-1" />
+
+      {planProgress && (() => {
+        const pct = planProgress.totalItems > 0 ? Math.round((planProgress.completedItems / planProgress.totalItems) * 100) : 0;
+        return (
+          <div className="flex items-center gap-2 w-full">
+            <div className="flex-1 h-[3px] rounded-full bg-[#2a2a3e] overflow-hidden">
+              <div
+                data-testid="repo-progress-fill"
+                className={planProgress.completedItems === planProgress.totalItems ? "bg-[#34d399]" : "bg-[#4ecdc4]"}
+                style={{ width: `${pct}%`, height: "100%" }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground font-mono shrink-0">
+              {planProgress.completedItems}/{planProgress.totalItems}
+            </span>
+          </div>
+        );
+      })()}
 
       <div className="flex items-center gap-2 min-w-0">
         <span

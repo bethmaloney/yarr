@@ -197,8 +197,8 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 - Only rendered when `planProgress` is truthy (session has parseable plan)
 
 **Checklist:**
-- [ ] Add `planProgress?: PlanProgress | null` to `RepoCardProps` (import type)
-- [ ] After the status indicator div (line 183) and before the `lastTrace &&` footer (line 184), render:
+- [x] Add `planProgress?: PlanProgress | null` to `RepoCardProps` (import type)
+- [x] After the status indicator div (line 183) and before the `lastTrace &&` footer (line 184), render:
   ```tsx
   {planProgress && (
     <div className="flex items-center gap-2 w-full">
@@ -214,8 +214,8 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
     </div>
   )}
   ```
-- [ ] Pass `planProgress` from session state in the dashboard page where RepoCard is rendered
-- [ ] Run `npx tsc --noEmit` to verify
+- [x] Pass `planProgress` from session state in the dashboard page where RepoCard is rendered
+- [x] Run `npx tsc --noEmit` to verify
 
 ---
 
@@ -227,10 +227,10 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 **Pattern reference:** How `status` and `lastTrace` are currently derived and passed to RepoCard.
 
 **Checklist:**
-- [ ] Find where `<RepoCard>` is rendered on the dashboard
-- [ ] Derive `planProgress` from `sessions.get(repo.id)?.planProgress`
-- [ ] Pass as prop: `planProgress={planProgress}`
-- [ ] Run `npx tsc --noEmit` to verify
+- [x] Find where `<RepoCard>` is rendered on the dashboard
+- [x] Derive `planProgress` from `sessions.get(repo.id)?.planProgress`
+- [x] Pass as prop: `planProgress={planProgress}`
+- [x] Run `npx tsc --noEmit` to verify
 
 ---
 
@@ -257,6 +257,6 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 | 5 | Event emoji/label | Done |
 | 6 | PlanProgressBar component | Done |
 | 7 | Integrate into EventsList | Done |
-| 8 | Compact bar in RepoCard | Not Started |
-| 9 | Dashboard → RepoCard wiring | Not Started |
+| 8 | Compact bar in RepoCard | Done |
+| 9 | Dashboard → RepoCard wiring | Done |
 | 10 | E2E verification | Not Started |
