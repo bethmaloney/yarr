@@ -112,12 +112,12 @@ Replace the discard of `StreamEvent::User` with parsing logic that extracts tool
 - Emit `SessionEvent::ToolResult` with the extracted output
 
 **Checklist:**
-- [ ] Parse `UserEvent.message.content` array
-- [ ] Extract `tool_use_id` and text content from tool_result blocks
-- [ ] Look up tool name in HashMap, filter to Bash/Agent only
-- [ ] Emit `SessionEvent::ToolResult`
-- [ ] Add tracing for tool result parsing
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Parse `UserEvent.message.content` array
+- [x] Extract `tool_use_id` and text content from tool_result blocks
+- [x] Look up tool name in HashMap, filter to Bash/Agent only
+- [x] Emit `SessionEvent::ToolResult`
+- [x] Add tracing for tool result parsing
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -212,10 +212,10 @@ Add tests for the new StreamEvent::User parsing and ToolResult emission.
 - Test text extraction from various content formats
 
 **Checklist:**
-- [ ] Add test for Bash tool result parsing and emission
-- [ ] Add test for Agent tool result parsing and emission
-- [ ] Add test for filtered-out tool types
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Add test for Bash tool result parsing and emission
+- [x] Add test for Agent tool result parsing and emission
+- [x] Add test for filtered-out tool types
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -245,9 +245,9 @@ Test the merge logic in iteration-groups.ts.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add ToolResult variant and ID tracking | Done |
-| 2 | Parse StreamEvent::User and emit ToolResult | Not Started |
+| 2 | Parse StreamEvent::User and emit ToolResult | Done |
 | 3 | Update frontend types and event merging | Not Started |
 | 4 | Render tool output in IterationGroup | Not Started |
 | 5 | Update event formatting for tool_result | Not Started |
-| 6 | Rust unit tests | Not Started |
+| 6 | Rust unit tests | Done |
 | 7 | Frontend tests for event merging | Not Started |

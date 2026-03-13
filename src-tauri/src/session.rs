@@ -990,8 +990,21 @@ impl SessionRunner {
                         StreamEvent::Result(r) => {
                             result_event = Some(r.clone());
                         }
-                        StreamEvent::User(_) => {
-                            // Tool results flowing back — not interesting for display
+                        StreamEvent::User(user_event) => {
+                            if let Some(ref message) = user_event.message {
+                                let tool_ids = self.tool_use_ids.lock().unwrap();
+                                let results = extract_tool_results(message, &tool_ids);
+                                drop(tool_ids); // Release lock before emitting
+                                for (tool_use_id, tool_name, tool_output) in results {
+                                    tracing::debug!(iteration, tool_use_id = %tool_use_id, tool_name = %tool_name, output_len = tool_output.len(), "tool result");
+                                    self.emit(SessionEvent::ToolResult {
+                                        iteration,
+                                        tool_use_id,
+                                        tool_name,
+                                        tool_output,
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -1045,6 +1058,57 @@ impl SessionRunner {
             .ok_or_else(|| anyhow::anyhow!("Claude process exited without emitting a result event"))
             .map(|r| (r, last_context_tokens))
     }
+}
+
+/// Extract tool results from a UserEvent message.
+/// Returns Vec of (tool_use_id, tool_name, tool_output) for Bash/Agent tools only.
+fn extract_tool_results(
+    message: &serde_json::Value,
+    tool_use_ids: &std::collections::HashMap<String, String>,
+) -> Vec<(String, String, String)> {
+    let mut results = Vec::new();
+
+    let content = match message.get("content").and_then(|c| c.as_array()) {
+        Some(arr) => arr,
+        None => return results,
+    };
+
+    for item in content {
+        if item.get("type").and_then(|t| t.as_str()) != Some("tool_result") {
+            continue;
+        }
+
+        let tool_use_id = match item.get("tool_use_id").and_then(|id| id.as_str()) {
+            Some(id) => id.to_string(),
+            None => continue,
+        };
+
+        let tool_name = match tool_use_ids.get(&tool_use_id) {
+            Some(name) => name.clone(),
+            None => continue,
+        };
+
+        if tool_name != "Bash" && tool_name != "Agent" {
+            continue;
+        }
+
+        let tool_output = match item.get("content") {
+            Some(serde_json::Value::String(s)) => s.clone(),
+            Some(serde_json::Value::Array(arr)) => {
+                let texts: Vec<&str> = arr
+                    .iter()
+                    .filter(|obj| obj.get("type").and_then(|t| t.as_str()) == Some("text"))
+                    .filter_map(|obj| obj.get("text").and_then(|t| t.as_str()))
+                    .collect();
+                texts.join("\n")
+            }
+            _ => String::new(),
+        };
+
+        results.push((tool_use_id, tool_name, tool_output));
+    }
+
+    results
 }
 
 #[cfg(test)]
@@ -3467,5 +3531,157 @@ mod tests {
             json["plan_content"], "# Plan\n- [x] Done",
             "serialized plan_content should match"
         );
+    }
+
+    // --- extract_tool_results tests ---
+
+    fn make_tool_use_ids(entries: &[(&str, &str)]) -> std::collections::HashMap<String, String> {
+        entries.iter().map(|(id, name)| (id.to_string(), name.to_string())).collect()
+    }
+
+    fn make_message(content_items: &[serde_json::Value]) -> serde_json::Value {
+        serde_json::json!({
+            "content": content_items
+        })
+    }
+
+    #[test]
+    fn extract_tool_results_bash_tool() {
+        let tool_use_ids = make_tool_use_ids(&[("toolu_bash1", "Bash")]);
+        let message = make_message(&[serde_json::json!({
+            "type": "tool_result",
+            "tool_use_id": "toolu_bash1",
+            "content": "bash output here"
+        })]);
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "toolu_bash1");
+        assert_eq!(results[0].1, "Bash");
+        assert_eq!(results[0].2, "bash output here");
+    }
+
+    #[test]
+    fn extract_tool_results_agent_tool() {
+        let tool_use_ids = make_tool_use_ids(&[("toolu_agent1", "Agent")]);
+        let message = make_message(&[serde_json::json!({
+            "type": "tool_result",
+            "tool_use_id": "toolu_agent1",
+            "content": "agent output here"
+        })]);
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "toolu_agent1");
+        assert_eq!(results[0].1, "Agent");
+        assert_eq!(results[0].2, "agent output here");
+    }
+
+    #[test]
+    fn extract_tool_results_read_tool_filtered_out() {
+        let tool_use_ids = make_tool_use_ids(&[("toolu_read1", "Read")]);
+        let message = make_message(&[serde_json::json!({
+            "type": "tool_result",
+            "tool_use_id": "toolu_read1",
+            "content": "file contents"
+        })]);
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert!(results.is_empty(), "Read tool results should be filtered out");
+    }
+
+    #[test]
+    fn extract_tool_results_write_tool_filtered_out() {
+        let tool_use_ids = make_tool_use_ids(&[("toolu_write1", "Write")]);
+        let message = make_message(&[serde_json::json!({
+            "type": "tool_result",
+            "tool_use_id": "toolu_write1",
+            "content": "write result"
+        })]);
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert!(results.is_empty(), "Write tool results should be filtered out");
+    }
+
+    #[test]
+    fn extract_tool_results_unknown_tool_use_id_skipped() {
+        let tool_use_ids = make_tool_use_ids(&[("toolu_known", "Bash")]);
+        let message = make_message(&[serde_json::json!({
+            "type": "tool_result",
+            "tool_use_id": "toolu_unknown",
+            "content": "some output"
+        })]);
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert!(results.is_empty(), "Unknown tool_use_id should be skipped");
+    }
+
+    #[test]
+    fn extract_tool_results_content_as_string() {
+        let tool_use_ids = make_tool_use_ids(&[("toolu_str1", "Bash")]);
+        let message = make_message(&[serde_json::json!({
+            "type": "tool_result",
+            "tool_use_id": "toolu_str1",
+            "content": "plain string output"
+        })]);
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].2, "plain string output");
+    }
+
+    #[test]
+    fn extract_tool_results_content_as_array_of_text_blocks() {
+        let tool_use_ids = make_tool_use_ids(&[("toolu_arr1", "Bash")]);
+        let message = make_message(&[serde_json::json!({
+            "type": "tool_result",
+            "tool_use_id": "toolu_arr1",
+            "content": [{"type": "text", "text": "array text output"}]
+        })]);
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].2, "array text output");
+    }
+
+    #[test]
+    fn extract_tool_results_multiple_mixed_tools() {
+        let tool_use_ids = make_tool_use_ids(&[
+            ("toolu_b1", "Bash"),
+            ("toolu_r1", "Read"),
+            ("toolu_b2", "Bash"),
+        ]);
+        let message = make_message(&[
+            serde_json::json!({
+                "type": "tool_result",
+                "tool_use_id": "toolu_b1",
+                "content": "bash output 1"
+            }),
+            serde_json::json!({
+                "type": "tool_result",
+                "tool_use_id": "toolu_r1",
+                "content": "read output"
+            }),
+            serde_json::json!({
+                "type": "tool_result",
+                "tool_use_id": "toolu_b2",
+                "content": "bash output 2"
+            }),
+        ]);
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert_eq!(results.len(), 2, "Only Bash results should be returned");
+        assert_eq!(results[0].0, "toolu_b1");
+        assert_eq!(results[0].2, "bash output 1");
+        assert_eq!(results[1].0, "toolu_b2");
+        assert_eq!(results[1].2, "bash output 2");
+    }
+
+    #[test]
+    fn extract_tool_results_null_message() {
+        let tool_use_ids = make_tool_use_ids(&[("toolu_1", "Bash")]);
+        let message = serde_json::Value::Null;
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert!(results.is_empty(), "Null message should return empty vec");
+    }
+
+    #[test]
+    fn extract_tool_results_empty_object_message() {
+        let tool_use_ids = make_tool_use_ids(&[("toolu_1", "Bash")]);
+        let message = serde_json::json!({});
+        let results = extract_tool_results(&message, &tool_use_ids);
+        assert!(results.is_empty(), "Empty object message should return empty vec");
     }
 }
