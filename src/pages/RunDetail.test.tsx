@@ -35,6 +35,23 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: mockInvoke,
 }));
 
+// Mock react-markdown (doesn't work in jsdom)
+vi.mock("react-markdown", () => ({
+  default: ({ children }: { children: string }) => (
+    <div data-testid="markdown">{children}</div>
+  ),
+}));
+
+// Mock PlanPanel to simplify testing
+vi.mock("../PlanPanel", () => ({
+  PlanPanel: (props: { open: boolean; planContent: string; planFile: string }) =>
+    props.open ? (
+      <div data-testid="plan-panel" data-plan-file={props.planFile}>
+        {props.planContent}
+      </div>
+    ) : null,
+}));
+
 // Mock EventsList since we just care that it receives correct props
 vi.mock("../components/EventsList", () => ({
   EventsList: (props: Record<string, unknown>) => (
@@ -488,6 +505,93 @@ describe("RunDetail", () => {
           sessionId: "sess-abc-123",
         });
       });
+    });
+  });
+
+  // =========================================================================
+  // 10. PlanPanel integration
+  // =========================================================================
+
+  describe("PlanPanel integration", () => {
+    const planContent = "# My Plan\n\nPlan details here.";
+    const planFile = "/path/to/plan.md";
+
+    it("shows 'View Plan' button when trace.plan_content is present", async () => {
+      setupDefaultInvoke({ plan_content: planContent, plan_file: planFile });
+      renderRunDetail();
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /View Plan/ }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("does not show 'View Plan' button when trace.plan_content is null", async () => {
+      setupDefaultInvoke({ plan_content: null });
+      renderRunDetail();
+
+      await waitFor(() => {
+        expect(screen.getByText("fix-bug")).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByRole("button", { name: /View Plan/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("clicking 'View Plan' button opens the PlanPanel", async () => {
+      setupDefaultInvoke({ plan_content: planContent, plan_file: planFile });
+      renderRunDetail();
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /View Plan/ }),
+        ).toBeInTheDocument();
+      });
+
+      // PlanPanel should not be visible yet
+      expect(screen.queryByTestId("plan-panel")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /View Plan/ }));
+
+      await waitFor(() => {
+        const panel = screen.getByTestId("plan-panel");
+        expect(panel).toBeInTheDocument();
+        expect(panel).toHaveAttribute("data-plan-file", planFile);
+        expect(panel).toHaveTextContent("# My Plan Plan details here.");
+      });
+    });
+
+    it("clicking plan name opens the PlanPanel when plan_content is present", async () => {
+      setupDefaultInvoke({ plan_content: planContent, plan_file: planFile });
+      renderRunDetail();
+
+      await waitFor(() => {
+        expect(screen.getByText("plan")).toBeInTheDocument();
+      });
+
+      // Click the plan display name (filename without .md)
+      fireEvent.click(screen.getByText("plan"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("plan-panel")).toBeInTheDocument();
+      });
+    });
+
+    it("plan name is NOT clickable when plan_content is null", async () => {
+      setupDefaultInvoke({ plan_content: null, plan_file: "/path/to/plan.md" });
+      renderRunDetail();
+
+      await waitFor(() => {
+        expect(screen.getByText("plan")).toBeInTheDocument();
+      });
+
+      // Click the plan display name — should NOT open PlanPanel
+      fireEvent.click(screen.getByText("plan"));
+
+      // PlanPanel should not appear
+      expect(screen.queryByTestId("plan-panel")).not.toBeInTheDocument();
     });
   });
 });

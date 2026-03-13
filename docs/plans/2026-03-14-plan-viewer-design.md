@@ -147,11 +147,11 @@ Add the "View Plan" button and make the plan excerpt clickable on the completed 
 - Only show triggers when `trace.plan_content` is present
 
 **Checklist:**
-- [ ] Add PlanPanel state and component
-- [ ] Make plan excerpt clickable
-- [ ] Add "View Plan" button
-- [ ] Hide triggers when no plan content
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Add PlanPanel state and component
+- [x] Make plan excerpt clickable
+- [x] Add "View Plan" button
+- [x] Hide triggers when no plan content
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -205,6 +205,6 @@ Make the plan excerpt on repo cards clickable to open the plan viewer.
 | 2 | Snapshot plan content in Ralph loop sessions | Done |
 | 3 | Snapshot plan content in one-shot sessions | Done |
 | 4 | Create PlanPanel component | Done |
-| 5 | Wire PlanPanel into RunDetail | Not Started |
+| 5 | Wire PlanPanel into RunDetail | Done |
 | 6 | Wire PlanPanel into OneShotDetail | Not Started |
 | 7 | Wire PlanPanel into RepoCard | Not Started |
