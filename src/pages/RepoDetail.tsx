@@ -1625,6 +1625,7 @@ export default function RepoDetail() {
           events={session.events}
           isLive={session.running}
           repoPath={repoPath}
+          planProgress={session.planProgress}
         />
       )}
 

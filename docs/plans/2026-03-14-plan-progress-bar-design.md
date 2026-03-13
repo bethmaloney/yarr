@@ -174,13 +174,13 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 **Pattern reference:** The existing `EventsListProps` interface (EventsList.tsx:7-11) and the header div (EventsList.tsx:153-160).
 
 **Checklist:**
-- [ ] Add `planProgress?: PlanProgress | null` to `EventsListProps` (import type from plan-progress)
-- [ ] Render `<PlanProgressBar progress={planProgress} />` between the header div (line 160) and the scrollable div (line 161), guarded by `planProgress &&`
-- [ ] Pass `planProgress` from session state in all EventsList usage sites:
+- [x] Add `planProgress?: PlanProgress | null` to `EventsListProps` (import type from plan-progress)
+- [x] Render `<PlanProgressBar progress={planProgress} />` between the header div (line 160) and the scrollable div (line 161), guarded by `planProgress &&`
+- [x] Pass `planProgress` from session state in all EventsList usage sites:
   - `src/pages/OneShotDetail.tsx` — pass `session.planProgress`
   - `src/pages/RepoDetail.tsx` — pass `session.planProgress`
   - `src/pages/RunDetail.tsx` — parse from `trace.plan_content` if available
-- [ ] Run `npx tsc --noEmit` to verify
+- [x] Run `npx tsc --noEmit` to verify
 
 ---
 
@@ -256,7 +256,7 @@ Progress is derived by parsing the plan markdown for `## Task N` headings and `-
 | 4 | Zustand store handling | Done |
 | 5 | Event emoji/label | Done |
 | 6 | PlanProgressBar component | Done |
-| 7 | Integrate into EventsList | Not Started |
+| 7 | Integrate into EventsList | Done |
 | 8 | Compact bar in RepoCard | Not Started |
 | 9 | Dashboard → RepoCard wiring | Not Started |
 | 10 | E2E verification | Not Started |

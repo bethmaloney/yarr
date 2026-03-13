@@ -213,6 +213,7 @@ export default function OneShotDetail() {
           events={displayEvents}
           isLive={isRunning}
           repoPath={displayRepoPath}
+          planProgress={session.planProgress}
         />
       )}
 

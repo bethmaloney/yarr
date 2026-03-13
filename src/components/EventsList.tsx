@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { SessionEvent } from "../types";
+import type { PlanProgress } from "../plan-progress";
 import { groupEventsByIteration } from "../iteration-groups";
 import { eventEmoji, eventLabel } from "../event-format";
 import { IterationGroupComponent } from "./IterationGroup";
+import { PlanProgressBar } from "./PlanProgressBar";
 
 interface EventsListProps {
   events: SessionEvent[];
   isLive?: boolean;
   repoPath?: string;
+  planProgress?: PlanProgress | null;
 }
 
 const eventKindColor: Record<string, string> = {
@@ -34,6 +37,7 @@ export function EventsList({
   events,
   isLive = false,
   repoPath,
+  planProgress,
 }: EventsListProps) {
   const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
   const [expandedIterations, setExpandedIterations] = useState<Set<number>>(
@@ -158,6 +162,7 @@ export function EventsList({
           {events.length}
         </span>
       </div>
+      {planProgress && <PlanProgressBar progress={planProgress} />}
       <div
         ref={eventsContainerRef}
         className="events-scroll max-h-[350px] overflow-y-auto border border-[#2a2a3e] rounded-md bg-[#12122a] py-1"

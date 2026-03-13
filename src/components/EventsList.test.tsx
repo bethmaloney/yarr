@@ -2,6 +2,7 @@ import { vi, describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
 import type { SessionEvent } from "../types";
+import type { PlanProgress } from "../plan-progress";
 import type { IterationGroup } from "../iteration-groups";
 import { eventEmoji, eventLabel } from "../event-format";
 
@@ -70,6 +71,24 @@ function makeIterationEvents(
       _ts: 1700000000000 + iteration * 60000 + 30000,
     }),
   ];
+}
+
+function makeProgress(overrides: Partial<PlanProgress> = {}): PlanProgress {
+  return {
+    tasks: [
+      { number: 1, title: "Setup environment", total: 10, completed: 5 },
+      { number: 2, title: "Implement feature", total: 10, completed: 5 },
+    ],
+    totalItems: 20,
+    completedItems: 10,
+    currentTask: {
+      number: 1,
+      title: "Setup environment",
+      total: 10,
+      completed: 5,
+    },
+    ...overrides,
+  };
 }
 
 // Lazy import to allow mock registration above to take effect
@@ -730,5 +749,96 @@ describe("EventsList", () => {
     expect(container.querySelector("li.session_started")).not.toBeNull();
     expect(container.querySelector("li.design_phase_started")).not.toBeNull();
     expect(container.querySelector("li.session_complete")).not.toBeNull();
+  });
+
+  // =========================================================================
+  // 15. PlanProgressBar integration
+  // =========================================================================
+
+  it("renders PlanProgressBar when planProgress prop is provided", async () => {
+    const EventsList = await importEventsList();
+    const events = [
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
+    ];
+    const progress = makeProgress();
+    render(<EventsList events={events} planProgress={progress} />);
+
+    // PlanProgressBar renders "50% · 10/20 items"
+    expect(screen.getByText(/50% · 10\/20 items/)).toBeInTheDocument();
+  });
+
+  it("does NOT render PlanProgressBar when planProgress is null", async () => {
+    const EventsList = await importEventsList();
+    const events = [
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
+    ];
+    render(<EventsList events={events} planProgress={null} />);
+
+    expect(screen.queryByTestId("progress-fill")).not.toBeInTheDocument();
+    expect(screen.queryByText(/items/)).not.toBeInTheDocument();
+  });
+
+  it("does NOT render PlanProgressBar when planProgress is not passed", async () => {
+    const EventsList = await importEventsList();
+    const events = [
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
+    ];
+    render(<EventsList events={events} />);
+
+    expect(screen.queryByTestId("progress-fill")).not.toBeInTheDocument();
+    expect(screen.queryByText(/items/)).not.toBeInTheDocument();
+  });
+
+  it("renders PlanProgressBar between the header and the scrollable events container", async () => {
+    const EventsList = await importEventsList();
+    const events = [
+      makeEvent({
+        kind: "session_started",
+        session_id: "s1",
+        _ts: 1700000000000,
+      }),
+    ];
+    const progress = makeProgress();
+    const { container } = render(
+      <EventsList events={events} planProgress={progress} />,
+    );
+
+    // The structure should be: <section> -> [header, progress-bar, scroll-container, ...]
+    const section = container.querySelector("section.events");
+    expect(section).not.toBeNull();
+
+    const header = section!.querySelector(".events-header");
+    const scrollContainer = section!.querySelector(".events-scroll");
+    expect(header).not.toBeNull();
+    expect(scrollContainer).not.toBeNull();
+
+    // The progress bar text should exist in the document
+    const progressText = screen.getByText(/50% · 10\/20 items/);
+    const progressBarWrapper = progressText.closest("div.mb-2");
+    expect(progressBarWrapper).not.toBeNull();
+
+    // Verify ordering: header comes before progress bar, progress bar comes before scroll container
+    // Using DOM compareDocumentPosition: DOCUMENT_POSITION_FOLLOWING = 4
+    const headerBeforeProgress =
+      header!.compareDocumentPosition(progressBarWrapper!) &
+      Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(headerBeforeProgress).toBeTruthy();
+
+    const progressBeforeScroll =
+      progressBarWrapper!.compareDocumentPosition(scrollContainer!) &
+      Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(progressBeforeScroll).toBeTruthy();
   });
 });

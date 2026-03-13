@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EventsList } from "@/components/EventsList";
 import { PlanPanel } from "../PlanPanel";
 import { parsePlanPreview, planDisplayName } from "../plan-preview";
+import { parsePlanProgress } from "../plan-progress";
 import type { SessionTrace, SessionEvent } from "../types";
 
 function formatDate(iso: string): string {
@@ -71,6 +72,11 @@ export default function RunDetail() {
     excerpt: string;
   } | null>(null);
   const [planPanelOpen, setPlanPanelOpen] = useState(false);
+
+  const planProgress = useMemo(
+    () => (trace?.plan_content ? parsePlanProgress(trace.plan_content) : null),
+    [trace?.plan_content],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -292,7 +298,7 @@ export default function RunDetail() {
         </dl>
       </div>
 
-      <EventsList events={events} repoPath={trace.repo_path} />
+      <EventsList events={events} repoPath={trace.repo_path} planProgress={planProgress} />
 
       {trace.plan_content && trace.plan_file && (
         <PlanPanel
