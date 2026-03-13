@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 
 // ---------------------------------------------------------------------------
@@ -129,9 +129,11 @@ describe("App", () => {
   // =========================================================================
 
   describe("route /oneshot/:oneshotId", () => {
-    it("renders OneShotDetail page showing not found for unknown oneshotId", () => {
+    it("renders OneShotDetail page showing not found for unknown oneshotId", async () => {
       renderWithRouter(["/oneshot/oneshot-nonexistent"]);
-      expect(screen.getByText(/not found/i)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText(/not found/i)).toBeInTheDocument();
+      });
     });
   });
 

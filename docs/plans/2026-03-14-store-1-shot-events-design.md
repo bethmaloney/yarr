@@ -103,29 +103,10 @@ If a user navigates to `/oneshot/{oneshotId}` from History but the entry was pru
 
 ### Checklist
 
-- [ ] In `OneShotDetail.tsx`, when `entry` is undefined but `oneshotId` is present, attempt to load the trace from disk:
-  ```typescript
-  useEffect(() => {
-    if (entry || !oneshotId) return;
-    // Try to load trace from disk to reconstruct a minimal entry
-    invoke<SessionTrace[]>("list_traces", { repoId: oneshotId })
-      .then((traces) => {
-        if (traces.length > 0) {
-          const trace = traces[0]; // Most recent
-          // Reconstruct a minimal entry from trace data
-          setFallbackTrace(trace);
-          // Also load events
-          invoke<SessionEvent[]>("get_trace_events", {
-            repoId: oneshotId,
-            sessionId: trace.session_id,
-          }).then(setFallbackEvents);
-        }
-      });
-  }, [entry, oneshotId]);
-  ```
-- [ ] Add local state for `fallbackTrace` and `fallbackEvents`.
-- [ ] When rendering, use fallback data if the entry doesn't exist — show trace info from the `SessionTrace` object (prompt, outcome, cost, etc.) and events from disk.
-- [ ] The page should still show the full events list and result section using the fallback data.
+- [x] In `OneShotDetail.tsx`, when `entry` is undefined but `oneshotId` is present, attempt to load the trace from disk via `list_traces` + `get_trace_events`.
+- [x] Add local state for `fallbackTrace`, `fallbackEvents`, and `fallbackLoading`.
+- [x] When rendering, use fallback data if the entry doesn't exist — show trace info from the `SessionTrace` object (prompt, outcome, cost, etc.) and events from disk.
+- [x] The page should still show the full events list and result section using the fallback data.
 
 ---
 
@@ -169,7 +150,7 @@ If `oneshot-entries.json` gets corrupted or lost, all oneshot history is gone ev
 - [x] **store.test.ts**: Test that `one_shot_complete` event triggers trace fetch.
 - [x] **store.test.ts**: Test that completed entries are no longer pruned.
 - [x] **History.test.tsx**: Test that clicking a `session_type: "one_shot"` trace navigates to `/oneshot/{id}`.
-- [ ] **OneShotDetail.test.tsx**: Test fallback rendering when entry is not in store but trace exists on disk.
+- [x] **OneShotDetail.test.tsx**: Test fallback rendering when entry is not in store but trace exists on disk.
 
 ---
 
@@ -181,7 +162,7 @@ If `oneshot-entries.json` gets corrupted or lost, all oneshot history is gone ev
 | 2. Fetch trace on oneshot completion | Done | `src/store.ts` — fetches on `one_shot_complete`, updates sessions + latestTraces |
 | 3. Remove aggressive pruning | Done | `src/store.ts` — pruning block removed |
 | 4. History → OneShotDetail navigation | Done | `src/pages/History.tsx` — uses `trace.repo_id` directly for oneshot, not `traceRepoId` |
-| 5. OneShotDetail disk fallback | Not Started | `src/pages/OneShotDetail.tsx` |
+| 5. OneShotDetail disk fallback | Done | `src/pages/OneShotDetail.tsx` — loads trace+events from disk when entry not in store |
 | 6. Reconcile entries from disk on startup | Not Started | `src/store.ts` — lower priority |
 | 7. Add tests | Not Started | Multiple test files |
 

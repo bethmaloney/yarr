@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
 import { groupEventsByIteration, maxContextPercent } from "../iteration-groups";
 import { sessionContextColor } from "../context-bar";
 import { Loader2, AlertTriangle, Terminal } from "lucide-react";
-import type { SessionState } from "../types";
+import type { SessionState, SessionTrace, SessionEvent } from "../types";
 
 const defaultSession: SessionState = {
   running: false,
@@ -31,20 +31,80 @@ export default function OneShotDetail() {
   const session =
     (oneshotId ? sessions.get(oneshotId) : undefined) ?? defaultSession;
 
+  const [fallbackTrace, setFallbackTrace] = useState<SessionTrace | null>(null);
+  const [fallbackEvents, setFallbackEvents] = useState<SessionEvent[]>([]);
+  const [fallbackLoading, setFallbackLoading] = useState(false);
+
+  useEffect(() => {
+    if (entry || !oneshotId) return;
+
+    let cancelled = false;
+    setFallbackLoading(true);
+
+    invoke<SessionTrace[]>("list_traces", { repoId: oneshotId }).then(
+      (traces) => {
+        if (cancelled) return;
+        if (!traces || traces.length === 0) {
+          setFallbackLoading(false);
+          return;
+        }
+        setFallbackTrace(traces[0]);
+        invoke<SessionEvent[]>("get_trace_events", {
+          repoId: oneshotId,
+          sessionId: traces[0].session_id,
+        })
+          .then((events) => {
+            if (!cancelled && events) {
+              setFallbackEvents(events);
+            }
+          })
+          .catch((e) => {
+            console.error("Failed to load trace events from disk:", e);
+          })
+          .finally(() => {
+            if (!cancelled) setFallbackLoading(false);
+          });
+      },
+      (e) => {
+        console.error("Failed to load traces from disk:", e);
+        if (!cancelled) setFallbackLoading(false);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entry, oneshotId]);
+
+  const displayTitle =
+    entry?.title ?? fallbackTrace?.prompt.slice(0, 80) ?? "";
+  const displayPrompt = entry?.prompt ?? fallbackTrace?.prompt ?? "";
+  const displayParentName = entry?.parentRepoName ?? "Unknown";
+  const displayEvents = entry ? session.events : fallbackEvents;
+  const displayTrace = entry ? session.trace : fallbackTrace;
+  const isRunning = entry ? session.running : false;
+  const displayRepoPath = entry?.worktreePath;
+
   const phase = useMemo(
-    () => getPhaseFromEvents(session.events),
-    [session.events],
+    () => getPhaseFromEvents(displayEvents),
+    [displayEvents],
   );
 
   const ctxPeak = useMemo(
-    () => maxContextPercent(groupEventsByIteration(session.events)),
-    [session.events],
+    () => maxContextPercent(groupEventsByIteration(displayEvents)),
+    [displayEvents],
   );
   const ctxPercent = ctxPeak > 0 ? ctxPeak : null;
 
-  const repoPath = entry?.worktreePath;
+  if (!entry && fallbackLoading) {
+    return (
+      <main className="max-w-[700px] mx-auto p-8">
+        <Loader2 className="size-8 text-muted-foreground animate-spin mx-auto" />
+      </main>
+    );
+  }
 
-  if (!entry) {
+  if (!entry && !fallbackTrace) {
     return (
       <main className="max-w-[700px] mx-auto p-8">
         <p>Not found</p>
@@ -71,17 +131,19 @@ export default function OneShotDetail() {
       <Breadcrumbs crumbs={breadcrumbs} />
 
       <header>
-        <h1 className="text-3xl text-primary mb-0">{entry.title}</h1>
+        <h1 className="text-3xl text-primary mb-0">{displayTitle}</h1>
         <p className="mt-1 text-muted-foreground text-sm">
-          from {entry.parentRepoName}
+          from {displayParentName}
         </p>
       </header>
 
-      <div className="mt-4 p-3 bg-card border border-border rounded font-mono text-sm text-muted-foreground whitespace-pre-wrap">
-        {entry.prompt}
-      </div>
+      {displayTitle !== displayPrompt && (
+        <div className="mt-4 p-3 bg-card border border-border rounded font-mono text-sm text-muted-foreground whitespace-pre-wrap">
+          {displayPrompt}
+        </div>
+      )}
 
-      {session.running && (
+      {isRunning && (
         <div className="flex gap-2 mt-4">
           <Button variant="destructive" onClick={stopSession}>
             Stop
@@ -103,14 +165,14 @@ export default function OneShotDetail() {
         </div>
       )}
 
-      {session.events.length === 0 ? (
+      {displayEvents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 rounded-md border border-dashed border-border text-center mt-4">
-          {entry.status === "running" ? (
+          {entry?.status === "running" ? (
             <>
               <Loader2 className="size-8 text-muted-foreground mb-3 animate-spin" />
               <p className="text-sm font-medium animate-pulse">Session starting...</p>
             </>
-          ) : entry.status === "failed" && entry.worktreePath ? (
+          ) : entry?.status === "failed" && entry.worktreePath ? (
             <>
               <AlertTriangle className="size-8 text-muted-foreground mb-3" />
               <p className="text-sm font-medium">Session was interrupted</p>
@@ -123,7 +185,7 @@ export default function OneShotDetail() {
                 Resume
               </Button>
             </>
-          ) : entry.status === "failed" ? (
+          ) : entry?.status === "failed" ? (
             <>
               <AlertTriangle className="size-8 text-muted-foreground mb-3" />
               <p className="text-sm font-medium">Session failed before starting</p>
@@ -137,9 +199,9 @@ export default function OneShotDetail() {
         </div>
       ) : (
         <EventsList
-          events={session.events}
-          isLive={session.running}
-          repoPath={repoPath}
+          events={displayEvents}
+          isLive={isRunning}
+          repoPath={displayRepoPath}
         />
       )}
 
@@ -154,29 +216,29 @@ export default function OneShotDetail() {
         </section>
       )}
 
-      {!session.running && session.trace && (
+      {!isRunning && displayTrace && (
         <section>
           <h2 className="text-sm text-muted-foreground uppercase tracking-wide border-b border-border pb-1 mb-0">
             Result
           </h2>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 mt-3">
             <dt className="text-muted-foreground text-sm">Outcome</dt>
-            <dd className="m-0 text-sm font-mono">{session.trace.outcome}</dd>
-            {session.trace.failure_reason && (
+            <dd className="m-0 text-sm font-mono">{displayTrace.outcome}</dd>
+            {displayTrace.failure_reason && (
               <>
                 <dt className="text-muted-foreground text-sm">Reason</dt>
                 <dd className="m-0 text-sm font-mono text-red-400 whitespace-pre-wrap break-words">
-                  {session.trace.failure_reason}
+                  {displayTrace.failure_reason}
                 </dd>
               </>
             )}
             <dt className="text-muted-foreground text-sm">Iterations</dt>
             <dd className="m-0 text-sm font-mono">
-              {session.trace.total_iterations}
+              {displayTrace.total_iterations}
             </dd>
             <dt className="text-muted-foreground text-sm">Total Cost</dt>
             <dd className="m-0 text-sm font-mono">
-              ${session.trace.total_cost_usd.toFixed(4)}
+              ${displayTrace.total_cost_usd.toFixed(4)}
             </dd>
             {ctxPercent !== null && (
               <>
@@ -190,7 +252,7 @@ export default function OneShotDetail() {
             )}
             <dt className="text-muted-foreground text-sm">Session ID</dt>
             <dd className="m-0 text-sm font-mono">
-              {session.trace.session_id}
+              {displayTrace.session_id}
             </dd>
           </dl>
         </section>
