@@ -258,8 +258,8 @@ Add an E2E test that verifies ANSI-colored tool output renders with the correct 
 - Verify plain (unstyled) text does not get wrapped in ANSI spans
 
 **Checklist:**
-- [ ] Create `e2e/ansi-colors.test.ts`
-- [ ] E2E test passes (`npm run test:e2e`)
+- [x] Create `e2e/ansi-colors.test.ts`
+- [x] E2E test passes (`npm run test:e2e`)
 
 ---
 
@@ -271,4 +271,4 @@ Add an E2E test that verifies ANSI-colored tool output renders with the correct 
 | 2 | Add ANSI palette CSS and utility classes | Done |
 | 3 | Create `parseAnsi` module with unit tests | Done |
 | 4 | Integrate ANSI rendering into `ToolOutputSection` with component tests | Done |
-| 5 | E2E test for ANSI color rendering | Not Started |
+| 5 | E2E test for ANSI color rendering | Done |
