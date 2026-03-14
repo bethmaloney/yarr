@@ -8,6 +8,7 @@ import {
   contextTokensColor,
 } from "../context-bar";
 import Markdown from "react-markdown";
+import { parseAnsi } from "../lib/ansi";
 
 interface IterationGroupProps {
   group: IterationGroup;
@@ -101,7 +102,15 @@ function ToolOutputSection({
         <pre className="font-mono whitespace-pre-wrap break-words overflow-x-auto">
           {displayedLines.map((line, li) => (
             <span key={li}>
-              {line}
+              {parseAnsi(line).map((seg, j) =>
+                seg.classes ? (
+                  <span key={j} className={seg.classes}>
+                    {seg.text}
+                  </span>
+                ) : (
+                  seg.text
+                ),
+              )}
               {li < displayedLines.length - 1 ? "\n" : ""}
             </span>
           ))}

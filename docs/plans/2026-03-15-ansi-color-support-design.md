@@ -233,11 +233,11 @@ Update the `ToolOutputSection` component to render ANSI-styled spans for non-Age
 - Truncation still works correctly with ANSI-colored output
 
 **Checklist:**
-- [ ] Import `parseAnsi` in `IterationGroup.tsx`
-- [ ] Update `ToolOutputSection` rendering
-- [ ] Add component tests to `IterationGroup.test.tsx`
-- [ ] All unit and component tests pass (`npm test`)
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Import `parseAnsi` in `IterationGroup.tsx`
+- [x] Update `ToolOutputSection` rendering
+- [x] Add component tests to `IterationGroup.test.tsx`
+- [x] All unit and component tests pass (`npm test`)
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -270,5 +270,5 @@ Add an E2E test that verifies ANSI-colored tool output renders with the correct 
 | 1 | Install `anser` dependency | Done |
 | 2 | Add ANSI palette CSS and utility classes | Done |
 | 3 | Create `parseAnsi` module with unit tests | Done |
-| 4 | Integrate ANSI rendering into `ToolOutputSection` with component tests | Not Started |
+| 4 | Integrate ANSI rendering into `ToolOutputSection` with component tests | Done |
 | 5 | E2E test for ANSI color rendering | Not Started |

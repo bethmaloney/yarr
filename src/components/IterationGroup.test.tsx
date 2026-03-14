@@ -1187,6 +1187,175 @@ describe("IterationGroupComponent", () => {
   });
 
   // =========================================================================
+  // ANSI color rendering in tool output
+  // =========================================================================
+
+  describe("ANSI color rendering in tool output", () => {
+    it("renders ANSI color codes as spans with correct classes", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "echo red" },
+          tool_output: "\x1b[31mred text\x1b[0m",
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      const span = document.querySelector("span.ansi-fg-red");
+      expect(span).not.toBeNull();
+      expect(span?.textContent).toBe("red text");
+    });
+
+    it("renders bold ANSI output with ansi-bold class", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "echo bold" },
+          tool_output: "\x1b[1mbold text\x1b[0m",
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      const span = document.querySelector("span.ansi-bold");
+      expect(span).not.toBeNull();
+      expect(span?.textContent).toBe("bold text");
+    });
+
+    it("renders plain text tool output without ansi-* spans", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "echo hello" },
+          tool_output: "hello world",
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      const ansiElements = document.querySelectorAll("[class*='ansi-']");
+      expect(ansiElements.length).toBe(0);
+    });
+
+    it("strips ANSI escape codes from visible text content", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "echo colored" },
+          tool_output: "\x1b[32mgreen\x1b[0m and \x1b[34mblue\x1b[0m",
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      const preElements = document.querySelectorAll("pre");
+      for (const pre of preElements) {
+        const text = pre.textContent ?? "";
+        expect(text).not.toMatch(/\x1b/);
+        expect(text).not.toMatch(/\u001b/);
+      }
+    });
+
+    it("truncates ANSI-colored output at 20 lines and shows Show more", () => {
+      const lines = Array.from(
+        { length: 30 },
+        (_, i) => `\x1b[31mcolored line ${i + 1}\x1b[0m`,
+      );
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Bash",
+          tool_input: { command: "seq 30" },
+          tool_output: lines.join("\n"),
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      // Line 20 should be visible (last truncated line)
+      expect(screen.getByText(/colored line 20/)).toBeInTheDocument();
+      // Line 21 should NOT be visible
+      expect(screen.queryByText(/colored line 21/)).not.toBeInTheDocument();
+      // Show more button should be present
+      expect(screen.getByText(/Show more/)).toBeInTheDocument();
+    });
+
+    it("does not apply ANSI parsing to Agent tool output", () => {
+      const events = [
+        makeEvent({
+          kind: "tool_use",
+          tool_name: "Agent",
+          tool_input: { prompt: "do something" },
+          tool_output: "\x1b[31mred text\x1b[0m and normal",
+          iteration: 1,
+        }),
+      ];
+      const group = makeGroup({ events });
+      const expandedEvents = new Set([0]);
+
+      renderComponent({
+        expanded: true,
+        group,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      // The text content should appear (Agent renders via Markdown)
+      expect(screen.getByText(/red text/)).toBeInTheDocument();
+      expect(screen.getByText(/normal/)).toBeInTheDocument();
+
+      // No ansi-* styled spans should exist since Agent uses Markdown rendering
+      const ansiSpans = document.querySelectorAll('[class*="ansi-"]');
+      expect(ansiSpans.length).toBe(0);
+    });
+  });
+
+  // =========================================================================
   // 22. Token display format, context tokens, and compaction icon
   // =========================================================================
 
