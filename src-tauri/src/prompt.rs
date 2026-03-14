@@ -132,8 +132,9 @@ If you look at the plan document at Step 1 and **every task is already checked o
 Do NOT output `<promise>COMPLETE</promise>` unless literally every task is done. Do NOT continue to another task after outputting your iteration summary."#;
 
 /// Build the full prompt by appending a plan document file reference.
-pub fn build_prompt(plan_file: &str) -> String {
-    format!("{IMPLEMENTATION_PROMPT}\n\n---\n\n**Plan document:** @{plan_file}")
+pub fn build_prompt(plan_file: &str, custom_prompt: Option<&str>) -> String {
+    let base = custom_prompt.unwrap_or(IMPLEMENTATION_PROMPT);
+    format!("{base}\n\n---\n\n**Plan document:** @{plan_file}")
 }
 
 /// The design phase prompt used for planning sessions.
@@ -435,6 +436,51 @@ mod tests {
         assert!(
             err_msg.contains("foo"),
             "error message should contain the invalid prompt_type value, got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn build_prompt_default_contains_implementation_prompt() {
+        let result = build_prompt("docs/plan.md", None);
+        assert!(
+            result.contains("orchestrator"),
+            "build_prompt with None should use the default IMPLEMENTATION_PROMPT which contains 'orchestrator', got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_prompt_default_contains_plan_file() {
+        let result = build_prompt("docs/plan.md", None);
+        assert!(
+            result.contains("docs/plan.md"),
+            "build_prompt with None should contain the plan file path, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_prompt_custom_uses_custom_content() {
+        let result = build_prompt("docs/plan.md", Some("My custom prompt"));
+        assert!(
+            result.contains("My custom prompt"),
+            "build_prompt with custom prompt should contain the custom content, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_prompt_custom_does_not_contain_default() {
+        let result = build_prompt("docs/plan.md", Some("My custom prompt"));
+        assert!(
+            !result.contains("orchestrator"),
+            "build_prompt with custom prompt should NOT contain default IMPLEMENTATION_PROMPT content, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_prompt_custom_still_contains_plan_file() {
+        let result = build_prompt("docs/plan.md", Some("My custom prompt"));
+        assert!(
+            result.contains("docs/plan.md"),
+            "build_prompt with custom prompt should still contain the plan file path, got: {result}"
         );
     }
 }

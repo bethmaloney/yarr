@@ -90,6 +90,7 @@ async fn run_session(
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
     create_branch: bool,
+    implementation_prompt_file: Option<String>,
 ) -> Result<SessionResult, String> {
     tracing::info!(repo_id = %repo_id, model = %model, effort_level = ?effort_level, repo_type = ?repo, "run_session called");
     let cancel_token = CancellationToken::new();
@@ -168,7 +169,26 @@ async fn run_session(
                 }
             }
 
-            let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
+            let custom_prompt_content = if let Some(ref prompt_file) = implementation_prompt_file {
+                let prompt_path = if Path::new(prompt_file).is_relative() {
+                    repo_path_buf.join(prompt_file)
+                } else {
+                    PathBuf::from(prompt_file)
+                };
+                match tokio::fs::read_to_string(&prompt_path).await {
+                    Ok(content) => {
+                        tracing::info!(prompt_file = %prompt_path.display(), content_len = content.len(), "loaded custom implementation prompt");
+                        Some(content)
+                    }
+                    Err(e) => {
+                        app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                        return Err(format!("Failed to read custom prompt file '{}': {}", prompt_path.display(), e));
+                    }
+                }
+            } else {
+                None
+            };
+            let prompt = prompt::build_prompt(&plan_path.to_string_lossy(), custom_prompt_content.as_deref());
 
             let plan_file_for_spawn = plan_file.clone();
             let config = SessionConfig {
@@ -285,7 +305,31 @@ async fn run_session(
             };
 
             // We can't verify the plan file exists on remote, skip the check
-            let prompt = prompt::build_prompt(&plan_path.to_string_lossy());
+            let custom_prompt_content = if let Some(ref prompt_file) = implementation_prompt_file {
+                let timeout = std::time::Duration::from_secs(30);
+                let remote_prompt_path = if Path::new(prompt_file).is_relative() {
+                    PathBuf::from(remote_path).join(prompt_file)
+                } else {
+                    PathBuf::from(prompt_file)
+                };
+                match ssh_runtime.run_command(&format!("cat {}", ssh_shell_escape(&remote_prompt_path.to_string_lossy())), &PathBuf::from(remote_path), timeout).await {
+                    Ok(output) if output.exit_code == 0 => {
+                        tracing::info!(prompt_file = %remote_prompt_path.display(), content_len = output.stdout.len(), "loaded custom implementation prompt");
+                        Some(output.stdout)
+                    }
+                    Ok(output) => {
+                        app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                        return Err(format!("Failed to read custom prompt file '{}': {}", prompt_file, output.stderr));
+                    }
+                    Err(e) => {
+                        app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
+                        return Err(format!("Failed to read custom prompt file '{}': {}", prompt_file, e));
+                    }
+                }
+            } else {
+                None
+            };
+            let prompt = prompt::build_prompt(&plan_path.to_string_lossy(), custom_prompt_content.as_deref());
 
             let plan_file_for_spawn = plan_file.clone();
             let config = SessionConfig {

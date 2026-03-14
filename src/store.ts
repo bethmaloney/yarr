@@ -959,6 +959,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             checks: repo.checks ?? [],
             gitSync: repo.gitSync,
             createBranch: repo.createBranch ?? true,
+            implementationPromptFile: repo.implementationPromptFile || null,
           },
         );
 

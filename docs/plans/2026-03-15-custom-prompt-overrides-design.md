@@ -122,12 +122,12 @@ Add prompt file parameters to the `run_session` flow and read custom prompts via
 **Pattern reference:** How `effort_level` is passed through `run_session` in `src/store.ts` and `src-tauri/src/lib.rs`
 
 **Checklist:**
-- [ ] Add `implementation_prompt_file: Option<String>` parameter to `run_session` Tauri command
-- [ ] If set, read file contents via runtime provider before building prompt
-- [ ] Update `build_prompt()` to accept `Option<&str>` for custom prompt content, using it instead of `IMPLEMENTATION_PROMPT` when `Some`
-- [ ] On file read failure, return error (abort session)
-- [ ] Update `store.ts` `runSession()` to pass `implementationPromptFile` from repo config
-- [ ] Verify: `cd src-tauri && cargo check && npx tsc --noEmit`
+- [x] Add `implementation_prompt_file: Option<String>` parameter to `run_session` Tauri command
+- [x] If set, read file contents via runtime provider before building prompt
+- [x] Update `build_prompt()` to accept `Option<&str>` for custom prompt content, using it instead of `IMPLEMENTATION_PROMPT` when `Some`
+- [x] On file read failure, return error (abort session)
+- [x] Update `store.ts` `runSession()` to pass `implementationPromptFile` from repo config
+- [x] Verify: `cd src-tauri && cargo check && npx tsc --noEmit`
 
 ---
 
@@ -181,6 +181,6 @@ Add tests for the new prompt override functionality.
 | 1 | Add prompt file fields to RepoConfig | Done |
 | 2 | Add settings UI for custom prompt files | Done |
 | 3 | Add `export_default_prompt` Tauri command | Done |
-| 4 | Pass prompt file paths through `run_session` | Not Started |
+| 4 | Pass prompt file paths through `run_session` | Done |
 | 5 | Pass prompt file paths through `run_oneshot` | Not Started |
 | 6 | Tests | Not Started |

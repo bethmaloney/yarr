@@ -858,7 +858,7 @@ impl OneShotRunner {
             trace.failure_reason = None;
 
             let plan_file_abs = format!("{}/{}", wt_path.display(), plan_file_path);
-            let impl_prompt = prompt::build_prompt(&plan_file_abs);
+            let impl_prompt = prompt::build_prompt(&plan_file_abs, None);
 
             let impl_config = SessionConfig {
                 repo_path: self.config.repo_path.clone(),
