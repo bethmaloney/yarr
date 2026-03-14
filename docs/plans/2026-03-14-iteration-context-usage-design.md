@@ -140,11 +140,11 @@ Extend the frontend data model to carry live context tokens and compaction state
 - Update existing tests, add new tests for `context_updated` and `compacted` events
 
 **Checklist:**
-- [ ] Add fields to `IterationGroup` type
-- [ ] Handle `context_updated` events in grouping logic
-- [ ] Handle `compacted` events in grouping logic
-- [ ] Add/update tests in `src/iteration-groups.test.ts`
-- [ ] `npx tsc --noEmit`
+- [x] Add fields to `IterationGroup` type
+- [x] Handle `context_updated` events in grouping logic
+- [x] Handle `compacted` events in grouping logic
+- [x] Add/update tests in `src/iteration-groups.test.ts`
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -165,9 +165,9 @@ Add a helper function for the absolute-threshold context color coding.
 - Add tests
 
 **Checklist:**
-- [ ] Add `contextTokensColor` function
-- [ ] Add tests in `src/context-bar.test.ts` (create if needed)
-- [ ] `npx tsc --noEmit`
+- [x] Add `contextTokensColor` function
+- [x] Add tests in `src/context-bar.test.ts` (create if needed)
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -236,8 +236,8 @@ Ensure the `SessionEvent` type covers the new event fields used by `context_upda
 - These are optional fields on the existing `SessionEvent` union type
 
 **Checklist:**
-- [ ] Add fields to SessionEvent type
-- [ ] `npx tsc --noEmit`
+- [x] Add fields to SessionEvent type
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -261,9 +261,9 @@ Add integration tests and verify the full flow.
 | 2 | Add ContextUpdated and Compacted session events | Done |
 | 3 | Emit events in SessionRunner | Done |
 | 4 | Emit events in SSH orchestrator | Done |
-| 5 | Add fields to IterationGroup | Not Started |
-| 6 | Add contextTokensColor helper | Not Started |
+| 5 | Add fields to IterationGroup | Done |
+| 6 | Add contextTokensColor helper | Done |
 | 7 | Update iteration header display | Not Started |
 | 8 | Add compacted event to event stream | Not Started |
-| 9 | Add fields to TypeScript types | Not Started |
+| 9 | Add fields to TypeScript types | Done |
 | 10 | Verify end-to-end with tests | Not Started |

@@ -21,3 +21,9 @@ export function sessionContextColor(percentage: number): string {
   if (percentage >= 60) return "var(--warning)";
   return "var(--success)";
 }
+
+export function contextTokensColor(tokens: number): string {
+  if (tokens > 140_000) return "#f87171";
+  if (tokens >= 80_000) return "#fbbf24";
+  return "#34d399";
+}

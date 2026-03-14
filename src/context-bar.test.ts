@@ -3,6 +3,7 @@ import {
   formatTokenCount,
   contextBarColor,
   sessionContextColor,
+  contextTokensColor,
 } from "./context-bar";
 
 describe("formatTokenCount", () => {
@@ -93,5 +94,31 @@ describe("sessionContextColor", () => {
 
   it("returns destructive token for 100%", () => {
     expect(sessionContextColor(100)).toBe("var(--destructive)");
+  });
+});
+
+describe("contextTokensColor", () => {
+  it("returns green for 0 tokens", () => {
+    expect(contextTokensColor(0)).toBe("#34d399");
+  });
+
+  it("returns green for 79,999 tokens", () => {
+    expect(contextTokensColor(79_999)).toBe("#34d399");
+  });
+
+  it("returns yellow for 80,000 tokens", () => {
+    expect(contextTokensColor(80_000)).toBe("#fbbf24");
+  });
+
+  it("returns yellow for 140,000 tokens", () => {
+    expect(contextTokensColor(140_000)).toBe("#fbbf24");
+  });
+
+  it("returns red for 140,001 tokens", () => {
+    expect(contextTokensColor(140_001)).toBe("#f87171");
+  });
+
+  it("returns red for 200,000 tokens", () => {
+    expect(contextTokensColor(200_000)).toBe("#f87171");
   });
 });

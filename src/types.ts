@@ -51,6 +51,9 @@ export type SessionEvent = {
   tool_use_id?: string;
   rate_limit_type?: string;
   plan_content?: string;
+  context_tokens?: number;
+  pre_tokens?: number;
+  trigger?: string;
   _ts?: number;
 };
 

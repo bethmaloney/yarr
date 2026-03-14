@@ -878,6 +878,184 @@ describe("groupEventsByIteration", () => {
     });
   });
 
+  describe("context_updated and compacted events", () => {
+    it("context_updated event updates contextTokens on the current group", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "context_updated",
+          context_tokens: 95000,
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.1, inputTokens: 100, outputTokens: 50 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].contextTokens).toBe(95000);
+    });
+
+    it("multiple context_updated events — last value wins", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "context_updated",
+          context_tokens: 50000,
+          _ts: 1200,
+        }),
+        makeEvent({
+          kind: "context_updated",
+          context_tokens: 120000,
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.1, inputTokens: 100, outputTokens: 50 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].contextTokens).toBe(120000);
+    });
+
+    it("context_updated without an open group creates implicit group", () => {
+      const events: SessionEvent[] = [
+        makeEvent({
+          kind: "context_updated",
+          iteration: 3,
+          context_tokens: 75000,
+          _ts: 5000,
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.standaloneEvents).toEqual([]);
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].iteration).toBe(3);
+      expect(result.iterations[0].contextTokens).toBe(75000);
+    });
+
+    it("compacted event sets compacted true and stores pre_tokens", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "compacted",
+          pre_tokens: 180000,
+          trigger: "auto",
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.2, inputTokens: 200, outputTokens: 100 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].compacted).toBe(true);
+      expect(result.iterations[0].compactedPreTokens).toBe(180000);
+    });
+
+    it("mixed scenario: context_updated + compacted in same iteration", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "context_updated",
+          context_tokens: 150000,
+          _ts: 1100,
+        }),
+        makeEvent({
+          kind: "compacted",
+          pre_tokens: 150000,
+          trigger: "auto",
+          _ts: 1200,
+        }),
+        makeEvent({
+          kind: "context_updated",
+          context_tokens: 60000,
+          _ts: 1300,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.3, inputTokens: 300, outputTokens: 150 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      const group = result.iterations[0];
+      expect(group.contextTokens).toBe(60000);
+      expect(group.compacted).toBe(true);
+      expect(group.compactedPreTokens).toBe(150000);
+    });
+
+    it("default values: new IterationGroup has contextTokens 0, compacted false, compactedPreTokens 0", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "assistant_text",
+          text: "Working...",
+          _ts: 1500,
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].contextTokens).toBe(0);
+      expect(result.iterations[0].compacted).toBe(false);
+      expect(result.iterations[0].compactedPreTokens).toBe(0);
+    });
+
+    it("context_updated events are NOT filtered out of group.events", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "context_updated",
+          context_tokens: 95000,
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "assistant_text",
+          text: "Working...",
+          _ts: 1600,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.1, inputTokens: 100, outputTokens: 50 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      const contextEvents = result.iterations[0].events.filter(
+        (e) => e.kind === "context_updated",
+      );
+      expect(contextEvents).toHaveLength(1);
+      expect(contextEvents[0].context_tokens).toBe(95000);
+    });
+  });
+
   describe("orphaned events (e.g. after sleep/wake)", () => {
     it("creates an implicit group for events without a preceding iteration_started", () => {
       const events: SessionEvent[] = [
@@ -963,6 +1141,9 @@ function makeIteration(overrides: Partial<IterationGroup>): IterationGroup {
     inputTokens: 0,
     outputTokens: 0,
     contextWindow: 0,
+    contextTokens: 0,
+    compacted: false,
+    compactedPreTokens: 0,
     startTs: undefined,
     endTs: undefined,
     ...overrides,

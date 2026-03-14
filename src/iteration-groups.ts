@@ -7,6 +7,9 @@ export type IterationGroup = {
   inputTokens: number;
   outputTokens: number;
   contextWindow: number;
+  contextTokens: number;
+  compacted: boolean;
+  compactedPreTokens: number;
   startTs: number | undefined;
   endTs: number | undefined;
 };
@@ -71,6 +74,9 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
         inputTokens: 0,
         outputTokens: 0,
         contextWindow: 0,
+        contextTokens: 0,
+        compacted: false,
+        compactedPreTokens: 0,
         startTs: ev._ts,
         endTs: undefined,
       };
@@ -94,9 +100,21 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
         inputTokens: 0,
         outputTokens: 0,
         contextWindow: 0,
+        contextTokens: 0,
+        compacted: false,
+        compactedPreTokens: 0,
         startTs: ev._ts,
         endTs: undefined,
       };
+    }
+
+    if (ev.kind === "context_updated") {
+      currentGroup.contextTokens = ev.context_tokens ?? 0;
+    }
+
+    if (ev.kind === "compacted") {
+      currentGroup.compacted = true;
+      currentGroup.compactedPreTokens = ev.pre_tokens ?? 0;
     }
 
     currentGroup.events.push(ev);
