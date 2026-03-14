@@ -1,101 +1,103 @@
 # Yarr — Yet Another Ralph Runner
 
-Desktop GUI that orchestrates Claude Code sessions — Ralph loops, research/planning, and a dashboard to monitor everything. Built on top of `claude -p` using subscription auth (no API keys).
+Desktop app that orchestrates [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions. Run Ralph loops, fire off one-shots, and monitor everything from a single dashboard. Built on `claude -p` with subscription auth — no API keys needed.
 
-## Architecture
+## Why Yarr?
 
-```
-yarr/
-├── ui/                  # Svelte frontend
-│   └── src/
-│       └── App.svelte   # Dashboard UI
-├── src-tauri/           # Rust backend
-│   └── src/
-│       ├── lib.rs       # Tauri commands + app entry
-│       ├── output.rs    # Claude stream-json event types
-│       ├── session.rs   # SessionRunner loop + state machine
-│       ├── trace.rs     # OTel-style tracing (spans to JSON)
-│       └── runtime/
-│           ├── mod.rs   # RuntimeProvider trait
-│           ├── wsl.rs   # WSL runtime
-│           └── mock.rs  # Mock runtime for testing
-```
+Running Claude Code in a loop (a "Ralph loop") means spawning `claude -p` repeatedly against a repo with a plan file. Yarr takes ownership of that loop so you can:
 
-```
-┌────────────────────────────────────────────────┐
-│  Svelte UI                                     │
-│  Button → invoke("run_session")                │
-│  listen("session-event") → live event log      │
-└──────────┬─────────────────────────────────────┘
-           │ Tauri IPC
-           ▼
-┌────────────────────────────────────────────────┐
-│  SessionRunner                                 │
-│  State machine: Idle → Running → Evaluating →… │
-│  Per-iteration: spawn → stream → record → next │
-└──────┬─────────────┬─────────────┬─────────────┘
-       │             │             │
-       ▼             ▼             ▼
-┌────────────┐ ┌──────────┐ ┌───────────────┐
-│ runtime/   │ │ output.rs│ │ trace.rs      │
-│            │ │          │ │               │
-│ WSL impl   │ │ Parse    │ │ SessionTrace  │
-│ Mock impl  │ │ stream-  │ │ IterationSpan │
-│ (SSH todo) │ │ json     │ │ Write to disk │
-└────────────┘ └──────────┘ └───────────────┘
-```
+- **Run multiple repos concurrently** from one place
+- **Track cost, context usage, and iterations** in real time
+- **Add custom checks** (lint, tests) that run between iterations or after completion
+- **Handle git workflows** — branch creation, push, and merge conflict resolution via Claude
+- **Review full session traces** with per-iteration breakdowns
 
-## Quick start
+## Features
+
+**Repository management** — Add local or SSH-remote repos. See git status (branch, dirty files, ahead/behind) at a glance.
+
+**Ralph loops** — Pick a plan file, configure model/effort/max iterations, and run. Yarr spawns one `claude -p` process per iteration. No state is injected between iterations — Claude reads fresh repo context each time.
+
+**One-shots** — Single-purpose runs with a design phase followed by implementation. Supports resume on failure and configurable merge strategies.
+
+**Live monitoring** — Stream events as they happen: tool use, assistant text, check results, git sync status. Events are grouped by iteration with expandable detail.
+
+**Custom checks** — Define checks (shell commands) that run after each iteration or post-completion. Failed checks trigger automatic fix attempts.
+
+**Git sync** — Optional auto-push with conflict detection and Claude-assisted resolution.
+
+**Session traces** — Every session writes a JSON trace to `./traces/` with outcome, cost, token counts, context usage, and per-iteration spans. Browse and inspect traces in the history view.
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://rustup.rs/) (stable toolchain)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- Platform-specific Tauri v2 dependencies — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
+
+## Setup
 
 ```bash
-# Install frontend deps
-cd ui && npm install && cd ..
+# Clone the repo
+git clone <repo-url> && cd yarr3
 
-# Run the app
-cd ui && npx tauri dev
+# Install frontend dependencies
+npm install
+
+# Run in development mode (starts both Vite dev server and Tauri app)
+npx tauri dev
 ```
 
-Add a repo, select a prompt file, and click "Run" to start a session. Traces are written to `./traces/`.
+## Development
 
-## Key design decisions
+```bash
+# Frontend type checking
+npx tsc --noEmit
 
-- **stream-json, not json**: Uses `--output-format stream-json --verbose` for real-time event streaming, not batch JSON.
+# Lint / format
+npx eslint .
+npx prettier --check .
 
-- **One process per iteration**: Each `claude -p` call is short-lived. The loop is owned by the harness, not Claude's built-in Ralph plugin.
+# Frontend unit tests (Vitest)
+npm test
 
-- **Git repo as context**: No state injection between iterations. Claude reads the repo fresh each time (PRD, progress file, git history). The prompt is static per loop.
+# E2E tests (Playwright — starts Vite dev server automatically)
+npm run test:e2e
 
-- **RuntimeProvider trait**: Adding SSH or macOS support means implementing one trait. The session runner doesn't care where Claude is running.
-
-## Trace output
-
-Each session produces a JSON trace in `./traces/`, designed for import into Jaeger or Grafana Tempo:
-
-```json
-{
-  "trace_id": "a1b2c3...",
-  "outcome": "completed",
-  "total_cost_usd": 0.024,
-  "total_iterations": 4,
-  "iterations": [
-    {
-      "operation_name": "ralph.iteration.1",
-      "duration_ms": 1200,
-      "attributes": {
-        "cost_usd": 0.006,
-        "num_turns": 3,
-        "completion_signal_found": false
-      }
-    }
-  ]
-}
+# Rust checks and tests
+cd src-tauri && cargo check
+cd src-tauri && cargo test
 ```
 
-## What's next
+## Project structure
 
-- Session persistence (SQLite)
-- Concurrency manager with global rate limit semaphore
-- Research/Plan interactive workflow
-- SSH runtime
-- Post-iteration hooks (lint, git push)
-- Dashboard: session table, iteration timeline, trace explorer
+```
+src/                    # React frontend (TypeScript, Tailwind, shadcn/ui)
+  pages/                # Home, RepoDetail, RunDetail, OneShotDetail, History
+  components/           # RepoCard, EventsList, HistoryTable, PlanProgressBar, ...
+  store.ts              # Zustand store (repos, sessions, git status, one-shots)
+
+src-tauri/src/          # Rust backend (Tauri v2, Tokio)
+  lib.rs                # Tauri commands + app setup
+  session.rs            # SessionRunner state machine (idle → running → evaluating → ...)
+  oneshot.rs            # One-shot orchestration (design + implementation phases)
+  output.rs             # Claude stream-json event parsing
+  prompt.rs             # Prompt construction with plan file references
+  trace.rs              # OTel-style session traces (JSON to disk)
+  git_merge.rs          # Git merge conflict resolution via Claude
+  ssh_orchestrator.rs   # SSH session management
+  runtime/
+    local.rs            # Local process execution
+    ssh.rs              # Remote SSH execution
+    wsl.rs              # WSL subprocess management
+    mock.rs             # Mock runtime for tests
+```
+
+## How it works
+
+1. You add a repo and select a plan file (a markdown document describing what to build).
+2. Yarr spawns `claude -p` with `--output-format stream-json --verbose`, streaming events back to the UI in real time.
+3. Each iteration is a short-lived `claude -p` process. The loop is owned by Yarr, not Claude's built-in session continuation.
+4. Between iterations, Yarr runs any configured checks and git sync operations.
+5. The session ends when Claude signals completion, hits the max iteration limit, or you stop it manually.
+6. A full trace is written to `./traces/` for later review.
