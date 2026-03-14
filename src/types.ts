@@ -58,6 +58,7 @@ export type SessionTrace = {
   session_id: string;
   repo_path: string;
   prompt: string;
+  title?: string | null;
   plan_file: string | null;
   plan_content?: string | null;
   repo_id?: string | null;

@@ -31,6 +31,8 @@ pub struct SessionTrace {
     pub repo_path: String,
     pub prompt: String,
     #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
     pub plan_file: Option<String>,
     #[serde(default)]
     pub plan_content: Option<String>,
@@ -130,6 +132,7 @@ impl TraceCollector {
             session_id: session_id.to_string(),
             repo_path: repo_path.to_string(),
             prompt: prompt.to_string(),
+            title: None,
             plan_file: plan_file.map(|s| s.to_string()),
             plan_content: None,
             repo_id: Some(self.repo_id.clone()),
@@ -162,6 +165,7 @@ impl TraceCollector {
             session_id: Uuid::new_v4().to_string(),
             repo_path: repo_path.to_string(),
             prompt: prompt.to_string(),
+            title: None,
             plan_file: plan_file.map(|s| s.to_string()),
             plan_content: None,
             repo_id: Some(self.repo_id.clone()),

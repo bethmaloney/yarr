@@ -77,11 +77,8 @@ test.describe("History view — column headers (Task 9)", () => {
     await expect(header).toBeVisible();
 
     await expect(header).toContainText("Date");
-    await expect(header).toContainText("Plan");
-    await expect(header).toContainText("Prompt");
+    await expect(header).toContainText("Description");
     await expect(header).toContainText("Status");
-    await expect(header).toContainText("Iters");
-    await expect(header).toContainText("Cost");
     await expect(header).toContainText("Duration");
   });
 
@@ -113,8 +110,8 @@ test.describe("History view — column headers (Task 9)", () => {
   });
 });
 
-test.describe("History view — prompt text column (Task 10)", () => {
-  test("prompt text is visible in each trace row", async ({
+test.describe("History view — description column (Task 10)", () => {
+  test("description text is visible in each trace row", async ({
     page,
     mockTauri,
   }) => {
@@ -123,28 +120,27 @@ test.describe("History view — prompt text column (Task 10)", () => {
     const traceRows = page.locator(".trace-row");
     await expect(traceRows).toHaveCount(2);
 
-    // First row should contain the prompt text
-    const firstRowPrompt = traceRows.nth(0).locator(".trace-prompt");
-    await expect(firstRowPrompt).toBeVisible();
-    await expect(firstRowPrompt).toContainText("Fix login bug");
+    // Both sample traces are ralph loops with plan files, so description shows plan filename
+    const firstRowDesc = traceRows.nth(0).locator(".trace-prompt");
+    await expect(firstRowDesc).toBeVisible();
+    await expect(firstRowDesc).toContainText("fix login");
 
-    // Second row should contain its prompt text
-    const secondRowPrompt = traceRows.nth(1).locator(".trace-prompt");
-    await expect(secondRowPrompt).toBeVisible();
-    await expect(secondRowPrompt).toContainText("Refactor auth module");
+    const secondRowDesc = traceRows.nth(1).locator(".trace-prompt");
+    await expect(secondRowDesc).toBeVisible();
+    await expect(secondRowDesc).toContainText("refactor auth");
   });
 
-  test("prompt span has the trace-prompt class", async ({
+  test("description span has the trace-prompt class", async ({
     page,
     mockTauri,
   }) => {
     await navigateToHistory(page, mockTauri);
 
-    const promptSpans = page.locator(".trace-row .trace-prompt");
-    await expect(promptSpans).toHaveCount(2);
+    const descSpans = page.locator(".trace-row .trace-prompt");
+    await expect(descSpans).toHaveCount(2);
   });
 
-  test("prompt column appears between plan and status badge", async ({
+  test("description column appears before status badge", async ({
     page,
     mockTauri,
   }) => {
@@ -161,30 +157,25 @@ test.describe("History view — prompt text column (Task 10)", () => {
       if (cls) spanClasses.push(cls);
     }
 
-    // Find indices of plan, prompt, and badge
-    const planIndex = spanClasses.findIndex((c) => c.includes("trace-plan"));
-    const promptIndex = spanClasses.findIndex((c) =>
+    // Find indices of description and badge
+    const descIndex = spanClasses.findIndex((c) =>
       c.includes("trace-prompt"),
     );
     const badgeIndex = spanClasses.findIndex((c) => c.includes("trace-badge"));
 
-    // Prompt should come after plan and before badge
-    expect(planIndex).toBeGreaterThanOrEqual(0);
-    expect(promptIndex).toBeGreaterThanOrEqual(0);
+    expect(descIndex).toBeGreaterThanOrEqual(0);
     expect(badgeIndex).toBeGreaterThanOrEqual(0);
-    expect(promptIndex).toBeGreaterThan(planIndex);
-    expect(promptIndex).toBeLessThan(badgeIndex);
+    expect(descIndex).toBeLessThan(badgeIndex);
   });
 
-  test("prompt text in header row matches column position", async ({
+  test("description text in header row matches column position", async ({
     page,
     mockTauri,
   }) => {
     await navigateToHistory(page, mockTauri);
 
-    // The header should also contain a "Prompt" label
     const header = page.locator(".trace-header");
-    await expect(header).toContainText("Prompt");
+    await expect(header).toContainText("Description");
   });
 });
 
@@ -200,11 +191,8 @@ test.describe("History view — sortable columns (Task 11)", () => {
     const expectedColumns = [
       "Date",
       "Type",
-      "Plan",
-      "Prompt",
+      "Description",
       "Status",
-      "Iters",
-      "Cost",
       "Duration",
     ];
 
@@ -228,10 +216,10 @@ test.describe("History view — sortable columns (Task 11)", () => {
 
     // sess-abc-123 (Mar 7) is more recent than sess-def-456 (Mar 6), so it should be first
     const firstRow = traceRows.nth(0);
-    await expect(firstRow).toContainText("Fix login bug");
+    await expect(firstRow).toContainText("fix login");
 
     const secondRow = traceRows.nth(1);
-    await expect(secondRow).toContainText("Refactor auth module");
+    await expect(secondRow).toContainText("refactor auth");
 
     // The Date column header button should show a descending arrow indicator
     const dateButton = page.locator(".trace-header button", {
@@ -257,37 +245,40 @@ test.describe("History view — sortable columns (Task 11)", () => {
 
     // After toggling to ascending, the older trace (sess-def-456, Mar 6) should be first
     const firstRow = traceRows.nth(0);
-    await expect(firstRow).toContainText("Refactor auth module");
+    await expect(firstRow).toContainText("refactor auth");
 
     const secondRow = traceRows.nth(1);
-    await expect(secondRow).toContainText("Fix login bug");
+    await expect(secondRow).toContainText("fix login");
 
     // Arrow should flip to ascending indicator
     await expect(dateButton).toContainText("\u2191"); // up arrow
   });
 
-  test("clicking Cost header sorts by cost", async ({ page, mockTauri }) => {
+  test("clicking Duration header sorts by duration", async ({
+    page,
+    mockTauri,
+  }) => {
     await navigateToHistory(page, mockTauri);
 
-    // Click Cost header to sort by cost ascending
-    const costButton = page.locator(".trace-header button", {
-      hasText: "Cost",
+    // Click Duration header to sort by duration ascending
+    const durationButton = page.locator(".trace-header button", {
+      hasText: "Duration",
     });
-    await costButton.click();
+    await durationButton.click();
 
     const traceRows = page.locator(".trace-row");
     await expect(traceRows).toHaveCount(2);
 
-    // sess-abc-123 has cost 0.4521, sess-def-456 has cost 0.8912
-    // Ascending: cheaper first
+    // sess-abc-123 is 12m15s, sess-def-456 is 15m30s
+    // Ascending: shorter first
     const firstRow = traceRows.nth(0);
-    await expect(firstRow).toContainText("$0.4521");
+    await expect(firstRow).toContainText("fix login");
 
     const secondRow = traceRows.nth(1);
-    await expect(secondRow).toContainText("$0.8912");
+    await expect(secondRow).toContainText("refactor auth");
 
-    // Cost button should show the active sort arrow
-    await expect(costButton).toContainText("\u2191"); // ascending arrow
+    // Duration button should show the active sort arrow
+    await expect(durationButton).toContainText("\u2191"); // ascending arrow
   });
 
   test("header buttons have no visible button chrome", async ({

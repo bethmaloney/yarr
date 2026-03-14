@@ -229,7 +229,7 @@ describe("History", () => {
   // =========================================================================
 
   describe("column headers", () => {
-    it("renders all column headers (Date, Type, Plan, Prompt, Status, Iters, Cost, Duration)", async () => {
+    it("renders all column headers (Date, Type, Description, Status, Duration)", async () => {
       mockInvoke.mockResolvedValue([makeTrace()]);
       setupMockState({ repos: [makeLocalRepo()] });
       renderHistory();
@@ -237,11 +237,8 @@ describe("History", () => {
       await waitFor(() => {
         expect(screen.getByText(/^Date$/)).toBeInTheDocument();
         expect(screen.getByText(/^Type$/)).toBeInTheDocument();
-        expect(screen.getByText(/^Plan$/)).toBeInTheDocument();
-        expect(screen.getByText(/^Prompt$/)).toBeInTheDocument();
+        expect(screen.getByText(/^Description$/)).toBeInTheDocument();
         expect(screen.getByText(/^Status$/)).toBeInTheDocument();
-        expect(screen.getByText(/^Iters$/)).toBeInTheDocument();
-        expect(screen.getByText(/^Cost$/)).toBeInTheDocument();
         expect(screen.getByText(/^Duration$/)).toBeInTheDocument();
       });
     });
@@ -304,19 +301,18 @@ describe("History", () => {
       renderHistory();
 
       await waitFor(() => {
-        expect(screen.getByText(/^Cost$/)).toBeInTheDocument();
+        expect(screen.getByText(/^Duration$/)).toBeInTheDocument();
       });
 
-      const costHeader =
-        screen.getByText(/^Cost$/).closest("button") ??
-        screen.getByText(/^Cost$/);
-      fireEvent.click(costHeader);
+      const durationHeader =
+        screen.getByText(/^Duration$/).closest("button") ??
+        screen.getByText(/^Duration$/);
+      fireEvent.click(durationHeader);
 
       await waitFor(() => {
-        // Cost column should now have a sort indicator
         const updatedHeader =
-          screen.getByText(/^Cost$/).closest("button") ??
-          screen.getByText(/^Cost$/);
+          screen.getByText(/^Duration$/).closest("button") ??
+          screen.getByText(/^Duration$/);
         expect(
           updatedHeader.textContent?.includes("\u2191") ||
             updatedHeader.textContent?.includes("\u2193"),
@@ -330,7 +326,7 @@ describe("History", () => {
   // =========================================================================
 
   describe("trace rows", () => {
-    it("renders trace data: date, type, prompt, outcome badge, iterations, cost, duration", async () => {
+    it("renders trace data: date, type, description, outcome badge, duration", async () => {
       const trace = makeTrace({
         session_type: "ralph_loop",
         prompt: "Fix the login bug",
@@ -347,8 +343,6 @@ describe("History", () => {
       await waitFor(() => {
         expect(screen.getByText(/Fix the login bug/)).toBeInTheDocument();
         expect(screen.getByText(/Completed/)).toBeInTheDocument();
-        expect(screen.getByText("5")).toBeInTheDocument();
-        expect(screen.getByText(/1\.23/)).toBeInTheDocument();
         expect(screen.getByText(/Ralph Loop/)).toBeInTheDocument();
       });
     });
@@ -376,22 +370,38 @@ describe("History", () => {
       });
     });
 
-    it('shows plan filename (last segment of path), or "—" if null', async () => {
+    it("shows plan filename for ralph loops, prompt for 1-shots", async () => {
       const traces = [
         makeTrace({
           session_id: "sess-1",
+          session_type: "ralph_loop",
           plan_file: "/home/beth/plans/fix-bug.md",
           prompt: "with plan",
         }),
-        makeTrace({ session_id: "sess-2", plan_file: null, prompt: "no plan" }),
+        makeTrace({
+          session_id: "sess-2",
+          session_type: "one_shot",
+          plan_file: null,
+          prompt: "one shot prompt",
+        }),
+        makeTrace({
+          session_id: "sess-3",
+          session_type: "ralph_loop",
+          plan_file: null,
+          prompt: "ralph no plan",
+        }),
       ];
       mockInvoke.mockResolvedValue(traces);
       setupMockState({ repos: [makeLocalRepo()] });
       renderHistory();
 
       await waitFor(() => {
-        expect(screen.getByText("fix-bug.md")).toBeInTheDocument();
-        expect(screen.getByText("\u2014")).toBeInTheDocument(); // em dash
+        // Ralph loop with plan → shows plan filename
+        expect(screen.getByText("fix bug")).toBeInTheDocument();
+        // 1-shot → shows prompt
+        expect(screen.getByText("one shot prompt")).toBeInTheDocument();
+        // Ralph loop without plan → falls back to prompt
+        expect(screen.getByText("ralph no plan")).toBeInTheDocument();
       });
     });
 

@@ -540,6 +540,7 @@ impl OneShotRunner {
             None => self.collector.start_session(&repo_str, &self.config.prompt, None),
         };
         trace.session_type = "one_shot".to_string();
+        trace.title = Some(self.config.title.clone());
         let session_id = trace.session_id.clone();
         *self.session_id.lock().unwrap() = Some(session_id.clone());
         tracing::info!(oneshot_id = %self.config.repo_id, session_id = %session_id, "trace session created");

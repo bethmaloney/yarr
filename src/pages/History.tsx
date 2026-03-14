@@ -17,7 +17,9 @@ function repoNameFromTrace(
     const repo = repos.find((r) => r.id === repoId);
     return repo?.name ?? repoId;
   }
-  const parts = trace.repo_path.split("/");
+  // Handle both forward and backslash separators (Windows UNC / WSL paths)
+  const normalized = trace.repo_path.replace(/\\/g, "/");
+  const parts = normalized.split("/").filter(Boolean);
   return parts[parts.length - 1] || trace.repo_path;
 }
 
@@ -59,13 +61,51 @@ function outcomeBadge(outcome: string): {
 
 function planFilename(path: string | null): string {
   if (!path) return "\u2014";
-  const parts = path.split("/");
-  return parts[parts.length - 1] || path;
+  const normalized = path.replace(/\\/g, "/");
+  const parts = normalized.split("/");
+  let name = parts[parts.length - 1] || path;
+  // Strip file extension
+  name = name.replace(/\.[^.]+$/, "");
+  // Strip leading date prefix (e.g. "2026-02-21-" or "2026-02-21_")
+  name = name.replace(/^\d{4}-\d{2}-\d{2}[-_]/, "");
+  // Replace underscores and hyphens with spaces
+  name = name.replace(/[_-]/g, " ");
+  return name;
 }
 
-function traceRepoId(trace: SessionTrace, repoId: string | undefined): string {
+function traceRepoId(
+  trace: SessionTrace,
+  repoId: string | undefined,
+): string {
   if (repoId) return repoId;
   return trace.repo_id ?? "unknown";
+}
+
+/** Grid column template shared between header and rows */
+function gridTemplate(showRepo: boolean): string {
+  //       Date     Type     [Repo]    Description  Status  Duration
+  return showRepo
+    ? "140px 88px minmax(80px, 1fr) minmax(120px, 3fr) 96px 76px"
+    : "140px 88px minmax(120px, 3fr) 96px 76px";
+}
+
+/** Combined description: title/prompt for 1-shots, plan filename for ralph loops */
+function traceDescription(trace: SessionTrace): {
+  text: string;
+  tooltip: string;
+} {
+  if (trace.session_type === "one_shot") {
+    if (trace.title) {
+      return { text: trace.title, tooltip: trace.prompt };
+    }
+    // Fallback: truncated prompt
+    return { text: trace.prompt, tooltip: trace.prompt };
+  }
+  // Ralph loop — show plan filename if available, otherwise prompt
+  if (trace.plan_file) {
+    return { text: planFilename(trace.plan_file), tooltip: trace.plan_file };
+  }
+  return { text: trace.prompt, tooltip: trace.prompt };
 }
 
 export default function History() {
@@ -83,6 +123,9 @@ export default function History() {
     () => sortTraces(traces, sortField, sortDir),
     [traces, sortField, sortDir],
   );
+
+  const showRepo = !repoId;
+  const colTemplate = gridTemplate(showRepo);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,25 +176,33 @@ export default function History() {
   function renderSortButton(
     label: string,
     field: SortField,
-    className: string,
+    align: "left" | "right" | "center" = "left",
   ) {
     const arrow = sortArrow(field);
+    const alignClass =
+      align === "right"
+        ? "justify-end"
+        : align === "center"
+          ? "justify-center"
+          : "justify-start";
     return (
       <button
-        className={`bg-transparent border-none text-inherit font-inherit cursor-pointer p-0 ${className}`}
+        className={`flex items-center gap-1 bg-transparent border-none text-muted-foreground font-mono text-xs font-semibold uppercase tracking-wide cursor-pointer p-0 hover:text-foreground transition-colors duration-150 ${alignClass}`}
         onClick={() => toggleSort(field)}
       >
         <span>{label}</span>
-        {arrow && <span> {arrow}</span>}
+        {arrow && (
+          <span className="text-primary-light">{arrow}</span>
+        )}
       </button>
     );
   }
 
   if (loading) {
     return (
-      <main className="max-w-[1100px] mx-auto p-8">
+      <main className="p-8">
         <Breadcrumbs crumbs={breadcrumbs} />
-        <h1 className="text-3xl text-primary mb-4">History</h1>
+        <h1 className="text-3xl font-bold text-primary mb-4">History</h1>
         <div className="text-center text-muted-foreground py-12">
           <p>Loading...</p>
         </div>
@@ -161,9 +212,9 @@ export default function History() {
 
   if (error) {
     return (
-      <main className="max-w-[1100px] mx-auto p-8">
+      <main className="p-8">
         <Breadcrumbs crumbs={breadcrumbs} />
-        <h1 className="text-3xl text-primary mb-4">History</h1>
+        <h1 className="text-3xl font-bold text-primary mb-4">History</h1>
         <div>
           <pre className="bg-destructive/10 text-destructive p-3 rounded overflow-x-auto">
             {error}
@@ -175,9 +226,9 @@ export default function History() {
 
   if (traces.length === 0) {
     return (
-      <main className="max-w-[1100px] mx-auto p-8">
+      <main className="p-8">
         <Breadcrumbs crumbs={breadcrumbs} />
-        <h1 className="text-3xl text-primary mb-4">History</h1>
+        <h1 className="text-3xl font-bold text-primary mb-4">History</h1>
         <div className="text-center text-muted-foreground py-12">
           <p>No runs recorded yet.</p>
         </div>
@@ -186,67 +237,38 @@ export default function History() {
   }
 
   return (
-    <main className="max-w-[1100px] mx-auto p-8">
+    <main className="p-8">
       <Breadcrumbs crumbs={breadcrumbs} />
-      <h1 className="text-3xl text-primary mb-4">History</h1>
+      <h1 className="text-3xl font-bold text-primary mb-6">History</h1>
 
-      <div className="trace-list flex flex-col gap-1">
+      <div className="trace-list flex flex-col gap-1 overflow-x-auto">
         {/* Column headers */}
-        <div className="trace-header flex items-center gap-4 px-3 py-1.5 text-muted-foreground font-mono text-xs font-semibold uppercase tracking-wide">
-          {renderSortButton(
-            "Date",
-            "start_time",
-            "text-left flex-shrink-0 min-w-28",
-          )}
-          {renderSortButton(
-            "Type",
-            "session_type",
-            "text-left flex-shrink-0 min-w-22",
-          )}
-          {!repoId && (
-            <span className="flex-shrink-0 min-w-24 max-w-40 overflow-hidden text-ellipsis whitespace-nowrap">
+        <div
+          className="trace-header grid items-center gap-x-4 px-3 py-2"
+          style={{ gridTemplateColumns: colTemplate }}
+        >
+          {renderSortButton("Date", "start_time")}
+          {renderSortButton("Type", "session_type")}
+          {showRepo && (
+            <span className="text-muted-foreground font-mono text-xs font-semibold uppercase tracking-wide">
               Repo
             </span>
           )}
-          {renderSortButton(
-            "Plan",
-            "plan_file",
-            "text-left flex-shrink-0 w-32 overflow-hidden text-ellipsis whitespace-nowrap",
-          )}
-          {renderSortButton(
-            "Prompt",
-            "prompt",
-            "text-left flex-1 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap",
-          )}
-          {renderSortButton(
-            "Status",
-            "outcome",
-            "text-center flex-shrink-0 min-w-22",
-          )}
-          {renderSortButton(
-            "Iters",
-            "total_iterations",
-            "text-right flex-shrink-0 min-w-16",
-          )}
-          {renderSortButton(
-            "Cost",
-            "total_cost_usd",
-            "text-right flex-shrink-0 min-w-16",
-          )}
-          {renderSortButton(
-            "Duration",
-            "duration",
-            "text-right flex-shrink-0 min-w-16",
-          )}
+          {renderSortButton("Description", "prompt")}
+          {renderSortButton("Status", "outcome", "center")}
+          {renderSortButton("Duration", "duration", "right")}
         </div>
 
         {/* Trace rows */}
         {sortedTraces.map((trace) => {
           const badge = outcomeBadge(trace.outcome);
+          const name = repoNameFromTrace(trace, repoId, repos);
+          const desc = traceDescription(trace);
           return (
             <button
               key={trace.session_id}
-              className="trace-row flex items-center gap-4 px-3 py-2.5 bg-card border border-border rounded-md cursor-pointer text-foreground font-mono text-sm text-left w-full hover:bg-accent hover:border-accent"
+              className="trace-row grid items-center gap-x-4 px-3 py-2.5 bg-card border border-border rounded-md cursor-pointer text-foreground text-sm text-left w-full hover:border-primary/30 transition-colors duration-150"
+              style={{ gridTemplateColumns: colTemplate }}
               onClick={() => {
                 if (trace.session_type === "one_shot") {
                   navigate(`/oneshot/${trace.repo_id ?? "unknown"}`);
@@ -257,33 +279,32 @@ export default function History() {
                 }
               }}
             >
-              <span className="flex-shrink-0 min-w-28 text-muted-foreground">
+              <span className="text-muted-foreground text-xs tabular-nums">
                 {formatDate(trace.start_time)}
               </span>
-              <span className="flex-shrink-0 min-w-22 text-muted-foreground">
-                {trace.session_type === "one_shot" ? "1-Shot" : "Ralph Loop"}
+              <span className="text-muted-foreground">
+                <Badge variant="outline" className="text-xs font-normal">
+                  {trace.session_type === "one_shot" ? "1-Shot" : "Ralph Loop"}
+                </Badge>
               </span>
-              {!repoId && (
-                <span className="flex-shrink-0 min-w-24 max-w-40 overflow-hidden text-ellipsis whitespace-nowrap text-teal-400">
-                  {repoNameFromTrace(trace, repoId, repos)}
+              {showRepo && (
+                <span
+                  className="truncate text-foreground font-medium"
+                  title={trace.repo_path}
+                >
+                  {name}
                 </span>
               )}
-              <span className="trace-plan flex-shrink-0 w-32 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground">
-                {planFilename(trace.plan_file)}
+              <span
+                className="trace-prompt truncate text-muted-foreground"
+                title={desc.tooltip}
+              >
+                {desc.text}
               </span>
-              <span className="trace-prompt flex-1 min-w-24 max-w-80 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground">
-                {trace.prompt}
-              </span>
-              <span className="trace-badge flex-shrink-0 min-w-22 text-center">
+              <span className="trace-badge flex justify-center">
                 <Badge variant={badge.variant}>{badge.label}</Badge>
               </span>
-              <span className="flex-shrink-0 min-w-16 text-right text-muted-foreground">
-                {trace.total_iterations}
-              </span>
-              <span className="flex-shrink-0 min-w-16 text-right text-muted-foreground">
-                ${trace.total_cost_usd.toFixed(4)}
-              </span>
-              <span className="flex-shrink-0 min-w-16 text-right text-muted-foreground">
+              <span className="text-right text-muted-foreground tabular-nums font-mono text-xs">
                 {formatDuration(trace.start_time, trace.end_time)}
               </span>
             </button>
