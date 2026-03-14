@@ -50,6 +50,10 @@ npm run test:e2e
 
 Yarr runs on Windows (WSL), macOS, and Linux. Path handling, shell commands, and filesystem operations must be cross-platform compatible.
 
+## UI
+
+All UI changes must follow `design_system.md` — read it before touching components, colors, tokens, or styles.
+
 ## Error Handling
 
 Users are technical. Surface errors as Sonner toasts (`toast.error(...)` from `sonner`) with the actual error message so they can diagnose and resolve issues themselves. Don't swallow errors or show vague "something went wrong" messages.

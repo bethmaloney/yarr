@@ -67,19 +67,19 @@ describe("Badge — data-variant attribute", () => {
 // ---------------------------------------------------------------------------
 
 describe("Badge — badgeVariants CSS classes", () => {
-  it("warning variant includes amber styling classes", () => {
+  it("warning variant uses warning token classes", () => {
     const classes = variantClasses("warning");
-    expect(classes).toMatch(/amber/);
+    expect(classes).toMatch(/text-warning/);
   });
 
-  it("success variant includes green/emerald styling classes", () => {
+  it("success variant uses success token classes", () => {
     const classes = variantClasses("success");
-    expect(classes).toMatch(/green|emerald/);
+    expect(classes).toMatch(/text-success/);
   });
 
-  it("completed variant includes green/emerald styling classes (same as success)", () => {
+  it("completed variant uses success token classes (same as success)", () => {
     const classes = variantClasses("completed");
-    expect(classes).toMatch(/green|emerald/);
+    expect(classes).toMatch(/text-success/);
   });
 
   it("failed variant includes destructive styling classes", () => {
@@ -87,14 +87,14 @@ describe("Badge — badgeVariants CSS classes", () => {
     expect(classes).toMatch(/bg-destructive/);
   });
 
-  it("maxiters variant includes amber/warning styling classes (same as warning)", () => {
+  it("maxiters variant uses warning token classes (same as warning)", () => {
     const classes = variantClasses("maxiters");
-    expect(classes).toMatch(/amber/);
+    expect(classes).toMatch(/text-warning/);
   });
 
-  it("cancelled variant includes gray styling classes", () => {
+  it("cancelled variant uses muted token classes", () => {
     const classes = variantClasses("cancelled");
-    expect(classes).toMatch(/gray/);
+    expect(classes).toMatch(/muted/);
   });
 });
 

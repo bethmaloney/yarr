@@ -45,53 +45,53 @@ describe("formatTokenCount", () => {
 });
 
 describe("contextBarColor", () => {
-  it("returns green for 0%", () => {
-    expect(contextBarColor(0)).toBe("#34d399");
+  it("returns success token for 0%", () => {
+    expect(contextBarColor(0)).toBe("var(--success)");
   });
 
-  it("returns green for 49%", () => {
-    expect(contextBarColor(49)).toBe("#34d399");
+  it("returns success token for 49%", () => {
+    expect(contextBarColor(49)).toBe("var(--success)");
   });
 
-  it("returns yellow for 50%", () => {
-    expect(contextBarColor(50)).toBe("#fbbf24");
+  it("returns warning token for 50%", () => {
+    expect(contextBarColor(50)).toBe("var(--warning)");
   });
 
-  it("returns yellow for 79%", () => {
-    expect(contextBarColor(79)).toBe("#fbbf24");
+  it("returns warning token for 79%", () => {
+    expect(contextBarColor(79)).toBe("var(--warning)");
   });
 
-  it("returns red for 80%", () => {
-    expect(contextBarColor(80)).toBe("#f87171");
+  it("returns destructive token for 80%", () => {
+    expect(contextBarColor(80)).toBe("var(--destructive)");
   });
 
-  it("returns red for 100%", () => {
-    expect(contextBarColor(100)).toBe("#f87171");
+  it("returns destructive token for 100%", () => {
+    expect(contextBarColor(100)).toBe("var(--destructive)");
   });
 });
 
 describe("sessionContextColor", () => {
-  it("returns green for 0%", () => {
-    expect(sessionContextColor(0)).toBe("#34d399");
+  it("returns success token for 0%", () => {
+    expect(sessionContextColor(0)).toBe("var(--success)");
   });
 
-  it("returns green for 59%", () => {
-    expect(sessionContextColor(59)).toBe("#34d399");
+  it("returns success token for 59%", () => {
+    expect(sessionContextColor(59)).toBe("var(--success)");
   });
 
-  it("returns yellow for 60%", () => {
-    expect(sessionContextColor(60)).toBe("#fbbf24");
+  it("returns warning token for 60%", () => {
+    expect(sessionContextColor(60)).toBe("var(--warning)");
   });
 
-  it("returns yellow for 85%", () => {
-    expect(sessionContextColor(85)).toBe("#fbbf24");
+  it("returns warning token for 85%", () => {
+    expect(sessionContextColor(85)).toBe("var(--warning)");
   });
 
-  it("returns red for 86%", () => {
-    expect(sessionContextColor(86)).toBe("#f87171");
+  it("returns destructive token for 86%", () => {
+    expect(sessionContextColor(86)).toBe("var(--destructive)");
   });
 
-  it("returns red for 100%", () => {
-    expect(sessionContextColor(100)).toBe("#f87171");
+  it("returns destructive token for 100%", () => {
+    expect(sessionContextColor(100)).toBe("var(--destructive)");
   });
 });

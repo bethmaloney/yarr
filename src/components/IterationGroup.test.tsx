@@ -15,13 +15,7 @@ afterEach(() => {
 // Test helpers
 // ===========================================================================
 
-/** Convert a hex colour like "#34d399" to the "rgb(52, 211, 153)" form that jsdom serialises. */
-function hexToRgb(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgb(${r}, ${g}, ${b})`;
-}
+/** No-op identity — contextBarColor now returns CSS var() references which jsdom stores as-is. */
 
 function makeEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
   return {
@@ -322,27 +316,27 @@ describe("IterationGroupComponent", () => {
     const fillBar = container.querySelector(".context-bar-fill") as HTMLElement;
     expect(fillBar).not.toBeNull();
     // jsdom normalises hex to rgb, so compare against the parsed value
-    expect(fillBar.style.background).toBe(hexToRgb(contextBarColor(20)));
+    expect(fillBar.style.background).toBe(contextBarColor(20));
   });
 
-  it("uses yellow color when percentage is between 50% and 80%", () => {
+  it("uses warning color when percentage is between 50% and 80%", () => {
     // 60% usage
     const { container } = renderComponent({
       group: makeGroup({ contextWindow: 200000, inputTokens: 120000 }),
     });
     const fillBar = container.querySelector(".context-bar-fill") as HTMLElement;
     expect(fillBar).not.toBeNull();
-    expect(fillBar.style.background).toBe(hexToRgb(contextBarColor(60)));
+    expect(fillBar.style.background).toBe(contextBarColor(60));
   });
 
-  it("uses red color when percentage is 80% or above", () => {
+  it("uses destructive color when percentage is 80% or above", () => {
     // 90% usage
     const { container } = renderComponent({
       group: makeGroup({ contextWindow: 200000, inputTokens: 180000 }),
     });
     const fillBar = container.querySelector(".context-bar-fill") as HTMLElement;
     expect(fillBar).not.toBeNull();
-    expect(fillBar.style.background).toBe(hexToRgb(contextBarColor(90)));
+    expect(fillBar.style.background).toBe(contextBarColor(90));
   });
 
   // =========================================================================

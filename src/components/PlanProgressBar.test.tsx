@@ -96,15 +96,15 @@ describe("PlanProgressBar", () => {
 
     const fillDiv = container.querySelector("[style*='width']");
     expect(fillDiv).not.toBeNull();
-    expect(fillDiv!.className).toContain("bg-[#34d399]");
+    expect(fillDiv!.className).toContain("bg-success");
   });
 
-  it("uses teal fill color when not complete", () => {
+  it("uses info fill color when not complete", () => {
     const progress = makeProgress();
     const { container } = render(<PlanProgressBar progress={progress} />);
 
     const fillDiv = container.querySelector("[style*='width']");
     expect(fillDiv).not.toBeNull();
-    expect(fillDiv!.className).toContain("bg-[#4ecdc4]");
+    expect(fillDiv!.className).toContain("bg-info");
   });
 });

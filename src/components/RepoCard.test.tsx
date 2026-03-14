@@ -272,7 +272,7 @@ describe("RepoCard", () => {
       />,
     );
     const behindEl = screen.getByText(/1↓/);
-    expect(behindEl.classList.contains("text-yellow-500")).toBe(true);
+    expect(behindEl.classList.contains("text-warning")).toBe(true);
   });
 
   it("does not show behind indicator when behind is 0", () => {
@@ -1038,7 +1038,7 @@ describe("RepoCard", () => {
       />,
     );
     const fill = screen.getByTestId("repo-progress-fill");
-    expect(fill.classList.contains("bg-[#4ecdc4]")).toBe(true);
+    expect(fill.classList.contains("bg-info")).toBe(true);
   });
 
   it("progress fill uses green color when all complete", () => {
@@ -1057,7 +1057,7 @@ describe("RepoCard", () => {
       />,
     );
     const fill = screen.getByTestId("repo-progress-fill");
-    expect(fill.classList.contains("bg-[#34d399]")).toBe(true);
+    expect(fill.classList.contains("bg-success")).toBe(true);
   });
 
   it("progress fill width is percentage-based", () => {

@@ -11,13 +11,13 @@ export function formatTokenCount(n: number): string {
 }
 
 export function contextBarColor(percentage: number): string {
-  if (percentage >= 80) return "#f87171";
-  if (percentage >= 50) return "#fbbf24";
-  return "#34d399";
+  if (percentage >= 80) return "var(--destructive)";
+  if (percentage >= 50) return "var(--warning)";
+  return "var(--success)";
 }
 
 export function sessionContextColor(percentage: number): string {
-  if (percentage > 85) return "#f87171";
-  if (percentage >= 60) return "#fbbf24";
-  return "#34d399";
+  if (percentage > 85) return "var(--destructive)";
+  if (percentage >= 60) return "var(--warning)";
+  return "var(--success)";
 }

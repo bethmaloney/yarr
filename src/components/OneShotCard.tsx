@@ -16,13 +16,13 @@ function phaseColor(phase: string): string {
     case "design_complete":
     case "implementation_complete":
     case "finalizing":
-      return "#e8d44d";
+      return "var(--warning)";
     case "complete":
-      return "#34d399";
+      return "var(--success)";
     case "failed":
-      return "#f87171";
+      return "var(--destructive)";
     default:
-      return "#888";
+      return "var(--muted-foreground)";
   }
 }
 
@@ -32,7 +32,7 @@ export function OneShotCard({ entry, phase, onClick }: OneShotCardProps) {
 
   const dotClassName = [
     "w-2 h-2 rounded-full shrink-0",
-    entry.status === "running" ? "animate-pulse" : "",
+    entry.status === "running" ? "motion-safe:animate-pulse" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -71,7 +71,7 @@ export function OneShotCard({ entry, phase, onClick }: OneShotCardProps) {
       <div className="flex-1" />
 
       <div className="flex items-center gap-2 min-w-0">
-        <span className={dotClassName} style={{ background: color }} />
+        <span className={dotClassName} style={{ background: color }} aria-hidden="true" />
         <span className="text-xs font-medium tracking-wider" style={{ color }}>
           {label}
         </span>

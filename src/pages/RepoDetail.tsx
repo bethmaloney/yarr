@@ -677,7 +677,7 @@ export default function RepoDetail() {
                 >
                   <PopoverTrigger asChild>
                     <button
-                      className={`branch-chip inline-flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-full text-sm font-mono border transition-all cursor-pointer bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:border-foreground/20${branchDropdownOpen ? " ring-2 ring-ring/30 border-foreground/20" : ""}${gitStatus.behind && gitStatus.behind > 0 ? " warning border-warning" : " border-border"}`}
+                      className={`branch-chip inline-flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-full text-sm font-mono border transition-colors cursor-pointer bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:border-foreground/20${branchDropdownOpen ? " ring-2 ring-ring/30 border-foreground/20" : ""}${gitStatus.behind && gitStatus.behind > 0 ? " warning border-warning" : " border-border"}`}
                       onClick={() => {
                         if (!branchDropdownOpen) fetchBranches();
                       }}
@@ -771,7 +771,7 @@ export default function RepoDetail() {
           {/* Error indicator - shown when error and no status */}
           {gitStatusEntry?.error && !gitStatus && (
             <span
-              className="text-xs text-yellow-500"
+              className="text-xs text-warning"
               title={gitStatusEntry.error}
             >
               {"\u26A0"}

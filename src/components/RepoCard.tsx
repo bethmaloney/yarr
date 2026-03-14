@@ -23,11 +23,11 @@ interface RepoCardProps {
 }
 
 const statusColors: Record<RepoStatus, string> = {
-  idle: "#888",
-  running: "#e8d44d",
-  completed: "#34d399",
-  failed: "#f87171",
-  disconnected: "#f59e0b",
+  idle: "var(--muted-foreground)",
+  running: "var(--warning)",
+  completed: "var(--success)",
+  failed: "var(--destructive)",
+  disconnected: "var(--warning)",
 };
 
 const statusLabels: Record<RepoStatus, string> = {
@@ -60,7 +60,7 @@ export function RepoCard({
 
   const dotClassName = [
     "w-2 h-2 rounded-full shrink-0",
-    status === "running" ? "animate-pulse" : "",
+    status === "running" ? "motion-safe:animate-pulse" : "",
     status === "disconnected" ? "animate-blink" : "",
   ]
     .filter(Boolean)
@@ -77,7 +77,7 @@ export function RepoCard({
     }
     if (gs.behind != null && gs.behind > 0) {
       indicators.push(
-        <span key="behind" className="text-yellow-500">
+        <span key="behind" className="text-warning">
           {gs.behind}&#x2193;
         </span>,
       );
@@ -98,17 +98,17 @@ export function RepoCard({
           {repoFullPath}
         </span>
         {gitStatus?.loading && !gs && (
-          <span className="text-xs text-gray-500 font-mono truncate">
+          <span className="text-xs text-muted-foreground font-mono truncate">
             Loading...
           </span>
         )}
         {gitStatus?.error && !gs && (
-          <span className="text-xs text-gray-500 font-mono truncate">
+          <span className="text-xs text-muted-foreground font-mono truncate">
             &#x26A0;
           </span>
         )}
         {gs && (
-          <span className="text-xs text-gray-500 font-mono truncate">
+          <span className="text-xs text-muted-foreground font-mono truncate">
             {gs.branchName}
             {indicators.length > 0 && (
               <>
@@ -124,7 +124,7 @@ export function RepoCard({
           </span>
         )}
         {gitStatus && shouldShowLastChecked(repo) && gitStatus.lastChecked && (
-          <span className="text-xs text-gray-500 font-mono truncate">
+          <span className="text-xs text-muted-foreground font-mono truncate">
             last checked: {timeAgo(gitStatus.lastChecked.toISOString())}
           </span>
         )}
@@ -177,13 +177,13 @@ export function RepoCard({
               : 0;
           return (
             <div className="flex items-center gap-2 w-full">
-              <div className="flex-1 h-[3px] rounded-full bg-[#2a2a3e] overflow-hidden">
+              <div className="flex-1 h-[3px] rounded-full bg-card-inset overflow-hidden">
                 <div
                   data-testid="repo-progress-fill"
                   className={
                     planProgress.completedItems === planProgress.totalItems
-                      ? "bg-[#34d399]"
-                      : "bg-[#4ecdc4]"
+                      ? "bg-success"
+                      : "bg-info"
                   }
                   style={{ width: `${pct}%`, height: "100%" }}
                 />
@@ -199,6 +199,7 @@ export function RepoCard({
         <span
           className={dotClassName}
           style={{ background: statusColors[status] }}
+          aria-hidden="true"
         />
         <span
           className="text-xs font-medium uppercase tracking-wider"

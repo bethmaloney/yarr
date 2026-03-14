@@ -165,9 +165,9 @@ export default function OneShotDetail() {
         <div
           className={`phase-indicator mt-4 p-3 bg-card border border-border rounded font-mono text-sm text-primary ${
             phase === "failed"
-              ? "failed text-red-400 border-red-400"
+              ? "failed text-destructive border-destructive"
               : phase === "complete"
-                ? "complete text-emerald-400 border-emerald-400"
+                ? "complete text-success border-success"
                 : ""
           }`}
         >
@@ -180,7 +180,7 @@ export default function OneShotDetail() {
           {entry?.status === "running" ? (
             <>
               <Loader2 className="size-8 text-muted-foreground mb-3 animate-spin" />
-              <p className="text-sm font-medium animate-pulse">
+              <p className="text-sm font-medium motion-safe:animate-pulse">
                 Session starting...
               </p>
             </>
@@ -225,7 +225,7 @@ export default function OneShotDetail() {
           <h2 className="text-sm text-muted-foreground uppercase tracking-wide border-b border-border pb-1 mb-0">
             Error
           </h2>
-          <pre className="bg-[#2d1b1b] text-red-400 p-3 rounded overflow-x-auto">
+          <pre className="bg-destructive/10 text-destructive p-3 rounded overflow-x-auto">
             {session.error}
           </pre>
         </section>
@@ -242,7 +242,7 @@ export default function OneShotDetail() {
             {displayTrace.failure_reason && (
               <>
                 <dt className="text-muted-foreground text-sm">Reason</dt>
-                <dd className="m-0 text-sm font-mono text-red-400 whitespace-pre-wrap break-words">
+                <dd className="m-0 text-sm font-mono text-destructive whitespace-pre-wrap break-words">
                   {displayTrace.failure_reason}
                 </dd>
               </>

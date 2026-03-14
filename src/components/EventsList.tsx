@@ -14,23 +14,23 @@ interface EventsListProps {
 }
 
 const eventKindColor: Record<string, string> = {
-  session_started: "text-[#4ecdc4]",
-  iteration_started: "text-[#888]",
-  tool_use: "text-[#a78bfa]",
-  assistant_text: "text-[#e0e0e0]",
-  iteration_complete: "text-[#34d399]",
-  session_complete: "text-[#e8d44d] font-semibold",
-  check_started: "text-[#60a5fa]",
-  check_passed: "text-[#34d399]",
-  check_failed: "text-[#f87171]",
-  check_fix_started: "text-[#fbbf24]",
-  check_fix_complete: "text-[#a78bfa]",
-  git_sync_started: "text-[#888]",
-  git_sync_push_succeeded: "text-[#34d399]",
-  git_sync_conflict: "text-[#f59e0b]",
-  git_sync_conflict_resolve_started: "text-[#a78bfa]",
-  git_sync_conflict_resolve_complete: "text-[#34d399]",
-  git_sync_failed: "text-[#ef4444]",
+  session_started: "text-info",
+  iteration_started: "text-muted-foreground",
+  tool_use: "text-primary",
+  assistant_text: "text-foreground",
+  iteration_complete: "text-success",
+  session_complete: "text-primary font-semibold",
+  check_started: "text-info",
+  check_passed: "text-success",
+  check_failed: "text-destructive",
+  check_fix_started: "text-warning",
+  check_fix_complete: "text-primary",
+  git_sync_started: "text-muted-foreground",
+  git_sync_push_succeeded: "text-success",
+  git_sync_conflict: "text-warning",
+  git_sync_conflict_resolve_started: "text-primary",
+  git_sync_conflict_resolve_complete: "text-success",
+  git_sync_failed: "text-destructive",
 };
 
 export function EventsList({
@@ -155,17 +155,17 @@ export function EventsList({
   return (
     <section className="events relative">
       <div className="events-header flex items-center gap-2 mb-2">
-        <h2 className="text-base text-[#aaa] uppercase tracking-wider border-b border-[#333] pb-1 m-0">
+        <h2 className="text-base text-muted-foreground uppercase tracking-wider border-b border-border pb-1 m-0">
           Events
         </h2>
-        <span className="event-count bg-[#333] text-[#aaa] text-xs px-2 py-0.5 rounded-[10px] font-mono">
+        <span className="event-count bg-secondary text-muted-foreground text-xs px-2 py-0.5 rounded-[10px] font-mono">
           {events.length}
         </span>
       </div>
       {planProgress && <PlanProgressBar progress={planProgress} />}
       <div
         ref={eventsContainerRef}
-        className="events-scroll max-h-[350px] overflow-y-auto border border-[#2a2a3e] rounded-md bg-[#12122a] py-1"
+        className="events-scroll max-h-[350px] overflow-y-auto border border-border rounded-md bg-card-inset py-1"
         onScroll={handleEventsScroll}
       >
         <ul className="list-none p-0 m-0">
@@ -178,7 +178,7 @@ export function EventsList({
               return (
                 <li
                   key={`before-${i}`}
-                  className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}
+                  className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
                 >
                   <div
                     role="button"
@@ -195,14 +195,14 @@ export function EventsList({
                     >
                       {eventLabel(standalone.event, repoPath)}
                     </span>
-                    <span className="event-time shrink-0 text-[#555] text-xs">
+                    <span className="event-time shrink-0 text-muted-foreground/60 text-xs">
                       {formatTime(standalone.event._ts)}
                     </span>
                   </div>
                   {isExpanded &&
                     standalone.event.kind === "git_sync_failed" &&
                     standalone.event.error && (
-                      <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                      <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
                         {standalone.event.error}
                       </pre>
                     )}
@@ -237,7 +237,7 @@ export function EventsList({
               return (
                 <li
                   key={`after-${i}`}
-                  className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}
+                  className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
                 >
                   <div
                     role="button"
@@ -256,14 +256,14 @@ export function EventsList({
                     >
                       {eventLabel(standalone.event, repoPath)}
                     </span>
-                    <span className="event-time shrink-0 text-[#555] text-xs">
+                    <span className="event-time shrink-0 text-muted-foreground/60 text-xs">
                       {formatTime(standalone.event._ts)}
                     </span>
                   </div>
                   {isExpanded &&
                     standalone.event.kind === "git_sync_failed" &&
                     standalone.event.error && (
-                      <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                      <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
                         {standalone.event.error}
                       </pre>
                     )}
@@ -274,7 +274,7 @@ export function EventsList({
       </div>
       {!autoScroll && (
         <button
-          className="jump-bottom absolute bottom-2 left-1/2 -translate-x-1/2 px-4 py-1 text-xs bg-[#e8d44d] text-[#1a1a2e] border-none rounded-xl cursor-pointer font-semibold shadow-md z-10 hover:bg-[#f0e060]"
+          className="jump-bottom absolute bottom-2 left-1/2 -translate-x-1/2 px-4 py-1 text-xs bg-primary text-primary-foreground border-none rounded-xl cursor-pointer font-semibold shadow-md z-10 hover:bg-primary/90"
           onClick={jumpToBottom}
         >
           ↓ New events

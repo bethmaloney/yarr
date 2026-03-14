@@ -180,7 +180,7 @@ export default function RunDetail() {
       <main className="max-w-[700px] mx-auto p-8">
         <Breadcrumbs crumbs={breadcrumbs} />
         <div>
-          <pre className="bg-[#2d1b1b] text-red-400 p-3 rounded overflow-x-auto">
+          <pre className="bg-destructive/10 text-destructive p-3 rounded overflow-x-auto">
             {error}
           </pre>
         </div>

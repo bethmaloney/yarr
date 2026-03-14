@@ -23,25 +23,25 @@ function formatDuration(ms: number): string {
 }
 
 const eventKindColor: Record<string, string> = {
-  session_started: "text-[#4ecdc4]",
-  iteration_started: "text-[#888]",
-  tool_use: "text-[#a78bfa]",
-  assistant_text: "text-[#e0e0e0]",
-  iteration_complete: "text-[#34d399]",
-  iteration_failed: "text-[#f87171]",
-  session_complete: "text-[#e8d44d] font-semibold",
-  check_started: "text-[#60a5fa]",
-  check_passed: "text-[#34d399]",
-  check_failed: "text-[#f87171]",
-  check_fix_started: "text-[#fbbf24]",
-  check_fix_complete: "text-[#a78bfa]",
-  git_sync_started: "text-[#888]",
-  git_sync_push_succeeded: "text-[#34d399]",
-  git_sync_conflict: "text-[#f59e0b]",
-  git_sync_conflict_resolve_started: "text-[#a78bfa]",
-  git_sync_conflict_resolve_complete: "text-[#34d399]",
-  git_sync_failed: "text-[#ef4444]",
-  rate_limited: "text-[#f59e0b]",
+  session_started: "text-info",
+  iteration_started: "text-muted-foreground",
+  tool_use: "text-primary",
+  assistant_text: "text-foreground",
+  iteration_complete: "text-success",
+  iteration_failed: "text-destructive",
+  session_complete: "text-primary font-semibold",
+  check_started: "text-info",
+  check_passed: "text-success",
+  check_failed: "text-destructive",
+  check_fix_started: "text-warning",
+  check_fix_complete: "text-primary",
+  git_sync_started: "text-muted-foreground",
+  git_sync_push_succeeded: "text-success",
+  git_sync_conflict: "text-warning",
+  git_sync_conflict_resolve_started: "text-primary",
+  git_sync_conflict_resolve_complete: "text-success",
+  git_sync_failed: "text-destructive",
+  rate_limited: "text-warning",
 };
 
 function handleSelectableClick(callback: () => void) {
@@ -83,8 +83,8 @@ function ToolOutputSection({
   const remainingLines = lines.length - 20;
 
   return (
-    <div className="mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded text-xs text-[#9ca3af]">
-      <div className="text-[#a78bfa] mb-1">Output</div>
+    <div className="mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded text-xs text-muted-foreground">
+      <div className="text-primary mb-1">Output</div>
       {toolName === "Agent" ? (
         <Markdown>
           {needsTruncation && !isOutputExpanded
@@ -103,7 +103,7 @@ function ToolOutputSection({
       )}
       {needsTruncation && !isOutputExpanded && (
         <button
-          className="mt-1 text-[#a78bfa] hover:underline cursor-pointer bg-transparent border-none text-xs p-0"
+          className="mt-1 text-primary hover:underline cursor-pointer bg-transparent border-none text-xs p-0"
           onClick={() => {
             setExpandedOutputs((prev) => {
               const next = new Set(prev);
@@ -143,7 +143,7 @@ export function IterationGroupComponent({
       <div
         role="button"
         tabIndex={0}
-        className="iteration-header flex items-baseline gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-[#1e1e38] select-text"
+        className="iteration-header flex items-baseline gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-border select-text"
         onClick={handleSelectableClick(onToggle)}
         onKeyDown={handleKeyDown(onToggle)}
       >
@@ -169,9 +169,9 @@ export function IterationGroupComponent({
 
       {group.contextWindow > 0 && (
         <div className="context-bar flex items-center gap-2 px-3 py-1">
-          <div className="context-bar-track flex-1 h-1.5 bg-[#1e1e38] rounded-full overflow-hidden">
+          <div className="context-bar-track flex-1 h-1.5 bg-card-inset rounded-full overflow-hidden">
             <div
-              className="context-bar-fill h-full rounded-full transition-all"
+              className="context-bar-fill h-full rounded-full transition-colors duration-150"
               style={{
                 width: `${Math.min(percentage, 100)}%`,
                 background: contextBarColor(percentage),
@@ -195,7 +195,7 @@ export function IterationGroupComponent({
             return (
               <li
                 key={i}
-                className={`event ${ev.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-[#1e1e38] last:border-b-0`}
+                className={`event ${ev.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
               >
                 <div
                   role="button"
@@ -214,7 +214,7 @@ export function IterationGroupComponent({
                   >
                     {eventLabel(ev, repoPath)}
                   </span>
-                  <span className="event-time shrink-0 text-[#555] text-xs">
+                  <span className="event-time shrink-0 text-muted-foreground/60 text-xs">
                     {formatTime(ev._ts)}
                   </span>
                 </div>
@@ -223,12 +223,12 @@ export function IterationGroupComponent({
                   ev.kind === "tool_use" &&
                   ev.tool_input &&
                   ev.tool_name === "Agent" && (
-                    <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded text-xs text-[#9ca3af]">
+                    <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded text-xs text-muted-foreground">
                       {Object.entries(ev.tool_input)
                         .filter(([key]) => key !== "prompt")
                         .map(([key, value]) => (
                           <div key={key} className="flex gap-2 py-0.5">
-                            <span className="font-semibold text-[#a78bfa]">
+                            <span className="font-semibold text-primary">
                               {key}:
                             </span>
                             <span>
@@ -239,7 +239,7 @@ export function IterationGroupComponent({
                           </div>
                         ))}
                       {typeof ev.tool_input.prompt === "string" && (
-                        <div className="mt-2 border-t border-[#2a2a3e] pt-2">
+                        <div className="mt-2 border-t border-border pt-2">
                           <Markdown>{ev.tool_input.prompt}</Markdown>
                         </div>
                       )}
@@ -250,7 +250,7 @@ export function IterationGroupComponent({
                   ev.kind === "tool_use" &&
                   ev.tool_input &&
                   ev.tool_name !== "Agent" && (
-                    <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                    <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
                       {JSON.stringify(ev.tool_input, null, 2)}
                     </pre>
                   )}
@@ -266,13 +266,13 @@ export function IterationGroupComponent({
                 )}
 
                 {isExpanded && ev.kind === "check_failed" && ev.output && (
-                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
                     {ev.output}
                   </pre>
                 )}
 
                 {isExpanded && ev.kind === "git_sync_failed" && ev.error && (
-                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-[#1a1a35] border border-[#2a2a3e] rounded font-mono text-xs text-[#9ca3af] whitespace-pre-wrap break-words overflow-x-auto">
+                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
                     {ev.error}
                   </pre>
                 )}

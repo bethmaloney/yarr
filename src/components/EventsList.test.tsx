@@ -671,7 +671,7 @@ describe("EventsList", () => {
   // 14. Event kind color classes
   // =========================================================================
 
-  it("applies text-[#4ecdc4] class for session_started standalone events", async () => {
+  it("applies text-info class for session_started standalone events", async () => {
     const EventsList = await importEventsList();
     const events = [
       makeEvent({
@@ -684,10 +684,10 @@ describe("EventsList", () => {
 
     const li = container.querySelector("li.session_started");
     expect(li).not.toBeNull();
-    expect(li!.className).toContain("text-[#4ecdc4]");
+    expect(li!.className).toContain("text-info");
   });
 
-  it("applies text-[#e8d44d] and font-semibold classes for session_complete events", async () => {
+  it("applies text-primary and font-semibold classes for session_complete events", async () => {
     const EventsList = await importEventsList();
     const events = [
       makeEvent({
@@ -705,11 +705,11 @@ describe("EventsList", () => {
 
     const li = container.querySelector("li.session_complete");
     expect(li).not.toBeNull();
-    expect(li!.className).toContain("text-[#e8d44d]");
+    expect(li!.className).toContain("text-primary");
     expect(li!.className).toContain("font-semibold");
   });
 
-  it("applies text-[#ef4444] class for git_sync_failed events rendered as standalone", async () => {
+  it("applies text-destructive class for git_sync_failed events rendered as standalone", async () => {
     const EventsList = await importEventsList();
     const events = [
       makeEvent({
@@ -725,7 +725,7 @@ describe("EventsList", () => {
     // rendered as standalone the li should have the color class
     const li = container.querySelector("li.git_sync_failed");
     if (li) {
-      expect(li.className).toContain("text-[#ef4444]");
+      expect(li.className).toContain("text-destructive");
     }
   });
 

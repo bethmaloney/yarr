@@ -615,7 +615,7 @@ describe("OneShotDetail", () => {
 
       const phaseEl = screen.getByText("Failed");
       expect(phaseEl).toBeInTheDocument();
-      expect(phaseEl.className).toContain("text-red-400");
+      expect(phaseEl.className).toContain("text-destructive");
     });
 
     it("has complete styling for complete phase", () => {
@@ -640,7 +640,7 @@ describe("OneShotDetail", () => {
 
       const phaseEl = screen.getByText("Complete");
       expect(phaseEl).toBeInTheDocument();
-      expect(phaseEl.className).toContain("text-emerald-400");
+      expect(phaseEl.className).toContain("text-success");
     });
   });
 
@@ -1238,9 +1238,9 @@ describe("OneShotDetail", () => {
       renderOneShotDetail();
 
       // inputTokens = 170000 + 10000 + 0 = 180000; 180000/200000 = 90%
-      // sessionContextColor(90) → "#f87171" (red, since >85%)
+      // sessionContextColor(90) → "var(--destructive)" (red, since >85%)
       const percentSpan = screen.getByText(/90%/);
-      expect(percentSpan).toHaveStyle({ color: "#f87171" });
+      expect(percentSpan).toHaveStyle({ color: "var(--destructive)" });
     });
   });
 

@@ -165,7 +165,7 @@ export default function History() {
         <Breadcrumbs crumbs={breadcrumbs} />
         <h1 className="text-3xl text-primary mb-4">History</h1>
         <div>
-          <pre className="bg-[#2d1b1b] text-red-400 p-3 rounded overflow-x-auto">
+          <pre className="bg-destructive/10 text-destructive p-3 rounded overflow-x-auto">
             {error}
           </pre>
         </div>
