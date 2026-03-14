@@ -2,6 +2,16 @@
 
 Desktop app that orchestrates [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions. Run Ralph loops, fire off one-shots, and monitor everything from a single dashboard. Built on `claude -p` with subscription auth — no API keys needed.
 
+## Screenshots
+
+| Home | Repo Detail |
+|------|-------------|
+| ![Home](screenshots/home.png) | ![Repo Detail](screenshots/repo-detail.png) |
+
+| Session Detail | History |
+|----------------|---------|
+| ![Session Detail](screenshots/oneshot-detail.png) | ![History](screenshots/history.png) |
+
 ## Why Yarr?
 
 Running Claude Code in a loop (a "Ralph loop") means spawning `claude -p` repeatedly against a repo with a plan file. Yarr takes ownership of that loop so you can:

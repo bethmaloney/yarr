@@ -6,5 +6,4 @@
 /src-tauri/traces
 /src-tauri/gen
 .playwright-cli/
-screenshots/
 test-results/
