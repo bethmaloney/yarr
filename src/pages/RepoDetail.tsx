@@ -42,6 +42,7 @@ import {
   CommandEmpty,
 } from "@/components/ui/command";
 import { toast } from "sonner";
+import HistoryTable from "@/components/HistoryTable";
 import { sessionContextColor } from "../context-bar";
 import { groupEventsByIteration, maxContextPercent } from "../iteration-groups";
 import { parsePlanPreview, planDisplayName } from "../plan-preview";
@@ -64,7 +65,7 @@ import {
   XCircle,
   Plus,
 } from "lucide-react";
-import type { Check, SessionState } from "../types";
+import type { Check, SessionState, SessionTrace } from "../types";
 import type { RepoConfig } from "../repos";
 import { timeAgo } from "../time";
 
@@ -158,6 +159,12 @@ export default function RepoDetail() {
     useState("high");
   const [oneShotSubmitting, setOneShotSubmitting] = useState(false);
 
+  // History tab state
+  const [historyTraces, setHistoryTraces] = useState<SessionTrace[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const historyLoadedRef = useRef(false);
+
   // Connection test state
   const [connectionTest, setConnectionTest] = useState<ConnectionTest | null>(
     null,
@@ -214,11 +221,30 @@ export default function RepoDetail() {
     fetchGitStatus(repoId, repo, true);
   }, [repo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch history traces for the History tab
+  function fetchHistory() {
+    if (!repoId) return;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    invoke<SessionTrace[]>("list_traces", { repoId })
+      .then((result) => {
+        setHistoryTraces(result);
+        historyLoadedRef.current = true;
+      })
+      .catch((e) => setHistoryError(String(e)))
+      .finally(() => setHistoryLoading(false));
+  }
+
   // Refresh git status after session completes
   useEffect(() => {
     if (wasRunningRef.current && !session.running) {
       if (repo && repoId) {
         fetchGitStatus(repoId, repo, true);
+      }
+
+      // Refresh history if it was previously loaded
+      if (historyLoadedRef.current) {
+        fetchHistory();
       }
 
       // Clear plan selector after successful completion with a plan file.
@@ -1749,107 +1775,146 @@ export default function RepoDetail() {
         )}
       </section>
 
-      {/* Session plan preview banner */}
-      {(() => {
-        const showSessionPlanBanner =
-          sessionPlanFile &&
-          !planFile &&
-          (session.running || session.trace) &&
-          sessionPlanParsed;
-        if (!showSessionPlanBanner) return null;
-        return (
-          <div className="bg-muted/50 border border-border rounded-md p-3 mb-4">
-            <p className="text-sm font-semibold">
-              {planDisplayName(sessionPlanFile, sessionPlanParsed.name)}
-            </p>
-            {sessionPlanParsed.excerpt && (
-              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                {sessionPlanParsed.excerpt}
+      <Tabs
+        defaultValue="session"
+        onValueChange={(v) => {
+          if (v === "history" && !historyLoadedRef.current) {
+            fetchHistory();
+          }
+        }}
+      >
+        <TabsList variant="line">
+          <TabsTrigger value="session">Session</TabsTrigger>
+          <TabsTrigger value="history">
+            History
+            {historyLoadedRef.current && historyTraces.length > 0 && (
+              <span className="text-xs text-muted-foreground ml-1">
+                ({historyTraces.length})
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="session">
+          {/* Session plan preview banner */}
+          {(() => {
+            const showSessionPlanBanner =
+              sessionPlanFile &&
+              !planFile &&
+              (session.running || session.trace) &&
+              sessionPlanParsed;
+            if (!showSessionPlanBanner) return null;
+            return (
+              <div className="bg-muted/50 border border-border rounded-md p-3 mb-4">
+                <p className="text-sm font-semibold">
+                  {planDisplayName(sessionPlanFile, sessionPlanParsed.name)}
+                </p>
+                {sessionPlanParsed.excerpt && (
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                    {sessionPlanParsed.excerpt}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Disconnected banner */}
+          {session.disconnected && (
+            <section className="bg-destructive/10 border border-destructive/30 rounded-md p-4 mb-4">
+              <p className="text-destructive font-medium">
+                {session.disconnectReason
+                  ? `Connection lost: ${session.disconnectReason}`
+                  : "Connection lost"}
               </p>
-            )}
-          </div>
-        );
-      })()}
+              <p className="text-sm text-muted-foreground mt-1">
+                The remote session may still be running.
+              </p>
+            </section>
+          )}
 
-      {/* Disconnected banner */}
-      {session.disconnected && (
-        <section className="bg-destructive/10 border border-destructive/30 rounded-md p-4 mb-4">
-          <p className="text-destructive font-medium">
-            {session.disconnectReason
-              ? `Connection lost: ${session.disconnectReason}`
-              : "Connection lost"}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            The remote session may still be running.
-          </p>
-        </section>
-      )}
+          {/* Events list or empty state */}
+          {session.events.length === 0 &&
+          !session.running &&
+          !session.error &&
+          !session.trace ? (
+            <div className="flex flex-col items-center justify-center py-16 rounded-md border border-dashed border-border text-center">
+              <Terminal className="size-8 text-muted-foreground mb-3" />
+              <p className="text-sm font-medium">No sessions yet</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Select a prompt file and hit Run to start a session
+              </p>
+            </div>
+          ) : (
+            <EventsList
+              events={session.events}
+              isLive={session.running}
+              repoPath={repoPath}
+              planProgress={session.planProgress}
+            />
+          )}
 
-      {/* Events list or empty state */}
-      {session.events.length === 0 &&
-      !session.running &&
-      !session.error &&
-      !session.trace ? (
-        <div className="flex flex-col items-center justify-center py-16 rounded-md border border-dashed border-border text-center">
-          <Terminal className="size-8 text-muted-foreground mb-3" />
-          <p className="text-sm font-medium">No sessions yet</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Select a prompt file and hit Run to start a session
-          </p>
-        </div>
-      ) : (
-        <EventsList
-          events={session.events}
-          isLive={session.running}
-          repoPath={repoPath}
-          planProgress={session.planProgress}
-        />
-      )}
+          {/* Error section */}
+          {session.error && (
+            <section className="bg-destructive/10 border border-destructive/30 rounded-md p-4 mt-4">
+              <h2 className="text-lg font-semibold text-destructive mb-2">
+                Error
+              </h2>
+              <pre className="text-sm text-destructive whitespace-pre-wrap">
+                {session.error}
+              </pre>
+            </section>
+          )}
 
-      {/* Error section */}
-      {session.error && (
-        <section className="bg-destructive/10 border border-destructive/30 rounded-md p-4 mt-4">
-          <h2 className="text-lg font-semibold text-destructive mb-2">Error</h2>
-          <pre className="text-sm text-destructive whitespace-pre-wrap">
-            {session.error}
-          </pre>
-        </section>
-      )}
-
-      {/* Trace/Result section */}
-      {session.trace && (
-        <section className="mt-6">
-          <h2 className="text-lg font-semibold mb-3">Result</h2>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-muted-foreground">Outcome</dt>
-            <dd>{session.trace.outcome}</dd>
-            {session.trace.failure_reason && (
-              <>
-                <dt className="text-muted-foreground">Reason</dt>
-                <dd className="text-destructive">
-                  {session.trace.failure_reason}
+          {/* Trace/Result section */}
+          {session.trace && (
+            <section className="mt-6">
+              <h2 className="text-lg font-semibold mb-3">Result</h2>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                <dt className="text-muted-foreground">Outcome</dt>
+                <dd>{session.trace.outcome}</dd>
+                {session.trace.failure_reason && (
+                  <>
+                    <dt className="text-muted-foreground">Reason</dt>
+                    <dd className="text-destructive">
+                      {session.trace.failure_reason}
+                    </dd>
+                  </>
+                )}
+                <dt className="text-muted-foreground">Iterations</dt>
+                <dd>{session.trace.total_iterations}</dd>
+                <dt className="text-muted-foreground">Total Cost</dt>
+                <dd>${session.trace.total_cost_usd.toFixed(4)}</dd>
+                {ctxPercent !== null && (
+                  <>
+                    <dt className="text-muted-foreground">Peak Context</dt>
+                    <dd>
+                      <span style={{ color: sessionContextColor(ctxPercent) }}>
+                        {ctxPercent}%
+                      </span>
+                    </dd>
+                  </>
+                )}
+                <dt className="text-muted-foreground">Session ID</dt>
+                <dd className="font-mono text-xs">
+                  {session.trace.session_id}
                 </dd>
-              </>
-            )}
-            <dt className="text-muted-foreground">Iterations</dt>
-            <dd>{session.trace.total_iterations}</dd>
-            <dt className="text-muted-foreground">Total Cost</dt>
-            <dd>${session.trace.total_cost_usd.toFixed(4)}</dd>
-            {ctxPercent !== null && (
-              <>
-                <dt className="text-muted-foreground">Peak Context</dt>
-                <dd>
-                  <span style={{ color: sessionContextColor(ctxPercent) }}>
-                    {ctxPercent}%
-                  </span>
-                </dd>
-              </>
-            )}
-            <dt className="text-muted-foreground">Session ID</dt>
-            <dd className="font-mono text-xs">{session.trace.session_id}</dd>
-          </dl>
-        </section>
-      )}
+              </dl>
+            </section>
+          )}
+        </TabsContent>
+
+        <TabsContent value="history">
+          <HistoryTable
+            traces={historyTraces}
+            loading={historyLoading}
+            error={historyError}
+            showRepo={false}
+            showType={false}
+            repos={repos}
+            repoId={repoId}
+          />
+        </TabsContent>
+      </Tabs>
     </main>
   );
 }
