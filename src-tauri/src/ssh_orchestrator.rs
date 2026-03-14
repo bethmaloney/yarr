@@ -808,6 +808,7 @@ mod tests {
             cwd: Some("/mock/project".to_string()),
             model: Some("mock-model".to_string()),
             tools: Some(vec!["Read".to_string(), "Write".to_string()]),
+            compact_metadata: None,
         })
     }
 

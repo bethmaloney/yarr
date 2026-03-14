@@ -77,6 +77,7 @@ impl RuntimeProvider for MockRuntime {
             cwd: Some("/mock/repo".to_string()),
             model: Some("mock-model".to_string()),
             tools: Some(vec!["Read".to_string(), "Write".to_string(), "Bash".to_string()]),
+            compact_metadata: None,
         }));
 
         // 2. assistant tool_use events

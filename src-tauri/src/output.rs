@@ -37,6 +37,13 @@ pub struct SystemEvent {
     pub cwd: Option<String>,
     pub model: Option<String>,
     pub tools: Option<Vec<String>>,
+    pub compact_metadata: Option<CompactMetadata>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CompactMetadata {
+    pub trigger: Option<String>,
+    pub pre_tokens: Option<u64>,
 }
 
 // ── assistant message ────────────────────────────────────────
@@ -399,6 +406,22 @@ mod tests {
                 assert!(r.model_token_usage().is_empty());
             }
             _ => panic!("expected Result event"),
+        }
+    }
+
+    #[test]
+    fn parse_compact_boundary() {
+        let json = r#"{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto","pre_tokens":167000}}"#;
+        let event = StreamEvent::parse_line(json).unwrap();
+        match event {
+            StreamEvent::System(e) => {
+                assert_eq!(e.subtype.as_deref(), Some("compact_boundary"));
+                assert!(e.compact_metadata.is_some());
+                let meta = e.compact_metadata.unwrap();
+                assert_eq!(meta.trigger, Some("auto".to_string()));
+                assert_eq!(meta.pre_tokens, Some(167000));
+            }
+            _ => panic!("expected System event"),
         }
     }
 }

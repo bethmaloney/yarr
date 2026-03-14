@@ -50,10 +50,10 @@ Add `compact_metadata` field to the Rust `SystemEvent` struct so we can detect c
 - Add a unit test parsing a real compact_boundary event
 
 **Checklist:**
-- [ ] Add `CompactMetadata` struct
-- [ ] Add field to `SystemEvent`
-- [ ] Add `parse_compact_boundary` test
-- [ ] `cd src-tauri && cargo test`
+- [x] Add `CompactMetadata` struct
+- [x] Add field to `SystemEvent`
+- [x] Add `parse_compact_boundary` test
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -257,7 +257,7 @@ Add integration tests and verify the full flow.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Parse compact_boundary in SystemEvent | Not Started |
+| 1 | Parse compact_boundary in SystemEvent | Done |
 | 2 | Add ContextUpdated and Compacted session events | Not Started |
 | 3 | Emit events in SessionRunner | Not Started |
 | 4 | Emit events in SSH orchestrator | Not Started |
