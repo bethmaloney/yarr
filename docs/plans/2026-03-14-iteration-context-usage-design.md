@@ -71,8 +71,8 @@ Add two new variants to `SessionEvent` so the frontend can receive live context 
 - Add `Compacted { iteration: u32, pre_tokens: u64, trigger: String }` variant
 
 **Checklist:**
-- [ ] Add both variants to `SessionEvent`
-- [ ] `cd src-tauri && cargo test`
+- [x] Add both variants to `SessionEvent`
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -258,7 +258,7 @@ Add integration tests and verify the full flow.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Parse compact_boundary in SystemEvent | Done |
-| 2 | Add ContextUpdated and Compacted session events | Not Started |
+| 2 | Add ContextUpdated and Compacted session events | Done |
 | 3 | Emit events in SessionRunner | Not Started |
 | 4 | Emit events in SSH orchestrator | Not Started |
 | 5 | Add fields to IterationGroup | Not Started |

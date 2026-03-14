@@ -197,6 +197,10 @@ pub enum SessionEvent {
     GitSyncConflictResolveComplete { iteration: u32, attempt: u32, success: bool },
     /// Git sync failed after all retries
     GitSyncFailed { iteration: u32, error: String },
+    /// Live context token count updated during iteration
+    ContextUpdated { iteration: u32, context_tokens: u64 },
+    /// Context was compacted by Claude during iteration
+    Compacted { iteration: u32, pre_tokens: u64, trigger: String },
     /// Claude API rate limit hit (non-"allowed" status only)
     RateLimited { iteration: u32, status: String, rate_limit_type: String },
 }
@@ -330,6 +334,8 @@ impl SessionRunner {
             SessionEvent::GitSyncConflictResolveStarted { .. } => "git_sync_conflict_resolve_started",
             SessionEvent::GitSyncConflictResolveComplete { .. } => "git_sync_conflict_resolve_complete",
             SessionEvent::GitSyncFailed { .. } => "git_sync_failed",
+            SessionEvent::ContextUpdated { .. } => "context_updated",
+            SessionEvent::Compacted { .. } => "compacted",
             SessionEvent::RateLimited { .. } => "rate_limited",
         };
         tracing::debug!(
@@ -3684,5 +3690,64 @@ mod tests {
         let message = serde_json::json!({});
         let results = extract_tool_results(&message, &tool_use_ids);
         assert!(results.is_empty(), "Empty object message should return empty vec");
+    }
+
+    // =========================================================================
+    // ContextUpdated and Compacted event serialization
+    // =========================================================================
+
+    #[test]
+    fn context_updated_event_serializes_correctly() {
+        let event = SessionEvent::ContextUpdated {
+            iteration: 3,
+            context_tokens: 48_000,
+        };
+        let json = serde_json::to_value(&event).expect("serialize ContextUpdated");
+        assert_eq!(json["kind"], "context_updated");
+        assert_eq!(json["iteration"], 3);
+        assert_eq!(json["context_tokens"], 48_000);
+    }
+
+    #[test]
+    fn compacted_event_serializes_correctly() {
+        let event = SessionEvent::Compacted {
+            iteration: 5,
+            pre_tokens: 120_000,
+            trigger: "token_limit".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize Compacted");
+        assert_eq!(json["kind"], "compacted");
+        assert_eq!(json["iteration"], 5);
+        assert_eq!(json["pre_tokens"], 120_000);
+        assert_eq!(json["trigger"], "token_limit");
+    }
+
+    #[test]
+    fn context_updated_and_compacted_roundtrip_through_json() {
+        let events = vec![
+            SessionEvent::ContextUpdated {
+                iteration: 1,
+                context_tokens: 25_000,
+            },
+            SessionEvent::Compacted {
+                iteration: 2,
+                pre_tokens: 95_000,
+                trigger: "auto".to_string(),
+            },
+        ];
+
+        for event in &events {
+            let json_str = serde_json::to_string(event).expect("serialize event");
+            let deserialized: SessionEvent =
+                serde_json::from_str(&json_str).expect("deserialize event");
+            let original_value = serde_json::to_value(event).expect("to_value original");
+            let roundtrip_value =
+                serde_json::to_value(&deserialized).expect("to_value roundtrip");
+            assert_eq!(
+                original_value, roundtrip_value,
+                "roundtrip failed for {:?}",
+                event
+            );
+        }
     }
 }
