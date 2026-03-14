@@ -157,6 +157,11 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
 
     fn emit(&self, event: SessionEvent) {
         self.accumulated_events.lock().unwrap().push(event.clone());
+        if let Some(ref sid) = self.trace_session_id {
+            if let Err(e) = self.collector.append_event(sid, &event) {
+                tracing::warn!("Failed to append event to disk: {e}");
+            }
+        }
         if let Some(ref cb) = self.on_event {
             cb(&event);
         }
@@ -319,13 +324,16 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
     /// Handles iterations, disconnect detection, and reconnection.
     pub async fn run(&self) -> Result<trace::SessionTrace> {
         // 1. Health check
+        tracing::info!(host = %self.ops.name(), "ssh orchestrator: starting health check");
         self.ops.health_check().await?;
+        tracing::info!(host = %self.ops.name(), "ssh orchestrator: health check passed");
 
         // 2. Generate session ID
         let session_id = uuid::Uuid::new_v4().to_string();
 
         // 3. Init session
         self.ops.init_session(&session_id).await?;
+        tracing::info!(host = %self.ops.name(), remote_session_id = %session_id, "ssh orchestrator: remote session initialized");
 
         // 4. (line_count starts at 1, tail will be started per iteration)
 
@@ -337,6 +345,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         };
 
         // 6. Emit SessionStarted
+        tracing::info!(trace_session_id = %trace.session_id, "ssh orchestrator: emitting SessionStarted");
         self.emit(SessionEvent::SessionStarted {
             session_id: trace.session_id.clone(),
         });

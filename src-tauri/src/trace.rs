@@ -419,7 +419,11 @@ impl TraceCollector {
             .join("traces")
             .join(repo_id)
             .join(format!("events_{}.jsonl", session_id));
-        let contents = std::fs::read_to_string(&path)?;
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(e.into()),
+        };
         let mut events = Vec::new();
         for line in contents.lines() {
             let line = line.trim();
