@@ -7,7 +7,7 @@ import { useAppStore } from "../store";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { EventsList } from "@/components/EventsList";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, NumberInput } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,9 @@ import {
   Loader2,
   ChevronDown,
   Check as CheckIcon,
+  X,
+  XCircle,
+  Plus,
 } from "lucide-react";
 import type { Check, SessionState } from "../types";
 import type { RepoConfig } from "../repos";
@@ -837,7 +840,7 @@ export default function RepoDetail() {
       <Sheet open={configOpen} onOpenChange={setConfigOpen}>
         <SheetContent
           side="right"
-          className="overflow-y-auto border-l border-border bg-card"
+          className="overflow-y-auto border-l border-border bg-card sm:max-w-xl"
         >
           <SheetHeader className="border-b border-border pb-4">
             <SheetTitle className="flex items-center gap-2 text-xl">
@@ -849,7 +852,7 @@ export default function RepoDetail() {
             </SheetDescription>
           </SheetHeader>
           <Tabs defaultValue="settings" className="px-4">
-            <TabsList className="w-full">
+            <TabsList variant="line" className="w-full">
               <TabsTrigger value="settings">Settings</TabsTrigger>
               <TabsTrigger value="checks">Checks</TabsTrigger>
               <TabsTrigger value="git-sync">Git Sync</TabsTrigger>
@@ -860,10 +863,11 @@ export default function RepoDetail() {
               <div className="flex flex-col gap-6 pt-4">
                 {repo.type === "ssh" && (
                   <div className="flex flex-col gap-3">
-                    <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                    <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                      <Terminal className="size-3.5" />
                       Connection
                     </span>
-                    <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                    <div className={`bg-card-inset rounded-md p-3 flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
                       <Label className="flex flex-col gap-1">
                         <span className="text-sm text-muted-foreground">SSH Host</span>
                         <Input
@@ -893,10 +897,11 @@ export default function RepoDetail() {
 
                 {/* Model & Execution */}
                 <div className="flex flex-col gap-3">
-                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <Cpu className="size-3.5" />
                     Model & Execution
                   </span>
-                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                  <div className={`bg-card-inset rounded-md p-3 flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
                     <div className="grid grid-cols-2 gap-3">
                       <Label className="flex flex-col gap-1">
                         <span className="text-sm text-muted-foreground">Model</span>
@@ -929,8 +934,7 @@ export default function RepoDetail() {
                     </div>
                     <Label className="flex flex-col gap-1">
                       <span className="text-sm text-muted-foreground">Max Iterations</span>
-                      <Input
-                        type="number"
+                      <NumberInput
                         value={maxIterations}
                         onChange={(e) => setMaxIterations(Number(e.target.value))}
                         min={1}
@@ -947,7 +951,7 @@ export default function RepoDetail() {
                         disabled={session.running}
                         className="font-mono"
                       />
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground mt-0.5">
                         Token that signals the agent has finished its task
                       </span>
                     </Label>
@@ -956,10 +960,11 @@ export default function RepoDetail() {
 
                 {/* Plans */}
                 <div className="flex flex-col gap-3">
-                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <FileText className="size-3.5" />
                     Plans
                   </span>
-                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                  <div className={`bg-card-inset rounded-md p-3 flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
                     <Label className="flex flex-col gap-1">
                       <span className="text-sm text-muted-foreground">Plans Directory</span>
                       <Input
@@ -969,7 +974,7 @@ export default function RepoDetail() {
                         placeholder="docs/plans/"
                         disabled={session.running}
                       />
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground mt-0.5">
                         Where plan files are read from for session execution
                       </span>
                     </Label>
@@ -990,10 +995,11 @@ export default function RepoDetail() {
 
                 {/* Behavior */}
                 <div className="flex flex-col gap-3">
-                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <Settings className="size-3.5" />
                     Behavior
                   </span>
-                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                  <div className={`bg-card-inset rounded-md p-3 flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
                     <Label
                       htmlFor="create-branch"
                       className="flex items-center gap-2 text-sm font-normal"
@@ -1019,7 +1025,7 @@ export default function RepoDetail() {
                         />
                         Auto-fetch from remote
                       </Label>
-                      <span className="text-xs text-muted-foreground ml-6">
+                      <span className="text-xs text-muted-foreground ml-6 mt-0.5">
                         Fetches from remote every 30 seconds during a session
                       </span>
                     </div>
@@ -1031,10 +1037,18 @@ export default function RepoDetail() {
                   disabled={session.running}
                   className="flex flex-col gap-3"
                 >
-                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <Variable className="size-3.5" />
                     Environment Variables
                   </span>
-                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                  <div className={`bg-card-inset rounded-md p-3 flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
+                    {envVars.length === 0 && (
+                      <div className="border border-dashed border-border rounded-md p-4 text-center">
+                        <span className="text-xs text-muted-foreground">
+                          No environment variables set
+                        </span>
+                      </div>
+                    )}
                     {envVars.map((envVar, i) => (
                       <div key={i} className="flex items-center gap-2">
                         <Input
@@ -1067,8 +1081,9 @@ export default function RepoDetail() {
                           onClick={() =>
                             setEnvVars(envVars.filter((_, j) => j !== i))
                           }
+                          aria-label="Remove variable"
                         >
-                          &times;
+                          <X className="size-3.5" />
                         </Button>
                       </div>
                     ))}
@@ -1080,7 +1095,8 @@ export default function RepoDetail() {
                         setEnvVars([...envVars, { key: "", value: "" }])
                       }
                     >
-                      + Add Variable
+                      <Plus className="size-3.5" />
+                      Add Variable
                     </Button>
                   </div>
                 </fieldset>
@@ -1094,23 +1110,17 @@ export default function RepoDetail() {
                         key={step.name}
                         className={`step-${step.status} flex items-center gap-2 text-sm`}
                       >
-                        <span
-                          className={
-                            step.status === "pass"
-                              ? "text-success"
-                              : step.status === "fail"
-                                ? "text-destructive"
-                                : "text-muted-foreground"
-                          }
-                        >
-                          {step.status === "running"
-                            ? "..."
-                            : step.status === "pass"
-                              ? "\u2713"
-                              : step.status === "fail"
-                                ? "\u2717"
-                                : "\u00B7"}
-                        </span>
+                        {step.status === "running" ? (
+                          <Loader2 className="size-4 text-muted-foreground animate-spin" />
+                        ) : step.status === "pass" ? (
+                          <CheckIcon className="size-4 text-success" />
+                        ) : step.status === "fail" ? (
+                          <XCircle className="size-4 text-destructive" />
+                        ) : (
+                          <span className="size-4 flex items-center justify-center text-muted-foreground">
+                            <span className="size-1.5 rounded-full bg-muted-foreground" />
+                          </span>
+                        )}
                         <span>{step.name}</span>
                         {step.error && (
                           <span className="text-destructive text-xs">
@@ -1126,9 +1136,10 @@ export default function RepoDetail() {
 
             {/* ── Checks tab ── */}
             <TabsContent value="checks">
-              <div className="flex flex-col gap-4 pt-4">
+              <div className="flex flex-col gap-6 pt-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="size-3.5" />
                     Validation Checks
                   </span>
                   <Button
@@ -1149,7 +1160,8 @@ export default function RepoDetail() {
                       ])
                     }
                   >
-                    + Add Check
+                    <Plus className="size-3.5" />
+                    Add Check
                   </Button>
                 </div>
                 {checks.length === 0 ? (
@@ -1166,12 +1178,67 @@ export default function RepoDetail() {
                     {checks.map((check, i) => (
                       <div
                         key={i}
-                        className="check-entry bg-card-inset rounded-md p-3 flex flex-col gap-3"
+                        className={`check-entry rounded-md border border-border border-l-2 border-l-primary/40 flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-foreground">
-                            {check.name || `Check ${i + 1}`}
-                          </span>
+                        {/* Header: inline-editable name + when toggle + delete */}
+                        <div className="flex items-center gap-2 bg-card-inset/50 px-3 pt-3 pb-0">
+                          <Input
+                            type="text"
+                            value={check.name}
+                            placeholder={`Check ${i + 1}`}
+                            onChange={(e) => {
+                              const updated = [...checks];
+                              updated[i] = {
+                                ...updated[i],
+                                name: e.target.value,
+                              };
+                              setChecks(updated);
+                            }}
+                            disabled={session.running}
+                            className="h-7 border-none bg-transparent shadow-none px-0 text-sm font-medium text-foreground placeholder:text-muted-foreground/60 focus-visible:ring-0 focus-visible:border-none"
+                          />
+                          <div className="flex items-center shrink-0">
+                            <div className="flex h-7 rounded-md border border-input overflow-hidden">
+                              <button
+                                type="button"
+                                disabled={session.running}
+                                onClick={() => {
+                                  const updated = [...checks];
+                                  updated[i] = {
+                                    ...updated[i],
+                                    when: "each_iteration",
+                                  };
+                                  setChecks(updated);
+                                }}
+                                className={`px-2.5 text-xs font-medium transition-colors duration-150 ${
+                                  check.when === "each_iteration"
+                                    ? "bg-primary/15 text-primary"
+                                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                                } disabled:pointer-events-none disabled:opacity-50`}
+                              >
+                                Every iteration
+                              </button>
+                              <button
+                                type="button"
+                                disabled={session.running}
+                                onClick={() => {
+                                  const updated = [...checks];
+                                  updated[i] = {
+                                    ...updated[i],
+                                    when: "post_completion",
+                                  };
+                                  setChecks(updated);
+                                }}
+                                className={`px-2.5 text-xs font-medium border-l border-input transition-colors duration-150 ${
+                                  check.when === "post_completion"
+                                    ? "bg-primary/15 text-primary"
+                                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                                } disabled:pointer-events-none disabled:opacity-50`}
+                              >
+                                After completion
+                              </button>
+                            </div>
+                          </div>
                           <Button
                             type="button"
                             variant="ghost"
@@ -1180,77 +1247,35 @@ export default function RepoDetail() {
                             onClick={() => {
                               setChecks(checks.filter((_, j) => j !== i));
                             }}
+                            aria-label="Remove check"
+                            className="shrink-0"
                           >
-                            &times;
+                            <X className="size-3.5" />
                           </Button>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* Fields: command + timeout + retries in one row */}
+                        <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 pb-3">
                           <Label className="flex flex-col gap-1">
-                            <span className="text-sm text-muted-foreground">Name</span>
+                            <span className="text-xs text-muted-foreground">Command</span>
                             <Input
                               type="text"
-                              value={check.name}
+                              value={check.command}
+                              placeholder="e.g. npm test"
                               onChange={(e) => {
                                 const updated = [...checks];
                                 updated[i] = {
                                   ...updated[i],
-                                  name: e.target.value,
+                                  command: e.target.value,
                                 };
                                 setChecks(updated);
                               }}
                               disabled={session.running}
+                              className="font-mono"
                             />
                           </Label>
                           <Label className="flex flex-col gap-1">
-                            <span className="text-sm text-muted-foreground">When</span>
-                            <Select
-                              value={check.when}
-                              onValueChange={(value) => {
-                                const updated = [...checks];
-                                updated[i] = {
-                                  ...updated[i],
-                                  when: value as Check["when"],
-                                };
-                                setChecks(updated);
-                              }}
-                              disabled={session.running}
-                            >
-                              <SelectTrigger className="w-full font-mono">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="each_iteration">
-                                  each_iteration
-                                </SelectItem>
-                                <SelectItem value="post_completion">
-                                  post_completion
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </Label>
-                        </div>
-                        <Label className="flex flex-col gap-1">
-                          <span className="text-sm text-muted-foreground">Command</span>
-                          <Input
-                            type="text"
-                            value={check.command}
-                            onChange={(e) => {
-                              const updated = [...checks];
-                              updated[i] = {
-                                ...updated[i],
-                                command: e.target.value,
-                              };
-                              setChecks(updated);
-                            }}
-                            disabled={session.running}
-                            className="font-mono"
-                          />
-                        </Label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Label className="flex flex-col gap-1">
-                            <span className="text-sm text-muted-foreground">Timeout (s)</span>
-                            <Input
-                              type="number"
+                            <span className="text-xs text-muted-foreground">Timeout (s)</span>
+                            <NumberInput
                               value={check.timeoutSecs}
                               onChange={(e) => {
                                 const updated = [...checks];
@@ -1262,13 +1287,12 @@ export default function RepoDetail() {
                               }}
                               min={1}
                               disabled={session.running}
-                              className="font-mono"
+                              className="font-mono w-24"
                             />
                           </Label>
                           <Label className="flex flex-col gap-1">
-                            <span className="text-sm text-muted-foreground">Retries</span>
-                            <Input
-                              type="number"
+                            <span className="text-xs text-muted-foreground">Retries</span>
+                            <NumberInput
                               value={check.maxRetries}
                               onChange={(e) => {
                                 const updated = [...checks];
@@ -1278,9 +1302,9 @@ export default function RepoDetail() {
                                 };
                                 setChecks(updated);
                               }}
-                              min={0}
+                              min={1}
                               disabled={session.running}
-                              className="font-mono"
+                              className="font-mono w-20"
                             />
                           </Label>
                         </div>
@@ -1295,10 +1319,11 @@ export default function RepoDetail() {
             <TabsContent value="git-sync">
               <div className="flex flex-col gap-6 pt-4">
                 <div className="flex flex-col gap-3">
-                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <GitBranch className="size-3.5" />
                     Sync Settings
                   </span>
-                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                  <div className={`bg-card-inset rounded-md p-3 flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
                     <Label
                       htmlFor="git-sync-enabled"
                       className="flex items-center gap-2 text-sm font-normal"
@@ -1325,8 +1350,7 @@ export default function RepoDetail() {
                       </Label>
                       <Label className="flex flex-col gap-1">
                         <span className="text-sm text-muted-foreground">Max Push Retries</span>
-                        <Input
-                          type="number"
+                        <NumberInput
                           value={gitSyncMaxRetries}
                           onChange={(e) =>
                             setGitSyncMaxRetries(Number(e.target.value))
@@ -1341,10 +1365,11 @@ export default function RepoDetail() {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                    <GitBranch className="size-3.5" />
                     Conflict Resolution
                   </span>
-                  <div className="bg-card-inset rounded-md p-3">
+                  <div className={`bg-card-inset rounded-md p-3 ${session.running ? "opacity-60" : ""}`}>
                     <Label className="flex flex-col gap-1">
                       <span className="text-sm text-muted-foreground">Prompt</span>
                       <Textarea
@@ -1354,7 +1379,7 @@ export default function RepoDetail() {
                         disabled={session.running || !gitSyncEnabled}
                         rows={3}
                       />
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground mt-0.5">
                         Instructions given to the agent when resolving merge conflicts
                       </span>
                     </Label>
@@ -1363,7 +1388,7 @@ export default function RepoDetail() {
               </div>
             </TabsContent>
           </Tabs>
-          <SheetFooter className="sticky bottom-0 bg-card border-t border-border pt-4">
+          <SheetFooter className="sticky bottom-0 bg-card border-t border-border pt-4 shadow-[0_-4px_12px_oklch(0_0_0/0.3)]">
             <div className="flex gap-2">
               <Button
                 type="button"

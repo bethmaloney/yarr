@@ -965,9 +965,9 @@ describe("RepoDetail", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /add check/i }));
 
-      // Should now have a new check entry (with default "New Check" label)
+      // Should now have a new check entry (with placeholder "Check 1")
       await waitFor(() => {
-        expect(screen.getByText("New Check")).toBeInTheDocument();
+        expect(screen.getByPlaceholderText("Check 1")).toBeInTheDocument();
       });
     });
   });
