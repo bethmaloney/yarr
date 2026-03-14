@@ -98,15 +98,15 @@ Backend command that writes the built-in default prompt to a file in the repo vi
 **Pattern reference:** `move_plan_to_completed` command in `src-tauri/src/lib.rs` (lines 1517-1530) for the runtime + shell command pattern
 
 **Checklist:**
-- [ ] Add `export_default_prompt` Tauri command accepting `repo: RepoType`, `prompt_type: String`
-- [ ] Validate `prompt_type` is "design" or "implementation"
-- [ ] Select the correct built-in prompt constant (`DESIGN_PROMPT` or `IMPLEMENTATION_PROMPT`)
-- [ ] Build runtime provider from `RepoType`
-- [ ] Create `.yarr/prompts/` directory via `rt.run_command("mkdir -p .yarr/prompts", ...)`
-- [ ] Write prompt content to file via `rt.run_command()` using heredoc or base64-encode + decode to handle special characters safely
-- [ ] Return the relative file path (`.yarr/prompts/design.md` or `.yarr/prompts/implementation.md`)
-- [ ] Register command in Tauri builder's `invoke_handler`
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add `export_default_prompt` Tauri command accepting `repo: RepoType`, `prompt_type: String`
+- [x] Validate `prompt_type` is "design" or "implementation"
+- [x] Select the correct built-in prompt constant (`DESIGN_PROMPT` or `IMPLEMENTATION_PROMPT`)
+- [x] Build runtime provider from `RepoType`
+- [x] Create `.yarr/prompts/` directory via `rt.run_command("mkdir -p .yarr/prompts", ...)`
+- [x] Write prompt content to file via `rt.run_command()` using heredoc or base64-encode + decode to handle special characters safely
+- [x] Return the relative file path (`.yarr/prompts/design.md` or `.yarr/prompts/implementation.md`)
+- [x] Register command in Tauri builder's `invoke_handler`
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -180,7 +180,7 @@ Add tests for the new prompt override functionality.
 |------|-------------|--------|
 | 1 | Add prompt file fields to RepoConfig | Done |
 | 2 | Add settings UI for custom prompt files | Done |
-| 3 | Add `export_default_prompt` Tauri command | Not Started |
+| 3 | Add `export_default_prompt` Tauri command | Done |
 | 4 | Pass prompt file paths through `run_session` | Not Started |
 | 5 | Pass prompt file paths through `run_oneshot` | Not Started |
 | 6 | Tests | Not Started |

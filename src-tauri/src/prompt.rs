@@ -230,6 +230,14 @@ pub fn build_conflict_prompt(custom_prompt: Option<&str>, conflict_files: &str) 
     }
 }
 
+pub fn export_prompt_details(prompt_type: &str) -> Result<(&'static str, &'static str), String> {
+    match prompt_type {
+        "design" => Ok((".yarr/prompts/design.md", DESIGN_PROMPT)),
+        "implementation" => Ok((".yarr/prompts/implementation.md", IMPLEMENTATION_PROMPT)),
+        _ => Err(format!("Invalid prompt_type: {}", prompt_type)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,6 +381,60 @@ mod tests {
         assert!(
             result.contains("src/app.rs"),
             "the actual file list should appear in the output, got: {result}"
+        );
+    }
+
+    #[test]
+    fn export_prompt_path_design() {
+        let (path, _content) = export_prompt_details("design")
+            .expect("export_prompt_details should succeed for 'design'");
+        assert_eq!(
+            path, ".yarr/prompts/design.md",
+            "design prompt path should be '.yarr/prompts/design.md'"
+        );
+    }
+
+    #[test]
+    fn export_prompt_path_implementation() {
+        let (path, _content) = export_prompt_details("implementation")
+            .expect("export_prompt_details should succeed for 'implementation'");
+        assert_eq!(
+            path, ".yarr/prompts/implementation.md",
+            "implementation prompt path should be '.yarr/prompts/implementation.md'"
+        );
+    }
+
+    #[test]
+    fn export_prompt_content_design() {
+        let (_path, content) = export_prompt_details("design")
+            .expect("export_prompt_details should succeed for 'design'");
+        assert_eq!(
+            content, DESIGN_PROMPT,
+            "design prompt content should match the DESIGN_PROMPT constant (with raw {{plans_dir}} placeholder)"
+        );
+    }
+
+    #[test]
+    fn export_prompt_content_implementation() {
+        let (_path, content) = export_prompt_details("implementation")
+            .expect("export_prompt_details should succeed for 'implementation'");
+        assert_eq!(
+            content, IMPLEMENTATION_PROMPT,
+            "implementation prompt content should match the IMPLEMENTATION_PROMPT constant"
+        );
+    }
+
+    #[test]
+    fn export_prompt_invalid_type() {
+        let result = export_prompt_details("foo");
+        assert!(
+            result.is_err(),
+            "export_prompt_details should return Err for invalid prompt_type 'foo'"
+        );
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.contains("foo"),
+            "error message should contain the invalid prompt_type value, got: {err_msg}"
         );
     }
 }

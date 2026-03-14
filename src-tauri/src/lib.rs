@@ -1529,6 +1529,33 @@ async fn move_plan_to_completed(app: tauri::AppHandle, repo: RepoType, plans_dir
     move_plan_to_completed_impl(rt.as_ref(), &working_dir, &plans_dir, &filename, true).await
 }
 
+#[tauri::command]
+async fn export_default_prompt(app: tauri::AppHandle, repo: RepoType, prompt_type: String) -> Result<String, String> {
+    tracing::info!(repo = ?repo, prompt_type = %prompt_type, "export_default_prompt called");
+    let (file_path, content) = prompt::export_prompt_details(&prompt_type)?;
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
+    let timeout = std::time::Duration::from_secs(30);
+
+    let mkdir_output = rt.run_command("mkdir -p .yarr/prompts", &working_dir, timeout).await
+        .map_err(|e| format!("Failed to create directory: {e}"))?;
+    if mkdir_output.exit_code != 0 {
+        return Err(format!("Failed to create .yarr/prompts directory: {}", mkdir_output.stderr));
+    }
+
+    use base64::Engine;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(content);
+    let write_cmd = format!("echo '{}' | base64 -d > {}", encoded, file_path);
+    let output = rt.run_command(&write_cmd, &working_dir, timeout).await
+        .map_err(|e| format!("Failed to write prompt file: {e}"))?;
+
+    if output.exit_code != 0 {
+        return Err(format!("Failed to write prompt file: {}", output.stderr));
+    }
+
+    tracing::info!(prompt_type = %prompt_type, file_path = %file_path, "default prompt exported successfully");
+    Ok(file_path.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Force a webview to repaint by briefly resizing and restoring the window.
 /// This works around a WebView2 bug on Windows where the rendering surface
@@ -1580,7 +1607,7 @@ pub fn run() {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
         .manage(SshEnvCache::default())
-        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, resume_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, resume_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed, export_default_prompt])
         .build(tauri::generate_context!())
         .expect("error building tauri application");
 
