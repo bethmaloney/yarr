@@ -2194,4 +2194,223 @@ describe("RepoDetail", () => {
       );
     });
   });
+
+  // =========================================================================
+  // 13. Custom Prompts settings
+  // =========================================================================
+
+  describe("custom prompts settings", () => {
+    it("renders Custom Prompts section heading in settings", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      renderRepoDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/custom prompts/i)).toBeInTheDocument();
+      });
+    });
+
+    it("shows Design Prompt File and Implementation Prompt File inputs with correct placeholders", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      renderRepoDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText(".yarr/prompts/design.md"),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByPlaceholderText(".yarr/prompts/implementation.md"),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("shows help text for prompt overrides", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      renderRepoDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/override the built-in prompt.*leave empty to use default/i),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("loads existing prompt file values from repo config", async () => {
+      const repo = makeLocalRepo({
+        designPromptFile: "my/design.md",
+        implementationPromptFile: "my/impl.md",
+      } as Partial<RepoConfig>);
+      setupMockState({ repos: [repo] });
+      renderRepoDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("my/design.md")).toBeInTheDocument();
+        expect(screen.getByDisplayValue("my/impl.md")).toBeInTheDocument();
+      });
+    });
+
+    it("saves prompt file values via updateRepo", async () => {
+      const state = setupMockState({ repos: [makeLocalRepo()] });
+      renderRepoDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText(".yarr/prompts/design.md"),
+        ).toBeInTheDocument();
+      });
+
+      const designInput = screen.getByPlaceholderText(
+        ".yarr/prompts/design.md",
+      );
+      const implInput = screen.getByPlaceholderText(
+        ".yarr/prompts/implementation.md",
+      );
+
+      fireEvent.change(designInput, {
+        target: { value: "custom/design-prompt.md" },
+      });
+      fireEvent.change(implInput, {
+        target: { value: "custom/impl-prompt.md" },
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+      expect(state.updateRepo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          designPromptFile: "custom/design-prompt.md",
+          implementationPromptFile: "custom/impl-prompt.md",
+        }),
+      );
+    });
+
+    it("Export Default button calls invoke with correct args for design prompt", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "export_default_prompt")
+          return Promise.resolve(".yarr/prompts/design.md");
+        return Promise.resolve(null);
+      });
+      renderRepoDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText(".yarr/prompts/design.md"),
+        ).toBeInTheDocument();
+      });
+
+      // Find the Export Default buttons — there should be two, one per prompt field
+      const exportButtons = screen.getAllByRole("button", {
+        name: /export default/i,
+      });
+      // Click the first one (design prompt)
+      fireEvent.click(exportButtons[0]);
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("export_default_prompt", {
+          repo: { type: "local", path: "/home/beth/repos/my-project" },
+          promptType: "design",
+        });
+      });
+    });
+
+    it("Export Default button calls invoke with correct args for implementation prompt", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "export_default_prompt")
+          return Promise.resolve(".yarr/prompts/implementation.md");
+        return Promise.resolve(null);
+      });
+      renderRepoDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText(".yarr/prompts/implementation.md"),
+        ).toBeInTheDocument();
+      });
+
+      const exportButtons = screen.getAllByRole("button", {
+        name: /export default/i,
+      });
+      // Click the second one (implementation prompt)
+      fireEvent.click(exportButtons[1]);
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("export_default_prompt", {
+          repo: { type: "local", path: "/home/beth/repos/my-project" },
+          promptType: "implementation",
+        });
+      });
+    });
+
+    it("Export Default auto-populates design input on success", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "export_default_prompt")
+          return Promise.resolve(".yarr/prompts/design.md");
+        return Promise.resolve(null);
+      });
+      renderRepoDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText(".yarr/prompts/design.md"),
+        ).toBeInTheDocument();
+      });
+
+      const exportButtons = screen.getAllByRole("button", {
+        name: /export default/i,
+      });
+      fireEvent.click(exportButtons[0]);
+
+      await waitFor(() => {
+        expect(
+          screen.getByDisplayValue(".yarr/prompts/design.md"),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("Export Default auto-populates implementation input on success", async () => {
+      setupMockState({ repos: [makeLocalRepo()] });
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "export_default_prompt")
+          return Promise.resolve(".yarr/prompts/implementation.md");
+        return Promise.resolve(null);
+      });
+      renderRepoDetail();
+
+      fireEvent.click(screen.getByRole("button", { name: /configure/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText(".yarr/prompts/implementation.md"),
+        ).toBeInTheDocument();
+      });
+
+      const exportButtons = screen.getAllByRole("button", {
+        name: /export default/i,
+      });
+      fireEvent.click(exportButtons[1]);
+
+      await waitFor(() => {
+        expect(
+          screen.getByDisplayValue(".yarr/prompts/implementation.md"),
+        ).toBeInTheDocument();
+      });
+    });
+  });
 });

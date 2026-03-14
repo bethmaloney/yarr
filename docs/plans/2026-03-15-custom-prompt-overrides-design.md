@@ -74,17 +74,17 @@ Add a "Custom Prompts" section to the repo settings form with text inputs and ex
 **Pattern reference:** Plans section in `src/pages/RepoDetail.tsx` (lines 1013-1052)
 
 **Checklist:**
-- [ ] Add `designPromptFile` and `implementationPromptFile` local state variables
-- [ ] Initialize them from `repo` config in the existing settings sync effect
-- [ ] Add "Custom Prompts" section with icon and heading (between Plans and Behavior)
-- [ ] Add text input for Design Prompt File with placeholder `.yarr/prompts/design.md`
-- [ ] Add text input for Implementation Prompt File with placeholder `.yarr/prompts/implementation.md`
-- [ ] Add "Export Default" button next to each input
-- [ ] Wire Export Default buttons to call `export_default_prompt` Tauri command
-- [ ] On successful export, auto-populate the corresponding input field
-- [ ] Include both fields in the `saveSettings()` config object
-- [ ] Add help text: "Override the built-in prompt. Leave empty for default."
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `designPromptFile` and `implementationPromptFile` local state variables
+- [x] Initialize them from `repo` config in the existing settings sync effect
+- [x] Add "Custom Prompts" section with icon and heading (between Plans and Behavior)
+- [x] Add text input for Design Prompt File with placeholder `.yarr/prompts/design.md`
+- [x] Add text input for Implementation Prompt File with placeholder `.yarr/prompts/implementation.md`
+- [x] Add "Export Default" button next to each input
+- [x] Wire Export Default buttons to call `export_default_prompt` Tauri command
+- [x] On successful export, auto-populate the corresponding input field
+- [x] Include both fields in the `saveSettings()` config object
+- [x] Add help text: "Override the built-in prompt. Leave empty for default."
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -179,7 +179,7 @@ Add tests for the new prompt override functionality.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add prompt file fields to RepoConfig | Done |
-| 2 | Add settings UI for custom prompt files | Not Started |
+| 2 | Add settings UI for custom prompt files | Done |
 | 3 | Add `export_default_prompt` Tauri command | Not Started |
 | 4 | Pass prompt file paths through `run_session` | Not Started |
 | 5 | Pass prompt file paths through `run_oneshot` | Not Started |

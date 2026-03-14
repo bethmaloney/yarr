@@ -64,6 +64,7 @@ import {
   X,
   XCircle,
   Plus,
+  FileDown,
 } from "lucide-react";
 import type { Check, SessionState, SessionTrace } from "../types";
 import type { RepoConfig } from "../repos";
@@ -117,6 +118,8 @@ export default function RepoDetail() {
   const [gitSyncModel, setGitSyncModel] = useState("");
   const [gitSyncMaxRetries, setGitSyncMaxRetries] = useState(3);
   const [gitSyncPrompt, setGitSyncPrompt] = useState("");
+  const [designPromptFile, setDesignPromptFile] = useState("");
+  const [implementationPromptFile, setImplementationPromptFile] = useState("");
 
   // Config sheet state
   const [configOpen, setConfigOpen] = useState(false);
@@ -198,6 +201,8 @@ export default function RepoDetail() {
     setGitSyncModel(repo.gitSync?.model ?? "");
     setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
     setGitSyncPrompt(repo.gitSync?.conflictPrompt ?? "");
+    setDesignPromptFile(repo.designPromptFile ?? "");
+    setImplementationPromptFile(repo.implementationPromptFile ?? "");
     setOneShotModel(repo.model);
     setOneShotDesignEffortLevel(repo.designEffortLevel ?? "high");
     setOneShotEffortLevel(repo.effortLevel ?? "medium");
@@ -431,6 +436,8 @@ export default function RepoDetail() {
         maxPushRetries: gitSyncMaxRetries,
         conflictPrompt: gitSyncPrompt || undefined,
       },
+      designPromptFile: designPromptFile || undefined,
+      implementationPromptFile: implementationPromptFile || undefined,
     });
   }
 
@@ -1048,6 +1055,95 @@ export default function RepoDetail() {
                       />
                       Move plans to completed folder after run
                     </Label>
+                  </div>
+                </div>
+
+                {/* Custom Prompts */}
+                <div className="flex flex-col gap-3">
+                  <span className="text-xs font-mono uppercase tracking-widest text-primary-light flex items-center gap-1.5">
+                    <FileDown className="size-3.5" />
+                    Custom Prompts
+                  </span>
+                  <div
+                    className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
+                  >
+                    <Label className="flex flex-col gap-1">
+                      <span className="text-sm text-muted-foreground">
+                        Design Prompt File
+                      </span>
+                      <div className="flex gap-2">
+                        <Input
+                          type="text"
+                          value={designPromptFile}
+                          onChange={(e) => setDesignPromptFile(e.target.value)}
+                          placeholder=".yarr/prompts/design.md"
+                          disabled={session.running}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={session.running}
+                          onClick={async () => {
+                            try {
+                              const repoPayload = buildRepoPayload();
+                              if (!repoPayload) return;
+                              const path = await invoke<string>("export_default_prompt", {
+                                repo: repoPayload,
+                                promptType: "design",
+                              });
+                              setDesignPromptFile(path);
+                              toast.success("Default design prompt exported");
+                            } catch (e) {
+                              toast.error(String(e));
+                            }
+                          }}
+                        >
+                          Export Default
+                        </Button>
+                      </div>
+                    </Label>
+                    <Label className="flex flex-col gap-1">
+                      <span className="text-sm text-muted-foreground">
+                        Implementation Prompt File
+                      </span>
+                      <div className="flex gap-2">
+                        <Input
+                          type="text"
+                          value={implementationPromptFile}
+                          onChange={(e) => setImplementationPromptFile(e.target.value)}
+                          placeholder=".yarr/prompts/implementation.md"
+                          disabled={session.running}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={session.running}
+                          onClick={async () => {
+                            try {
+                              const repoPayload = buildRepoPayload();
+                              if (!repoPayload) return;
+                              const path = await invoke<string>("export_default_prompt", {
+                                repo: repoPayload,
+                                promptType: "implementation",
+                              });
+                              setImplementationPromptFile(path);
+                              toast.success("Default implementation prompt exported");
+                            } catch (e) {
+                              toast.error(String(e));
+                            }
+                          }}
+                        >
+                          Export Default
+                        </Button>
+                      </div>
+                    </Label>
+                    <span className="text-xs text-muted-foreground mt-0.5">
+                      Override the built-in prompt. Leave empty to use default.
+                    </span>
                   </div>
                 </div>
 
