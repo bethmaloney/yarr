@@ -56,11 +56,11 @@ Add `designPromptFile` and `implementationPromptFile` optional fields to the Typ
 **Pattern reference:** `plansDir` field in `src/repos.ts`
 
 **Checklist:**
-- [ ] Add `designPromptFile?: string` to `LocalRepoConfig` type
-- [ ] Add `implementationPromptFile?: string` to `LocalRepoConfig` type
-- [ ] Add same fields to `SshRepoConfig` type
-- [ ] Ensure `loadRepos()` defaults handle missing fields (no default needed — they're optional)
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add `designPromptFile?: string` to `LocalRepoConfig` type
+- [x] Add `implementationPromptFile?: string` to `LocalRepoConfig` type
+- [x] Add same fields to `SshRepoConfig` type
+- [x] Ensure `loadRepos()` defaults handle missing fields (no default needed — they're optional)
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -178,7 +178,7 @@ Add tests for the new prompt override functionality.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add prompt file fields to RepoConfig | Not Started |
+| 1 | Add prompt file fields to RepoConfig | Done |
 | 2 | Add settings UI for custom prompt files | Not Started |
 | 3 | Add `export_default_prompt` Tauri command | Not Started |
 | 4 | Pass prompt file paths through `run_session` | Not Started |

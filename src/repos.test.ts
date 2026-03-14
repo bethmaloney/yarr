@@ -1353,3 +1353,408 @@ describe("RepoConfig with effortLevel fields", () => {
     expect(repo.designEffortLevel).toBe("medium");
   });
 });
+
+describe("RepoConfig with designPromptFile field", () => {
+  it("local RepoConfig with designPromptFile is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-dpf-1",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      designPromptFile: ".yarr/prompts/design.md",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.designPromptFile).toBe(".yarr/prompts/design.md");
+  });
+
+  it("local RepoConfig without designPromptFile (undefined) is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-no-dpf",
+      path: "/home/beth/repos/other",
+      name: "other",
+      model: "opus",
+      maxIterations: 20,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(
+      (repo as RepoConfig & { designPromptFile?: string }).designPromptFile,
+    ).toBeUndefined();
+  });
+
+  it("SSH RepoConfig with designPromptFile is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-dpf-1",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      designPromptFile: ".yarr/prompts/design.md",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(repo.designPromptFile).toBe(".yarr/prompts/design.md");
+  });
+
+  it("SSH RepoConfig without designPromptFile (undefined) is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-no-dpf",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(
+      (repo as RepoConfig & { designPromptFile?: string }).designPromptFile,
+    ).toBeUndefined();
+  });
+});
+
+describe("designPromptFile round-trip through loadRepos", () => {
+  it("local repo with designPromptFile round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-dpf-rt-1",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        designPromptFile: ".yarr/prompts/design.md",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].designPromptFile).toBe(".yarr/prompts/design.md");
+    }
+  });
+
+  it("local repo without designPromptFile loads fine", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-no-dpf",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].designPromptFile).toBeUndefined();
+    }
+  });
+
+  it("ssh repo with designPromptFile round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "ssh",
+        id: "repo-dpf-ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        designPromptFile: ".yarr/prompts/design.md",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "ssh") {
+      expect(result[0].designPromptFile).toBe(".yarr/prompts/design.md");
+    }
+  });
+});
+
+describe("updateRepo preserves designPromptFile", () => {
+  it("updateRepo preserves designPromptFile config", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-update-dpf",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        designPromptFile: ".yarr/prompts/design.md",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const updated: RepoConfig = {
+      type: "local",
+      id: "repo-update-dpf",
+      path: "/home/beth/repos/yarr",
+      name: "yarr",
+      model: "sonnet",
+      maxIterations: 20,
+      completionSignal: "DONE",
+      designPromptFile: ".yarr/prompts/design.md",
+    };
+    await updateRepo(updated);
+
+    const stored = mockData.get("repos") as RepoConfig[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].model).toBe("sonnet");
+    if (stored[0].type === "local") {
+      expect(stored[0].designPromptFile).toBe(".yarr/prompts/design.md");
+    }
+  });
+});
+
+describe("RepoConfig with implementationPromptFile field", () => {
+  it("local RepoConfig with implementationPromptFile is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-ipf-1",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      implementationPromptFile: ".yarr/prompts/implementation.md",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.implementationPromptFile).toBe(
+      ".yarr/prompts/implementation.md",
+    );
+  });
+
+  it("local RepoConfig without implementationPromptFile (undefined) is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-no-ipf",
+      path: "/home/beth/repos/other",
+      name: "other",
+      model: "opus",
+      maxIterations: 20,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(
+      (repo as RepoConfig & { implementationPromptFile?: string })
+        .implementationPromptFile,
+    ).toBeUndefined();
+  });
+
+  it("SSH RepoConfig with implementationPromptFile is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-ipf-1",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      implementationPromptFile: ".yarr/prompts/implementation.md",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(repo.implementationPromptFile).toBe(
+      ".yarr/prompts/implementation.md",
+    );
+  });
+
+  it("SSH RepoConfig without implementationPromptFile (undefined) is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-no-ipf",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "DONE",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(
+      (repo as RepoConfig & { implementationPromptFile?: string })
+        .implementationPromptFile,
+    ).toBeUndefined();
+  });
+});
+
+describe("implementationPromptFile round-trip through loadRepos", () => {
+  it("local repo with implementationPromptFile round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-ipf-rt-1",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        implementationPromptFile: ".yarr/prompts/implementation.md",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].implementationPromptFile).toBe(
+        ".yarr/prompts/implementation.md",
+      );
+    }
+  });
+
+  it("local repo without implementationPromptFile loads fine", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-no-ipf",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "local") {
+      expect(result[0].implementationPromptFile).toBeUndefined();
+    }
+  });
+
+  it("ssh repo with implementationPromptFile round-trips through loadRepos", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "ssh",
+        id: "repo-ipf-ssh",
+        sshHost: "dev-server",
+        remotePath: "/home/beth/repos/project",
+        name: "project",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        implementationPromptFile: ".yarr/prompts/implementation.md",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const result = await loadRepos();
+    expect(result).toHaveLength(1);
+    if (result[0].type === "ssh") {
+      expect(result[0].implementationPromptFile).toBe(
+        ".yarr/prompts/implementation.md",
+      );
+    }
+  });
+});
+
+describe("updateRepo preserves implementationPromptFile", () => {
+  it("updateRepo preserves implementationPromptFile config", async () => {
+    const existing: RepoConfig[] = [
+      {
+        type: "local",
+        id: "repo-update-ipf",
+        path: "/home/beth/repos/yarr",
+        name: "yarr",
+        model: "opus",
+        maxIterations: 40,
+        completionSignal: "ALL TODO ITEMS COMPLETE",
+        implementationPromptFile: ".yarr/prompts/implementation.md",
+      },
+    ];
+    mockData.set("repos", existing);
+
+    const updated: RepoConfig = {
+      type: "local",
+      id: "repo-update-ipf",
+      path: "/home/beth/repos/yarr",
+      name: "yarr",
+      model: "sonnet",
+      maxIterations: 20,
+      completionSignal: "DONE",
+      implementationPromptFile: ".yarr/prompts/implementation.md",
+    };
+    await updateRepo(updated);
+
+    const stored = mockData.get("repos") as RepoConfig[];
+    expect(stored).toHaveLength(1);
+    expect(stored[0].model).toBe("sonnet");
+    if (stored[0].type === "local") {
+      expect(stored[0].implementationPromptFile).toBe(
+        ".yarr/prompts/implementation.md",
+      );
+    }
+  });
+});
+
+describe("RepoConfig with both designPromptFile and implementationPromptFile", () => {
+  it("local RepoConfig with both prompt file fields is valid", () => {
+    const repo = {
+      type: "local" as const,
+      id: "local-both-pf-1",
+      path: "/home/beth/repos/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 40,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      designPromptFile: ".yarr/prompts/design.md",
+      implementationPromptFile: ".yarr/prompts/implementation.md",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("local");
+    expect(repo.designPromptFile).toBe(".yarr/prompts/design.md");
+    expect(repo.implementationPromptFile).toBe(
+      ".yarr/prompts/implementation.md",
+    );
+  });
+
+  it("SSH RepoConfig with both prompt file fields is valid", () => {
+    const repo = {
+      type: "ssh" as const,
+      id: "ssh-both-pf-1",
+      sshHost: "dev-server",
+      remotePath: "/opt/project",
+      name: "project",
+      model: "opus",
+      maxIterations: 30,
+      completionSignal: "ALL TODO ITEMS COMPLETE",
+      designPromptFile: ".yarr/prompts/design.md",
+      implementationPromptFile: ".yarr/prompts/implementation.md",
+    } satisfies RepoConfig;
+
+    expect(repo.type).toBe("ssh");
+    expect(repo.designPromptFile).toBe(".yarr/prompts/design.md");
+    expect(repo.implementationPromptFile).toBe(
+      ".yarr/prompts/implementation.md",
+    );
+  });
+});

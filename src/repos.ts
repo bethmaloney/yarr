@@ -20,6 +20,8 @@ type LocalRepoConfig = {
   autoFetch?: boolean;
   plansDir?: string;
   movePlansToCompleted?: boolean;
+  designPromptFile?: string;
+  implementationPromptFile?: string;
 };
 
 type SshRepoConfig = {
@@ -40,6 +42,8 @@ type SshRepoConfig = {
   autoFetch?: boolean;
   plansDir?: string;
   movePlansToCompleted?: boolean;
+  designPromptFile?: string;
+  implementationPromptFile?: string;
 };
 
 export type RepoConfig = LocalRepoConfig | SshRepoConfig;
