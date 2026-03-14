@@ -139,8 +139,10 @@ pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
             } else {
                 None
             };
+            tracing::info!("initializing local shell environment cache");
             match shell_env::snapshot_shell_env(
                 |cmd| async move {
+                    tracing::debug!(cmd = %cmd, "spawning env snapshot command");
                     let output = if cfg!(target_os = "windows") {
                         tokio::process::Command::new("wsl")
                             .args(&["-e", "bash", "-c", &cmd])
@@ -161,14 +163,27 @@ pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
             )
             .await
             {
-                Ok(env) => CachedEnv { vars: env, warning: None },
+                Ok(env) => {
+                    tracing::info!(var_count = env.len(), "local shell env cache initialized successfully");
+                    CachedEnv { vars: env, warning: None }
+                }
                 Err(e) => {
                     let warning = format!(
                         "Failed to load shell environment — some tools (nvm, pyenv, etc.) may not be available. Restart the app to retry. Error: {e}"
                     );
                     tracing::warn!("{warning}");
+                    // On Windows the fallback must NOT be std::env::vars()
+                    // because that returns Windows host environment variables
+                    // (ProgramFiles(x86), APPDATA, etc.) which are invalid
+                    // and harmful when exported into a WSL bash session.
+                    // Use an empty map so WSL commands run with WSL's own defaults.
+                    let fallback_vars = if cfg!(target_os = "windows") {
+                        HashMap::new()
+                    } else {
+                        std::env::vars().collect()
+                    };
                     CachedEnv {
-                        vars: std::env::vars().collect(),
+                        vars: fallback_vars,
                         warning: Some(warning),
                     }
                 }
@@ -325,19 +340,45 @@ mod tests {
         // get_or_init_local_env should return a reference to a HashMap
         // with environment variables. Even if snapshot_shell_env fails
         // (e.g. in CI with no interactive shell), it should fall back
-        // to std::env::vars().
+        // to std::env::vars() on non-Windows, or empty on Windows.
         let env: &HashMap<String, String> = get_or_init_local_env().await;
 
-        assert!(
-            !env.is_empty(),
-            "local env cache should not be empty"
-        );
+        if cfg!(not(target_os = "windows")) {
+            assert!(
+                !env.is_empty(),
+                "local env cache should not be empty on non-Windows"
+            );
 
-        // PATH should always be present in the result
-        assert!(
-            env.contains_key("PATH") || env.contains_key("Path"),
-            "local env should contain PATH"
-        );
+            // PATH should always be present in the result on non-Windows
+            assert!(
+                env.contains_key("PATH") || env.contains_key("Path"),
+                "local env should contain PATH"
+            );
+        }
+        // On Windows the fallback is an empty map (Windows process env
+        // is useless inside WSL), so we don't assert non-empty.
+    }
+
+    #[tokio::test]
+    async fn get_or_init_local_env_no_windows_vars_on_windows() {
+        // On Windows, the local env cache should never contain Windows-only
+        // env vars — even if the WSL snapshot fails. The fallback should be
+        // an empty map, not std::env::vars() (which gives Windows host env).
+        let env: &HashMap<String, String> = get_or_init_local_env().await;
+
+        // These vars only exist in a Windows process environment, never in WSL.
+        // If any are present, the fallback is leaking Windows env into WSL.
+        let windows_only_vars = [
+            "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SystemRoot",
+            "ComSpec", "PATHEXT", "windir", "HOMEDRIVE", "HOMEPATH",
+        ];
+        for var in &windows_only_vars {
+            assert!(
+                !env.contains_key(*var),
+                "local env should not contain Windows-only var '{var}' — \
+                 this means Windows process env leaked into WSL env cache"
+            );
+        }
     }
 
     #[tokio::test]

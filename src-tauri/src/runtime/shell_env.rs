@@ -2,7 +2,13 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::time::Duration;
 
-pub const LOCAL_TIMEOUT: Duration = Duration::from_secs(10);
+/// Timeout for local shell env snapshot. On Windows, WSL cold boot can
+/// take 3-5s alone, plus zsh/oh-my-zsh init, so we allow extra time.
+pub const LOCAL_TIMEOUT: Duration = if cfg!(target_os = "windows") {
+    Duration::from_secs(30)
+} else {
+    Duration::from_secs(10)
+};
 pub const SSH_TIMEOUT: Duration = Duration::from_secs(15);
 pub const COMMON_DENYLIST: &[&str] = &["_", "SHLVL", "PWD", "OLDPWD"];
 pub const SSH_DENYLIST: &[&str] = &["SSH_AUTH_SOCK", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];
@@ -109,22 +115,42 @@ where
         "{shell} -ilc 'echo -n {marker}; env -0; echo -n {marker}'"
     );
 
+    tracing::info!(shell = %shell, timeout = ?timeout, "starting shell env snapshot");
+    let start = std::time::Instant::now();
+
     let output = tokio::time::timeout(timeout, spawn_fn(cmd))
         .await
-        .map_err(|_| anyhow::anyhow!("shell environment snapshot timed out"))??;
+        .map_err(|_| {
+            tracing::error!(elapsed = ?start.elapsed(), "shell env snapshot timed out");
+            anyhow::anyhow!("shell environment snapshot timed out after {timeout:?}")
+        })??;
+
+    let elapsed = start.elapsed();
 
     if !output.status.success() {
         tracing::warn!(
-            "shell env snapshot exited with status {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
+            exit_code = output.status.code().unwrap_or(-1),
+            elapsed_ms = elapsed.as_millis() as u64,
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "shell env snapshot exited with non-zero status"
+        );
+    } else {
+        tracing::info!(
+            elapsed_ms = elapsed.as_millis() as u64,
+            stdout_bytes = output.stdout.len(),
+            "shell env snapshot completed"
         );
     }
 
     let mut combined_denylist: Vec<&str> = COMMON_DENYLIST.to_vec();
     combined_denylist.extend_from_slice(extra_denylist);
 
-    parse_snapshot_output(&output.stdout, &marker, &combined_denylist)
+    let result = parse_snapshot_output(&output.stdout, &marker, &combined_denylist);
+    match &result {
+        Ok(env) => tracing::info!(var_count = env.len(), "shell env snapshot parsed successfully"),
+        Err(e) => tracing::error!(error = %e, stdout_len = output.stdout.len(), "failed to parse shell env snapshot output"),
+    }
+    result
 }
 
 #[cfg(test)]

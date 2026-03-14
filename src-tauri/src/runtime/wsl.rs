@@ -340,8 +340,20 @@ fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+/// Returns true if `name` is a valid POSIX shell variable name:
+/// starts with a letter or underscore, followed by alphanumerics or underscores.
+fn is_valid_shell_var(name: &str) -> bool {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 fn env_export_parts(env: &HashMap<String, String>) -> Vec<String> {
     env.iter()
+        .filter(|(key, _)| is_valid_shell_var(key))
         .map(|(key, val)| format!("export {}={}", key, shell_escape(val)))
         .collect()
 }
@@ -419,6 +431,25 @@ mod tests {
         assert!(
             parts.is_empty(),
             "empty HashMap should produce empty Vec, got: {parts:?}"
+        );
+    }
+
+    #[test]
+    fn test_env_export_parts_skips_invalid_bash_var_names() {
+        let mut map = HashMap::new();
+        map.insert("VALID_VAR".to_string(), "good".to_string());
+        map.insert("ProgramFiles(x86)".to_string(), "C:\\Program Files (x86)".to_string());
+        map.insert("CommonProgramFiles(x86)".to_string(), "C:\\Program Files (x86)\\Common Files".to_string());
+        map.insert("=D:".to_string(), "D:\\repos\\yarr".to_string());
+        map.insert("".to_string(), "empty".to_string());
+        map.insert("123BAD".to_string(), "starts with digit".to_string());
+
+        let parts = env_export_parts(&map);
+
+        assert_eq!(parts.len(), 1, "should only include VALID_VAR, got: {parts:?}");
+        assert!(
+            parts[0].contains("VALID_VAR"),
+            "should contain VALID_VAR export, got: {parts:?}"
         );
     }
 
