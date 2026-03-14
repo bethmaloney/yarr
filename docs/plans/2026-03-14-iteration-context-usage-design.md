@@ -214,9 +214,9 @@ Show compaction events as visible items in the event list within an iteration.
 - Add `context_updated` kind but do NOT display it in the event list (it's too noisy) — it's only used for updating `IterationGroup.contextTokens`
 
 **Checklist:**
-- [ ] Add emoji, label, and color for `compacted` event kind
-- [ ] Filter out `context_updated` from visible events (or just don't render — it won't match any display logic)
-- [ ] `npx tsc --noEmit`
+- [x] Add emoji, label, and color for `compacted` event kind
+- [x] Filter out `context_updated` from visible events (or just don't render — it won't match any display logic)
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -264,6 +264,6 @@ Add integration tests and verify the full flow.
 | 5 | Add fields to IterationGroup | Done |
 | 6 | Add contextTokensColor helper | Done |
 | 7 | Update iteration header display | Done |
-| 8 | Add compacted event to event stream | Not Started |
+| 8 | Add compacted event to event stream | Done |
 | 9 | Add fields to TypeScript types | Done |
 | 10 | Verify end-to-end with tests | Not Started |

@@ -1,4 +1,5 @@
 import type { SessionEvent } from "./types";
+import { formatTokenCount } from "./context-bar";
 
 /**
  * Convert a backslash-normalized path to its WSL equivalent.
@@ -131,6 +132,8 @@ export function eventEmoji(kind: string): string {
       return "\u{1F4CA}";
     case "tool_result":
       return "\u{1F4CB}";
+    case "compacted":
+      return "\u27F3";
     default:
       return "\u{1F4CB}";
   }
@@ -228,6 +231,8 @@ export function eventLabel(ev: SessionEvent, repoPath?: string): string {
       return "Plan progress updated";
     case "tool_result":
       return `[${ev.iteration}] Result: ${ev.tool_name ?? "unknown"}`;
+    case "compacted":
+      return `Context compacted from ${formatTokenCount(ev.pre_tokens ?? 0)}`;
     default:
       return JSON.stringify(ev);
   }

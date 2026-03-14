@@ -47,6 +47,7 @@ const eventKindColor: Record<string, string> = {
   git_sync_conflict_resolve_complete: "text-success",
   git_sync_failed: "text-destructive",
   rate_limited: "text-warning",
+  compacted: "text-[#60a5fa]",
 };
 
 function handleSelectableClick(callback: () => void) {
@@ -208,14 +209,17 @@ export function IterationGroupComponent({
 
       {expanded && (
         <ul className="iteration-events list-none p-0 m-0">
-          {group.events.map((ev, i) => {
-            const globalIndex = globalStartIndex + i;
+          {group.events
+            .map((ev, i) => ({ ev, origIndex: i }))
+            .filter(({ ev }) => ev.kind !== "context_updated")
+            .map(({ ev, origIndex }) => {
+            const globalIndex = globalStartIndex + origIndex;
             const isExpanded = expandedEvents.has(globalIndex);
             const colorClass = eventKindColor[ev.kind] ?? "";
 
             return (
               <li
-                key={i}
+                key={origIndex}
                 className={`event ${ev.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
               >
                 <div

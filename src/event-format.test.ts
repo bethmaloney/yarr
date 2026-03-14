@@ -517,3 +517,32 @@ describe("eventLabel — plan_content_updated", () => {
     expect(eventLabel(ev)).toBe("Plan progress updated");
   });
 });
+
+// ===========================================================================
+// compacted event
+// ===========================================================================
+
+describe("eventEmoji — compacted", () => {
+  it("returns cycle arrow emoji for compacted", () => {
+    expect(eventEmoji("compacted")).toBe("\u27F3");
+  });
+});
+
+describe("eventLabel — compacted", () => {
+  it("returns label with formatted pre_tokens", () => {
+    const ev = makeEvent({ kind: "compacted", pre_tokens: 167000 });
+    expect(eventLabel(ev)).toBe("Context compacted from 167k");
+  });
+
+  it("handles pre_tokens of 0", () => {
+    const ev = makeEvent({ kind: "compacted", pre_tokens: 0 });
+    const label = eventLabel(ev);
+    expect(label).toBe("Context compacted from 0");
+  });
+
+  it("handles missing pre_tokens gracefully", () => {
+    const ev = makeEvent({ kind: "compacted" });
+    const label = eventLabel(ev);
+    expect(label).toBe("Context compacted from 0");
+  });
+});
