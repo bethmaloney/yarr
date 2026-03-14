@@ -21,10 +21,6 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
 } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -665,7 +661,7 @@ export default function RepoDetail() {
                     </span>
                   )}
                   {gitStatus.behind != null && gitStatus.behind > 0 && (
-                    <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive">
+                    <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">
                       {"\u2193"}{gitStatus.behind}
                     </span>
                   )}
@@ -696,7 +692,7 @@ export default function RepoDetail() {
                         </span>
                       )}
                       {gitStatus.behind != null && gitStatus.behind > 0 && (
-                        <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-destructive/15 text-destructive">
+                        <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">
                           {"\u2193"}{gitStatus.behind}
                         </span>
                       )}
@@ -843,9 +839,9 @@ export default function RepoDetail() {
           side="right"
           className="overflow-y-auto border-l border-border bg-card"
         >
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <Settings className="size-4 text-primary" />
+          <SheetHeader className="border-b border-border pb-4">
+            <SheetTitle className="flex items-center gap-2 text-xl">
+              <Settings className="size-5 text-primary" />
               Configuration
             </SheetTitle>
             <SheetDescription>
@@ -861,186 +857,232 @@ export default function RepoDetail() {
 
             {/* ── Settings tab ── */}
             <TabsContent value="settings">
-              <div className="flex flex-col gap-4 pt-4">
+              <div className="flex flex-col gap-6 pt-4">
                 {repo.type === "ssh" && (
-                  <>
-                    <Label className="flex flex-col gap-1">
-                      SSH Host
-                      <Input
-                        type="text"
-                        value={
-                          (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost
-                        }
-                        readOnly
-                        disabled
-                      />
-                    </Label>
-                    <Label className="flex flex-col gap-1">
-                      Remote Path
-                      <Input
-                        type="text"
-                        value={
-                          (repo as Extract<RepoConfig, { type: "ssh" }>)
-                            .remotePath
-                        }
-                        readOnly
-                        disabled
-                      />
-                    </Label>
-                  </>
+                  <div className="flex flex-col gap-3">
+                    <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                      Connection
+                    </span>
+                    <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                      <Label className="flex flex-col gap-1">
+                        <span className="text-sm text-muted-foreground">SSH Host</span>
+                        <Input
+                          type="text"
+                          value={
+                            (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost
+                          }
+                          readOnly
+                          disabled
+                        />
+                      </Label>
+                      <Label className="flex flex-col gap-1">
+                        <span className="text-sm text-muted-foreground">Remote Path</span>
+                        <Input
+                          type="text"
+                          value={
+                            (repo as Extract<RepoConfig, { type: "ssh" }>)
+                              .remotePath
+                          }
+                          readOnly
+                          disabled
+                        />
+                      </Label>
+                    </div>
+                  </div>
                 )}
-                <Label className="flex flex-col gap-1">
-                  Model
-                  <Input
-                    type="text"
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    disabled={session.running}
-                    className="font-mono"
-                  />
-                </Label>
-                <Label className="flex flex-col gap-1">
-                  Effort Level
-                  <Select
-                    value={effortLevel}
-                    onValueChange={setEffortLevel}
-                    disabled={session.running}
-                  >
-                    <SelectTrigger className="font-mono">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">low</SelectItem>
-                      <SelectItem value="medium">medium</SelectItem>
-                      <SelectItem value="high">high</SelectItem>
-                      <SelectItem value="max">max</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Label>
-                <Label className="flex flex-col gap-1">
-                  Max Iterations
-                  <Input
-                    type="number"
-                    value={maxIterations}
-                    onChange={(e) => setMaxIterations(Number(e.target.value))}
-                    min={1}
-                    disabled={session.running}
-                    className="font-mono"
-                  />
-                </Label>
-                <Label className="flex flex-col gap-1">
-                  Completion Signal
-                  <Input
-                    type="text"
-                    value={completionSignal}
-                    onChange={(e) => setCompletionSignal(e.target.value)}
-                    disabled={session.running}
-                    className="font-mono"
-                  />
-                </Label>
-                <Label className="flex flex-col gap-1">
-                  Plans Directory
-                  <Input
-                    type="text"
-                    value={plansDir}
-                    onChange={(e) => setPlansDir(e.target.value)}
-                    placeholder="docs/plans/"
-                    disabled={session.running}
-                  />
-                </Label>
-                <Label
-                  htmlFor="create-branch"
-                  className="flex items-center gap-2 text-sm font-normal"
-                >
-                  <Checkbox
-                    id="create-branch"
-                    checked={createBranch}
-                    onCheckedChange={(v) => setCreateBranch(v === true)}
-                    disabled={session.running}
-                  />
-                  Create branch on run
-                </Label>
-                <Label
-                  htmlFor="auto-fetch"
-                  className="flex items-center gap-2 text-sm font-normal"
-                >
-                  <Checkbox
-                    id="auto-fetch"
-                    checked={autoFetch}
-                    onCheckedChange={(v) => setAutoFetch(v === true)}
-                    disabled={session.running}
-                  />
-                  Auto-fetch from remote
-                  <span className="text-xs text-muted-foreground font-normal">
-                    Automatically fetch from remote every 30 seconds
+
+                {/* Model & Execution */}
+                <div className="flex flex-col gap-3">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                    Model & Execution
                   </span>
-                </Label>
-                <Label
-                  htmlFor="move-plans-completed"
-                  className="flex items-center gap-2 text-sm font-normal"
-                >
-                  <Checkbox
-                    id="move-plans-completed"
-                    checked={movePlansToCompleted}
-                    onCheckedChange={(v) => setMovePlansToCompleted(v === true)}
-                    disabled={session.running}
-                  />
-                  Move plans to completed folder after run
-                </Label>
+                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Label className="flex flex-col gap-1">
+                        <span className="text-sm text-muted-foreground">Model</span>
+                        <Input
+                          type="text"
+                          value={model}
+                          onChange={(e) => setModel(e.target.value)}
+                          disabled={session.running}
+                          className="font-mono"
+                        />
+                      </Label>
+                      <Label className="flex flex-col gap-1">
+                        <span className="text-sm text-muted-foreground">Effort Level</span>
+                        <Select
+                          value={effortLevel}
+                          onValueChange={setEffortLevel}
+                          disabled={session.running}
+                        >
+                          <SelectTrigger className="font-mono">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="low">low</SelectItem>
+                            <SelectItem value="medium">medium</SelectItem>
+                            <SelectItem value="high">high</SelectItem>
+                            <SelectItem value="max">max</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </Label>
+                    </div>
+                    <Label className="flex flex-col gap-1">
+                      <span className="text-sm text-muted-foreground">Max Iterations</span>
+                      <Input
+                        type="number"
+                        value={maxIterations}
+                        onChange={(e) => setMaxIterations(Number(e.target.value))}
+                        min={1}
+                        disabled={session.running}
+                        className="font-mono"
+                      />
+                    </Label>
+                    <Label className="flex flex-col gap-1">
+                      <span className="text-sm text-muted-foreground">Completion Signal</span>
+                      <Input
+                        type="text"
+                        value={completionSignal}
+                        onChange={(e) => setCompletionSignal(e.target.value)}
+                        disabled={session.running}
+                        className="font-mono"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        Token that signals the agent has finished its task
+                      </span>
+                    </Label>
+                  </div>
+                </div>
+
+                {/* Plans */}
+                <div className="flex flex-col gap-3">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                    Plans
+                  </span>
+                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                    <Label className="flex flex-col gap-1">
+                      <span className="text-sm text-muted-foreground">Plans Directory</span>
+                      <Input
+                        type="text"
+                        value={plansDir}
+                        onChange={(e) => setPlansDir(e.target.value)}
+                        placeholder="docs/plans/"
+                        disabled={session.running}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        Where plan files are read from for session execution
+                      </span>
+                    </Label>
+                    <Label
+                      htmlFor="move-plans-completed"
+                      className="flex items-center gap-2 text-sm font-normal"
+                    >
+                      <Checkbox
+                        id="move-plans-completed"
+                        checked={movePlansToCompleted}
+                        onCheckedChange={(v) => setMovePlansToCompleted(v === true)}
+                        disabled={session.running}
+                      />
+                      Move plans to completed folder after run
+                    </Label>
+                  </div>
+                </div>
+
+                {/* Behavior */}
+                <div className="flex flex-col gap-3">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                    Behavior
+                  </span>
+                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                    <Label
+                      htmlFor="create-branch"
+                      className="flex items-center gap-2 text-sm font-normal"
+                    >
+                      <Checkbox
+                        id="create-branch"
+                        checked={createBranch}
+                        onCheckedChange={(v) => setCreateBranch(v === true)}
+                        disabled={session.running}
+                      />
+                      Create branch on run
+                    </Label>
+                    <div className="flex flex-col gap-1">
+                      <Label
+                        htmlFor="auto-fetch"
+                        className="flex items-center gap-2 text-sm font-normal"
+                      >
+                        <Checkbox
+                          id="auto-fetch"
+                          checked={autoFetch}
+                          onCheckedChange={(v) => setAutoFetch(v === true)}
+                          disabled={session.running}
+                        />
+                        Auto-fetch from remote
+                      </Label>
+                      <span className="text-xs text-muted-foreground ml-6">
+                        Fetches from remote every 30 seconds during a session
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Environment Variables */}
                 <fieldset
                   disabled={session.running}
                   className="flex flex-col gap-3"
                 >
-                  <legend className="text-sm font-medium mb-2">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
                     Environment Variables
-                  </legend>
-                  {envVars.map((envVar, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <Input
-                        type="text"
-                        value={envVar.key}
-                        onChange={(e) => {
-                          const updated = [...envVars];
-                          updated[i] = { ...updated[i], key: e.target.value };
-                          setEnvVars(updated);
-                        }}
-                        placeholder="KEY"
-                        className="flex-1"
-                      />
-                      <span className="text-muted-foreground">=</span>
-                      <Input
-                        type="text"
-                        value={envVar.value}
-                        onChange={(e) => {
-                          const updated = [...envVars];
-                          updated[i] = { ...updated[i], value: e.target.value };
-                          setEnvVars(updated);
-                        }}
-                        placeholder="value"
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          setEnvVars(envVars.filter((_, j) => j !== i))
-                        }
-                      >
-                        &times;
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() =>
-                      setEnvVars([...envVars, { key: "", value: "" }])
-                    }
-                  >
-                    + Add Variable
-                  </Button>
+                  </span>
+                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                    {envVars.map((envVar, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <Input
+                          type="text"
+                          value={envVar.key}
+                          onChange={(e) => {
+                            const updated = [...envVars];
+                            updated[i] = { ...updated[i], key: e.target.value };
+                            setEnvVars(updated);
+                          }}
+                          placeholder="KEY"
+                          className="flex-1 font-mono"
+                        />
+                        <span className="text-muted-foreground">=</span>
+                        <Input
+                          type="text"
+                          value={envVar.value}
+                          onChange={(e) => {
+                            const updated = [...envVars];
+                            updated[i] = { ...updated[i], value: e.target.value };
+                            setEnvVars(updated);
+                          }}
+                          placeholder="value"
+                          className="flex-1 font-mono"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            setEnvVars(envVars.filter((_, j) => j !== i))
+                          }
+                        >
+                          &times;
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        setEnvVars([...envVars, { key: "", value: "" }])
+                      }
+                    >
+                      + Add Variable
+                    </Button>
+                  </div>
                 </fieldset>
                 {connectionTest && (
                   <div
@@ -1085,33 +1127,66 @@ export default function RepoDetail() {
             {/* ── Checks tab ── */}
             <TabsContent value="checks">
               <div className="flex flex-col gap-4 pt-4">
-                <Accordion type="multiple">
-                  {checks.map((check, i) => (
-                    <AccordionItem
-                      key={i}
-                      value={`check-${i}`}
-                      className="check-entry"
-                    >
-                      <div className="flex items-center">
-                        <AccordionTrigger className="flex-1">
-                          {check.name || "New Check"}
-                        </AccordionTrigger>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={session.running}
-                          onClick={() => {
-                            setChecks(checks.filter((_, j) => j !== i));
-                          }}
-                        >
-                          &times;
-                        </Button>
-                      </div>
-                      <AccordionContent>
-                        <div className="flex flex-col gap-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                    Validation Checks
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={session.running}
+                    onClick={() =>
+                      setChecks([
+                        ...checks,
+                        {
+                          name: "",
+                          command: "",
+                          when: "each_iteration",
+                          timeoutSecs: 300,
+                          maxRetries: 1,
+                        },
+                      ])
+                    }
+                  >
+                    + Add Check
+                  </Button>
+                </div>
+                {checks.length === 0 ? (
+                  <div className="bg-card-inset rounded-md border border-dashed border-border p-6 flex flex-col items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      No checks configured
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Add a check to run validation during or after sessions
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {checks.map((check, i) => (
+                      <div
+                        key={i}
+                        className="check-entry bg-card-inset rounded-md p-3 flex flex-col gap-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-foreground">
+                            {check.name || `Check ${i + 1}`}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            disabled={session.running}
+                            onClick={() => {
+                              setChecks(checks.filter((_, j) => j !== i));
+                            }}
+                          >
+                            &times;
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
                           <Label className="flex flex-col gap-1">
-                            Name
+                            <span className="text-sm text-muted-foreground">Name</span>
                             <Input
                               type="text"
                               value={check.name}
@@ -1127,23 +1202,7 @@ export default function RepoDetail() {
                             />
                           </Label>
                           <Label className="flex flex-col gap-1">
-                            Command
-                            <Input
-                              type="text"
-                              value={check.command}
-                              onChange={(e) => {
-                                const updated = [...checks];
-                                updated[i] = {
-                                  ...updated[i],
-                                  command: e.target.value,
-                                };
-                                setChecks(updated);
-                              }}
-                              disabled={session.running}
-                            />
-                          </Label>
-                          <Label className="flex flex-col gap-1">
-                            When
+                            <span className="text-sm text-muted-foreground">When</span>
                             <Select
                               value={check.when}
                               onValueChange={(value) => {
@@ -1156,7 +1215,7 @@ export default function RepoDetail() {
                               }}
                               disabled={session.running}
                             >
-                              <SelectTrigger className="w-full">
+                              <SelectTrigger className="w-full font-mono">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1169,124 +1228,142 @@ export default function RepoDetail() {
                               </SelectContent>
                             </Select>
                           </Label>
-                          <div className="grid grid-cols-2 gap-3">
-                            <Label className="flex flex-col gap-1">
-                              Timeout
-                              <Input
-                                type="number"
-                                value={check.timeoutSecs}
-                                onChange={(e) => {
-                                  const updated = [...checks];
-                                  updated[i] = {
-                                    ...updated[i],
-                                    timeoutSecs: Number(e.target.value),
-                                  };
-                                  setChecks(updated);
-                                }}
-                                min={1}
-                                disabled={session.running}
-                              />
-                            </Label>
-                            <Label className="flex flex-col gap-1">
-                              Retries
-                              <Input
-                                type="number"
-                                value={check.maxRetries}
-                                onChange={(e) => {
-                                  const updated = [...checks];
-                                  updated[i] = {
-                                    ...updated[i],
-                                    maxRetries: Number(e.target.value),
-                                  };
-                                  setChecks(updated);
-                                }}
-                                min={0}
-                                disabled={session.running}
-                              />
-                            </Label>
-                          </div>
                         </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={session.running}
-                  onClick={() =>
-                    setChecks([
-                      ...checks,
-                      {
-                        name: "",
-                        command: "",
-                        when: "each_iteration",
-                        timeoutSecs: 300,
-                        maxRetries: 1,
-                      },
-                    ])
-                  }
-                >
-                  Add Check
-                </Button>
+                        <Label className="flex flex-col gap-1">
+                          <span className="text-sm text-muted-foreground">Command</span>
+                          <Input
+                            type="text"
+                            value={check.command}
+                            onChange={(e) => {
+                              const updated = [...checks];
+                              updated[i] = {
+                                ...updated[i],
+                                command: e.target.value,
+                              };
+                              setChecks(updated);
+                            }}
+                            disabled={session.running}
+                            className="font-mono"
+                          />
+                        </Label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Label className="flex flex-col gap-1">
+                            <span className="text-sm text-muted-foreground">Timeout (s)</span>
+                            <Input
+                              type="number"
+                              value={check.timeoutSecs}
+                              onChange={(e) => {
+                                const updated = [...checks];
+                                updated[i] = {
+                                  ...updated[i],
+                                  timeoutSecs: Number(e.target.value),
+                                };
+                                setChecks(updated);
+                              }}
+                              min={1}
+                              disabled={session.running}
+                              className="font-mono"
+                            />
+                          </Label>
+                          <Label className="flex flex-col gap-1">
+                            <span className="text-sm text-muted-foreground">Retries</span>
+                            <Input
+                              type="number"
+                              value={check.maxRetries}
+                              onChange={(e) => {
+                                const updated = [...checks];
+                                updated[i] = {
+                                  ...updated[i],
+                                  maxRetries: Number(e.target.value),
+                                };
+                                setChecks(updated);
+                              }}
+                              min={0}
+                              disabled={session.running}
+                              className="font-mono"
+                            />
+                          </Label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </TabsContent>
 
             {/* ── Git Sync tab ── */}
             <TabsContent value="git-sync">
-              <div className="flex flex-col gap-4 pt-4">
-                <Label
-                  htmlFor="git-sync-enabled"
-                  className="flex items-center gap-2 text-sm font-normal"
-                >
-                  <Checkbox
-                    id="git-sync-enabled"
-                    checked={gitSyncEnabled}
-                    onCheckedChange={(v) => setGitSyncEnabled(v === true)}
-                    disabled={session.running}
-                  />
-                  Enable git sync
-                </Label>
+              <div className="flex flex-col gap-6 pt-4">
                 <div className="flex flex-col gap-3">
-                  <Label className="flex flex-col gap-1">
-                    Model
-                    <Input
-                      type="text"
-                      value={gitSyncModel}
-                      onChange={(e) => setGitSyncModel(e.target.value)}
-                      placeholder="sonnet"
-                      disabled={session.running || !gitSyncEnabled}
-                      className="font-mono"
-                    />
-                  </Label>
-                  <Label className="flex flex-col gap-1">
-                    Max Push Retries
-                    <Input
-                      type="number"
-                      value={gitSyncMaxRetries}
-                      onChange={(e) =>
-                        setGitSyncMaxRetries(Number(e.target.value))
-                      }
-                      min={1}
-                      disabled={session.running || !gitSyncEnabled}
-                    />
-                  </Label>
-                  <Label className="flex flex-col gap-1">
-                    Conflict Resolution Prompt
-                    <Textarea
-                      value={gitSyncPrompt}
-                      onChange={(e) => setGitSyncPrompt(e.target.value)}
-                      placeholder="Resolve merge conflicts..."
-                      disabled={session.running || !gitSyncEnabled}
-                      rows={3}
-                    />
-                  </Label>
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                    Sync Settings
+                  </span>
+                  <div className="bg-card-inset rounded-md p-3 flex flex-col gap-3">
+                    <Label
+                      htmlFor="git-sync-enabled"
+                      className="flex items-center gap-2 text-sm font-normal"
+                    >
+                      <Checkbox
+                        id="git-sync-enabled"
+                        checked={gitSyncEnabled}
+                        onCheckedChange={(v) => setGitSyncEnabled(v === true)}
+                        disabled={session.running}
+                      />
+                      Enable git sync
+                    </Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Label className="flex flex-col gap-1">
+                        <span className="text-sm text-muted-foreground">Model</span>
+                        <Input
+                          type="text"
+                          value={gitSyncModel}
+                          onChange={(e) => setGitSyncModel(e.target.value)}
+                          placeholder="sonnet"
+                          disabled={session.running || !gitSyncEnabled}
+                          className="font-mono"
+                        />
+                      </Label>
+                      <Label className="flex flex-col gap-1">
+                        <span className="text-sm text-muted-foreground">Max Push Retries</span>
+                        <Input
+                          type="number"
+                          value={gitSyncMaxRetries}
+                          onChange={(e) =>
+                            setGitSyncMaxRetries(Number(e.target.value))
+                          }
+                          min={1}
+                          disabled={session.running || !gitSyncEnabled}
+                          className="font-mono"
+                        />
+                      </Label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                    Conflict Resolution
+                  </span>
+                  <div className="bg-card-inset rounded-md p-3">
+                    <Label className="flex flex-col gap-1">
+                      <span className="text-sm text-muted-foreground">Prompt</span>
+                      <Textarea
+                        value={gitSyncPrompt}
+                        onChange={(e) => setGitSyncPrompt(e.target.value)}
+                        placeholder="Resolve merge conflicts..."
+                        disabled={session.running || !gitSyncEnabled}
+                        rows={3}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        Instructions given to the agent when resolving merge conflicts
+                      </span>
+                    </Label>
+                  </div>
                 </div>
               </div>
             </TabsContent>
           </Tabs>
-          <SheetFooter className="sticky bottom-0 bg-card border-t border-border">
+          <SheetFooter className="sticky bottom-0 bg-card border-t border-border pt-4">
             <div className="flex gap-2">
               <Button
                 type="button"
