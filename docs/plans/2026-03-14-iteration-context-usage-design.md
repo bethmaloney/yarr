@@ -114,10 +114,10 @@ Mirror the same ContextUpdated/Compacted event emission in the SSH orchestrator'
 - Handle `compact_boundary` system events and emit `Compacted`
 
 **Checklist:**
-- [ ] Add `last_context_tokens` tracking in SSH orchestrator
-- [ ] Emit `ContextUpdated` on assistant messages
-- [ ] Handle `compact_boundary` and emit `Compacted`
-- [ ] `cd src-tauri && cargo test`
+- [x] Add `last_context_tokens` tracking in SSH orchestrator
+- [x] Emit `ContextUpdated` on assistant messages
+- [x] Handle `compact_boundary` and emit `Compacted`
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -260,7 +260,7 @@ Add integration tests and verify the full flow.
 | 1 | Parse compact_boundary in SystemEvent | Done |
 | 2 | Add ContextUpdated and Compacted session events | Done |
 | 3 | Emit events in SessionRunner | Done |
-| 4 | Emit events in SSH orchestrator | Not Started |
+| 4 | Emit events in SSH orchestrator | Done |
 | 5 | Add fields to IterationGroup | Not Started |
 | 6 | Add contextTokensColor helper | Not Started |
 | 7 | Update iteration header display | Not Started |

@@ -48,7 +48,7 @@ fn classify_disconnect(exit: &crate::runtime::ProcessExit) -> String {
 /// Result of consuming events from a running process.
 enum ConsumeResult {
     /// Got a Result event from Claude
-    GotResult(crate::output::ResultEvent),
+    GotResult(crate::output::ResultEvent, u64),
     /// Process exited without a Result event (disconnect)
     Disconnected(crate::runtime::ProcessExit),
     /// Cancelled via cancel token
@@ -185,6 +185,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         iteration: u32,
     ) -> Result<ConsumeResult> {
         let mut result_event: Option<crate::output::ResultEvent> = None;
+        let mut last_context_tokens: u64 = 0;
 
         loop {
             tokio::select! {
@@ -195,6 +196,21 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                         StreamEvent::System(sys) => {
                             if let Some(ref model) = sys.model {
                                 tracing::debug!("Iteration {iteration}: model={model}");
+                            }
+                            // Detect context compaction
+                            if sys.subtype.as_deref() == Some("compact_boundary") {
+                                let pre_tokens = sys.compact_metadata.as_ref()
+                                    .and_then(|m| m.pre_tokens)
+                                    .unwrap_or(0);
+                                let trigger = sys.compact_metadata.as_ref()
+                                    .and_then(|m| m.trigger.clone())
+                                    .unwrap_or_else(|| "unknown".to_string());
+                                tracing::info!(iteration, pre_tokens, %trigger, "context compacted");
+                                self.emit(SessionEvent::Compacted {
+                                    iteration,
+                                    pre_tokens,
+                                    trigger,
+                                });
                             }
                         }
                         StreamEvent::Assistant(assistant) => {
@@ -217,6 +233,16 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                     ContentBlock::Unknown => {}
                                 }
                             }
+                            if let Some(ref usage) = assistant.message.usage {
+                                last_context_tokens =
+                                    usage.input_tokens.unwrap_or(0)
+                                    + usage.cache_read_input_tokens.unwrap_or(0)
+                                    + usage.cache_creation_input_tokens.unwrap_or(0);
+                                self.emit(SessionEvent::ContextUpdated {
+                                    iteration,
+                                    context_tokens: last_context_tokens,
+                                });
+                            }
                         }
                         StreamEvent::Result(r) => {
                             result_event = Some(r.clone());
@@ -235,7 +261,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         let exit = process.completion.await??;
 
         match result_event {
-            Some(r) => Ok(ConsumeResult::GotResult(r)),
+            Some(r) => Ok(ConsumeResult::GotResult(r, last_context_tokens)),
             None => Ok(ConsumeResult::Disconnected(exit)),
         }
     }
@@ -248,6 +274,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         iteration: u32,
         iter_start: chrono::DateTime<chrono::Utc>,
         trace: &mut trace::SessionTrace,
+        last_context_tokens: u64,
     ) -> IterationOutcome {
         let iter_end = Utc::now();
         let has_signal = result.has_completion_signal(&self.config.completion_signal);
@@ -269,8 +296,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                 result_preview: truncate_str(&result_text, 500).to_string(),
                 token_usage: result.token_usage(),
                 model_token_usage: result.model_token_usage(),
-                // TODO: track last_context_tokens from assistant messages (like session.rs does)
-                final_context_tokens: 0,
+                final_context_tokens: last_context_tokens,
             },
             is_error,
         );
@@ -352,14 +378,14 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                     state = SessionState::Cancelled { iteration };
                     break;
                 }
-                ConsumeResult::GotResult(result) => Some(result),
+                ConsumeResult::GotResult(result, ctx_tokens) => Some((result, ctx_tokens)),
                 ConsumeResult::Disconnected(exit) => {
                     // No Result event -- disconnect detected
                     let reason = classify_disconnect(&exit);
                     self.emit(SessionEvent::Disconnected { iteration, reason: Some(reason) });
 
                     // Wait on reconnect_notify OR cancel_token
-                    let reconnect_result: Option<crate::output::ResultEvent> = tokio::select! {
+                    let reconnect_result: Option<(crate::output::ResultEvent, u64)> = tokio::select! {
                         _ = self.reconnect_notify.notified() => {
                             self.emit(SessionEvent::Reconnecting { iteration });
 
@@ -380,7 +406,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                             state = SessionState::Cancelled { iteration };
                                             break;
                                         }
-                                        ConsumeResult::GotResult(result) => Some(result),
+                                        ConsumeResult::GotResult(result, ctx_tokens) => Some((result, ctx_tokens)),
                                         ConsumeResult::Disconnected(_exit) => {
                                             state = SessionState::Failed {
                                                 iteration,
@@ -422,8 +448,8 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             };
 
             // e. Process the result if we have one
-            if let Some(result) = result_for_processing {
-                match self.process_result(&result, iteration, iter_start, &mut trace) {
+            if let Some((result, ctx_tokens)) = result_for_processing {
+                match self.process_result(&result, iteration, iter_start, &mut trace, ctx_tokens) {
                     IterationOutcome::Completed => {
                         state = SessionState::Completed {
                             iterations: iteration,
@@ -1234,6 +1260,167 @@ mod tests {
         assert_eq!(
             reason,
             "Remote process exited unexpectedly (code 137)"
+        );
+    }
+
+    // ── Context tracking tests ────────────────────────────────
+
+    /// Helper: build an assistant event WITH usage data
+    fn make_assistant_with_usage(
+        input_tokens: u64,
+        cache_read: u64,
+        cache_creation: u64,
+        output_tokens: u64,
+    ) -> StreamEvent {
+        StreamEvent::Assistant(crate::output::AssistantEvent {
+            message: crate::output::AssistantMessage {
+                id: Some("msg_1".to_string()),
+                role: Some("assistant".to_string()),
+                model: Some("mock-model".to_string()),
+                content: vec![crate::output::ContentBlock::Text {
+                    text: "Working...".to_string(),
+                }],
+                stop_reason: Some("end_turn".to_string()),
+                usage: Some(crate::output::Usage {
+                    input_tokens: Some(input_tokens),
+                    output_tokens: Some(output_tokens),
+                    cache_read_input_tokens: Some(cache_read),
+                    cache_creation_input_tokens: Some(cache_creation),
+                }),
+            },
+            session_id: Some("test-session".to_string()),
+        })
+    }
+
+    /// Helper: build a compact_boundary system event
+    fn make_compact_boundary(trigger: &str, pre_tokens: u64) -> StreamEvent {
+        StreamEvent::System(crate::output::SystemEvent {
+            subtype: Some("compact_boundary".to_string()),
+            session_id: None,
+            cwd: None,
+            model: None,
+            tools: None,
+            compact_metadata: Some(crate::output::CompactMetadata {
+                trigger: Some(trigger.to_string()),
+                pre_tokens: Some(pre_tokens),
+            }),
+        })
+    }
+
+    #[tokio::test]
+    async fn test_context_updated_emitted() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_config();
+        let collector = make_collector(&tmp);
+        let cancel_token = CancellationToken::new();
+
+        // Assistant event with usage: input=50000, cache_read=30000, cache_creation=0
+        // Expected context_tokens = 50000 + 30000 + 0 = 80000
+        let events = vec![
+            make_system_event(),
+            make_assistant_with_usage(50000, 30000, 0, 1000),
+            make_completing_result(),
+        ];
+
+        let mock = MockSshOps::new("test-ssh").push_tail_scenario(events, 0);
+        let orchestrator = SshSessionOrchestrator::new(mock, config, collector, cancel_token);
+
+        // Collect emitted events
+        let emitted = Arc::new(std::sync::Mutex::new(Vec::<SessionEvent>::new()));
+        let emitted_clone = emitted.clone();
+        let orchestrator = orchestrator.on_event(Box::new(move |event| {
+            emitted_clone.lock().unwrap().push(event.clone());
+        }));
+
+        let _trace = orchestrator.run().await.expect("run should succeed");
+
+        let events = emitted.lock().unwrap();
+        let context_updated = events.iter().find(|e| {
+            matches!(e, SessionEvent::ContextUpdated { .. })
+        });
+        assert!(
+            context_updated.is_some(),
+            "Expected a ContextUpdated event to be emitted, got: {:?}",
+            *events
+        );
+        match context_updated.unwrap() {
+            SessionEvent::ContextUpdated { iteration, context_tokens } => {
+                assert_eq!(*iteration, 1, "should be iteration 1");
+                assert_eq!(*context_tokens, 80000, "context_tokens should be input + cache_read + cache_creation");
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_compacted_event_emitted() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_config();
+        let collector = make_collector(&tmp);
+        let cancel_token = CancellationToken::new();
+
+        let events = vec![
+            make_system_event(),
+            make_assistant_text("Before compaction..."),
+            make_compact_boundary("auto", 167000),
+            make_assistant_text("After compaction..."),
+            make_completing_result(),
+        ];
+
+        let mock = MockSshOps::new("test-ssh").push_tail_scenario(events, 0);
+        let orchestrator = SshSessionOrchestrator::new(mock, config, collector, cancel_token);
+
+        // Collect emitted events
+        let emitted = Arc::new(std::sync::Mutex::new(Vec::<SessionEvent>::new()));
+        let emitted_clone = emitted.clone();
+        let orchestrator = orchestrator.on_event(Box::new(move |event| {
+            emitted_clone.lock().unwrap().push(event.clone());
+        }));
+
+        let _trace = orchestrator.run().await.expect("run should succeed");
+
+        let events = emitted.lock().unwrap();
+        let compacted = events.iter().find(|e| {
+            matches!(e, SessionEvent::Compacted { .. })
+        });
+        assert!(
+            compacted.is_some(),
+            "Expected a Compacted event to be emitted, got: {:?}",
+            *events
+        );
+        match compacted.unwrap() {
+            SessionEvent::Compacted { iteration, pre_tokens, trigger } => {
+                assert_eq!(*iteration, 1, "should be iteration 1");
+                assert_eq!(*pre_tokens, 167000, "pre_tokens should match compact_metadata");
+                assert_eq!(trigger, "auto", "trigger should match compact_metadata");
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_final_context_tokens_in_trace() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let config = make_config();
+        let collector = make_collector(&tmp);
+        let cancel_token = CancellationToken::new();
+
+        // Assistant with usage: input=50000, cache_read=30000, cache_creation=0 → 80000
+        let events = vec![
+            make_system_event(),
+            make_assistant_with_usage(50000, 30000, 0, 1000),
+            make_completing_result(),
+        ];
+
+        let mock = MockSshOps::new("test-ssh").push_tail_scenario(events, 0);
+        let orchestrator = SshSessionOrchestrator::new(mock, config, collector, cancel_token);
+
+        let trace = orchestrator.run().await.expect("run should succeed");
+
+        assert_eq!(trace.iterations.len(), 1, "should have exactly 1 iteration");
+        assert_eq!(
+            trace.iterations[0].attributes.final_context_tokens, 80000,
+            "final_context_tokens should reflect tracked context from assistant usage"
         );
     }
 }
