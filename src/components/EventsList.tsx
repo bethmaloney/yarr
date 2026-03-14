@@ -154,20 +154,21 @@ export function EventsList({
 
   return (
     <section className="events relative">
-      <div className="events-header flex items-center gap-2 mb-2">
-        <h2 className="text-base text-muted-foreground uppercase tracking-wider border-b border-border pb-1 m-0">
-          Events
-        </h2>
-        <span className="event-count bg-secondary text-muted-foreground text-xs px-2 py-0.5 rounded-[10px] font-mono">
-          {events.length}
-        </span>
-      </div>
-      {planProgress && <PlanProgressBar progress={planProgress} />}
-      <div
-        ref={eventsContainerRef}
-        className="events-scroll max-h-[350px] overflow-y-auto border border-border rounded-md bg-card-inset py-1"
-        onScroll={handleEventsScroll}
-      >
+      <div className="border border-border rounded-md bg-card-inset">
+        <div className="events-header flex items-center gap-2 px-3 py-2 border-b border-border">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground m-0">
+            Events
+          </h2>
+          <span className="event-count bg-secondary text-muted-foreground text-xs px-2 py-0.5 rounded-[10px] font-mono">
+            {events.length}
+          </span>
+        </div>
+        {planProgress && <PlanProgressBar progress={planProgress} />}
+        <div
+          ref={eventsContainerRef}
+          className="events-scroll max-h-[calc(100vh-280px)] overflow-y-auto py-1"
+          onScroll={handleEventsScroll}
+        >
         <ul className="list-none p-0 m-0">
           {/* Before standalones */}
           {grouped.standaloneEvents
@@ -183,7 +184,7 @@ export function EventsList({
                   <div
                     role="button"
                     tabIndex={0}
-                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text"
+                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text hover:bg-background/50 transition-colors duration-150"
                     onClick={handleSelectableClick(() => toggleEvent(i))}
                     onKeyDown={handleKeyDown(() => toggleEvent(i))}
                   >
@@ -195,7 +196,7 @@ export function EventsList({
                     >
                       {eventLabel(standalone.event, repoPath)}
                     </span>
-                    <span className="event-time shrink-0 text-muted-foreground/60 text-xs">
+                    <span className="event-time shrink-0 text-muted-foreground text-xs">
                       {formatTime(standalone.event._ts)}
                     </span>
                   </div>
@@ -242,7 +243,7 @@ export function EventsList({
                   <div
                     role="button"
                     tabIndex={0}
-                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text"
+                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text hover:bg-background/50 transition-colors duration-150"
                     onClick={handleSelectableClick(() =>
                       toggleEvent(globalIndex),
                     )}
@@ -256,7 +257,7 @@ export function EventsList({
                     >
                       {eventLabel(standalone.event, repoPath)}
                     </span>
-                    <span className="event-time shrink-0 text-muted-foreground/60 text-xs">
+                    <span className="event-time shrink-0 text-muted-foreground text-xs">
                       {formatTime(standalone.event._ts)}
                     </span>
                   </div>
@@ -271,6 +272,7 @@ export function EventsList({
               );
             })}
         </ul>
+        </div>
       </div>
       {!autoScroll && (
         <button

@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router";
 
 import {
   Breadcrumb,
@@ -10,7 +11,7 @@ import {
 } from "@/components/ui/breadcrumb";
 
 interface BreadcrumbsProps {
-  crumbs: { label: string; onClick?: () => void }[];
+  crumbs: { label: string; href?: string; onClick?: () => void }[];
 }
 
 export function Breadcrumbs({ crumbs }: BreadcrumbsProps) {
@@ -23,7 +24,11 @@ export function Breadcrumbs({ crumbs }: BreadcrumbsProps) {
             return (
               <React.Fragment key={crumb.label}>
                 <BreadcrumbItem>
-                  {crumb.onClick ? (
+                  {crumb.href ? (
+                    <BreadcrumbLink asChild>
+                      <Link to={crumb.href}>{crumb.label}</Link>
+                    </BreadcrumbLink>
+                  ) : crumb.onClick ? (
                     <BreadcrumbLink
                       className="cursor-pointer"
                       role="button"

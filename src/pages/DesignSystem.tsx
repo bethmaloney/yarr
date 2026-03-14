@@ -217,7 +217,8 @@ export default function DesignSystem() {
                 claude.spawn(prompt);
               </p>
               <p className="text-xs text-muted-foreground">
-                $ claude -p &quot;fix the failing test&quot; --output-format json
+                $ claude -p &quot;fix the failing test&quot; --output-format
+                json
               </p>
             </div>
           </div>
@@ -338,11 +339,7 @@ export default function DesignSystem() {
               fgOklch="0.9 0 0"
             />
             <ColorSwatch name="Ring" cssVar="--ring" oklch="0.85 0.15 85" />
-            <ColorSwatch
-              name="Border"
-              cssVar="--border"
-              oklch="0.3 0 0"
-            />
+            <ColorSwatch name="Border" cssVar="--border" oklch="0.3 0 0" />
             <ColorSwatch
               name="Border Hover"
               cssVar="--border-hover"
@@ -374,11 +371,7 @@ export default function DesignSystem() {
               cssVar="--success"
               oklch="0.7 0.15 165"
             />
-            <ColorSwatch
-              name="Info"
-              cssVar="--info"
-              oklch="0.70 0.10 250"
-            />
+            <ColorSwatch name="Info" cssVar="--info" oklch="0.70 0.10 250" />
             <ColorSwatch
               name="Foreground"
               cssVar="--foreground"
@@ -512,10 +505,7 @@ export default function DesignSystem() {
                 <p className="text-[10px] text-muted-foreground">:hover</p>
               </div>
               <div className="space-y-1.5 text-center">
-                <Button
-                  size="sm"
-                  className="ring-[3px] ring-ring/50"
-                >
+                <Button size="sm" className="ring-[3px] ring-ring/50">
                   Focus
                 </Button>
                 <p className="text-[10px] text-muted-foreground">
@@ -638,9 +628,7 @@ export default function DesignSystem() {
           <div className="rounded-xl border border-border bg-card p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Terminal className="size-4 text-primary" />
-              <span className="text-sm font-semibold">
-                Compact Card (p-4)
-              </span>
+              <span className="text-sm font-semibold">Compact Card (p-4)</span>
             </div>
             <p className="text-xs text-muted-foreground">
               Dashboard cards, list items — dense information display with
@@ -774,7 +762,9 @@ export default function DesignSystem() {
               <tbody className="text-muted-foreground">
                 <tr className="border-b border-border/50">
                   <td className="py-2 pr-4">
-                    <code className="text-xs">color, background, border, opacity</code>
+                    <code className="text-xs">
+                      color, background, border, opacity
+                    </code>
                   </td>
                   <td className="py-2 pr-4">150ms</td>
                   <td className="py-2 pr-4">ease-out</td>
@@ -1007,9 +997,7 @@ export default function DesignSystem() {
         <div className="flex flex-wrap gap-4">
           <div className="space-y-2 text-center">
             <div className="size-20 rounded-md bg-background border border-transparent" />
-            <code className="text-xs text-muted-foreground block">
-              Level 0
-            </code>
+            <code className="text-xs text-muted-foreground block">Level 0</code>
             <span className="text-[10px] text-muted-foreground/50">
               Background
             </span>
@@ -1028,18 +1016,14 @@ export default function DesignSystem() {
           </div>
           <div className="space-y-2 text-center">
             <div className="size-20 rounded-md bg-card border border-border" />
-            <code className="text-xs text-muted-foreground block">
-              Level 1
-            </code>
+            <code className="text-xs text-muted-foreground block">Level 1</code>
             <span className="text-[10px] text-muted-foreground/50">
               Cards, list items
             </span>
           </div>
           <div className="space-y-2 text-center">
             <div className="size-20 rounded-md bg-popover border border-border" />
-            <code className="text-xs text-muted-foreground block">
-              Level 2
-            </code>
+            <code className="text-xs text-muted-foreground block">Level 2</code>
             <span className="text-[10px] text-muted-foreground/50">
               Popovers, menus
             </span>
@@ -1052,9 +1036,7 @@ export default function DesignSystem() {
                   "0 4px 16px oklch(0 0 0 / 0.4), 0 1px 4px oklch(0 0 0 / 0.2)",
               }}
             />
-            <code className="text-xs text-muted-foreground block">
-              Level 3
-            </code>
+            <code className="text-xs text-muted-foreground block">Level 3</code>
             <span className="text-[10px] text-muted-foreground/50">
               Dropdowns, dialogs
             </span>
@@ -1077,9 +1059,14 @@ export default function DesignSystem() {
             [ChevronRight, "Chevron"],
             [Info, "Info"],
           ].map(([Icon, label]) => {
-            const IconComp = Icon as React.ComponentType<{ className?: string }>;
+            const IconComp = Icon as React.ComponentType<{
+              className?: string;
+            }>;
             return (
-              <div key={label as string} className="flex flex-col items-center gap-1">
+              <div
+                key={label as string}
+                className="flex flex-col items-center gap-1"
+              >
                 <IconComp className="size-5" />
                 <span className="text-xs">{label as string}</span>
               </div>
@@ -1226,9 +1213,7 @@ export default function DesignSystem() {
         description="Dark, minimal scrollbars that match the UI. 6px width, transparent track, border-colored thumb."
       >
         <div className="flex gap-4">
-          <div
-            className="w-48 h-32 rounded-md border border-border bg-card p-3 overflow-y-auto text-xs text-muted-foreground"
-          >
+          <div className="w-48 h-32 rounded-md border border-border bg-card p-3 overflow-y-auto text-xs text-muted-foreground">
             {Array.from({ length: 20 }, (_, i) => (
               <div key={i} className="py-0.5">
                 Log entry {i + 1}: Processing request...
@@ -1250,8 +1235,7 @@ export default function DesignSystem() {
               var(--muted-foreground)
             </p>
             <p className="mt-2">
-              Firefox:{" "}
-              <code>scrollbar-width: thin</code>
+              Firefox: <code>scrollbar-width: thin</code>
             </p>
           </div>
         </div>

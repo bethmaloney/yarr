@@ -71,7 +71,11 @@ export function OneShotCard({ entry, phase, onClick }: OneShotCardProps) {
       <div className="flex-1" />
 
       <div className="flex items-center gap-2 min-w-0">
-        <span className={dotClassName} style={{ background: color }} aria-hidden="true" />
+        <span
+          className={dotClassName}
+          style={{ background: color }}
+          aria-hidden="true"
+        />
         <span className="text-xs font-medium tracking-wider" style={{ color }}>
           {label}
         </span>

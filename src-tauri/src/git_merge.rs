@@ -858,7 +858,7 @@ mod tests {
         let env_vars = HashMap::new();
         let config = test_config(&cancel_token, &env_vars);
 
-        let (events, on_event) = event_collector();
+        let (_events, on_event) = event_collector();
         let result = git_merge_push(&runtime, &config, on_event).await;
 
         assert!(

@@ -328,7 +328,9 @@ export default function Home() {
                         <span
                           className="w-1.5 h-1.5 rounded-full shrink-0"
                           style={{
-                            background: isFailed ? "var(--destructive)" : "var(--success)",
+                            background: isFailed
+                              ? "var(--destructive)"
+                              : "var(--success)",
                           }}
                         />
                         <span className="text-sm text-foreground/80 truncate min-w-0 flex-1">
@@ -340,7 +342,9 @@ export default function Home() {
                         <span
                           className="text-[10px] font-medium uppercase tracking-wider shrink-0 w-16 text-right"
                           style={{
-                            color: isFailed ? "var(--destructive)" : "var(--success)",
+                            color: isFailed
+                              ? "var(--destructive)"
+                              : "var(--success)",
                           }}
                         >
                           {phaseLabel(item.phase)}

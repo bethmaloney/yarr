@@ -264,7 +264,7 @@ describe("OneShotDetail", () => {
   // =========================================================================
 
   describe("breadcrumbs", () => {
-    it("renders Home > {title} > 1-Shot breadcrumbs", () => {
+    it("renders Home > {title} breadcrumbs", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         oneShotEntries: new Map([
@@ -274,22 +274,21 @@ describe("OneShotDetail", () => {
       renderOneShotDetail();
 
       expect(screen.getByText("Home")).toBeInTheDocument();
-      expect(screen.getByText("1-Shot")).toBeInTheDocument();
       expect(
         screen.getAllByText("Fix login bug").length,
       ).toBeGreaterThanOrEqual(1);
     });
 
-    it('clicking "Home" navigates to "/"', () => {
+    it('"Home" links to "/"', () => {
       setupMockState({
         repos: [makeLocalRepo()],
         oneShotEntries: new Map([["oneshot-abc123", makeEntry()]]),
       });
       renderOneShotDetail();
 
-      fireEvent.click(screen.getByText("Home"));
-
-      expect(mockNavigate).toHaveBeenCalledWith("/");
+      const homeLink = screen.getByText("Home").closest("a");
+      expect(homeLink).toBeInTheDocument();
+      expect(homeLink).toHaveAttribute("href", "/");
     });
   });
 
@@ -307,17 +306,9 @@ describe("OneShotDetail", () => {
       });
       renderOneShotDetail();
 
-      expect(screen.getByText("Refactor auth module")).toBeInTheDocument();
-    });
-
-    it('shows "1-Shot" badge', () => {
-      setupMockState({
-        repos: [makeLocalRepo()],
-        oneShotEntries: new Map([["oneshot-abc123", makeEntry()]]),
-      });
-      renderOneShotDetail();
-
-      expect(screen.getByText("1-Shot")).toBeInTheDocument();
+      expect(
+        screen.getAllByText("Refactor auth module").length,
+      ).toBeGreaterThanOrEqual(1);
     });
 
     it('shows "from {parentRepoName}" subtitle', () => {
@@ -485,7 +476,7 @@ describe("OneShotDetail", () => {
       });
       renderOneShotDetail();
 
-      expect(screen.getByText("completed")).toBeInTheDocument();
+      expect(screen.getByText("Completed")).toBeInTheDocument();
       expect(screen.getByText("5")).toBeInTheDocument();
       expect(screen.getByText(/\$1\.2345/)).toBeInTheDocument();
       expect(screen.getByText("sess-xyz-789")).toBeInTheDocument();
@@ -543,7 +534,7 @@ describe("OneShotDetail", () => {
   // =========================================================================
 
   describe("phase indicator", () => {
-    it("shows phase label for design phase", () => {
+    it("shows phase label for design phase as status badge", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         oneShotEntries: new Map([
@@ -567,7 +558,7 @@ describe("OneShotDetail", () => {
       expect(screen.getByText("Design Phase")).toBeInTheDocument();
     });
 
-    it("shows phase label for implementation phase", () => {
+    it("shows phase label for implementation phase as status badge", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         oneShotEntries: new Map([
@@ -593,7 +584,7 @@ describe("OneShotDetail", () => {
       expect(screen.getByText("Implementation Phase")).toBeInTheDocument();
     });
 
-    it("has failed styling for failed phase", () => {
+    it("shows failed badge for failed phase", () => {
       setupMockState({
         repos: [makeLocalRepo()],
         oneShotEntries: new Map([
@@ -613,9 +604,9 @@ describe("OneShotDetail", () => {
       });
       renderOneShotDetail();
 
-      const phaseEl = screen.getByText("Failed");
-      expect(phaseEl).toBeInTheDocument();
-      expect(phaseEl.className).toContain("text-destructive");
+      const badge = screen.getByText("Failed");
+      expect(badge).toBeInTheDocument();
+      expect(badge).toHaveAttribute("data-slot", "badge");
     });
 
     it("has complete styling for complete phase", () => {
@@ -638,9 +629,9 @@ describe("OneShotDetail", () => {
       });
       renderOneShotDetail();
 
-      const phaseEl = screen.getByText("Complete");
-      expect(phaseEl).toBeInTheDocument();
-      expect(phaseEl.className).toContain("text-success");
+      const badge = screen.getByText("Complete");
+      expect(badge).toBeInTheDocument();
+      expect(badge).toHaveAttribute("data-slot", "badge");
     });
   });
 
@@ -1023,7 +1014,7 @@ describe("OneShotDetail", () => {
 
       // inputTokens = 50000 + 20000 + 5000 = 75000; 75000/200000 = 37.5 → 38%
       expect(screen.getByText(/Peak Context/)).toBeInTheDocument();
-      expect(screen.getByText(/38%/)).toBeInTheDocument();
+      expect(screen.getAllByText(/38%/).length).toBeGreaterThanOrEqual(1);
     });
 
     it('does not show "Peak Context" when no context data in events', () => {
@@ -1189,8 +1180,10 @@ describe("OneShotDetail", () => {
       // Iteration 1: (170000+10000+0)/200000 = 90%
       // Iteration 2: (40000+5000+0)/200000 = 23%
       // Peak should be 90%, not 23%
-      expect(screen.getByText(/90%/)).toBeInTheDocument();
-      expect(screen.queryByText(/23%/)).not.toBeInTheDocument();
+      expect(screen.getAllByText(/90%/).length).toBeGreaterThanOrEqual(1);
+      // 23% should not appear in the result card (may appear in iteration context bars)
+      const peakContextRow = screen.getByText(/Peak Context/).closest("div");
+      expect(peakContextRow?.textContent).toMatch(/90%/);
     });
 
     it("applies correct color styling based on percentage", () => {
@@ -1239,7 +1232,9 @@ describe("OneShotDetail", () => {
 
       // inputTokens = 170000 + 10000 + 0 = 180000; 180000/200000 = 90%
       // sessionContextColor(90) → "var(--destructive)" (red, since >85%)
-      const percentSpan = screen.getByText(/90%/);
+      const peakContextLabel = screen.getByText(/Peak Context/);
+      const peakContextRow = peakContextLabel.closest("div")!;
+      const percentSpan = peakContextRow.querySelector("span[style]")!;
       expect(percentSpan).toHaveStyle({ color: "var(--destructive)" });
     });
   });
@@ -1314,7 +1309,7 @@ describe("OneShotDetail", () => {
         expect(screen.getByText("Result")).toBeInTheDocument();
       });
 
-      expect(screen.getByText("completed")).toBeInTheDocument();
+      expect(screen.getByText("Completed")).toBeInTheDocument();
       expect(screen.getByText("3")).toBeInTheDocument();
       expect(screen.getByText(/\$0\.8765/)).toBeInTheDocument();
       expect(screen.getByText("sess-disk-001")).toBeInTheDocument();
@@ -1347,10 +1342,10 @@ describe("OneShotDetail", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(
+          screen.getAllByText(
             "Fix the login bug where users get redirected incorrectly",
-          ),
-        ).toBeInTheDocument();
+          ).length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
 

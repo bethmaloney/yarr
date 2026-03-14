@@ -158,9 +158,7 @@ test.describe("History view — description column (Task 10)", () => {
     }
 
     // Find indices of description and badge
-    const descIndex = spanClasses.findIndex((c) =>
-      c.includes("trace-prompt"),
-    );
+    const descIndex = spanClasses.findIndex((c) => c.includes("trace-prompt"));
     const badgeIndex = spanClasses.findIndex((c) => c.includes("trace-badge"));
 
     expect(descIndex).toBeGreaterThanOrEqual(0);

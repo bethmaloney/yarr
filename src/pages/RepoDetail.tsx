@@ -20,8 +20,7 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-} from "@/components/ui/accordion";
+import {} from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -660,12 +659,14 @@ export default function RepoDetail() {
                   )}
                   {gitStatus.ahead != null && gitStatus.ahead > 0 && (
                     <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-success/15 text-success">
-                      {"\u2191"}{gitStatus.ahead}
+                      {"\u2191"}
+                      {gitStatus.ahead}
                     </span>
                   )}
                   {gitStatus.behind != null && gitStatus.behind > 0 && (
                     <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">
-                      {"\u2193"}{gitStatus.behind}
+                      {"\u2193"}
+                      {gitStatus.behind}
                     </span>
                   )}
                 </button>
@@ -691,15 +692,19 @@ export default function RepoDetail() {
                         )}
                       {gitStatus.ahead != null && gitStatus.ahead > 0 && (
                         <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-success/15 text-success">
-                          {"\u2191"}{gitStatus.ahead}
+                          {"\u2191"}
+                          {gitStatus.ahead}
                         </span>
                       )}
                       {gitStatus.behind != null && gitStatus.behind > 0 && (
                         <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">
-                          {"\u2193"}{gitStatus.behind}
+                          {"\u2193"}
+                          {gitStatus.behind}
                         </span>
                       )}
-                      <ChevronDown className={`size-3.5 opacity-50 transition-transform ${branchDropdownOpen ? "rotate-180" : ""}`} />
+                      <ChevronDown
+                        className={`size-3.5 opacity-50 transition-transform ${branchDropdownOpen ? "rotate-180" : ""}`}
+                      />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent
@@ -725,7 +730,8 @@ export default function RepoDetail() {
                             </>
                           ) : (
                             <>
-                              {"\u2193"}{gitStatus.behind} behind — Fast-forward
+                              {"\u2193"}
+                              {gitStatus.behind} behind — Fast-forward
                             </>
                           )}
                         </Button>
@@ -769,10 +775,7 @@ export default function RepoDetail() {
 
           {/* Error indicator - shown when error and no status */}
           {gitStatusEntry?.error && !gitStatus && (
-            <span
-              className="text-xs text-warning"
-              title={gitStatusEntry.error}
-            >
+            <span className="text-xs text-warning" title={gitStatusEntry.error}>
               {"\u26A0"}
             </span>
           )}
@@ -780,7 +783,11 @@ export default function RepoDetail() {
           {/* Refresh button — timestamp shown in title tooltip */}
           <button
             aria-label="Refresh git status"
-            title={gitStatusEntry?.lastChecked ? `Last checked: ${timeAgo(gitStatusEntry.lastChecked.toISOString())}` : undefined}
+            title={
+              gitStatusEntry?.lastChecked
+                ? `Last checked: ${timeAgo(gitStatusEntry.lastChecked.toISOString())}`
+                : undefined
+            }
             className="inline-flex items-center justify-center size-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors cursor-pointer"
             onClick={() => {
               if (repoId && repo) fetchGitStatus(repoId, repo, true);
@@ -867,20 +874,27 @@ export default function RepoDetail() {
                       <Terminal className="size-3.5" />
                       Connection
                     </span>
-                    <div className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
+                    <div
+                      className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
+                    >
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">SSH Host</span>
+                        <span className="text-sm text-muted-foreground">
+                          SSH Host
+                        </span>
                         <Input
                           type="text"
                           value={
-                            (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost
+                            (repo as Extract<RepoConfig, { type: "ssh" }>)
+                              .sshHost
                           }
                           readOnly
                           disabled
                         />
                       </Label>
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">Remote Path</span>
+                        <span className="text-sm text-muted-foreground">
+                          Remote Path
+                        </span>
                         <Input
                           type="text"
                           value={
@@ -901,10 +915,14 @@ export default function RepoDetail() {
                     <Cpu className="size-3.5" />
                     Model & Execution
                   </span>
-                  <div className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
+                  <div
+                    className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
+                  >
                     <div className="grid grid-cols-3 gap-3">
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">Model</span>
+                        <span className="text-sm text-muted-foreground">
+                          Model
+                        </span>
                         <Input
                           type="text"
                           value={model}
@@ -914,7 +932,9 @@ export default function RepoDetail() {
                         />
                       </Label>
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">Effort Level</span>
+                        <span className="text-sm text-muted-foreground">
+                          Effort Level
+                        </span>
                         <Select
                           value={effortLevel}
                           onValueChange={setEffortLevel}
@@ -932,10 +952,14 @@ export default function RepoDetail() {
                         </Select>
                       </Label>
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">Max Iterations</span>
+                        <span className="text-sm text-muted-foreground">
+                          Max Iterations
+                        </span>
                         <NumberInput
                           value={maxIterations}
-                          onChange={(e) => setMaxIterations(Number(e.target.value))}
+                          onChange={(e) =>
+                            setMaxIterations(Number(e.target.value))
+                          }
                           min={1}
                           disabled={session.running}
                           className="font-mono"
@@ -943,7 +967,9 @@ export default function RepoDetail() {
                       </Label>
                     </div>
                     <Label className="flex flex-col gap-1">
-                      <span className="text-sm text-muted-foreground">Completion Signal</span>
+                      <span className="text-sm text-muted-foreground">
+                        Completion Signal
+                      </span>
                       <Input
                         type="text"
                         value={completionSignal}
@@ -964,9 +990,13 @@ export default function RepoDetail() {
                     <FileText className="size-3.5" />
                     Plans
                   </span>
-                  <div className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
+                  <div
+                    className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
+                  >
                     <Label className="flex flex-col gap-1">
-                      <span className="text-sm text-muted-foreground">Plans Directory</span>
+                      <span className="text-sm text-muted-foreground">
+                        Plans Directory
+                      </span>
                       <Input
                         type="text"
                         value={plansDir}
@@ -985,7 +1015,9 @@ export default function RepoDetail() {
                       <Checkbox
                         id="move-plans-completed"
                         checked={movePlansToCompleted}
-                        onCheckedChange={(v) => setMovePlansToCompleted(v === true)}
+                        onCheckedChange={(v) =>
+                          setMovePlansToCompleted(v === true)
+                        }
                         disabled={session.running}
                       />
                       Move plans to completed folder after run
@@ -999,7 +1031,9 @@ export default function RepoDetail() {
                     <Settings className="size-3.5" />
                     Behavior
                   </span>
-                  <div className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
+                  <div
+                    className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
+                  >
                     <Label
                       htmlFor="create-branch"
                       className="flex items-center gap-2 text-sm font-normal"
@@ -1041,7 +1075,9 @@ export default function RepoDetail() {
                     <Variable className="size-3.5" />
                     Environment Variables
                   </span>
-                  <div className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
+                  <div
+                    className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
+                  >
                     {envVars.length === 0 && (
                       <div className="border border-dashed border-border rounded-md p-4 text-center">
                         <span className="text-xs text-muted-foreground">
@@ -1068,7 +1104,10 @@ export default function RepoDetail() {
                           value={envVar.value}
                           onChange={(e) => {
                             const updated = [...envVars];
-                            updated[i] = { ...updated[i], value: e.target.value };
+                            updated[i] = {
+                              ...updated[i],
+                              value: e.target.value,
+                            };
                             setEnvVars(updated);
                           }}
                           placeholder="value"
@@ -1256,7 +1295,9 @@ export default function RepoDetail() {
                         {/* Fields: command + timeout + retries in one row */}
                         <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 pb-3">
                           <Label className="flex flex-col gap-1">
-                            <span className="text-xs text-muted-foreground">Command</span>
+                            <span className="text-xs text-muted-foreground">
+                              Command
+                            </span>
                             <Input
                               type="text"
                               value={check.command}
@@ -1274,7 +1315,9 @@ export default function RepoDetail() {
                             />
                           </Label>
                           <Label className="flex flex-col gap-1">
-                            <span className="text-xs text-muted-foreground">Timeout (s)</span>
+                            <span className="text-xs text-muted-foreground">
+                              Timeout (s)
+                            </span>
                             <NumberInput
                               value={check.timeoutSecs}
                               onChange={(e) => {
@@ -1291,7 +1334,9 @@ export default function RepoDetail() {
                             />
                           </Label>
                           <Label className="flex flex-col gap-1">
-                            <span className="text-xs text-muted-foreground">Retries</span>
+                            <span className="text-xs text-muted-foreground">
+                              Retries
+                            </span>
                             <NumberInput
                               value={check.maxRetries}
                               onChange={(e) => {
@@ -1323,7 +1368,9 @@ export default function RepoDetail() {
                     <GitBranch className="size-3.5" />
                     Sync Settings
                   </span>
-                  <div className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
+                  <div
+                    className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
+                  >
                     <Label
                       htmlFor="git-sync-enabled"
                       className="flex items-center gap-2 text-sm font-normal"
@@ -1338,7 +1385,9 @@ export default function RepoDetail() {
                     </Label>
                     <div className="grid grid-cols-2 gap-3">
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">Model</span>
+                        <span className="text-sm text-muted-foreground">
+                          Model
+                        </span>
                         <Input
                           type="text"
                           value={gitSyncModel}
@@ -1349,7 +1398,9 @@ export default function RepoDetail() {
                         />
                       </Label>
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">Max Push Retries</span>
+                        <span className="text-sm text-muted-foreground">
+                          Max Push Retries
+                        </span>
                         <NumberInput
                           value={gitSyncMaxRetries}
                           onChange={(e) =>
@@ -1369,9 +1420,13 @@ export default function RepoDetail() {
                     <GitBranch className="size-3.5" />
                     Conflict Resolution
                   </span>
-                  <div className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}>
+                  <div
+                    className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
+                  >
                     <Label className="flex flex-col gap-1">
-                      <span className="text-sm text-muted-foreground">Prompt</span>
+                      <span className="text-sm text-muted-foreground">
+                        Prompt
+                      </span>
                       <Textarea
                         value={gitSyncPrompt}
                         onChange={(e) => setGitSyncPrompt(e.target.value)}
@@ -1380,7 +1435,8 @@ export default function RepoDetail() {
                         rows={3}
                       />
                       <span className="text-xs text-muted-foreground mt-0.5">
-                        Instructions given to the agent when resolving merge conflicts
+                        Instructions given to the agent when resolving merge
+                        conflicts
                       </span>
                     </Label>
                   </div>

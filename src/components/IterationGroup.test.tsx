@@ -131,13 +131,17 @@ describe("IterationGroupComponent", () => {
   // =========================================================================
 
   it("shows collapsed arrow when not expanded", () => {
-    renderComponent({ expanded: false });
-    expect(screen.getByText(/\u25B6/)).toBeInTheDocument();
+    const { container } = renderComponent({ expanded: false });
+    const chevron = container.querySelector(".iteration-toggle");
+    expect(chevron).toBeInTheDocument();
+    expect(chevron).not.toHaveClass("rotate-90");
   });
 
   it("shows expanded arrow when expanded", () => {
-    renderComponent({ expanded: true });
-    expect(screen.getByText(/\u25BC/)).toBeInTheDocument();
+    const { container } = renderComponent({ expanded: true });
+    const chevron = container.querySelector(".iteration-toggle");
+    expect(chevron).toBeInTheDocument();
+    expect(chevron).toHaveClass("rotate-90");
   });
 
   // =========================================================================

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import type { IterationGroup } from "../iteration-groups";
 import { eventEmoji, eventLabel } from "../event-format";
 import { formatTokenCount, contextBarColor } from "../context-bar";
@@ -143,13 +144,13 @@ export function IterationGroupComponent({
       <div
         role="button"
         tabIndex={0}
-        className="iteration-header flex items-baseline gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-border select-text"
+        className="iteration-header flex items-center gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-border select-text hover:bg-background/50 transition-colors duration-150"
         onClick={handleSelectableClick(onToggle)}
         onKeyDown={handleKeyDown(onToggle)}
       >
-        <span className="iteration-toggle shrink-0">
-          {expanded ? "\u25BC" : "\u25B6"}
-        </span>
+        <ChevronRight
+          className={`iteration-toggle shrink-0 size-4 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+        />
         <span className="iteration-title">Iteration {group.iteration}</span>
         <span className="iteration-stats text-muted-foreground">
           — {group.events.length} events · ${group.cost.toFixed(2)}
@@ -200,7 +201,7 @@ export function IterationGroupComponent({
                 <div
                   role="button"
                   tabIndex={0}
-                  className="event-btn flex items-baseline gap-2 w-full px-3 py-1 pl-8 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text"
+                  className="event-btn flex items-baseline gap-2 w-full px-3 py-1 pl-8 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text hover:bg-background/50 transition-colors duration-150"
                   onClick={handleSelectableClick(() =>
                     toggleEvent(globalIndex),
                   )}
@@ -214,7 +215,7 @@ export function IterationGroupComponent({
                   >
                     {eventLabel(ev, repoPath)}
                   </span>
-                  <span className="event-time shrink-0 text-muted-foreground/60 text-xs">
+                  <span className="event-time shrink-0 text-muted-foreground text-xs">
                     {formatTime(ev._ts)}
                   </span>
                 </div>

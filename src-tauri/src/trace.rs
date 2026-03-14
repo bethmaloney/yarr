@@ -461,6 +461,7 @@ mod tests {
             session_id: "sess-789".to_string(),
             repo_path: "/tmp/repo".to_string(),
             prompt: "do the thing".to_string(),
+            title: None,
             plan_file,
             plan_content: None,
             repo_id: Some("test-repo".to_string()),

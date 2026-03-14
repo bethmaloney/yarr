@@ -73,10 +73,7 @@ function planFilename(path: string | null): string {
   return name;
 }
 
-function traceRepoId(
-  trace: SessionTrace,
-  repoId: string | undefined,
-): string {
+function traceRepoId(trace: SessionTrace, repoId: string | undefined): string {
   if (repoId) return repoId;
   return trace.repo_id ?? "unknown";
 }
@@ -191,9 +188,7 @@ export default function History() {
         onClick={() => toggleSort(field)}
       >
         <span>{label}</span>
-        {arrow && (
-          <span className="text-primary-light">{arrow}</span>
-        )}
+        {arrow && <span className="text-primary-light">{arrow}</span>}
       </button>
     );
   }
