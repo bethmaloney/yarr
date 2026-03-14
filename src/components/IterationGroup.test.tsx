@@ -5,11 +5,7 @@ import { IterationGroupComponent } from "./IterationGroup";
 import type { IterationGroup } from "../iteration-groups";
 import type { SessionEvent } from "../types";
 import { eventEmoji, eventLabel } from "../event-format";
-import {
-  formatTokenCount,
-  contextBarColor,
-  contextTokensColor,
-} from "../context-bar";
+import { formatTokenCount, contextBarColor } from "../context-bar";
 
 afterEach(() => {
   cleanup();

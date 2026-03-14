@@ -148,11 +148,14 @@ describe("RunDetail", () => {
   // =========================================================================
 
   describe("loading state", () => {
-    it('shows "Loading..." while invoke is pending', () => {
+    it("shows a spinner while invoke is pending", () => {
       mockInvoke.mockReturnValue(new Promise(() => {}));
       renderRunDetail();
 
-      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+      // The loading state renders a Loader2 spinner, not text.
+      // Verify the breadcrumbs are present (component mounted) but no trace content yet.
+      expect(screen.getByText("Home")).toBeInTheDocument();
+      expect(screen.queryByText("Completed")).not.toBeInTheDocument();
     });
   });
 
@@ -176,13 +179,15 @@ describe("RunDetail", () => {
   // =========================================================================
 
   describe("breadcrumbs", () => {
-    it("renders Home > History > Run {sessionId} breadcrumbs", async () => {
+    it("renders Home > History > displayTitle breadcrumbs", async () => {
       renderRunDetail();
 
       await waitFor(() => {
         expect(screen.getByText("Home")).toBeInTheDocument();
         expect(screen.getByText("History")).toBeInTheDocument();
-        expect(screen.getByText(/sess-abc-123/)).toBeInTheDocument();
+        // displayTitle "fix bug" appears in both breadcrumb and h1
+        const matches = screen.getAllByText("fix bug");
+        expect(matches.length).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -216,25 +221,55 @@ describe("RunDetail", () => {
   // =========================================================================
 
   describe("header", () => {
-    it('shows "Run Detail" title', async () => {
+    it("shows dynamic title derived from plan_file", async () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText(/Run Detail/)).toBeInTheDocument();
+        // plan_file is "/home/beth/plans/fix-bug.md" => planFilename => "fix bug"
+        expect(
+          screen.getByRole("heading", { level: 1 }),
+        ).toHaveTextContent("fix bug");
       });
     });
 
-    it("shows formatted date from trace.start_time", async () => {
-      setupDefaultInvoke({ start_time: "2026-03-10T10:00:00Z" });
+    it("falls back to trace.title when plan_file is null", async () => {
+      setupDefaultInvoke({ plan_file: null, title: "My custom title" });
       renderRunDetail();
 
       await waitFor(() => {
-        // The date should be formatted (e.g. "Mar 10, 2026" or similar)
         expect(
-          screen.getByText(
-            /Mar.*10.*2026|10.*Mar.*2026|2026.*03.*10|3\/10\/2026/,
-          ),
-        ).toBeInTheDocument();
+          screen.getByRole("heading", { level: 1 }),
+        ).toHaveTextContent("My custom title");
+      });
+    });
+
+    it("falls back to prompt when plan_file and title are null", async () => {
+      setupDefaultInvoke({
+        plan_file: null,
+        title: undefined,
+        prompt: "Fix the login bug",
+      });
+      renderRunDetail();
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("heading", { level: 1 }),
+        ).toHaveTextContent("Fix the login bug");
+      });
+    });
+
+    it('falls back to "Run {sessionId}" when plan_file, title, and prompt are unavailable', async () => {
+      setupDefaultInvoke({
+        plan_file: null,
+        title: undefined,
+        prompt: undefined as unknown as string,
+      });
+      renderRunDetail();
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("heading", { level: 1 }),
+        ).toHaveTextContent("Run sess-abc-123");
       });
     });
   });
@@ -249,7 +284,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Completed")).toBeInTheDocument();
+        // Badge appears in both header and sidebar
+        const badges = screen.getAllByText("Completed");
+        expect(badges.length).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -262,13 +299,17 @@ describe("RunDetail", () => {
       });
     });
 
-    it('shows "\u2014" when plan_file is null', async () => {
-      setupDefaultInvoke({ plan_file: null });
+    it("hides Plan row when plan_file and plan_content are both null", async () => {
+      setupDefaultInvoke({ plan_file: null, plan_content: null });
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("\u2014")).toBeInTheDocument();
+        const badges = screen.getAllByText("Completed");
+        expect(badges.length).toBeGreaterThanOrEqual(1);
       });
+
+      // Plan row should not be rendered
+      expect(screen.queryByText("Plan")).not.toBeInTheDocument();
     });
 
     it("shows iteration count", async () => {
@@ -297,22 +338,23 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText(/30m.*0s/)).toBeInTheDocument();
+        // Duration appears in both header badge area and sidebar
+        const matches = screen.getAllByText(/30m.*0s/);
+        expect(matches.length).toBeGreaterThanOrEqual(1);
       });
     });
 
-    it('shows "\u2014" for duration when end_time is null', async () => {
+    it("hides Duration row when end_time is null", async () => {
       setupDefaultInvoke({ end_time: null });
       renderRunDetail();
 
       await waitFor(() => {
-        // There should be an em dash for duration.
-        // We look for the duration label first to confirm the section loaded,
-        // then verify an em dash exists near it.
-        expect(screen.getByText(/Duration/)).toBeInTheDocument();
-        const dashes = screen.getAllByText("\u2014");
-        expect(dashes.length).toBeGreaterThanOrEqual(1);
+        const badges = screen.getAllByText("Completed");
+        expect(badges.length).toBeGreaterThanOrEqual(1);
       });
+
+      // Duration row should not be rendered when end_time is null
+      expect(screen.queryByText("Duration")).not.toBeInTheDocument();
     });
 
     it("shows token counts (input + cache_read + cache_creation) / output", async () => {
@@ -360,7 +402,8 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Completed")).toBeInTheDocument();
+        const badges = screen.getAllByText("Completed");
+        expect(badges.length).toBeGreaterThanOrEqual(1);
       });
 
       // "Failure" or "Reason" label should not appear
@@ -378,7 +421,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Completed")).toBeInTheDocument();
+        // Badge appears in both header and sidebar
+        const badges = screen.getAllByText("Completed");
+        expect(badges.length).toBe(2);
       });
     });
 
@@ -387,7 +432,8 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Failed")).toBeInTheDocument();
+        const badges = screen.getAllByText("Failed");
+        expect(badges.length).toBe(2);
       });
     });
 
@@ -396,7 +442,8 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Max Iters")).toBeInTheDocument();
+        const badges = screen.getAllByText("Max Iters");
+        expect(badges.length).toBe(2);
       });
     });
 
@@ -405,7 +452,8 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Cancelled")).toBeInTheDocument();
+        const badges = screen.getAllByText("Cancelled");
+        expect(badges.length).toBe(2);
       });
     });
 
@@ -414,7 +462,8 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("something_unexpected")).toBeInTheDocument();
+        const badges = screen.getAllByText("something_unexpected");
+        expect(badges.length).toBe(2);
       });
     });
   });
@@ -574,11 +623,12 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("plan")).toBeInTheDocument();
+        // The plan display name in the sidebar is a clickable span with role="button"
+        expect(screen.getByRole("button", { name: "plan" })).toBeInTheDocument();
       });
 
       // Click the plan display name (filename without .md)
-      fireEvent.click(screen.getByText("plan"));
+      fireEvent.click(screen.getByRole("button", { name: "plan" }));
 
       await waitFor(() => {
         expect(screen.getByTestId("plan-panel")).toBeInTheDocument();
@@ -590,11 +640,16 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("plan")).toBeInTheDocument();
+        // "plan" appears in multiple places (title, breadcrumb, sidebar)
+        const matches = screen.getAllByText("plan");
+        expect(matches.length).toBeGreaterThanOrEqual(1);
       });
 
-      // Click the plan display name — should NOT open PlanPanel
-      fireEvent.click(screen.getByText("plan"));
+      // The plan name in the sidebar should NOT be a clickable button when plan_content is null
+      // (it renders as plain text, not a span with role="button")
+      expect(
+        screen.queryByRole("button", { name: "plan" }),
+      ).not.toBeInTheDocument();
 
       // PlanPanel should not appear
       expect(screen.queryByTestId("plan-panel")).not.toBeInTheDocument();

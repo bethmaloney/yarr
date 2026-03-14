@@ -192,7 +192,7 @@ Update the iteration header to show human-friendly tokens with hover, context us
 - [x] Human-friendly token counts with hover title
 - [x] Context tokens display with color
 - [x] Compaction ⟳ icon
-- [ ] Visual verification with `npx tauri dev`
+- [x] Visual verification with `npx tauri dev`
 - [x] `npx tsc --noEmit`
 
 ---
@@ -246,10 +246,10 @@ Ensure the `SessionEvent` type covers the new event fields used by `context_upda
 Add integration tests and verify the full flow.
 
 **Checklist:**
-- [ ] `cd src-tauri && cargo test`
-- [ ] `npm test`
-- [ ] `npx tsc --noEmit`
-- [ ] `npx eslint .`
+- [x] `cd src-tauri && cargo test`
+- [x] `npm test`
+- [x] `npx tsc --noEmit`
+- [x] `npx eslint .`
 
 ---
 
@@ -266,4 +266,4 @@ Add integration tests and verify the full flow.
 | 7 | Update iteration header display | Done |
 | 8 | Add compacted event to event stream | Done |
 | 9 | Add fields to TypeScript types | Done |
-| 10 | Verify end-to-end with tests | Not Started |
+| 10 | Verify end-to-end with tests | Done |
