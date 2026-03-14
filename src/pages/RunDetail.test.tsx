@@ -148,11 +148,11 @@ describe("RunDetail", () => {
   // =========================================================================
 
   describe("loading state", () => {
-    it('shows "Loading..." while invoke is pending', () => {
+    it("shows spinner while invoke is pending", () => {
       mockInvoke.mockReturnValue(new Promise(() => {}));
       renderRunDetail();
 
-      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
     });
   });
 
@@ -216,25 +216,24 @@ describe("RunDetail", () => {
   // =========================================================================
 
   describe("header", () => {
-    it('shows "Run Detail" title', async () => {
+    it("shows display title from plan file", async () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText(/Run Detail/)).toBeInTheDocument();
+        expect(
+          screen.getAllByText("fix bug").length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
 
-    it("shows formatted date from trace.start_time", async () => {
-      setupDefaultInvoke({ start_time: "2026-03-10T10:00:00Z" });
+    it("falls back to prompt text when plan_file is null", async () => {
+      setupDefaultInvoke({ plan_file: null, prompt: "Fix the login bug" });
       renderRunDetail();
 
       await waitFor(() => {
-        // The date should be formatted (e.g. "Mar 10, 2026" or similar)
         expect(
-          screen.getByText(
-            /Mar.*10.*2026|10.*Mar.*2026|2026.*03.*10|3\/10\/2026/,
-          ),
-        ).toBeInTheDocument();
+          screen.getAllByText("Fix the login bug").length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
   });
@@ -249,7 +248,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Completed")).toBeInTheDocument();
+        expect(
+          screen.getAllByText("Completed").length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -262,13 +263,15 @@ describe("RunDetail", () => {
       });
     });
 
-    it('shows "\u2014" when plan_file is null', async () => {
+    it("does not show Plan row when plan_file is null", async () => {
       setupDefaultInvoke({ plan_file: null });
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("\u2014")).toBeInTheDocument();
+        expect(screen.getByText("Iterations")).toBeInTheDocument();
       });
+
+      expect(screen.queryByText("Plan")).not.toBeInTheDocument();
     });
 
     it("shows iteration count", async () => {
@@ -297,22 +300,21 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText(/30m.*0s/)).toBeInTheDocument();
+        expect(
+          screen.getAllByText(/30m.*0s/).length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
 
-    it('shows "\u2014" for duration when end_time is null', async () => {
+    it("does not show Duration row when end_time is null", async () => {
       setupDefaultInvoke({ end_time: null });
       renderRunDetail();
 
       await waitFor(() => {
-        // There should be an em dash for duration.
-        // We look for the duration label first to confirm the section loaded,
-        // then verify an em dash exists near it.
-        expect(screen.getByText(/Duration/)).toBeInTheDocument();
-        const dashes = screen.getAllByText("\u2014");
-        expect(dashes.length).toBeGreaterThanOrEqual(1);
+        expect(screen.getByText("Iterations")).toBeInTheDocument();
       });
+
+      expect(screen.queryByText("Duration")).not.toBeInTheDocument();
     });
 
     it("shows token counts (input + cache_read + cache_creation) / output", async () => {
@@ -360,7 +362,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Completed")).toBeInTheDocument();
+        expect(
+          screen.getAllByText("Completed").length,
+        ).toBeGreaterThanOrEqual(1);
       });
 
       // "Failure" or "Reason" label should not appear
@@ -378,7 +382,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Completed")).toBeInTheDocument();
+        expect(
+          screen.getAllByText("Completed").length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -387,7 +393,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Failed")).toBeInTheDocument();
+        expect(
+          screen.getAllByText("Failed").length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -396,7 +404,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Max Iters")).toBeInTheDocument();
+        expect(
+          screen.getAllByText("Max Iters").length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -405,7 +415,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("Cancelled")).toBeInTheDocument();
+        expect(
+          screen.getAllByText("Cancelled").length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -414,7 +426,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("something_unexpected")).toBeInTheDocument();
+        expect(
+          screen.getAllByText("something_unexpected").length,
+        ).toBeGreaterThanOrEqual(1);
       });
     });
   });
@@ -574,11 +588,12 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("plan")).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: "plan" }),
+        ).toBeInTheDocument();
       });
 
-      // Click the plan display name (filename without .md)
-      fireEvent.click(screen.getByText("plan"));
+      fireEvent.click(screen.getByRole("button", { name: "plan" }));
 
       await waitFor(() => {
         expect(screen.getByTestId("plan-panel")).toBeInTheDocument();
@@ -590,13 +605,18 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(screen.getByText("plan")).toBeInTheDocument();
+        expect(
+          screen.getAllByText("plan").length,
+        ).toBeGreaterThanOrEqual(1);
       });
 
-      // Click the plan display name — should NOT open PlanPanel
-      fireEvent.click(screen.getByText("plan"));
+      // No element with role="button" and name "plan" should exist
+      expect(
+        screen.queryByRole("button", { name: "plan" }),
+      ).not.toBeInTheDocument();
 
-      // PlanPanel should not appear
+      // Clicking should not open PlanPanel
+      fireEvent.click(screen.getAllByText("plan")[0]);
       expect(screen.queryByTestId("plan-panel")).not.toBeInTheDocument();
     });
   });

@@ -182,7 +182,7 @@ describe("App", () => {
   describe("route /run/:repoId/:sessionId", () => {
     it("renders RunDetail page with loading state", () => {
       renderWithRouter(["/run/test-id/sess-123"]);
-      expect(screen.getByText("Loading...")).toBeInTheDocument();
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
     });
   });
 
