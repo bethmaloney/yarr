@@ -142,9 +142,9 @@ Install the `anser` npm package and its type definitions.
 - `anser` ships its own TypeScript types, no separate `@types/anser` needed
 
 **Checklist:**
-- [ ] Run `npm install anser`
-- [ ] Verify `anser` appears in `package.json` dependencies
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Run `npm install anser`
+- [x] Verify `anser` appears in `package.json` dependencies
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -164,11 +164,11 @@ Add the 16-color palette and corresponding CSS utility classes to `globals.css`.
 - Add `.ansi-bold`, `.ansi-dim`, `.ansi-italic`, `.ansi-underline`, `.ansi-strikethrough` classes
 
 **Checklist:**
-- [ ] Add `--ansi-*` custom properties to `:root`
-- [ ] Add foreground color classes
-- [ ] Add background color classes
-- [ ] Add text decoration classes
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Add `--ansi-*` custom properties to `:root`
+- [x] Add foreground color classes
+- [x] Add background color classes
+- [x] Add text decoration classes (used `text-decoration-line` instead of `text-decoration` so underline+strikethrough can coexist)
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -186,7 +186,8 @@ Create the parser module that wraps `anser` and maps output to CSS class names.
 - Export `AnsiSegment` interface and `parseAnsi` function
 - Use `Anser.ansiToJson()` with `use_classes: true`
 - Map `fg`/`bg` to `ansi-fg-{color}` / `ansi-bg-{color}` class names
-- Map `decoration` to corresponding `ansi-*` class names
+- Map `decorations` (plural array, not singular `decoration`) to corresponding `ansi-*` class names — `decoration` only holds the last one
+- Strip `ansi-` prefix from `entry.fg`/`entry.bg` before constructing class names (Anser returns e.g. `"ansi-red"`, not `"red"`)
 - Filter out empty content entries
 
 **Unit tests to include:**
@@ -201,10 +202,10 @@ Create the parser module that wraps `anser` and maps output to CSS class names.
 - Malformed sequences stripped (no raw escape chars in output text)
 
 **Checklist:**
-- [ ] Create `src/lib/ansi.ts`
-- [ ] Create `src/lib/ansi.test.ts`
-- [ ] All unit tests pass (`npm test`)
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/lib/ansi.ts`
+- [x] Create `src/lib/ansi.test.ts`
+- [x] All unit tests pass (`npm test`)
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -266,8 +267,8 @@ Add an E2E test that verifies ANSI-colored tool output renders with the correct 
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Install `anser` dependency | Not Started |
-| 2 | Add ANSI palette CSS and utility classes | Not Started |
-| 3 | Create `parseAnsi` module with unit tests | Not Started |
+| 1 | Install `anser` dependency | Done |
+| 2 | Add ANSI palette CSS and utility classes | Done |
+| 3 | Create `parseAnsi` module with unit tests | Done |
 | 4 | Integrate ANSI rendering into `ToolOutputSection` with component tests | Not Started |
 | 5 | E2E test for ANSI color rendering | Not Started |
