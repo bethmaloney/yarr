@@ -185,6 +185,7 @@ describe("App", () => {
       // The loading state renders breadcrumbs with the fallback title "Run sess-123"
       // and a Loader2 spinner (no "Loading..." text).
       expect(screen.getByText("Run sess-123")).toBeInTheDocument();
+      expect(document.querySelector(".animate-spin")).toBeInTheDocument();
     });
   });
 
