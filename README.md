@@ -1,4 +1,4 @@
-# Yarr — Yet Another Ralph Reigns
+# Yarr — Yet Another Ralph Runner
 
 Desktop GUI that orchestrates Claude Code sessions — Ralph loops, research/planning, and a dashboard to monitor everything. Built on top of `claude -p` using subscription auth (no API keys).
 

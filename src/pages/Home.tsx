@@ -212,7 +212,7 @@ export default function Home() {
         <div>
           <h1 className="text-3xl text-primary font-bold">Yarr</h1>
           <p className="subtitle text-sm text-muted-foreground mt-1">
-            Claude Orchestrator
+            Yet Another Ralph Runner
           </p>
         </div>
         <div className="flex gap-2 items-center pt-2">

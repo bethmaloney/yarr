@@ -227,10 +227,10 @@ describe("Home", () => {
     expect(screen.getByText("Yarr")).toBeInTheDocument();
   });
 
-  it('shows "Claude Orchestrator" subtitle', () => {
+  it('shows "Yet Another Ralph Runner" subtitle', () => {
     setupMockState();
     renderHome();
-    expect(screen.getByText("Claude Orchestrator")).toBeInTheDocument();
+    expect(screen.getByText("Yet Another Ralph Runner")).toBeInTheDocument();
   });
 
   // =========================================================================

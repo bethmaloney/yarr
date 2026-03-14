@@ -1,4 +1,4 @@
-# Yarr
+# Yarr — Yet Another Ralph Runner
 
 Desktop app that orchestrates Claude Code sessions (Ralph loops). Layer on top of `claude -p` using subscription auth.
 

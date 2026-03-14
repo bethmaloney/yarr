@@ -2,7 +2,7 @@
 name = "yarr"
 version = "0.1.0"
 edition = "2021"
-description = "Yet Another Ralph Reigns"
+description = "Yet Another Ralph Runner"
 
 [lib]
 name = "yarr_lib"

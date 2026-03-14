@@ -296,7 +296,7 @@ test.describe("Home page toolbar alignment", () => {
 
   test("subtitle is still visible", async ({ tauriPage: page }) => {
     await expect(
-      page.locator(".subtitle", { hasText: "Claude Orchestrator" }),
+      page.locator(".subtitle", { hasText: "Yet Another Ralph Runner" }),
     ).toBeVisible();
   });
 });

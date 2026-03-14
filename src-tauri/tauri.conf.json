@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Yarr - Claude Orchestrator",
+        "title": "Yarr — Yet Another Ralph Runner",
         "width": 900,
         "height": 700
       }
