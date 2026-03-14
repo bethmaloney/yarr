@@ -1,70 +1,48 @@
 # Yarr — Yet Another Ralph Runner
 
-Desktop app that orchestrates [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions. Run Ralph loops, fire off one-shots, and monitor everything from a single dashboard. Built on `claude -p` with subscription auth — no API keys needed.
+A desktop app for running [Claude Code](https://docs.anthropic.com/en/docs/claude-code) in a loop. Point it at a repo and a plan file, and Yarr will repeatedly spawn `claude -p` until the work is done — managing iterations, checks, git operations, and cost tracking so you don't have to babysit a terminal.
 
-## Screenshots
+Uses your existing Claude subscription auth. No API keys needed.
 
-| Home | Repo Detail |
-|------|-------------|
-| ![Home](screenshots/home.png) | ![Repo Detail](screenshots/repo-detail.png) |
-
-| Session Detail | History |
-|----------------|---------|
-| ![Session Detail](screenshots/oneshot-detail.png) | ![History](screenshots/history.png) |
+![Session detail view showing iterations, cost tracking, and result summary](screenshots/oneshot-detail.png)
 
 ## Why Yarr?
 
-Running Claude Code in a loop (a "Ralph loop") means spawning `claude -p` repeatedly against a repo with a plan file. Yarr takes ownership of that loop so you can:
+Running Claude Code in a loop (a "Ralph loop") means spawning `claude -p` over and over against a repo with a plan. Without tooling, you're left tabbing between terminals, eyeballing token spend, and manually re-running after failures. Yarr takes ownership of that loop:
 
-- **Run multiple repos concurrently** from one place
-- **Track cost, context usage, and iterations** in real time
-- **Add custom checks** (lint, tests) that run between iterations or after completion
-- **Handle git workflows** — branch creation, push, and merge conflict resolution via Claude
-- **Review full session traces** with per-iteration breakdowns
+- **Multiple repos at once** — Run concurrent sessions across different repositories from a single dashboard.
+- **Cost and context tracking** — See token counts, dollar spend, and context window usage per iteration in real time.
+- **Custom checks between iterations** — Define shell commands (lint, tests, type checks) that run after each iteration. Failed checks trigger automatic fix attempts.
+- **Git workflow automation** — Branch creation, auto-push, and merge conflict resolution handled by Claude.
+- **One-shot mode** — Single-purpose runs with a design phase followed by implementation. Supports resume on failure.
+- **Full session traces** — Every session writes a JSON trace to `./traces/` with per-iteration breakdowns. Browse them in the built-in history view.
 
-## Features
+## Getting Started
 
-**Repository management** — Add local or SSH-remote repos. See git status (branch, dirty files, ahead/behind) at a glance.
-
-**Ralph loops** — Pick a plan file, configure model/effort/max iterations, and run. Yarr spawns one `claude -p` process per iteration. No state is injected between iterations — Claude reads fresh repo context each time.
-
-**One-shots** — Single-purpose runs with a design phase followed by implementation. Supports resume on failure and configurable merge strategies.
-
-**Live monitoring** — Stream events as they happen: tool use, assistant text, check results, git sync status. Events are grouped by iteration with expandable detail.
-
-**Custom checks** — Define checks (shell commands) that run after each iteration or post-completion. Failed checks trigger automatic fix attempts.
-
-**Git sync** — Optional auto-push with conflict detection and Claude-assisted resolution.
-
-**Session traces** — Every session writes a JSON trace to `./traces/` with outcome, cost, token counts, context usage, and per-iteration spans. Browse and inspect traces in the history view.
-
-## Prerequisites
+### Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+
 - [Rust](https://rustup.rs/) (stable toolchain)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
 - Platform-specific Tauri v2 dependencies — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
-## Setup
+### Install and run
 
 ```bash
-# Clone the repo
-git clone <repo-url> && cd yarr3
-
-# Install frontend dependencies
+git clone <repo-url> && cd yarr2
 npm install
-
-# Run in development mode (starts both Vite dev server and Tauri app)
 npx tauri dev
 ```
 
-## Development
+This starts both the Vite dev server and the Tauri desktop app with hot-reload.
+
+### Development commands
 
 ```bash
 # Frontend type checking
 npx tsc --noEmit
 
-# Lint / format
+# Lint and format
 npx eslint .
 npx prettier --check .
 
@@ -78,6 +56,15 @@ npm run test:e2e
 cd src-tauri && cargo check
 cd src-tauri && cargo test
 ```
+
+## How it works
+
+1. Add a repo (local path or SSH remote) and select a plan file — a markdown document describing what to build.
+2. Yarr spawns `claude -p` with `--output-format stream-json --verbose`, streaming events back to the UI in real time.
+3. Each iteration is a short-lived `claude -p` process. The loop is owned by Yarr, not Claude's session continuation.
+4. Between iterations, Yarr runs any configured checks and git sync operations.
+5. The session ends when Claude signals completion, hits the max iteration limit, or you stop it manually.
+6. A full trace is written to `./traces/` for later review.
 
 ## Project structure
 
@@ -102,12 +89,3 @@ src-tauri/src/          # Rust backend (Tauri v2, Tokio)
     wsl.rs              # WSL subprocess management
     mock.rs             # Mock runtime for tests
 ```
-
-## How it works
-
-1. You add a repo and select a plan file (a markdown document describing what to build).
-2. Yarr spawns `claude -p` with `--output-format stream-json --verbose`, streaming events back to the UI in real time.
-3. Each iteration is a short-lived `claude -p` process. The loop is owned by Yarr, not Claude's built-in session continuation.
-4. Between iterations, Yarr runs any configured checks and git sync operations.
-5. The session ends when Claude signals completion, hits the max iteration limit, or you stop it manually.
-6. A full trace is written to `./traces/` for later review.
