@@ -202,7 +202,7 @@ impl SshRuntime {
         ));
 
         let remote_cmd = parts.join(" && ");
-        ssh_command(&self.ssh_host, &remote_cmd)
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
     pub fn build_tail_command(&self, session_id: &str) -> Command {
@@ -215,7 +215,7 @@ impl SshRuntime {
         parts.extend(env_export_parts(resolved_env));
         parts.push("command -v tmux && command -v claude && echo OK".to_string());
         let remote_cmd = parts.join(" && ");
-        ssh_command(&self.ssh_host, &remote_cmd)
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
     pub fn build_check_tmux_command(&self, session_id: &str) -> Command {
@@ -556,6 +556,7 @@ impl RuntimeProvider for SshRuntime {
             },
             shell_env::SSH_TIMEOUT,
             shell_env::SSH_DENYLIST,
+            Some("$SHELL"),
         )
         .await
         {

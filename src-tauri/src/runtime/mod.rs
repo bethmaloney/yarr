@@ -148,6 +148,7 @@ pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
                 },
                 shell_env::LOCAL_TIMEOUT,
                 &[],
+                None,
             )
             .await
             {

@@ -74,10 +74,15 @@ fn is_valid_shell_path(s: &str) -> bool {
 
 /// Snapshot the user's shell environment by running an interactive login shell,
 /// capturing `env -0` output between UUID markers.
+///
+/// `shell_override` lets callers specify the shell to use. Pass `Some("$SHELL")`
+/// for SSH contexts so the *remote* side resolves `$SHELL` to the remote user's
+/// default shell instead of using the local machine's `$SHELL`.
 pub async fn snapshot_shell_env<F, Fut>(
     spawn_fn: F,
     timeout: Duration,
     extra_denylist: &[&str],
+    shell_override: Option<&str>,
 ) -> Result<HashMap<String, String>>
 where
     F: FnOnce(String) -> Fut,
@@ -85,20 +90,19 @@ where
 {
     let marker = uuid::Uuid::new_v4().to_string().replace('-', "");
 
-    let shell = std::env::var("SHELL").unwrap_or_default();
-    let shell = if shell.is_empty() || !is_valid_shell_path(&shell) {
-        "bash".to_string()
+    let shell = if let Some(s) = shell_override {
+        s.to_string()
     } else {
-        shell
-    };
-
-    let is_fish = std::path::Path::new(&shell)
-        .file_name()
-        .map_or(false, |n| n == "fish");
-    let shell = if is_fish {
-        "bash".to_string()
-    } else {
-        shell
+        let s = std::env::var("SHELL").unwrap_or_default();
+        let s = if s.is_empty() || !is_valid_shell_path(&s) {
+            "bash".to_string()
+        } else {
+            s
+        };
+        let is_fish = std::path::Path::new(&s)
+            .file_name()
+            .map_or(false, |n| n == "fish");
+        if is_fish { "bash".to_string() } else { s }
     };
 
     let cmd = format!(
@@ -358,7 +362,7 @@ mod tests {
             })
         };
 
-        let result = snapshot_shell_env(spawn_fn, LOCAL_TIMEOUT, &[]).await.unwrap();
+        let result = snapshot_shell_env(spawn_fn, LOCAL_TIMEOUT, &[], None).await.unwrap();
 
         assert_eq!(result.get("HOME").unwrap(), "/home/testuser");
         assert_eq!(result.get("EDITOR").unwrap(), "nvim");
@@ -381,7 +385,7 @@ mod tests {
         };
 
         // Use a very short timeout so the test completes quickly
-        let result = snapshot_shell_env(spawn_fn, Duration::from_millis(50), &[]).await;
+        let result = snapshot_shell_env(spawn_fn, Duration::from_millis(50), &[], None).await;
 
         assert!(result.is_err(), "expected timeout error");
     }
@@ -466,7 +470,7 @@ mod tests {
             })
         };
 
-        let result = snapshot_shell_env(spawn_fn, LOCAL_TIMEOUT, &[]).await.unwrap();
+        let result = snapshot_shell_env(spawn_fn, LOCAL_TIMEOUT, &[], None).await.unwrap();
 
         assert_eq!(result.get("HOME").unwrap(), "/home/testuser");
         assert_eq!(result.get("LANG").unwrap(), "C.UTF-8");
@@ -534,7 +538,7 @@ mod tests {
             })
         };
 
-        let result = snapshot_shell_env(spawn_fn, LOCAL_TIMEOUT, SSH_DENYLIST)
+        let result = snapshot_shell_env(spawn_fn, LOCAL_TIMEOUT, SSH_DENYLIST, None)
             .await
             .unwrap();
 
