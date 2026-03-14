@@ -5,7 +5,11 @@ import { IterationGroupComponent } from "./IterationGroup";
 import type { IterationGroup } from "../iteration-groups";
 import type { SessionEvent } from "../types";
 import { eventEmoji, eventLabel } from "../event-format";
-import { formatTokenCount, contextBarColor } from "../context-bar";
+import {
+  formatTokenCount,
+  contextBarColor,
+  contextTokensColor,
+} from "../context-bar";
 
 afterEach(() => {
   cleanup();
@@ -173,10 +177,9 @@ describe("IterationGroupComponent", () => {
     renderComponent({
       group: makeGroup({ inputTokens: 50000, outputTokens: 12000 }),
     });
-    // inputTokens uses toLocaleString() in the header stats
-    expect(screen.getByText(/50,000/)).toBeInTheDocument();
-    // outputTokens also uses toLocaleString() in the header stats
-    expect(screen.getByText(/12,000/)).toBeInTheDocument();
+    // inputTokens and outputTokens use formatTokenCount() in the header stats
+    expect(screen.getByText(/50k in/)).toBeInTheDocument();
+    expect(screen.getByText(/12k out/)).toBeInTheDocument();
   });
 
   it("does not show tokens text when both are zero", () => {
@@ -253,28 +256,27 @@ describe("IterationGroupComponent", () => {
   // 8. Context bar percentage: Correct width and label
   // =========================================================================
 
-  it("shows correct percentage in the iteration header", () => {
+  it("shows context tokens in the iteration header when contextTokens > 0", () => {
     renderComponent({
-      group: makeGroup({ contextWindow: 200000, inputTokens: 100000 }),
+      group: makeGroup({ contextTokens: 100000 }),
     });
-    // 100000/200000 = 50%
-    expect(screen.getByText(/50%/)).toBeInTheDocument();
+    // 100000 -> "100k ctx"
+    expect(screen.getByText(/100k ctx/)).toBeInTheDocument();
   });
 
-  it("shows context percentage in the iteration header", () => {
+  it("shows context tokens with correct formatTokenCount format", () => {
     renderComponent({
-      group: makeGroup({ contextWindow: 200000, inputTokens: 60000 }),
+      group: makeGroup({ contextTokens: 142000 }),
     });
-    // 60000/200000 = 30%
-    // Should show "30% ctx" in the header stats
-    expect(screen.getByText(/30% ctx/)).toBeInTheDocument();
+    // 142000 -> "142k ctx"
+    expect(screen.getByText(/142k ctx/)).toBeInTheDocument();
   });
 
-  it("does not show context percentage in header when contextWindow is 0", () => {
+  it("does not show context tokens in header when contextTokens is 0", () => {
     renderComponent({
-      group: makeGroup({ contextWindow: 0, inputTokens: 0 }),
+      group: makeGroup({ contextTokens: 0 }),
     });
-    expect(screen.queryByText(/% ctx/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ctx/)).not.toBeInTheDocument();
   });
 
   it("does not show percentage in the context bar label", () => {
@@ -299,16 +301,13 @@ describe("IterationGroupComponent", () => {
   });
 
   it("shows formatted token counts in the context bar label", () => {
-    renderComponent({
+    const { container } = renderComponent({
       group: makeGroup({ contextWindow: 200000, inputTokens: 100000 }),
     });
-    // Should show "100k / 200k (50%)" or similar
-    expect(
-      screen.getByText(new RegExp(`${formatTokenCount(100000)}`)),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(new RegExp(`${formatTokenCount(200000)}`)),
-    ).toBeInTheDocument();
+    const barLabel = container.querySelector(".context-bar-label");
+    expect(barLabel).not.toBeNull();
+    expect(barLabel!.textContent).toContain(formatTokenCount(100000));
+    expect(barLabel!.textContent).toContain(formatTokenCount(200000));
   });
 
   // =========================================================================
@@ -1188,6 +1187,147 @@ describe("IterationGroupComponent", () => {
 
       // No "Show more" button
       expect(screen.queryByText(/Show more/)).not.toBeInTheDocument();
+    });
+  });
+
+  // =========================================================================
+  // 22. Token display format, context tokens, and compaction icon
+  // =========================================================================
+
+  describe("token display format, context tokens, and compaction", () => {
+    it("shows token counts using formatTokenCount format, not toLocaleString", () => {
+      renderComponent({
+        group: makeGroup({ inputTokens: 50000, outputTokens: 12000 }),
+      });
+      // Should show "50k in" and "12k out", not "50,000 in" and "12,000 out"
+      expect(screen.getByText(/50k in/)).toBeInTheDocument();
+      expect(screen.getByText(/12k out/)).toBeInTheDocument();
+    });
+
+    it("shows formatTokenCount format for large token counts", () => {
+      renderComponent({
+        group: makeGroup({ inputTokens: 1500000, outputTokens: 2000000 }),
+      });
+      // 1500000 -> "1.5M", 2000000 -> "2M"
+      expect(screen.getByText(/1\.5M in/)).toBeInTheDocument();
+      expect(screen.getByText(/2M out/)).toBeInTheDocument();
+    });
+
+    it("shows exact comma-separated counts in hover title attribute", () => {
+      const { container } = renderComponent({
+        group: makeGroup({ inputTokens: 50000, outputTokens: 12000 }),
+      });
+      // The token counts should be wrapped in a span with a title attribute
+      // containing exact comma-separated numbers
+      const statsSpan = container.querySelector(".iteration-stats");
+      expect(statsSpan).not.toBeNull();
+      const titleSpan = statsSpan!.querySelector("span[title]");
+      expect(titleSpan).not.toBeNull();
+      expect(titleSpan!.getAttribute("title")).toContain(
+        (50000).toLocaleString(),
+      );
+      expect(titleSpan!.getAttribute("title")).toContain(
+        (12000).toLocaleString(),
+      );
+    });
+
+    it("shows context tokens display when contextTokens > 0", () => {
+      renderComponent({
+        group: makeGroup({ contextTokens: 142000 }),
+      });
+      expect(screen.getByText(/142k ctx/)).toBeInTheDocument();
+    });
+
+    it("applies correct color from contextTokensColor for low token count", () => {
+      const { container } = renderComponent({
+        group: makeGroup({ contextTokens: 50000 }),
+      });
+      const statsSpan = container.querySelector(".iteration-stats");
+      expect(statsSpan).not.toBeNull();
+      // Find the element with "ctx" text that has a style.color
+      const allSpans = statsSpan!.querySelectorAll("span");
+      const ctxSpan = Array.from(allSpans).find(
+        (el) =>
+          el.textContent?.includes("ctx") &&
+          (el as HTMLElement).style.color !== "",
+      ) as HTMLElement | undefined;
+      expect(ctxSpan).toBeDefined();
+      // jsdom converts hex to rgb, so check for rgb equivalent of #34d399
+      expect(ctxSpan!.style.color).toBe("rgb(52, 211, 153)");
+    });
+
+    it("applies yellow color from contextTokensColor for medium token count", () => {
+      const { container } = renderComponent({
+        group: makeGroup({ contextTokens: 100000 }),
+      });
+      const statsSpan = container.querySelector(".iteration-stats");
+      expect(statsSpan).not.toBeNull();
+      const allSpans = statsSpan!.querySelectorAll("span");
+      const ctxSpan = Array.from(allSpans).find(
+        (el) =>
+          el.textContent?.includes("ctx") &&
+          (el as HTMLElement).style.color !== "",
+      ) as HTMLElement | undefined;
+      expect(ctxSpan).toBeDefined();
+      // jsdom converts hex to rgb, so check for rgb equivalent of #fbbf24
+      expect(ctxSpan!.style.color).toBe("rgb(251, 191, 36)");
+    });
+
+    it("applies red color from contextTokensColor for high token count", () => {
+      const { container } = renderComponent({
+        group: makeGroup({ contextTokens: 150000 }),
+      });
+      const statsSpan = container.querySelector(".iteration-stats");
+      expect(statsSpan).not.toBeNull();
+      const allSpans = statsSpan!.querySelectorAll("span");
+      const ctxSpan = Array.from(allSpans).find(
+        (el) =>
+          el.textContent?.includes("ctx") &&
+          (el as HTMLElement).style.color !== "",
+      ) as HTMLElement | undefined;
+      expect(ctxSpan).toBeDefined();
+      // jsdom converts hex to rgb, so check for rgb equivalent of #f87171
+      expect(ctxSpan!.style.color).toBe("rgb(248, 113, 113)");
+    });
+
+    it("does not show context tokens when contextTokens is 0", () => {
+      renderComponent({
+        group: makeGroup({ contextTokens: 0 }),
+      });
+      expect(screen.queryByText(/ctx/)).not.toBeInTheDocument();
+    });
+
+    it("shows compaction icon when group.compacted is true", () => {
+      renderComponent({
+        group: makeGroup({ contextTokens: 100000, compacted: true }),
+      });
+      expect(screen.getByText(/⟳/)).toBeInTheDocument();
+    });
+
+    it("does not show compaction icon when group.compacted is false", () => {
+      renderComponent({
+        group: makeGroup({ contextTokens: 100000, compacted: false }),
+      });
+      expect(screen.queryByText(/⟳/)).not.toBeInTheDocument();
+    });
+
+    it("shows both context tokens and compaction icon together", () => {
+      renderComponent({
+        group: makeGroup({ contextTokens: 142000, compacted: true }),
+      });
+      // Should show context tokens display
+      expect(screen.getByText(/142k ctx/)).toBeInTheDocument();
+      // Should also show compaction icon
+      expect(screen.getByText(/⟳/)).toBeInTheDocument();
+    });
+
+    it("does not show compaction icon when compacted is true but contextTokens is 0", () => {
+      // Compaction icon only shows alongside context tokens display
+      renderComponent({
+        group: makeGroup({ contextTokens: 0, compacted: true }),
+      });
+      // No ctx display means no compaction icon either (since it follows ctx)
+      expect(screen.queryByText(/⟳/)).not.toBeInTheDocument();
     });
   });
 });

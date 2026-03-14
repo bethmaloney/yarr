@@ -189,11 +189,11 @@ Update the iteration header to show human-friendly tokens with hover, context us
 - Keep the context bar below the header as-is (it uses contextWindow from the result event)
 
 **Checklist:**
-- [ ] Human-friendly token counts with hover title
-- [ ] Context tokens display with color
-- [ ] Compaction ⟳ icon
+- [x] Human-friendly token counts with hover title
+- [x] Context tokens display with color
+- [x] Compaction ⟳ icon
 - [ ] Visual verification with `npx tauri dev`
-- [ ] `npx tsc --noEmit`
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -263,7 +263,7 @@ Add integration tests and verify the full flow.
 | 4 | Emit events in SSH orchestrator | Done |
 | 5 | Add fields to IterationGroup | Done |
 | 6 | Add contextTokensColor helper | Done |
-| 7 | Update iteration header display | Not Started |
+| 7 | Update iteration header display | Done |
 | 8 | Add compacted event to event stream | Not Started |
 | 9 | Add fields to TypeScript types | Done |
 | 10 | Verify end-to-end with tests | Not Started |

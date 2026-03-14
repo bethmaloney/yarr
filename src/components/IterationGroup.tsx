@@ -2,7 +2,11 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import type { IterationGroup } from "../iteration-groups";
 import { eventEmoji, eventLabel } from "../event-format";
-import { formatTokenCount, contextBarColor } from "../context-bar";
+import {
+  formatTokenCount,
+  contextBarColor,
+  contextTokensColor,
+} from "../context-bar";
 import Markdown from "react-markdown";
 
 interface IterationGroupProps {
@@ -154,12 +158,28 @@ export function IterationGroupComponent({
         <span className="iteration-title">Iteration {group.iteration}</span>
         <span className="iteration-stats text-muted-foreground">
           — {group.events.length} events · ${group.cost.toFixed(2)}
-          {group.contextWindow > 0 ? <> · {percentage}% ctx</> : null}
           {group.inputTokens || group.outputTokens ? (
             <>
               {" "}
-              · {group.inputTokens.toLocaleString()} in /{" "}
-              {group.outputTokens.toLocaleString()} out
+              ·{" "}
+              <span
+                title={`${group.inputTokens.toLocaleString()} in / ${group.outputTokens.toLocaleString()} out`}
+              >
+                {formatTokenCount(group.inputTokens)} in /{" "}
+                {formatTokenCount(group.outputTokens)} out
+              </span>
+            </>
+          ) : null}
+          {group.contextTokens > 0 ? (
+            <>
+              {" "}
+              ·{" "}
+              <span
+                style={{ color: contextTokensColor(group.contextTokens) }}
+              >
+                {formatTokenCount(group.contextTokens)} ctx
+                {group.compacted ? " \u27F3" : ""}
+              </span>
             </>
           ) : null}
           {group.startTs && group.endTs ? (
