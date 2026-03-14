@@ -16,7 +16,7 @@ export interface PlanProgress {
   currentTask: TaskProgress | null;
 }
 
-const TASK_HEADING_RE = /^##\s+(?:Task\s+)?(\d+)[:\s\u2014\u2013-]*(.*)$/i;
+const TASK_HEADING_RE = /^#{2,3}\s+(?:Task\s+)?(\d+)[:\s\u2014\u2013-]*(.*)$/i;
 const CHECKLIST_RE = /^[\s]*- \[([ xX])\]/;
 
 export function parsePlanProgress(content: string): PlanProgress | null {

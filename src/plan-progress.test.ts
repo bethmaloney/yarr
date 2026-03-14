@@ -212,6 +212,43 @@ but no structure.
     });
   });
 
+  describe("h3 headings (### Task N)", () => {
+    it("parses ### Task headings the same as ## Task headings", () => {
+      const markdown = `# Plan
+
+### Task 1: Parse stuff
+- [x] Add struct
+- [x] Add field
+- [ ] Add test
+
+### Task 2: Wire it up
+- [ ] Emit event
+- [ ] Handle in store
+`;
+
+      const result = parsePlanProgress(markdown);
+
+      expect(result).not.toBeNull();
+      const progress = result as PlanProgress;
+      expect(progress.tasks).toHaveLength(2);
+      expect(progress.tasks[0]).toEqual({
+        number: 1,
+        title: "Parse stuff",
+        total: 3,
+        completed: 2,
+      });
+      expect(progress.tasks[1]).toEqual({
+        number: 2,
+        title: "Wire it up",
+        total: 2,
+        completed: 0,
+      });
+      expect(progress.totalItems).toBe(5);
+      expect(progress.completedItems).toBe(2);
+      expect(progress.currentTask?.number).toBe(1);
+    });
+  });
+
   describe("malformed and empty input", () => {
     it("returns null for empty string", () => {
       expect(parsePlanProgress("")).toBeNull();
