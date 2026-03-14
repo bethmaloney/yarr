@@ -133,6 +133,7 @@ pub enum SessionEvent {
         iteration: u32,
         tool_name: String,
         tool_input: Option<serde_json::Value>,
+        #[serde(default)]
         tool_use_id: String,
     },
     /// Result/output from a tool invocation (Bash/Agent only)
@@ -151,7 +152,7 @@ pub enum SessionEvent {
     /// An iteration failed with an error (process crash, etc.)
     IterationFailed { iteration: u32, error: String },
     /// The entire session finished
-    SessionComplete { outcome: SessionOutcome, plan_file: Option<String> },
+    SessionComplete { outcome: SessionOutcome, #[serde(default)] plan_file: Option<String> },
     /// SSH connection lost, session may still be running remotely
     Disconnected { iteration: u32, reason: Option<String> },
     /// Attempting to reconnect to remote session
@@ -167,7 +168,7 @@ pub enum SessionEvent {
     /// A fix agent has completed
     CheckFixComplete { iteration: u32, check_name: String, attempt: u32, success: bool },
     /// 1-shot session has started
-    OneShotStarted { title: String, parent_repo_id: String, prompt: String, merge_strategy: String, worktree_path: String, branch: String },
+    OneShotStarted { title: String, parent_repo_id: String, prompt: String, merge_strategy: String, #[serde(default)] worktree_path: String, #[serde(default)] branch: String },
     /// Design phase has begun
     DesignPhaseStarted,
     /// Design phase completed, plan file written

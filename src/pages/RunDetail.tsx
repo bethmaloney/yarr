@@ -8,23 +8,20 @@ import { EventsList } from "@/components/EventsList";
 import { PlanPanel } from "../PlanPanel";
 import { parsePlanPreview, planDisplayName } from "../plan-preview";
 import { parsePlanProgress } from "../plan-progress";
+import { groupEventsByIteration, maxContextPercent } from "../iteration-groups";
+import { sessionContextColor } from "../context-bar";
+import { Loader2 } from "lucide-react";
 import type { SessionTrace, SessionEvent } from "../types";
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return (
-    d.toLocaleDateString([], {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }) +
-    " " +
-    d.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    })
-  );
+function planFilename(path: string | null): string {
+  if (!path) return "\u2014";
+  const normalized = path.replace(/\\/g, "/");
+  const parts = normalized.split("/");
+  let name = parts[parts.length - 1] || path;
+  name = name.replace(/\.[^.]+$/, "");
+  name = name.replace(/^\d{4}-\d{2}-\d{2}[-_]/, "");
+  name = name.replace(/[_-]/g, " ");
+  return name;
 }
 
 function formatDuration(start: string, end: string | null): string {
@@ -77,6 +74,12 @@ export default function RunDetail() {
     () => (trace?.plan_content ? parsePlanProgress(trace.plan_content) : null),
     [trace?.plan_content],
   );
+
+  const ctxPeak = useMemo(
+    () => maxContextPercent(groupEventsByIteration(events)),
+    [events],
+  );
+  const ctxPercent = ctxPeak > 0 ? ctxPeak : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -158,32 +161,34 @@ export default function RunDetail() {
     }, 1500);
   }
 
+  const displayTitle = trace
+    ? planFilename(trace.plan_file) !== "\u2014"
+      ? planFilename(trace.plan_file)
+      : trace.title ?? trace.prompt?.slice(0, 80) ?? `Run ${sessionId}`
+    : `Run ${sessionId}`;
+
   const breadcrumbs = [
     { label: "Home", onClick: () => navigate("/") },
     { label: "History", onClick: () => navigate("/history") },
-    { label: "Run " + sessionId },
+    { label: displayTitle },
   ];
 
   if (loading) {
     return (
-      <main className="max-w-[700px] mx-auto p-8">
+      <main className="max-w-[1100px] mx-auto p-8">
         <Breadcrumbs crumbs={breadcrumbs} />
-        <div className="text-center text-muted-foreground py-12">
-          <p>Loading...</p>
-        </div>
+        <Loader2 className="size-8 text-muted-foreground animate-spin mx-auto mt-12" />
       </main>
     );
   }
 
   if (error) {
     return (
-      <main className="max-w-[700px] mx-auto p-8">
+      <main className="max-w-[1100px] mx-auto p-8">
         <Breadcrumbs crumbs={breadcrumbs} />
-        <div>
-          <pre className="bg-destructive/10 text-destructive p-3 rounded overflow-x-auto">
-            {error}
-          </pre>
-        </div>
+        <pre className="bg-destructive/10 text-destructive p-3 rounded overflow-x-auto whitespace-pre-wrap break-words">
+          {error}
+        </pre>
       </main>
     );
   }
@@ -191,122 +196,172 @@ export default function RunDetail() {
   if (!trace) return null;
 
   const badge = outcomeBadge(trace.outcome);
+  const elapsed = formatDuration(trace.start_time, trace.end_time);
   const totalInputTokens =
     trace.total_input_tokens +
     trace.total_cache_read_tokens +
     trace.total_cache_creation_tokens;
 
   return (
-    <main className="max-w-[700px] mx-auto p-8">
+    <main className="mx-auto p-8 space-y-4 max-w-[1100px]">
       <Breadcrumbs crumbs={breadcrumbs} />
 
-      <h1 className="text-3xl text-primary mb-0">Run Detail</h1>
-      <p className="mt-1 text-muted-foreground text-sm">
-        {formatDate(trace.start_time)}
-      </p>
-
-      <div className="summary">
-        <h2 className="text-sm text-muted-foreground uppercase tracking-wide border-b border-border pb-1 mb-0">
-          Summary
-        </h2>
-
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 mt-3">
-          <dt className="text-muted-foreground text-sm">Outcome</dt>
-          <dd className="m-0 text-sm">
+      {/* Header card */}
+      <div className="bg-card border border-border rounded-lg p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold text-foreground truncate">
+              {displayTitle}
+            </h1>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 pt-1">
             <Badge variant={badge.variant}>{badge.label}</Badge>
-          </dd>
-
-          {trace.failure_reason && (
-            <>
-              <dt className="text-muted-foreground text-sm">Failure Reason</dt>
-              <dd className="m-0 text-sm">{trace.failure_reason}</dd>
-            </>
-          )}
-
-          <dt className="text-muted-foreground text-sm">Plan</dt>
-          <dd className="m-0 text-sm">
-            {trace.plan_content ? (
-              <span
-                className="cursor-pointer hover:underline"
-                role="button"
-                onClick={() => setPlanPanelOpen(true)}
-              >
-                {planDisplayName(trace.plan_file, planParsed?.name)}
+            {elapsed !== "\u2014" && (
+              <span className="text-sm text-muted-foreground font-mono">
+                {elapsed}
               </span>
-            ) : (
-              planDisplayName(trace.plan_file, planParsed?.name)
             )}
-          </dd>
+          </div>
+        </div>
 
-          {planParsed?.excerpt && (
-            <>
-              <dt className="text-muted-foreground text-sm">Plan Preview</dt>
-              <dd className="m-0 text-sm text-muted-foreground line-clamp-3">
-                {trace.plan_content ? (
-                  <span
-                    className="cursor-pointer hover:underline"
-                    role="button"
-                    onClick={() => setPlanPanelOpen(true)}
-                  >
-                    {planParsed.excerpt}
-                  </span>
-                ) : (
-                  planParsed.excerpt
-                )}
-              </dd>
-            </>
-          )}
+        {ctxPercent !== null && (
+          <div className="flex items-center gap-2 mt-2">
+            <div className="flex-1 h-1.5 bg-card-inset rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-[width] duration-300"
+                style={{
+                  width: `${Math.min(ctxPercent, 100)}%`,
+                  background: sessionContextColor(ctxPercent),
+                }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground font-mono shrink-0">
+              {ctxPercent}% ctx
+            </span>
+          </div>
+        )}
 
-          {trace.plan_content && (
-            <>
-              <dt className="sr-only">Actions</dt>
-              <dd className="m-0 text-sm">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPlanPanelOpen(true)}
-                >
-                  View Plan
-                </Button>
-              </dd>
-            </>
-          )}
-
-          <dt className="text-muted-foreground text-sm">Iterations</dt>
-          <dd className="m-0 text-sm">{trace.total_iterations}</dd>
-
-          <dt className="text-muted-foreground text-sm">Cost</dt>
-          <dd className="m-0 text-sm">${trace.total_cost_usd.toFixed(4)}</dd>
-
-          <dt className="text-muted-foreground text-sm">Duration</dt>
-          <dd className="m-0 text-sm">
-            {formatDuration(trace.start_time, trace.end_time)}
-          </dd>
-
-          <dt className="text-muted-foreground text-sm">Tokens</dt>
-          <dd className="m-0 text-sm">
-            {totalInputTokens.toLocaleString()} /{" "}
-            {trace.total_output_tokens.toLocaleString()}
-          </dd>
-
-          <dt className="text-muted-foreground text-sm">Session ID</dt>
-          <dd className="m-0 text-sm">
-            <span>{trace.session_id}</span>
-            <button
-              className="text-xs px-1.5 py-0.5 bg-secondary text-muted-foreground border border-border rounded cursor-pointer ml-2 align-middle"
-              onClick={handleCopy}
-            >
-              {copied ? "Copied!" : "Copy"}
-            </button>
-          </dd>
-        </dl>
       </div>
 
-      <EventsList
-        events={events}
-        repoPath={trace.repo_path}
-        planProgress={planProgress}
-      />
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
+        {/* Events */}
+        <EventsList
+          events={events}
+          repoPath={trace.repo_path}
+          planProgress={planProgress}
+        />
+
+        {/* Result sidebar */}
+        <section className="bg-card border border-border rounded-lg p-4">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3">
+            Result
+          </h2>
+          <div className="space-y-0 divide-y divide-border">
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2 first:pt-0">
+              <dt className="text-muted-foreground text-sm">Outcome</dt>
+              <dd className="m-0 text-sm">
+                <Badge variant={badge.variant}>{badge.label}</Badge>
+              </dd>
+            </div>
+
+            {trace.failure_reason && (
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
+                <dt className="text-muted-foreground text-sm">Reason</dt>
+                <dd className="m-0 text-sm text-destructive whitespace-pre-wrap break-words">
+                  {trace.failure_reason}
+                </dd>
+              </div>
+            )}
+
+            {(trace.plan_file || trace.plan_content) && (
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
+                <dt className="text-muted-foreground text-sm">Plan</dt>
+                <dd className="m-0 text-sm">
+                  {trace.plan_content ? (
+                    <span
+                      className="cursor-pointer hover:underline"
+                      role="button"
+                      onClick={() => setPlanPanelOpen(true)}
+                    >
+                      {planDisplayName(trace.plan_file, planParsed?.name)}
+                    </span>
+                  ) : (
+                    planDisplayName(trace.plan_file, planParsed?.name)
+                  )}
+                </dd>
+              </div>
+            )}
+
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
+              <dt className="text-muted-foreground text-sm">Iterations</dt>
+              <dd className="m-0 text-sm font-mono">
+                {trace.total_iterations}
+              </dd>
+            </div>
+
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
+              <dt className="text-muted-foreground text-sm">Total Cost</dt>
+              <dd className="m-0 text-sm font-mono">
+                ${trace.total_cost_usd.toFixed(4)}
+              </dd>
+            </div>
+
+            {ctxPercent !== null && (
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
+                <dt className="text-muted-foreground text-sm">Peak Context</dt>
+                <dd className="m-0 text-sm font-mono">
+                  <span style={{ color: sessionContextColor(ctxPercent) }}>
+                    {ctxPercent}%
+                  </span>
+                </dd>
+              </div>
+            )}
+
+            {elapsed !== "\u2014" && (
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
+                <dt className="text-muted-foreground text-sm">Duration</dt>
+                <dd className="m-0 text-sm font-mono">{elapsed}</dd>
+              </div>
+            )}
+
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
+              <dt className="text-muted-foreground text-sm">Tokens</dt>
+              <dd className="m-0 text-sm font-mono">
+                {totalInputTokens.toLocaleString()} /{" "}
+                {trace.total_output_tokens.toLocaleString()}
+              </dd>
+            </div>
+
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
+              <dt className="text-muted-foreground text-sm">Session ID</dt>
+              <dd className="m-0 text-sm font-mono truncate" title={trace.session_id}>
+                {trace.session_id}
+                <button
+                  className="text-xs px-1.5 py-0.5 bg-secondary text-muted-foreground border border-border rounded cursor-pointer ml-2 align-middle"
+                  onClick={handleCopy}
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </dd>
+            </div>
+
+            {trace.plan_content && (
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
+                <dt className="sr-only">Actions</dt>
+                <dd className="m-0 text-sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPlanPanelOpen(true)}
+                  >
+                    View Plan
+                  </Button>
+                </dd>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
 
       {trace.plan_content && trace.plan_file && (
         <PlanPanel
