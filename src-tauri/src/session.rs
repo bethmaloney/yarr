@@ -936,6 +936,21 @@ impl SessionRunner {
                             if let Some(ref model) = sys.model {
                                 tracing::debug!("Iteration {iteration}: model={model}");
                             }
+                            // Detect context compaction
+                            if sys.subtype.as_deref() == Some("compact_boundary") {
+                                let pre_tokens = sys.compact_metadata.as_ref()
+                                    .and_then(|m| m.pre_tokens)
+                                    .unwrap_or(0);
+                                let trigger = sys.compact_metadata.as_ref()
+                                    .and_then(|m| m.trigger.clone())
+                                    .unwrap_or_else(|| "unknown".to_string());
+                                tracing::info!(iteration, pre_tokens, %trigger, "context compacted");
+                                self.emit(SessionEvent::Compacted {
+                                    iteration,
+                                    pre_tokens,
+                                    trigger,
+                                });
+                            }
                         }
                         StreamEvent::Assistant(assistant) => {
                             for block in &assistant.message.content {
@@ -972,6 +987,10 @@ impl SessionRunner {
                                     usage.input_tokens.unwrap_or(0)
                                     + usage.cache_read_input_tokens.unwrap_or(0)
                                     + usage.cache_creation_input_tokens.unwrap_or(0);
+                                self.emit(SessionEvent::ContextUpdated {
+                                    iteration,
+                                    context_tokens: last_context_tokens,
+                                });
                             }
                         }
                         StreamEvent::RateLimit(rl) => {
@@ -3748,6 +3767,137 @@ mod tests {
                 "roundtrip failed for {:?}",
                 event
             );
+        }
+    }
+
+    // =========================================================================
+    // ContextUpdated and Compacted event emission tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn context_updated_emitted_on_assistant_usage() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // MockRuntime::completing_after(1) emits assistant events with
+        // usage: { input_tokens: 100, output_tokens: 50, cache_*: None }
+        let runtime = MockRuntime::completing_after(1);
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        let events = TraceCollector::read_events(base_dir, "test-repo", &trace.session_id)
+            .expect("should read events file");
+
+        // There should be at least one ContextUpdated event.
+        // The mock assistant text event has input_tokens=100, no cache tokens,
+        // so context_tokens should be 100.
+        let context_events: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::ContextUpdated { .. }))
+            .collect();
+
+        assert!(
+            !context_events.is_empty(),
+            "should emit at least one ContextUpdated event, all events: {:?}",
+            events.iter().map(|e| format!("{:?}", e)).collect::<Vec<_>>()
+        );
+
+        // Verify the token count: input_tokens(100) + cache_read(0) + cache_creation(0) = 100
+        match &context_events[0] {
+            SessionEvent::ContextUpdated { context_tokens, .. } => {
+                assert_eq!(
+                    *context_tokens, 100,
+                    "context_tokens should be 100 (input_tokens=100, no cache tokens)"
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[tokio::test]
+    async fn compacted_event_emitted_on_compact_boundary() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let base_dir = tmp.path();
+
+        // Create a runtime that injects a compact_boundary system event
+        let runtime = MockRuntime::completing_after(1)
+            .with_compaction(150_000, "auto_compact");
+
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/mock/project"),
+            working_dir: None,
+            prompt: "Test prompt".to_string(),
+            max_iterations: 10,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(base_dir, "test-repo");
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let runner = SessionRunner::new(config, collector, cancel_token);
+
+        let trace = runner.run(&runtime).await.expect("run should succeed");
+
+        let events = TraceCollector::read_events(base_dir, "test-repo", &trace.session_id)
+            .expect("should read events file");
+
+        // There should be at least one Compacted event
+        let compacted_events: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::Compacted { .. }))
+            .collect();
+
+        assert!(
+            !compacted_events.is_empty(),
+            "should emit at least one Compacted event when compact_boundary is received, all events: {:?}",
+            events.iter().map(|e| format!("{:?}", e)).collect::<Vec<_>>()
+        );
+
+        // Verify the fields match what the mock injected
+        match &compacted_events[0] {
+            SessionEvent::Compacted {
+                pre_tokens,
+                trigger,
+                ..
+            } => {
+                assert_eq!(
+                    *pre_tokens, 150_000,
+                    "pre_tokens should match the mock's injected value"
+                );
+                assert_eq!(
+                    trigger, "auto_compact",
+                    "trigger should match the mock's injected value"
+                );
+            }
+            _ => unreachable!(),
         }
     }
 }

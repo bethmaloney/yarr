@@ -91,10 +91,10 @@ Wire up the new events in `run_iteration()` so they're emitted during streaming.
 - Add tracing for compaction events
 
 **Checklist:**
-- [ ] Emit `ContextUpdated` after each assistant usage update
-- [ ] Detect `compact_boundary` subtype and emit `Compacted`
-- [ ] Add tracing log for compaction
-- [ ] `cd src-tauri && cargo test`
+- [x] Emit `ContextUpdated` after each assistant usage update
+- [x] Detect `compact_boundary` subtype and emit `Compacted`
+- [x] Add tracing log for compaction
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -259,7 +259,7 @@ Add integration tests and verify the full flow.
 |------|-------------|--------|
 | 1 | Parse compact_boundary in SystemEvent | Done |
 | 2 | Add ContextUpdated and Compacted session events | Done |
-| 3 | Emit events in SessionRunner | Not Started |
+| 3 | Emit events in SessionRunner | Done |
 | 4 | Emit events in SSH orchestrator | Not Started |
 | 5 | Add fields to IterationGroup | Not Started |
 | 6 | Add contextTokensColor helper | Not Started |

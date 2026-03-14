@@ -14,6 +14,8 @@ pub struct MockRuntime {
     command_call_count: AtomicUsize,
     pub env_override: Option<HashMap<String, String>>,
     pub captured_commands: Arc<Mutex<Vec<String>>>,
+    /// If set, inject a compact_boundary system event during each iteration.
+    inject_compaction: Option<(u64, String)>,
 }
 
 /// What a single mock invocation should emit
@@ -49,7 +51,15 @@ impl MockRuntime {
             command_call_count: AtomicUsize::new(0),
             env_override: None,
             captured_commands: Arc::new(Mutex::new(Vec::new())),
+            inject_compaction: None,
         }
+    }
+
+    /// Configure the mock to inject a `compact_boundary` system event into each iteration's
+    /// event stream (inserted after the init event and before assistant messages).
+    pub fn with_compaction(mut self, pre_tokens: u64, trigger: &str) -> Self {
+        self.inject_compaction = Some((pre_tokens, trigger.to_string()));
+        self
     }
 }
 
@@ -79,6 +89,21 @@ impl RuntimeProvider for MockRuntime {
             tools: Some(vec!["Read".to_string(), "Write".to_string(), "Bash".to_string()]),
             compact_metadata: None,
         }));
+
+        // 1b. optional compact_boundary event
+        if let Some((pre_tokens, ref trigger)) = self.inject_compaction {
+            events.push(StreamEvent::System(SystemEvent {
+                subtype: Some("compact_boundary".to_string()),
+                session_id: Some(session_id.clone()),
+                cwd: None,
+                model: None,
+                tools: None,
+                compact_metadata: Some(CompactMetadata {
+                    trigger: Some(trigger.clone()),
+                    pre_tokens: Some(pre_tokens),
+                }),
+            }));
+        }
 
         // 2. assistant tool_use events
         for tool in &scenario.tool_uses {
