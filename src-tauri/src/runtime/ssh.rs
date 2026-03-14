@@ -556,7 +556,7 @@ impl RuntimeProvider for SshRuntime {
             },
             shell_env::SSH_TIMEOUT,
             shell_env::SSH_DENYLIST,
-            Some("$SHELL"),
+            Some("${SHELL:-bash}"),
         )
         .await
         {

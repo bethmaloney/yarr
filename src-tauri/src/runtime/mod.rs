@@ -130,6 +130,15 @@ static LOCAL_ENV_CACHE: tokio::sync::OnceCell<CachedEnv> =
 pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
     &LOCAL_ENV_CACHE
         .get_or_init(|| async {
+            // On Windows the snapshot runs inside WSL, so use $SHELL
+            // (expanded by WSL bash) to pick up the WSL user's default
+            // shell rather than the Windows process's $SHELL (which is
+            // unset and would fall back to bash).
+            let shell_override: Option<&str> = if cfg!(target_os = "windows") {
+                Some("${SHELL:-bash}")
+            } else {
+                None
+            };
             match shell_env::snapshot_shell_env(
                 |cmd| async move {
                     let output = if cfg!(target_os = "windows") {
@@ -148,7 +157,7 @@ pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
                 },
                 shell_env::LOCAL_TIMEOUT,
                 &[],
-                None,
+                shell_override,
             )
             .await
             {
