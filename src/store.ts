@@ -747,6 +747,8 @@ export const useAppStore = create<AppStore>((set, get) => {
             gitSync: repo.gitSync,
             plansDir: repo.plansDir || "docs/plans/",
             movePlansToCompleted: repo.movePlansToCompleted ?? true,
+            designPromptFile: repo.designPromptFile || null,
+            implementationPromptFile: repo.implementationPromptFile || null,
           },
         );
 
@@ -877,6 +879,8 @@ export const useAppStore = create<AppStore>((set, get) => {
             worktreePath: entry.worktreePath,
             branch: entry.branch,
             oldSessionId: entry.session_id ?? "",
+            designPromptFile: repo.designPromptFile || null,
+            implementationPromptFile: repo.implementationPromptFile || null,
           },
         );
 

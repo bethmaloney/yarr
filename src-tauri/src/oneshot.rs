@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::git_merge::{git_merge_push, GitMergeConfig, GitMergeEvent};
 use crate::prompt;
-use crate::runtime::ssh::SshRuntime;
+use crate::runtime::ssh::{shell_escape, SshRuntime};
 use crate::runtime::RuntimeProvider;
 use crate::session::{AbortRegistry, GitSyncConfig, OnSessionEvent, SessionConfig, SessionEvent, SessionRunner};
 use crate::ssh_orchestrator::SshSessionOrchestrator;
@@ -43,6 +43,8 @@ pub struct OneShotConfig {
     pub plans_dir: String,
     pub move_plans_to_completed: bool,
     pub ssh_host: Option<String>,
+    pub design_prompt_file: Option<String>,
+    pub implementation_prompt_file: Option<String>,
 }
 
 /// State for resuming an interrupted one-shot session.
@@ -700,7 +702,40 @@ impl OneShotRunner {
         } else {
             self.emit(SessionEvent::DesignPhaseStarted);
 
-            let design_prompt = prompt::build_design_prompt(&self.config.prompt, &self.config.title, &self.config.plans_dir);
+            let design_prompt_file = self.config.design_prompt_file.as_deref()
+                .filter(|s| !s.trim().is_empty());
+
+            let custom_design_content = if let Some(prompt_file) = design_prompt_file {
+                let prompt_path = if std::path::Path::new(prompt_file).is_relative() {
+                    self.config.repo_path.join(prompt_file)
+                } else {
+                    std::path::PathBuf::from(prompt_file)
+                };
+                let timeout = std::time::Duration::from_secs(30);
+                match runtime.run_command(
+                    &format!("cat {}", shell_escape(&prompt_path.to_string_lossy())),
+                    &self.config.repo_path,
+                    timeout,
+                ).await {
+                    Ok(output) if output.exit_code == 0 => {
+                        if output.stdout.trim().is_empty() {
+                            return Err(anyhow::anyhow!("Custom design prompt file '{}' is empty", prompt_file));
+                        }
+                        tracing::info!(prompt_file = %prompt_path.display(), content_len = output.stdout.len(), "loaded custom design prompt");
+                        Some(output.stdout)
+                    }
+                    Ok(output) => {
+                        return Err(anyhow::anyhow!("Failed to read custom design prompt file '{}': {}", prompt_file, output.stderr));
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!("Failed to read custom design prompt file '{}': {}", prompt_file, e));
+                    }
+                }
+            } else {
+                None
+            };
+
+            let design_prompt = prompt::build_design_prompt(&self.config.prompt, &self.config.title, &self.config.plans_dir, custom_design_content.as_deref());
 
             let design_config = SessionConfig {
                 repo_path: self.config.repo_path.clone(),
@@ -857,8 +892,41 @@ impl OneShotRunner {
             trace.outcome = SessionOutcome::Running;
             trace.failure_reason = None;
 
+            let implementation_prompt_file = self.config.implementation_prompt_file.as_deref()
+                .filter(|s| !s.trim().is_empty());
+
+            let custom_impl_content = if let Some(prompt_file) = implementation_prompt_file {
+                let prompt_path = if std::path::Path::new(prompt_file).is_relative() {
+                    self.config.repo_path.join(prompt_file)
+                } else {
+                    std::path::PathBuf::from(prompt_file)
+                };
+                let timeout = std::time::Duration::from_secs(30);
+                match runtime.run_command(
+                    &format!("cat {}", shell_escape(&prompt_path.to_string_lossy())),
+                    &self.config.repo_path,
+                    timeout,
+                ).await {
+                    Ok(output) if output.exit_code == 0 => {
+                        if output.stdout.trim().is_empty() {
+                            return Err(anyhow::anyhow!("Custom implementation prompt file '{}' is empty", prompt_file));
+                        }
+                        tracing::info!(prompt_file = %prompt_path.display(), content_len = output.stdout.len(), "loaded custom implementation prompt");
+                        Some(output.stdout)
+                    }
+                    Ok(output) => {
+                        return Err(anyhow::anyhow!("Failed to read custom implementation prompt file '{}': {}", prompt_file, output.stderr));
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!("Failed to read custom implementation prompt file '{}': {}", prompt_file, e));
+                    }
+                }
+            } else {
+                None
+            };
+
             let plan_file_abs = format!("{}/{}", wt_path.display(), plan_file_path);
-            let impl_prompt = prompt::build_prompt(&plan_file_abs, None);
+            let impl_prompt = prompt::build_prompt(&plan_file_abs, custom_impl_content.as_deref());
 
             let impl_config = SessionConfig {
                 repo_path: self.config.repo_path.clone(),
@@ -1227,6 +1295,8 @@ mod tests {
             plans_dir: "docs/plans/".to_string(),
             ssh_host: None,
             move_plans_to_completed: true,
+            design_prompt_file: None,
+            implementation_prompt_file: None,
         }
     }
 
@@ -1565,6 +1635,8 @@ mod tests {
             plans_dir: "docs/plans/".to_string(),
             ssh_host: None,
             move_plans_to_completed: true,
+            design_prompt_file: None,
+            implementation_prompt_file: None,
         };
 
         assert_eq!(config.repo_id, "repo-123");
@@ -1602,6 +1674,8 @@ mod tests {
             plans_dir: "docs/plans/".to_string(),
             ssh_host: None,
             move_plans_to_completed: true,
+            design_prompt_file: None,
+            implementation_prompt_file: None,
         };
 
         assert_eq!(config.merge_strategy, MergeStrategy::Branch);
@@ -3008,6 +3082,8 @@ mod tests {
             plans_dir: "custom/plans/".to_string(),
             ssh_host: None,
             move_plans_to_completed: true,
+            design_prompt_file: None,
+            implementation_prompt_file: None,
         };
 
         assert_eq!(config.max_iterations, 20);
@@ -4793,6 +4869,8 @@ mod tests {
             plans_dir: "docs/plans/".to_string(),
             move_plans_to_completed: true,
             ssh_host: Some("testhost".to_string()),
+            design_prompt_file: None,
+            implementation_prompt_file: None,
         }
     }
 

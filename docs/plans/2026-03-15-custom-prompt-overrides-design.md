@@ -143,15 +143,15 @@ Add prompt file parameters to the `run_oneshot` flow for both design and impleme
 **Pattern reference:** How `plans_dir` is passed through `run_oneshot` in `src/store.ts` and `src-tauri/src/lib.rs`
 
 **Checklist:**
-- [ ] Add `design_prompt_file: Option<String>` and `implementation_prompt_file: Option<String>` parameters to `run_oneshot` Tauri command
-- [ ] Pass both to `OneShotConfig`
-- [ ] Add fields to `OneShotConfig` struct in `oneshot.rs`
-- [ ] In design phase: if `design_prompt_file` is set, read via runtime and pass custom content to `build_design_prompt()`
-- [ ] Update `build_design_prompt()` to accept `Option<&str>` for custom prompt, using it instead of `DESIGN_PROMPT` when `Some`
-- [ ] In implementation phase: if `implementation_prompt_file` is set, read via runtime and pass custom content to `build_prompt()`
-- [ ] On file read failure, emit error event and abort
-- [ ] Update `store.ts` `runOneShot()` to pass both fields from repo config
-- [ ] Verify: `cd src-tauri && cargo check && npx tsc --noEmit`
+- [x] Add `design_prompt_file: Option<String>` and `implementation_prompt_file: Option<String>` parameters to `run_oneshot` Tauri command
+- [x] Pass both to `OneShotConfig`
+- [x] Add fields to `OneShotConfig` struct in `oneshot.rs`
+- [x] In design phase: if `design_prompt_file` is set, read via runtime and pass custom content to `build_design_prompt()`
+- [x] Update `build_design_prompt()` to accept `Option<&str>` for custom prompt, using it instead of `DESIGN_PROMPT` when `Some`
+- [x] In implementation phase: if `implementation_prompt_file` is set, read via runtime and pass custom content to `build_prompt()`
+- [x] On file read failure, emit error event and abort
+- [x] Update `store.ts` `runOneShot()` to pass both fields from repo config
+- [x] Verify: `cd src-tauri && cargo check && npx tsc --noEmit`
 
 ---
 
@@ -166,11 +166,11 @@ Add tests for the new prompt override functionality.
 **Pattern reference:** Existing tests in `src-tauri/src/prompt.rs` (if any), test files in `src/*.test.ts`
 
 **Checklist:**
-- [ ] Add Rust unit test: `build_prompt` with custom prompt uses custom content
-- [ ] Add Rust unit test: `build_prompt` without custom prompt uses default
-- [ ] Add Rust unit test: `build_design_prompt` with custom prompt uses custom content
-- [ ] Add Rust unit test: `build_design_prompt` without custom prompt uses default
-- [ ] Verify: `cd src-tauri && cargo test`
+- [x] Add Rust unit test: `build_prompt` with custom prompt uses custom content
+- [x] Add Rust unit test: `build_prompt` without custom prompt uses default
+- [x] Add Rust unit test: `build_design_prompt` with custom prompt uses custom content
+- [x] Add Rust unit test: `build_design_prompt` without custom prompt uses default
+- [x] Verify: `cd src-tauri && cargo test`
 
 ---
 
@@ -182,5 +182,5 @@ Add tests for the new prompt override functionality.
 | 2 | Add settings UI for custom prompt files | Done |
 | 3 | Add `export_default_prompt` Tauri command | Done |
 | 4 | Pass prompt file paths through `run_session` | Done |
-| 5 | Pass prompt file paths through `run_oneshot` | Not Started |
-| 6 | Tests | Not Started |
+| 5 | Pass prompt file paths through `run_oneshot` | Done |
+| 6 | Tests | Done |

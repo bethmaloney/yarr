@@ -475,6 +475,8 @@ async fn run_oneshot(
     git_sync: Option<session::GitSyncConfig>,
     plans_dir: Option<String>,
     move_plans_to_completed: Option<bool>,
+    design_prompt_file: Option<String>,
+    implementation_prompt_file: Option<String>,
 ) -> Result<OneShotResult, String> {
     let oneshot_id = oneshot::generate_oneshot_id();
     let cancel_token = CancellationToken::new();
@@ -526,6 +528,8 @@ async fn run_oneshot(
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
                 move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
                 ssh_host: None,
+                design_prompt_file: design_prompt_file.clone(),
+                implementation_prompt_file: implementation_prompt_file.clone(),
             };
 
             let base_dir = match app.path().app_data_dir() {
@@ -615,6 +619,8 @@ async fn run_oneshot(
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
                 move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
                 ssh_host: Some(ssh_host.clone()),
+                design_prompt_file,
+                implementation_prompt_file,
             };
 
             let base_dir = match app.path().app_data_dir() {
@@ -724,6 +730,8 @@ async fn resume_oneshot(
     worktree_path: String,
     branch: String,
     old_session_id: String,
+    design_prompt_file: Option<String>,
+    implementation_prompt_file: Option<String>,
 ) -> Result<OneShotResult, String> {
     let session_id = Uuid::new_v4().to_string();
     let session_id_for_result = session_id.clone();
@@ -833,6 +841,8 @@ async fn resume_oneshot(
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
                 move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
                 ssh_host: None,
+                design_prompt_file: design_prompt_file.clone(),
+                implementation_prompt_file: implementation_prompt_file.clone(),
             };
 
             let collector = TraceCollector::new(base_dir, &oneshot_id);
@@ -984,6 +994,8 @@ async fn resume_oneshot(
                 plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
                 move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
                 ssh_host: Some(ssh_host.clone()),
+                design_prompt_file,
+                implementation_prompt_file,
             };
 
             let collector = TraceCollector::new(base_dir, &oneshot_id);
@@ -2004,6 +2016,8 @@ mod tests {
             plans_dir: "docs/plans/".to_string(),
             ssh_host: None,
             move_plans_to_completed: true,
+            design_prompt_file: None,
+            implementation_prompt_file: None,
         };
 
         assert_eq!(config.repo_id, "repo-123");

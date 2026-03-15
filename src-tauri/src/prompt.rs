@@ -200,8 +200,9 @@ When the plan is fully written to disk, output exactly:
 - **Do NOT implement anything** — this phase is design only. Do not write code, tests, or make changes beyond the plan document."#;
 
 /// Build the full design prompt by combining DESIGN_PROMPT with the user's task and title.
-pub fn build_design_prompt(user_prompt: &str, title: &str, plans_dir: &str) -> String {
-    let prompt = DESIGN_PROMPT.replace("{plans_dir}", plans_dir);
+pub fn build_design_prompt(user_prompt: &str, title: &str, plans_dir: &str, custom_prompt: Option<&str>) -> String {
+    let base = custom_prompt.unwrap_or(DESIGN_PROMPT);
+    let prompt = base.replace("{plans_dir}", plans_dir);
     format!("{prompt}\n\n---\n\n**Title:** {title}\n\n**Task:** {user_prompt}")
 }
 
@@ -274,7 +275,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_includes_user_prompt() {
-        let result = build_design_prompt("Add a login page", "Login Feature", "docs/plans/");
+        let result = build_design_prompt("Add a login page", "Login Feature", "docs/plans/", None);
         assert!(
             result.contains("Add a login page"),
             "Result should contain the user prompt text"
@@ -283,7 +284,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_includes_title() {
-        let result = build_design_prompt("Add a login page", "Login Feature", "docs/plans/");
+        let result = build_design_prompt("Add a login page", "Login Feature", "docs/plans/", None);
         assert!(
             result.contains("Login Feature"),
             "Result should contain the title"
@@ -292,7 +293,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_includes_design_prompt_content() {
-        let result = build_design_prompt("Add a login page", "Login Feature", "docs/plans/");
+        let result = build_design_prompt("Add a login page", "Login Feature", "docs/plans/", None);
         assert!(
             result.contains("implementation plan"),
             "Result should include content from DESIGN_PROMPT"
@@ -301,7 +302,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_handles_empty_inputs() {
-        let result = build_design_prompt("", "", "docs/plans/");
+        let result = build_design_prompt("", "", "docs/plans/", None);
         assert!(
             !result.is_empty(),
             "Result should be non-empty even with empty inputs"
@@ -310,7 +311,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_includes_custom_plans_dir() {
-        let result = build_design_prompt("task", "title", "custom/path/");
+        let result = build_design_prompt("task", "title", "custom/path/", None);
         assert!(
             result.contains("custom/path/"),
             "Result should contain the custom plans_dir, got: {result}"
@@ -319,7 +320,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_includes_default_plans_dir() {
-        let result = build_design_prompt("task", "title", "docs/plans/");
+        let result = build_design_prompt("task", "title", "docs/plans/", None);
         assert!(
             result.contains("docs/plans/"),
             "Result should contain the default plans_dir, got: {result}"
@@ -328,7 +329,7 @@ mod tests {
 
     #[test]
     fn build_design_prompt_replaces_plans_dir_placeholder() {
-        let result = build_design_prompt("task", "title", "my/plans/");
+        let result = build_design_prompt("task", "title", "my/plans/", None);
         assert!(
             !result.contains("{plans_dir}"),
             "Result should not contain the literal '{{plans_dir}}' placeholder — it should be replaced, got: {result}"
@@ -481,6 +482,79 @@ mod tests {
         assert!(
             result.contains("docs/plan.md"),
             "build_prompt with custom prompt should still contain the plan file path, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_with_custom_prompt_uses_custom_content() {
+        let result = build_design_prompt(
+            "Build a dashboard",
+            "Dashboard Feature",
+            "docs/plans/",
+            Some("You are a custom architect. Write plans to {plans_dir}."),
+        );
+        assert!(
+            result.contains("You are a custom architect"),
+            "build_design_prompt with custom prompt should contain the custom content, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_with_custom_prompt_does_not_contain_default() {
+        let result = build_design_prompt(
+            "Build a dashboard",
+            "Dashboard Feature",
+            "docs/plans/",
+            Some("You are a custom architect."),
+        );
+        assert!(
+            !result.contains("implementation plan"),
+            "build_design_prompt with custom prompt should NOT contain default DESIGN_PROMPT content ('implementation plan'), got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_with_custom_prompt_still_contains_title_and_task() {
+        let result = build_design_prompt(
+            "Build a dashboard",
+            "Dashboard Feature",
+            "docs/plans/",
+            Some("You are a custom architect."),
+        );
+        assert!(
+            result.contains("Dashboard Feature"),
+            "build_design_prompt with custom prompt should still contain the title, got: {result}"
+        );
+        assert!(
+            result.contains("Build a dashboard"),
+            "build_design_prompt with custom prompt should still contain the user prompt, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_with_custom_prompt_replaces_plans_dir() {
+        let result = build_design_prompt(
+            "task",
+            "title",
+            "my/custom/plans/",
+            Some("Write plans to {plans_dir} directory."),
+        );
+        assert!(
+            result.contains("my/custom/plans/"),
+            "build_design_prompt with custom prompt should replace {{plans_dir}} placeholder, got: {result}"
+        );
+        assert!(
+            !result.contains("{plans_dir}"),
+            "build_design_prompt with custom prompt should not contain literal '{{plans_dir}}' after replacement, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_design_prompt_without_custom_prompt_uses_default() {
+        let result = build_design_prompt("task", "title", "docs/plans/", None);
+        assert!(
+            result.contains("implementation plan"),
+            "build_design_prompt with None should use the default DESIGN_PROMPT which contains 'implementation plan', got: {result}"
         );
     }
 }
