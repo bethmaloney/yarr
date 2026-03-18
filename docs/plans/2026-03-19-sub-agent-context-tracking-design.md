@@ -173,12 +173,12 @@ Apply the same changes from Task 3 to the SSH orchestrator's event processing lo
 - Add test mirroring the session.rs test
 
 **Checklist:**
-- [ ] Add `sub_agent_peaks` HashMap
-- [ ] Gate `ContextUpdated` emission on `parent_tool_use_id.is_none()`
-- [ ] Emit `SubAgentContextUpdated` for sub-agent events
-- [ ] Gate `ToolUse` and `AssistantText` on `parent_tool_use_id.is_none()`
-- [ ] Add integration test
-- [ ] `cd src-tauri && cargo test`
+- [x] Add `sub_agent_peaks` HashMap
+- [x] Gate `ContextUpdated` emission on `parent_tool_use_id.is_none()`
+- [x] Emit `SubAgentContextUpdated` for sub-agent events
+- [x] Gate `ToolUse` and `AssistantText` on `parent_tool_use_id.is_none()`
+- [x] Add integration test
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -286,7 +286,7 @@ Add a Playwright test that verifies sub-agent context is displayed correctly for
 | 1 | Add `parent_tool_use_id` to stream event structs | Done |
 | 2 | Add `SubAgentContextUpdated` session event variant | Done |
 | 3 | Filter sub-agent events in `session.rs` | Done |
-| 4 | Mirror sub-agent filtering in `ssh_orchestrator.rs` | Not Started |
+| 4 | Mirror sub-agent filtering in `ssh_orchestrator.rs` | Done |
 | 5 | Add frontend types and grouping logic | Not Started |
 | 6 | Add `sub_agent_context_updated` to event-format.ts | Not Started |
 | 7 | Display sub-agent peak in iteration header | Not Started |
