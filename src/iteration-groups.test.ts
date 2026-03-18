@@ -1131,6 +1131,226 @@ describe("groupEventsByIteration", () => {
       expect(result.iterations[0].events).toHaveLength(1);
     });
   });
+
+  describe("sub-agent context tracking", () => {
+    it("sub_agent_context_updated updates subAgentPeakContext on the current group (takes the max)", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_1",
+          context_tokens: 45000,
+          _ts: 1200,
+        }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_1",
+          context_tokens: 80000,
+          _ts: 1400,
+        }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_1",
+          context_tokens: 60000,
+          _ts: 1600,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.1, inputTokens: 100, outputTokens: 50 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      // Peak should be the max value seen (80000), not the last (60000)
+      expect(result.iterations[0].subAgentPeakContext).toBe(80000);
+    });
+
+    it("sub_agent_context_updated increments subAgentCount for distinct parent_tool_use_id values", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_1",
+          context_tokens: 30000,
+          _ts: 1100,
+        }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_2",
+          context_tokens: 50000,
+          _ts: 1200,
+        }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_1",
+          context_tokens: 40000,
+          _ts: 1300,
+        }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_3",
+          context_tokens: 20000,
+          _ts: 1400,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.2, inputTokens: 200, outputTokens: 100 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      // 3 distinct parent_tool_use_id values: tu_agent_1, tu_agent_2, tu_agent_3
+      expect(result.iterations[0].subAgentCount).toBe(3);
+    });
+
+    it("sub_agent_context_updated events are stored in group.events (not filtered out)", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_1",
+          context_tokens: 45000,
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "assistant_text",
+          text: "Working...",
+          _ts: 1600,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.1, inputTokens: 100, outputTokens: 50 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      const subAgentEvents = result.iterations[0].events.filter(
+        (e) => e.kind === "sub_agent_context_updated",
+      );
+      expect(subAgentEvents).toHaveLength(1);
+      expect(subAgentEvents[0].context_tokens).toBe(45000);
+      expect(subAgentEvents[0].parent_tool_use_id).toBe("tu_agent_1");
+    });
+
+    it("iteration_complete with sub_agent_peak_context in result sets subAgentPeakContext", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "assistant_text",
+          text: "Delegating to sub-agent...",
+          _ts: 1500,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: {
+            ...makeResult({
+              cost: 0.3,
+              inputTokens: 500,
+              outputTokens: 200,
+            }),
+            sub_agent_peak_context: 45000,
+          },
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].subAgentPeakContext).toBe(45000);
+    });
+
+    it("default values: new groups have subAgentPeakContext: 0 and subAgentCount: 0", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        makeEvent({
+          kind: "assistant_text",
+          text: "No sub-agents here.",
+          _ts: 1500,
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      expect(result.iterations[0].subAgentPeakContext).toBe(0);
+      expect(result.iterations[0].subAgentCount).toBe(0);
+    });
+
+    it("main-agent context_updated only affects contextTokens; sub-agent events only affect subAgentPeakContext/subAgentCount", () => {
+      const events: SessionEvent[] = [
+        makeEvent({ kind: "iteration_started", iteration: 1, _ts: 1000 }),
+        // Main-agent context update
+        makeEvent({
+          kind: "context_updated",
+          context_tokens: 95000,
+          _ts: 1100,
+        }),
+        // Sub-agent context updates
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_1",
+          context_tokens: 30000,
+          _ts: 1200,
+        }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          iteration: 1,
+          parent_tool_use_id: "tu_agent_2",
+          context_tokens: 50000,
+          _ts: 1300,
+        }),
+        // Another main-agent context update
+        makeEvent({
+          kind: "context_updated",
+          context_tokens: 110000,
+          _ts: 1400,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          _ts: 2000,
+          result: makeResult({ cost: 0.2, inputTokens: 200, outputTokens: 100 }),
+        }),
+      ];
+
+      const result = groupEventsByIteration(events);
+
+      expect(result.iterations).toHaveLength(1);
+      const group = result.iterations[0];
+
+      // Main-agent context: last value wins (110000)
+      expect(group.contextTokens).toBe(110000);
+
+      // Sub-agent peak: max of 30000 and 50000
+      expect(group.subAgentPeakContext).toBe(50000);
+
+      // Sub-agent count: 2 distinct parent_tool_use_id values
+      expect(group.subAgentCount).toBe(2);
+    });
+  });
 });
 
 function makeIteration(overrides: Partial<IterationGroup>): IterationGroup {
@@ -1144,6 +1364,8 @@ function makeIteration(overrides: Partial<IterationGroup>): IterationGroup {
     contextTokens: 0,
     compacted: false,
     compactedPreTokens: 0,
+    subAgentPeakContext: 0,
+    subAgentCount: 0,
     startTs: undefined,
     endTs: undefined,
     ...overrides,

@@ -10,6 +10,8 @@ export type IterationGroup = {
   contextTokens: number;
   compacted: boolean;
   compactedPreTokens: number;
+  subAgentPeakContext: number;
+  subAgentCount: number;
   startTs: number | undefined;
   endTs: number | undefined;
 };
@@ -32,6 +34,7 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
   const standaloneEvents: GroupedEvents["standaloneEvents"] = [];
   const iterations: IterationGroup[] = [];
   let currentGroup: IterationGroup | null = null;
+  let subAgentIds = new Set<string>();
 
   for (const ev of events) {
     if (
@@ -77,9 +80,12 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
         contextTokens: 0,
         compacted: false,
         compactedPreTokens: 0,
+        subAgentPeakContext: 0,
+        subAgentCount: 0,
         startTs: ev._ts,
         endTs: undefined,
       };
+      subAgentIds = new Set<string>();
       continue;
     }
 
@@ -103,9 +109,12 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
         contextTokens: 0,
         compacted: false,
         compactedPreTokens: 0,
+        subAgentPeakContext: 0,
+        subAgentCount: 0,
         startTs: ev._ts,
         endTs: undefined,
       };
+      subAgentIds = new Set<string>();
     }
 
     if (ev.kind === "context_updated") {
@@ -115,6 +124,17 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
     if (ev.kind === "compacted") {
       currentGroup.compacted = true;
       currentGroup.compactedPreTokens = ev.pre_tokens ?? 0;
+    }
+
+    if (ev.kind === "sub_agent_context_updated") {
+      currentGroup.subAgentPeakContext = Math.max(
+        currentGroup.subAgentPeakContext,
+        ev.context_tokens ?? 0,
+      );
+      if (ev.parent_tool_use_id) {
+        subAgentIds.add(ev.parent_tool_use_id);
+        currentGroup.subAgentCount = subAgentIds.size;
+      }
     }
 
     currentGroup.events.push(ev);
@@ -137,6 +157,13 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
             ...Object.values(modelUsage).map((m) => m?.contextWindow ?? 0),
           )
         : 0;
+      const subAgentPeak = result?.sub_agent_peak_context as number | undefined;
+      if (subAgentPeak !== undefined) {
+        currentGroup.subAgentPeakContext = Math.max(
+          currentGroup.subAgentPeakContext,
+          subAgentPeak,
+        );
+      }
       currentGroup.endTs = ev._ts;
     }
 

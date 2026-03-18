@@ -52,6 +52,8 @@ export type SessionEvent = {
   rate_limit_type?: string;
   plan_content?: string;
   context_tokens?: number;
+  parent_tool_use_id?: string;
+  sub_agent_peak_context?: number;
   pre_tokens?: number;
   trigger?: string;
   _ts?: number;

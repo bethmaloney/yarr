@@ -51,6 +51,8 @@ function makeGroup(overrides: Partial<IterationGroup> = {}): IterationGroup {
     contextTokens: 0,
     compacted: false,
     compactedPreTokens: 0,
+    subAgentPeakContext: 0,
+    subAgentCount: 0,
     startTs: 1700000000000,
     endTs: 1700000030000,
     ...overrides,

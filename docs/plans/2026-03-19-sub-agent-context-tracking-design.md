@@ -202,12 +202,12 @@ Update the TypeScript types and `groupEventsByIteration` to track sub-agent cont
 - Filter `sub_agent_context_updated` from `group.events` (like `context_updated` is filtered in the UI)
 
 **Checklist:**
-- [ ] Update `SessionEvent` type in `types.ts`
-- [ ] Add `subAgentPeakContext` and `subAgentCount` to `IterationGroup`
-- [ ] Initialize new fields in both group creation sites (lines 70-83 and 96-108)
-- [ ] Handle `sub_agent_context_updated` in the grouping loop
-- [ ] Add tests in `iteration-groups.test.ts`
-- [ ] `npx tsc --noEmit`
+- [x] Update `SessionEvent` type in `types.ts`
+- [x] Add `subAgentPeakContext` and `subAgentCount` to `IterationGroup`
+- [x] Initialize new fields in both group creation sites (lines 70-83 and 96-108)
+- [x] Handle `sub_agent_context_updated` in the grouping loop
+- [x] Add tests in `iteration-groups.test.ts`
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -287,7 +287,7 @@ Add a Playwright test that verifies sub-agent context is displayed correctly for
 | 2 | Add `SubAgentContextUpdated` session event variant | Done |
 | 3 | Filter sub-agent events in `session.rs` | Done |
 | 4 | Mirror sub-agent filtering in `ssh_orchestrator.rs` | Done |
-| 5 | Add frontend types and grouping logic | Not Started |
+| 5 | Add frontend types and grouping logic | Done |
 | 6 | Add `sub_agent_context_updated` to event-format.ts | Not Started |
 | 7 | Display sub-agent peak in iteration header | Not Started |
 | 8 | E2E smoke test | Not Started |
