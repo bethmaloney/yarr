@@ -47,7 +47,7 @@ The existing card structure (name, when toggle, command, timeout) stays. A new c
 
 - **Collapsible trigger**: Uses `<Collapsible>` component. Trigger is a button with `ChevronRight` icon that rotates 90° on open (`transition-transform duration-200`). Text "On Failure" in `text-xs text-muted-foreground`. Styled as a subtle divider row, not a prominent header.
 - **Inset panel**: `bg-card-inset rounded-md p-3` — elevation 0.5, visually recessed within the card.
-- **Model select**: Standard `<Select>` component. Options: "Inherit from session" (value: `""`), "Sonnet", "Opus", "Haiku". Placed inline with retries in a `grid-cols-[1fr_auto]` row.
+- **Model input**: Free text `<Input>` with `font-mono` (matches existing model input pattern elsewhere in the app). Placeholder: "Inherit from session". Placed inline with retries in a `grid-cols-[1fr_auto]` row.
 - **Retries**: Moves from the command row into the "On Failure" section since it only applies to failure handling. Same `NumberInput` as today.
 - **Prompt textarea**: `<Textarea>` with `font-mono`, 3 rows, placeholder: `"e.g. Fix all lint errors in the codebase."`. Resizable vertically.
 - **Helper text**: `text-xs text-muted-foreground` caption below the textarea explaining `{{output}}` and the default behavior.
@@ -88,3 +88,116 @@ None required. The `Check` type in both TypeScript and Rust already has `prompt:
 ### Backend
 - Unit test: `build_fix_prompt` with `{{output}}` in custom prompt does replacement
 - Unit test: `build_fix_prompt` without `{{output}}` in custom prompt still appends (backward compat)
+
+---
+
+## Implementation Plan
+
+### Task 1: Backend — `{{output}}` template variable in `build_fix_prompt`
+
+Add support for `{{output}}` placeholder replacement in custom prompts.
+
+**Files to modify:**
+- `src-tauri/src/session.rs` — `build_fix_prompt` function (line 219)
+
+**Pattern reference:** existing `build_fix_prompt` at `src-tauri/src/session.rs:219-244`
+
+**Details:**
+- In the `Some(custom)` branch, check if `custom.contains("{{output}}")`
+- If yes: `custom.replace("{{output}}", output)` — no appending
+- If no: keep current behavior (append output block)
+- Also support `{{command}}` and `{{name}}` for symmetry
+
+**Checklist:**
+- [ ] Add `{{output}}` replacement branch in `build_fix_prompt`
+- [ ] Add `{{command}}` and `{{name}}` replacement support
+- [ ] Add unit test: custom prompt with `{{output}}` does replacement, no appending
+- [ ] Add unit test: custom prompt with `{{output}}` and `{{command}}` does both replacements
+- [ ] Add unit test: custom prompt without `{{output}}` still appends (backward compat — existing test covers this, verify it still passes)
+- [ ] Run `cargo test` in `src-tauri/`
+
+---
+
+### Task 2: Frontend — Add "On Failure" collapsible section to check cards
+
+Add a collapsible section within each check card that exposes the prompt, model, and retries fields.
+
+**Files to modify:**
+- `src/pages/RepoDetail.tsx` — checks tab (lines 1299-1483)
+
+**Pattern references:**
+- Collapsible usage: `src/pages/Home.tsx:295-362`
+- Textarea usage: `src/pages/RepoDetail.tsx:1552-1558` (git sync prompt)
+- Model input: `src/pages/RepoDetail.tsx:959-965` (free text Input)
+- NumberInput: already used in check cards for timeout
+
+**Details:**
+- Import `Collapsible`, `CollapsibleTrigger`, `CollapsibleContent` from `@/components/ui/collapsible`
+- Remove the empty `import {} from "@/components/ui/accordion"` import
+- Move retries `NumberInput` from the command row into the "On Failure" section
+- Command row becomes `grid-cols-[1fr_auto]` (command + timeout only)
+- Add collapsible "On Failure" section after the command row:
+  - Trigger: `ChevronRight` icon (rotates on open) + "On Failure" text in `text-xs text-muted-foreground`
+  - Content: `bg-card-inset rounded-md p-3` inset panel containing:
+    - Row 1: Model `Input` (placeholder "Inherit from session", `font-mono`) + Retries `NumberInput` in `grid-cols-[1fr_auto]`
+    - Row 2: "Fix Prompt" label + `Textarea` (`font-mono`, 3 rows, placeholder "e.g. Fix all lint errors in the codebase.")
+    - Row 3: Helper text `text-xs text-muted-foreground`: "Leave blank for default prompt. Use {{output}} to inject check output, {{command}} for the check command."
+- Wire `prompt` and `model` fields to check state updates (same pattern as other fields)
+- All fields disabled when `session.running`
+- Import `ChevronRight` from lucide-react if not already imported
+
+**Checklist:**
+- [ ] Import Collapsible components
+- [ ] Remove empty accordion import
+- [ ] Restructure command row to `grid-cols-[1fr_auto]` (drop retries)
+- [ ] Add collapsible "On Failure" section with trigger
+- [ ] Add model Input field
+- [ ] Move retries NumberInput into collapsible section
+- [ ] Add prompt Textarea field
+- [ ] Add helper text with `{{output}}` / `{{command}}` explanation
+- [ ] Wire all new fields to check state updates
+- [ ] Verify all fields respect `session.running` disabled state
+- [ ] Run `npx tsc --noEmit`
+- [ ] Run `npx eslint .`
+
+---
+
+### Task 3: Frontend — Update E2E tests for check configuration
+
+The existing E2E tests in `e2e/checks.test.ts` are stale — they reference a `.checks` collapsible + accordion structure that doesn't match the current settings sheet + tabs UI. Rewrite them to match the current UI and add tests for the new "On Failure" section.
+
+**Files to modify:**
+- `e2e/checks.test.ts`
+
+**Pattern reference:** `e2e/checks.test.ts` (existing test structure, `navigateToRepoDetail` helper), `e2e/fixtures.ts` (mock setup)
+
+**Details:**
+- Fix `navigateToRepoDetail` to open settings sheet and navigate to the Checks tab
+- Update selectors: replace `.checks` + `[data-slot="collapsible-trigger"]` with settings sheet + tab navigation
+- Keep `.check-entry` selector (still valid)
+- Remove `[data-slot="accordion-trigger"]` references (check fields are always visible, no accordion)
+- Add new test data: `repoWithTwoChecks` already has `prompt` and `model` fields — good
+- Add tests for the "On Failure" section:
+  - Expand "On Failure", verify model/prompt/retries fields render
+  - Pre-existing check with prompt/model displays values
+  - New check has empty prompt and model
+  - All "On Failure" fields disabled while running
+
+**Checklist:**
+- [ ] Fix `navigateToRepoDetail` to open settings sheet → Checks tab
+- [ ] Update all selectors to match current UI structure
+- [ ] Update default value tests for new field locations (retries in "On Failure")
+- [ ] Add test: "On Failure" section expands to show model, prompt, retries
+- [ ] Add test: pre-existing check with prompt/model shows values
+- [ ] Add test: prompt and model fields disabled while running
+- [ ] Run `npm run test:e2e`
+
+---
+
+### Progress Tracking
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 1 | Backend: `{{output}}` template variable | Not Started |
+| 2 | Frontend: "On Failure" collapsible section | Not Started |
+| 3 | Frontend: Update E2E tests | Not Started |
