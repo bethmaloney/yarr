@@ -1497,4 +1497,159 @@ describe("IterationGroupComponent", () => {
       expect(screen.queryByText(/⟳/)).not.toBeInTheDocument();
     });
   });
+
+  // =========================================================================
+  // 23. Sub-agent peak context in header
+  // =========================================================================
+
+  describe("sub-agent peak context in header", () => {
+    it("shows sub-agent peak when subAgentPeakContext > 0", () => {
+      renderComponent({
+        group: makeGroup({
+          subAgentPeakContext: 45000,
+          contextWindow: 200000,
+        }),
+      });
+      expect(screen.getByText(/sub-agents peak:/)).toBeInTheDocument();
+      expect(screen.getByText(/45k/)).toBeInTheDocument();
+      expect(screen.getAllByText(/200k/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("does not show sub-agent peak when subAgentPeakContext is 0", () => {
+      renderComponent({
+        group: makeGroup({ subAgentPeakContext: 0 }),
+      });
+      expect(screen.queryByText(/sub-agents peak/)).not.toBeInTheDocument();
+    });
+  });
+
+  // =========================================================================
+  // 24. Filter sub_agent_context_updated from event list
+  // =========================================================================
+
+  describe("filter sub_agent_context_updated from event list", () => {
+    it("filters sub_agent_context_updated events from the rendered event list", () => {
+      const group = makeGroup({
+        events: [
+          makeEvent({ kind: "iteration_started", iteration: 1 }),
+          makeEvent({
+            kind: "tool_use",
+            tool_name: "Read",
+            tool_input: { file_path: "/home/beth/repos/yarr/src/main.ts" },
+            iteration: 1,
+          }),
+          makeEvent({
+            kind: "sub_agent_context_updated",
+            parent_tool_use_id: "toolu_abc",
+            context_tokens: 45000,
+            iteration: 1,
+          }),
+          makeEvent({
+            kind: "iteration_complete",
+            iteration: 1,
+            result: { total_cost_usd: 0.05 },
+          }),
+        ],
+      });
+
+      renderComponent({ group, expanded: true });
+
+      // The sub_agent_context_updated label should NOT appear
+      const subAgentLabel = eventLabel(
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          parent_tool_use_id: "toolu_abc",
+          context_tokens: 45000,
+          iteration: 1,
+        }),
+      );
+      expect(screen.queryByText(subAgentLabel)).not.toBeInTheDocument();
+
+      // Other events should still appear
+      const iterStartLabel = eventLabel(
+        makeEvent({ kind: "iteration_started", iteration: 1 }),
+      );
+      expect(screen.getByText(iterStartLabel)).toBeInTheDocument();
+    });
+  });
+
+  // =========================================================================
+  // 25. Per-agent context in Agent tool_use detail
+  // =========================================================================
+
+  describe("per-agent context in Agent tool_use detail", () => {
+    it("shows per-agent context when expanding an Agent tool_use with matching sub-agent events", () => {
+      const events = [
+        makeEvent({ kind: "iteration_started", iteration: 1 }),
+        makeEvent({
+          kind: "tool_use",
+          tool_use_id: "toolu_abc",
+          tool_name: "Agent",
+          tool_input: { description: "research task", prompt: "do research" },
+          iteration: 1,
+        }),
+        makeEvent({
+          kind: "sub_agent_context_updated",
+          parent_tool_use_id: "toolu_abc",
+          context_tokens: 45000,
+          iteration: 1,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          result: { total_cost_usd: 0.05 },
+        }),
+      ];
+
+      // The Agent tool_use is at index 1 in the events array, so globalIndex = 0 + 1 = 1
+      const expandedEvents = new Set<number>([1]);
+
+      renderComponent({
+        group: makeGroup({ events }),
+        expanded: true,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      // Should show per-agent context info inside the agent-detail panel
+      const agentDetail = document.querySelector(".agent-detail");
+      expect(agentDetail).toBeInTheDocument();
+      expect(agentDetail!.textContent).toMatch(/context:/i);
+      expect(agentDetail!.textContent).toMatch(/45k/);
+      expect(agentDetail!.textContent).toMatch(/200k/);
+    });
+
+    it("does not show per-agent context for Agent tool_use with no matching sub-agent events", () => {
+      const events = [
+        makeEvent({ kind: "iteration_started", iteration: 1 }),
+        makeEvent({
+          kind: "tool_use",
+          tool_use_id: "toolu_xyz",
+          tool_name: "Agent",
+          tool_input: { description: "research task", prompt: "do research" },
+          iteration: 1,
+        }),
+        makeEvent({
+          kind: "iteration_complete",
+          iteration: 1,
+          result: { total_cost_usd: 0.05 },
+        }),
+      ];
+
+      // The Agent tool_use is at index 1
+      const expandedEvents = new Set<number>([1]);
+
+      renderComponent({
+        group: makeGroup({ events }),
+        expanded: true,
+        expandedEvents,
+        globalStartIndex: 0,
+      });
+
+      // The agent-detail panel should exist (Agent is expanded) but no "context:" line
+      const agentDetail = document.querySelector(".agent-detail");
+      expect(agentDetail).toBeInTheDocument();
+      expect(agentDetail!.textContent).not.toMatch(/context:.*\d+k/i);
+    });
+  });
 });

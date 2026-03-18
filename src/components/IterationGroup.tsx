@@ -192,6 +192,16 @@ export function IterationGroupComponent({
               </span>
             </>
           ) : null}
+          {group.subAgentPeakContext > 0 ? (
+            <>
+              {" "}·{" "}
+              <span className="text-muted-foreground">
+                sub-agents peak:{" "}
+                {formatTokenCount(group.subAgentPeakContext)}/
+                {formatTokenCount(group.contextWindow)}
+              </span>
+            </>
+          ) : null}
           {group.startTs && group.endTs ? (
             <> · {formatDuration(group.endTs - group.startTs)}</>
           ) : null}
@@ -220,7 +230,7 @@ export function IterationGroupComponent({
         <ul className="iteration-events list-none p-0 m-0">
           {group.events
             .map((ev, i) => ({ ev, origIndex: i }))
-            .filter(({ ev }) => ev.kind !== "context_updated")
+            .filter(({ ev }) => ev.kind !== "context_updated" && ev.kind !== "sub_agent_context_updated")
             .map(({ ev, origIndex }) => {
             const globalIndex = globalStartIndex + origIndex;
             const isExpanded = expandedEvents.has(globalIndex);
@@ -272,6 +282,31 @@ export function IterationGroupComponent({
                             </span>
                           </div>
                         ))}
+                      {(() => {
+                        const peakCtx = group.events
+                          .filter(
+                            (e) =>
+                              e.kind === "sub_agent_context_updated" &&
+                              e.parent_tool_use_id === ev.tool_use_id,
+                          )
+                          .reduce(
+                            (max, e) =>
+                              Math.max(max, e.context_tokens ?? 0),
+                            0,
+                          );
+                        if (peakCtx === 0) return null;
+                        return (
+                          <div className="flex gap-2 py-0.5">
+                            <span className="font-semibold text-primary">
+                              context:
+                            </span>
+                            <span>
+                              {formatTokenCount(peakCtx)} /{" "}
+                              {formatTokenCount(group.contextWindow)}
+                            </span>
+                          </div>
+                        );
+                      })()}
                       {typeof ev.tool_input.prompt === "string" && (
                         <div className="mt-2 border-t border-border pt-2">
                           <Markdown>{ev.tool_input.prompt}</Markdown>

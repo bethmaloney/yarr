@@ -250,11 +250,11 @@ Show the aggregate sub-agent peak context in the iteration header, and add per-a
 - Filter `sub_agent_context_updated` events from the rendered event list (add to the `.filter()` on line 214)
 
 **Checklist:**
-- [ ] Add sub-agent peak display in iteration header
-- [ ] Add per-agent context in Agent tool_use detail panel
-- [ ] Filter `sub_agent_context_updated` from event list
-- [ ] Add tests in `IterationGroup.test.tsx`
-- [ ] `npx tsc --noEmit && npm test`
+- [x] Add sub-agent peak display in iteration header
+- [x] Add per-agent context in Agent tool_use detail panel
+- [x] Filter `sub_agent_context_updated` from event list
+- [x] Add tests in `IterationGroup.test.tsx`
+- [x] `npx tsc --noEmit && npm test`
 
 ---
 
@@ -289,5 +289,5 @@ Add a Playwright test that verifies sub-agent context is displayed correctly for
 | 4 | Mirror sub-agent filtering in `ssh_orchestrator.rs` | Done |
 | 5 | Add frontend types and grouping logic | Done |
 | 6 | Add `sub_agent_context_updated` to event-format.ts | Done |
-| 7 | Display sub-agent peak in iteration header | Not Started |
+| 7 | Display sub-agent peak in iteration header | Done |
 | 8 | E2E smoke test | Not Started |
