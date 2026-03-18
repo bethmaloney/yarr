@@ -274,8 +274,8 @@ Add a Playwright test that verifies sub-agent context is displayed correctly for
 - Verify expanding an Agent tool_use shows per-agent context
 
 **Checklist:**
-- [ ] Add E2E test for sub-agent context display
-- [ ] `npm run test:e2e`
+- [x] Add E2E test for sub-agent context display
+- [x] `npm run test:e2e`
 
 ---
 
@@ -290,4 +290,4 @@ Add a Playwright test that verifies sub-agent context is displayed correctly for
 | 5 | Add frontend types and grouping logic | Done |
 | 6 | Add `sub_agent_context_updated` to event-format.ts | Done |
 | 7 | Display sub-agent peak in iteration header | Done |
-| 8 | E2E smoke test | Not Started |
+| 8 | E2E smoke test | Done |
