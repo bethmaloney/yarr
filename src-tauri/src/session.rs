@@ -199,6 +199,8 @@ pub enum SessionEvent {
     GitSyncFailed { iteration: u32, error: String },
     /// Live context token count updated during iteration
     ContextUpdated { iteration: u32, context_tokens: u64 },
+    /// Live context token count for a sub-agent during iteration
+    SubAgentContextUpdated { iteration: u32, parent_tool_use_id: String, context_tokens: u64 },
     /// Context was compacted by Claude during iteration
     Compacted { iteration: u32, pre_tokens: u64, trigger: String },
     /// Claude API rate limit hit (non-"allowed" status only)
@@ -335,6 +337,7 @@ impl SessionRunner {
             SessionEvent::GitSyncConflictResolveComplete { .. } => "git_sync_conflict_resolve_complete",
             SessionEvent::GitSyncFailed { .. } => "git_sync_failed",
             SessionEvent::ContextUpdated { .. } => "context_updated",
+            SessionEvent::SubAgentContextUpdated { .. } => "sub_agent_context_updated",
             SessionEvent::Compacted { .. } => "compacted",
             SessionEvent::RateLimited { .. } => "rate_limited",
         };
@@ -3899,5 +3902,35 @@ mod tests {
             }
             _ => unreachable!(),
         }
+    }
+
+    #[test]
+    fn sub_agent_context_updated_event_serializes_correctly() {
+        let event = SessionEvent::SubAgentContextUpdated {
+            iteration: 2,
+            parent_tool_use_id: "toolu_abc123".to_string(),
+            context_tokens: 45_000,
+        };
+        let json = serde_json::to_value(&event).expect("serialize SubAgentContextUpdated");
+        assert_eq!(json["kind"], "sub_agent_context_updated");
+        assert_eq!(json["iteration"], 2);
+        assert_eq!(json["parent_tool_use_id"], "toolu_abc123");
+        assert_eq!(json["context_tokens"], 45_000);
+    }
+
+    #[test]
+    fn sub_agent_context_updated_roundtrips_through_json() {
+        let event = SessionEvent::SubAgentContextUpdated {
+            iteration: 2,
+            parent_tool_use_id: "toolu_abc123".to_string(),
+            context_tokens: 45_000,
+        };
+        let json_str = serde_json::to_string(&event).expect("serialize event");
+        let deserialized: SessionEvent =
+            serde_json::from_str(&json_str).expect("deserialize event");
+        let original_value = serde_json::to_value(&event).expect("to_value original");
+        let roundtrip_value =
+            serde_json::to_value(&deserialized).expect("to_value roundtrip");
+        assert_eq!(original_value, roundtrip_value);
     }
 }

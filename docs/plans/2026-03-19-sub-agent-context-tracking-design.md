@@ -123,10 +123,10 @@ Add the new event variant to the `SessionEvent` enum so it can be emitted and se
 - Add serialization test matching the pattern of `context_updated_event_serializes_correctly`
 
 **Checklist:**
-- [ ] Add `SubAgentContextUpdated` variant to `SessionEvent` enum
-- [ ] Add `kind_str()` match arm
-- [ ] Add serialization test
-- [ ] `cd src-tauri && cargo test`
+- [x] Add `SubAgentContextUpdated` variant to `SessionEvent` enum
+- [x] Add `kind_str()` match arm
+- [x] Add serialization test
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -284,7 +284,7 @@ Add a Playwright test that verifies sub-agent context is displayed correctly for
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add `parent_tool_use_id` to stream event structs | Done |
-| 2 | Add `SubAgentContextUpdated` session event variant | Not Started |
+| 2 | Add `SubAgentContextUpdated` session event variant | Done |
 | 3 | Filter sub-agent events in `session.rs` | Not Started |
 | 4 | Mirror sub-agent filtering in `ssh_orchestrator.rs` | Not Started |
 | 5 | Add frontend types and grouping logic | Not Started |
