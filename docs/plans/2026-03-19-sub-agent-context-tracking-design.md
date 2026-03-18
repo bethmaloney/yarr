@@ -225,9 +225,9 @@ Add emoji and label handlers for the new event type.
 - `eventLabel`: Add `case "sub_agent_context_updated": return \`[${ev.iteration}] Sub-agent context: ${formatTokenCount(ev.context_tokens ?? 0)}\`;`
 
 **Checklist:**
-- [ ] Add emoji case
-- [ ] Add label case
-- [ ] `npx tsc --noEmit`
+- [x] Add emoji case
+- [x] Add label case
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -288,6 +288,6 @@ Add a Playwright test that verifies sub-agent context is displayed correctly for
 | 3 | Filter sub-agent events in `session.rs` | Done |
 | 4 | Mirror sub-agent filtering in `ssh_orchestrator.rs` | Done |
 | 5 | Add frontend types and grouping logic | Done |
-| 6 | Add `sub_agent_context_updated` to event-format.ts | Not Started |
+| 6 | Add `sub_agent_context_updated` to event-format.ts | Done |
 | 7 | Display sub-agent peak in iteration header | Not Started |
 | 8 | E2E smoke test | Not Started |

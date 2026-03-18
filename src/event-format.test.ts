@@ -546,3 +546,32 @@ describe("eventLabel — compacted", () => {
     expect(label).toBe("Context compacted from 0");
   });
 });
+
+// ===========================================================================
+// sub_agent_context_updated event
+// ===========================================================================
+
+describe("eventEmoji — sub_agent_context_updated", () => {
+  it("returns robot face emoji for sub_agent_context_updated", () => {
+    expect(eventEmoji("sub_agent_context_updated")).toBe("\u{1F916}");
+  });
+});
+
+describe("eventLabel — sub_agent_context_updated", () => {
+  it("returns label with iteration and formatted context_tokens", () => {
+    const ev = makeEvent({
+      kind: "sub_agent_context_updated",
+      iteration: 3,
+      context_tokens: 45000,
+    });
+    expect(eventLabel(ev)).toBe("[3] Sub-agent context: 45k");
+  });
+
+  it("handles missing context_tokens gracefully (defaults to 0)", () => {
+    const ev = makeEvent({
+      kind: "sub_agent_context_updated",
+      iteration: 1,
+    });
+    expect(eventLabel(ev)).toBe("[1] Sub-agent context: 0");
+  });
+});

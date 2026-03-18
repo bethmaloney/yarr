@@ -134,6 +134,8 @@ export function eventEmoji(kind: string): string {
       return "\u{1F4CB}";
     case "compacted":
       return "\u27F3";
+    case "sub_agent_context_updated":
+      return "\u{1F916}";
     default:
       return "\u{1F4CB}";
   }
@@ -233,6 +235,8 @@ export function eventLabel(ev: SessionEvent, repoPath?: string): string {
       return `[${ev.iteration}] Result: ${ev.tool_name ?? "unknown"}`;
     case "compacted":
       return `Context compacted from ${formatTokenCount(ev.pre_tokens ?? 0)}`;
+    case "sub_agent_context_updated":
+      return `[${ev.iteration}] Sub-agent context: ${formatTokenCount(ev.context_tokens ?? 0)}`;
     default:
       return JSON.stringify(ev);
   }
