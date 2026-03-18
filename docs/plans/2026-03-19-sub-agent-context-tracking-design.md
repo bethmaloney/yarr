@@ -149,12 +149,12 @@ Update the assistant event processing loop to check `parent_tool_use_id`, skip m
 - Add integration test: feed a mix of main-agent and sub-agent assistant events, verify only main-agent `ContextUpdated` events are emitted and `SubAgentContextUpdated` events are emitted for sub-agent events
 
 **Checklist:**
-- [ ] Add `sub_agent_peaks` HashMap
-- [ ] Gate `ContextUpdated` emission on `parent_tool_use_id.is_none()`
-- [ ] Emit `SubAgentContextUpdated` for sub-agent assistant events
-- [ ] Gate `ToolUse` and `AssistantText` on `parent_tool_use_id.is_none()`
-- [ ] Add integration test with mixed main/sub-agent events
-- [ ] `cd src-tauri && cargo test`
+- [x] Add `sub_agent_peaks` HashMap
+- [x] Gate `ContextUpdated` emission on `parent_tool_use_id.is_none()`
+- [x] Emit `SubAgentContextUpdated` for sub-agent assistant events
+- [x] Gate `ToolUse` and `AssistantText` on `parent_tool_use_id.is_none()`
+- [x] Add integration test with mixed main/sub-agent events
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -285,7 +285,7 @@ Add a Playwright test that verifies sub-agent context is displayed correctly for
 |------|-------------|--------|
 | 1 | Add `parent_tool_use_id` to stream event structs | Done |
 | 2 | Add `SubAgentContextUpdated` session event variant | Done |
-| 3 | Filter sub-agent events in `session.rs` | Not Started |
+| 3 | Filter sub-agent events in `session.rs` | Done |
 | 4 | Mirror sub-agent filtering in `ssh_orchestrator.rs` | Not Started |
 | 5 | Add frontend types and grouping logic | Not Started |
 | 6 | Add `sub_agent_context_updated` to event-format.ts | Not Started |

@@ -913,6 +913,7 @@ impl SessionRunner {
         tracing::info!(iteration, "claude process spawned");
         let mut result_event: Option<ResultEvent> = None;
         let mut last_context_tokens: u64 = 0;
+        let mut sub_agent_peaks: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
         let mut last_assistant_text = String::new();
         let mut event_count: u32 = 0;
         let mut event_summary = Vec::<String>::new();
@@ -956,44 +957,61 @@ impl SessionRunner {
                             }
                         }
                         StreamEvent::Assistant(assistant) => {
-                            for block in &assistant.message.content {
-                                match block {
-                                    ContentBlock::ToolUse { id, name, input } => {
-                                        tracing::debug!(iteration, name, id, "tool use");
-                                        self.tool_use_ids.lock().unwrap().insert(id.clone(), name.clone());
-                                        self.emit(SessionEvent::ToolUse {
-                                            iteration,
-                                            tool_name: name.clone(),
-                                            tool_input: Some(input.clone()),
-                                            tool_use_id: id.clone(),
-                                        });
+                            if assistant.parent_tool_use_id.is_none() {
+                                for block in &assistant.message.content {
+                                    match block {
+                                        ContentBlock::ToolUse { id, name, input } => {
+                                            tracing::debug!(iteration, name, id, "tool use");
+                                            self.tool_use_ids.lock().unwrap().insert(id.clone(), name.clone());
+                                            self.emit(SessionEvent::ToolUse {
+                                                iteration,
+                                                tool_name: name.clone(),
+                                                tool_input: Some(input.clone()),
+                                                tool_use_id: id.clone(),
+                                            });
+                                        }
+                                        ContentBlock::Text { text } => {
+                                            let preview = if text.chars().count() > 100 {
+                                                let truncated: String = text.chars().take(100).collect();
+                                                format!("{truncated}...")
+                                            } else {
+                                                text.clone()
+                                            };
+                                            tracing::debug!(iteration, preview, "text output");
+                                            last_assistant_text = text.clone();
+                                            self.emit(SessionEvent::AssistantText {
+                                                iteration,
+                                                text: text.clone(),
+                                            });
+                                        }
+                                        ContentBlock::Unknown => {}
                                     }
-                                    ContentBlock::Text { text } => {
-                                        let preview = if text.chars().count() > 100 {
-                                            let truncated: String = text.chars().take(100).collect();
-                                            format!("{truncated}...")
-                                        } else {
-                                            text.clone()
-                                        };
-                                        tracing::debug!(iteration, preview, "text output");
-                                        last_assistant_text = text.clone();
-                                        self.emit(SessionEvent::AssistantText {
-                                            iteration,
-                                            text: text.clone(),
-                                        });
-                                    }
-                                    ContentBlock::Unknown => {}
                                 }
-                            }
-                            if let Some(ref usage) = assistant.message.usage {
-                                last_context_tokens =
-                                    usage.input_tokens.unwrap_or(0)
-                                    + usage.cache_read_input_tokens.unwrap_or(0)
-                                    + usage.cache_creation_input_tokens.unwrap_or(0);
-                                self.emit(SessionEvent::ContextUpdated {
-                                    iteration,
-                                    context_tokens: last_context_tokens,
-                                });
+                                if let Some(ref usage) = assistant.message.usage {
+                                    last_context_tokens =
+                                        usage.input_tokens.unwrap_or(0)
+                                        + usage.cache_read_input_tokens.unwrap_or(0)
+                                        + usage.cache_creation_input_tokens.unwrap_or(0);
+                                    self.emit(SessionEvent::ContextUpdated {
+                                        iteration,
+                                        context_tokens: last_context_tokens,
+                                    });
+                                }
+                            } else {
+                                let parent_id = assistant.parent_tool_use_id.as_ref().unwrap().clone();
+                                if let Some(ref usage) = assistant.message.usage {
+                                    let context_tokens =
+                                        usage.input_tokens.unwrap_or(0)
+                                        + usage.cache_read_input_tokens.unwrap_or(0)
+                                        + usage.cache_creation_input_tokens.unwrap_or(0);
+                                    let peak = sub_agent_peaks.entry(parent_id.clone()).or_insert(0);
+                                    *peak = (*peak).max(context_tokens);
+                                    self.emit(SessionEvent::SubAgentContextUpdated {
+                                        iteration,
+                                        parent_tool_use_id: parent_id,
+                                        context_tokens,
+                                    });
+                                }
                             }
                         }
                         StreamEvent::RateLimit(rl) => {
@@ -1020,20 +1038,23 @@ impl SessionRunner {
                             result_event = Some(r.clone());
                         }
                         StreamEvent::User(user_event) => {
-                            if let Some(ref message) = user_event.message {
-                                let tool_ids = self.tool_use_ids.lock().unwrap();
-                                let results = extract_tool_results(message, &tool_ids);
-                                drop(tool_ids); // Release lock before emitting
-                                for (tool_use_id, tool_name, tool_output) in results {
-                                    tracing::debug!(iteration, tool_use_id = %tool_use_id, tool_name = %tool_name, output_len = tool_output.len(), "tool result");
-                                    self.emit(SessionEvent::ToolResult {
-                                        iteration,
-                                        tool_use_id,
-                                        tool_name,
-                                        tool_output,
-                                    });
+                            if user_event.parent_tool_use_id.is_none() {
+                                if let Some(ref message) = user_event.message {
+                                    let tool_ids = self.tool_use_ids.lock().unwrap();
+                                    let results = extract_tool_results(message, &tool_ids);
+                                    drop(tool_ids); // Release lock before emitting
+                                    for (tool_use_id, tool_name, tool_output) in results {
+                                        tracing::debug!(iteration, tool_use_id = %tool_use_id, tool_name = %tool_name, output_len = tool_output.len(), "tool result");
+                                        self.emit(SessionEvent::ToolResult {
+                                            iteration,
+                                            tool_use_id,
+                                            tool_name,
+                                            tool_output,
+                                        });
+                                    }
                                 }
                             }
+                            // Sub-agent user events are silently ignored
                         }
                     }
                 }
@@ -3932,5 +3953,392 @@ mod tests {
         let roundtrip_value =
             serde_json::to_value(&deserialized).expect("to_value roundtrip");
         assert_eq!(original_value, roundtrip_value);
+    }
+
+    // =========================================================================
+    // Sub-agent event filtering integration test
+    // =========================================================================
+
+    /// Test runtime that emits a specific sequence of StreamEvents
+    struct SubAgentTestRuntime {
+        events: std::sync::Mutex<Option<Vec<StreamEvent>>>,
+    }
+
+    impl SubAgentTestRuntime {
+        fn new(events: Vec<StreamEvent>) -> Self {
+            Self {
+                events: std::sync::Mutex::new(Some(events)),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl RuntimeProvider for SubAgentTestRuntime {
+        fn name(&self) -> &str {
+            "sub-agent-test"
+        }
+
+        async fn spawn_claude(
+            &self,
+            _invocation: &ClaudeInvocation,
+        ) -> anyhow::Result<crate::runtime::RunningProcess> {
+            let events = self.events.lock().unwrap().take().unwrap();
+            let (tx, rx) = tokio::sync::mpsc::channel(64);
+            let completion = tokio::spawn(async move {
+                for event in events {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                    if tx.send(event).await.is_err() {
+                        break;
+                    }
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                Ok(crate::runtime::ProcessExit {
+                    exit_code: 0,
+                    wall_time_ms: 100,
+                    stderr: String::new(),
+                })
+            });
+            let abort_handle =
+                crate::runtime::TaskAbortHandle(completion.abort_handle());
+            Ok(crate::runtime::RunningProcess {
+                events: rx,
+                completion,
+                abort_handle: Box::new(abort_handle),
+            })
+        }
+
+        async fn health_check(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn resolve_env(
+            &self,
+        ) -> anyhow::Result<std::collections::HashMap<String, String>> {
+            Ok(std::env::vars().collect())
+        }
+
+        async fn run_command(
+            &self,
+            _cmd: &str,
+            _dir: &std::path::Path,
+            _timeout: std::time::Duration,
+        ) -> anyhow::Result<CommandOutput> {
+            Ok(CommandOutput {
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn sub_agent_events_filtered_correctly() {
+        use crate::output::{
+            AssistantEvent, AssistantMessage, ContentBlock, ResultEvent,
+            StreamEvent, SystemEvent, Usage, UserEvent,
+        };
+
+        let tmp = TempDir::new().expect("create temp dir");
+
+        // Build the event sequence
+        let stream_events = vec![
+            // 1. System init event
+            StreamEvent::System(SystemEvent {
+                subtype: Some("init".to_string()),
+                session_id: Some("test-sub-agent".to_string()),
+                cwd: Some("/tmp/test".to_string()),
+                model: Some("claude-opus-4-6".to_string()),
+                tools: Some(vec!["Bash".to_string(), "Read".to_string()]),
+                compact_metadata: None,
+            }),
+            // 2. Main-agent assistant with ToolUse (parent_tool_use_id: None)
+            StreamEvent::Assistant(AssistantEvent {
+                message: AssistantMessage {
+                    id: Some("msg_main_1".to_string()),
+                    role: Some("assistant".to_string()),
+                    model: Some("claude-opus-4-6".to_string()),
+                    content: vec![ContentBlock::ToolUse {
+                        id: "toolu_main_1".to_string(),
+                        name: "Bash".to_string(),
+                        input: serde_json::json!({"command": "ls"}),
+                    }],
+                    stop_reason: None,
+                    usage: Some(Usage {
+                        input_tokens: Some(5000),
+                        output_tokens: Some(100),
+                        cache_read_input_tokens: None,
+                        cache_creation_input_tokens: None,
+                    }),
+                },
+                session_id: Some("test-sub-agent".to_string()),
+                parent_tool_use_id: None,
+            }),
+            // 3. Sub-agent assistant with ToolUse (should NOT emit ToolUse or ContextUpdated)
+            StreamEvent::Assistant(AssistantEvent {
+                message: AssistantMessage {
+                    id: Some("msg_sub_1".to_string()),
+                    role: Some("assistant".to_string()),
+                    model: Some("claude-opus-4-6".to_string()),
+                    content: vec![ContentBlock::ToolUse {
+                        id: "toolu_sub_1".to_string(),
+                        name: "Read".to_string(),
+                        input: serde_json::json!({"file_path": "/tmp/foo"}),
+                    }],
+                    stop_reason: None,
+                    usage: Some(Usage {
+                        input_tokens: Some(3000),
+                        output_tokens: Some(50),
+                        cache_read_input_tokens: None,
+                        cache_creation_input_tokens: None,
+                    }),
+                },
+                session_id: Some("test-sub-agent".to_string()),
+                parent_tool_use_id: Some("toolu_agent_123".to_string()),
+            }),
+            // 4. Sub-agent assistant with Text (should NOT emit AssistantText, should emit SubAgentContextUpdated)
+            StreamEvent::Assistant(AssistantEvent {
+                message: AssistantMessage {
+                    id: Some("msg_sub_2".to_string()),
+                    role: Some("assistant".to_string()),
+                    model: Some("claude-opus-4-6".to_string()),
+                    content: vec![ContentBlock::Text {
+                        text: "sub-agent thinking...".to_string(),
+                    }],
+                    stop_reason: None,
+                    usage: Some(Usage {
+                        input_tokens: Some(8000),
+                        output_tokens: Some(200),
+                        cache_read_input_tokens: None,
+                        cache_creation_input_tokens: None,
+                    }),
+                },
+                session_id: Some("test-sub-agent".to_string()),
+                parent_tool_use_id: Some("toolu_agent_123".to_string()),
+            }),
+            // 5. Main-agent assistant with Text (parent_tool_use_id: None)
+            StreamEvent::Assistant(AssistantEvent {
+                message: AssistantMessage {
+                    id: Some("msg_main_2".to_string()),
+                    role: Some("assistant".to_string()),
+                    model: Some("claude-opus-4-6".to_string()),
+                    content: vec![ContentBlock::Text {
+                        text: "main agent response".to_string(),
+                    }],
+                    stop_reason: None,
+                    usage: Some(Usage {
+                        input_tokens: Some(10000),
+                        output_tokens: Some(300),
+                        cache_read_input_tokens: None,
+                        cache_creation_input_tokens: None,
+                    }),
+                },
+                session_id: Some("test-sub-agent".to_string()),
+                parent_tool_use_id: None,
+            }),
+            // 6. Sub-agent user event (should NOT emit ToolResult)
+            StreamEvent::User(UserEvent {
+                message: Some(serde_json::json!({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_sub_1",
+                        "content": "file contents here"
+                    }]
+                })),
+                session_id: Some("test-sub-agent".to_string()),
+                parent_tool_use_id: Some("toolu_agent_123".to_string()),
+            }),
+            // 7. Result with completion signal
+            StreamEvent::Result(ResultEvent {
+                subtype: Some("success".to_string()),
+                is_error: false,
+                duration_ms: Some(5000),
+                duration_api_ms: Some(4500),
+                num_turns: Some(3),
+                result: Some(
+                    "All done. <promise>COMPLETE</promise>".to_string(),
+                ),
+                session_id: Some("test-sub-agent".to_string()),
+                total_cost_usd: Some(0.05),
+                stop_reason: Some("end_turn".to_string()),
+                usage: None,
+                model_usage: None,
+            }),
+        ];
+
+        let config = SessionConfig {
+            repo_path: std::path::PathBuf::from("/tmp/test"),
+            working_dir: None,
+            prompt: "test prompt".to_string(),
+            max_iterations: 1,
+            completion_signal: "<promise>COMPLETE</promise>".to_string(),
+            model: None,
+            effort_level: None,
+            extra_args: vec![],
+            plan_file: None,
+            inter_iteration_delay_ms: 0,
+            env_vars: std::collections::HashMap::new(),
+            checks: Vec::new(),
+            git_sync: None,
+            iteration_offset: 0,
+        };
+
+        let collector = TraceCollector::new(tmp.path(), "test-repo");
+        let cancel_token = CancellationToken::new();
+
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+        let on_event: OnSessionEvent = Box::new(move |ev| {
+            events_clone.lock().unwrap().push(ev.clone());
+        });
+
+        let runner = SessionRunner::new(config, collector, cancel_token)
+            .on_event(on_event);
+
+        let runtime = SubAgentTestRuntime::new(stream_events);
+        runner.run(&runtime).await.expect("run should succeed");
+
+        let collected = events.lock().unwrap().clone();
+
+        // --- Assert ContextUpdated events ---
+        let context_updated: Vec<&SessionEvent> = collected
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::ContextUpdated { .. }))
+            .collect();
+        // Should have exactly 2 ContextUpdated events (from the two main-agent assistant events)
+        assert_eq!(
+            context_updated.len(),
+            2,
+            "expected 2 ContextUpdated events (main-agent only), got {}: {:?}",
+            context_updated.len(),
+            context_updated
+        );
+        // First from main-agent with 5000 input_tokens
+        match context_updated[0] {
+            SessionEvent::ContextUpdated {
+                context_tokens, ..
+            } => {
+                assert_eq!(
+                    *context_tokens, 5000,
+                    "first ContextUpdated should have context_tokens=5000"
+                );
+            }
+            _ => unreachable!(),
+        }
+        // Second from main-agent with 10000 input_tokens
+        match context_updated[1] {
+            SessionEvent::ContextUpdated {
+                context_tokens, ..
+            } => {
+                assert_eq!(
+                    *context_tokens, 10000,
+                    "second ContextUpdated should have context_tokens=10000"
+                );
+            }
+            _ => unreachable!(),
+        }
+
+        // --- Assert SubAgentContextUpdated events ---
+        let sub_agent_context: Vec<&SessionEvent> = collected
+            .iter()
+            .filter(|e| {
+                matches!(e, SessionEvent::SubAgentContextUpdated { .. })
+            })
+            .collect();
+        // Sub-agent events (events 3 and 4) should produce SubAgentContextUpdated
+        assert!(
+            !sub_agent_context.is_empty(),
+            "expected SubAgentContextUpdated events for sub-agent assistant events, got none. All events: {:?}",
+            collected
+        );
+        // All sub-agent context events should have the correct parent_tool_use_id
+        for ev in &sub_agent_context {
+            match ev {
+                SessionEvent::SubAgentContextUpdated {
+                    parent_tool_use_id,
+                    ..
+                } => {
+                    assert_eq!(
+                        parent_tool_use_id, "toolu_agent_123",
+                        "SubAgentContextUpdated should have parent_tool_use_id='toolu_agent_123'"
+                    );
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        // --- Assert ToolUse events ---
+        let tool_uses: Vec<&SessionEvent> = collected
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::ToolUse { .. }))
+            .collect();
+        // Only 1 ToolUse from the main-agent (event 2), NOT the sub-agent (event 3)
+        assert_eq!(
+            tool_uses.len(),
+            1,
+            "expected 1 ToolUse event (main-agent only), got {}: {:?}",
+            tool_uses.len(),
+            tool_uses
+        );
+        match tool_uses[0] {
+            SessionEvent::ToolUse {
+                tool_name,
+                tool_use_id,
+                ..
+            } => {
+                assert_eq!(tool_name, "Bash", "main-agent ToolUse should be 'Bash'");
+                assert_eq!(
+                    tool_use_id, "toolu_main_1",
+                    "main-agent ToolUse should have id 'toolu_main_1'"
+                );
+            }
+            _ => unreachable!(),
+        }
+
+        // --- Assert AssistantText events ---
+        let assistant_texts: Vec<&SessionEvent> = collected
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::AssistantText { .. }))
+            .collect();
+        // Only 1 AssistantText from the main-agent (event 5), NOT the sub-agent (event 4)
+        assert_eq!(
+            assistant_texts.len(),
+            1,
+            "expected 1 AssistantText event (main-agent only), got {}: {:?}",
+            assistant_texts.len(),
+            assistant_texts
+        );
+        match assistant_texts[0] {
+            SessionEvent::AssistantText { text, .. } => {
+                assert_eq!(
+                    text, "main agent response",
+                    "AssistantText should be from main-agent"
+                );
+            }
+            _ => unreachable!(),
+        }
+
+        // --- Assert no ToolResult from sub-agent user events ---
+        let tool_results: Vec<&SessionEvent> = collected
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::ToolResult { .. }))
+            .collect();
+        // The sub-agent user event (event 6) should NOT produce a ToolResult.
+        // The tool_use_id "toolu_sub_1" was registered by the sub-agent's ToolUse,
+        // but since sub-agent filtering should prevent that registration too,
+        // there should be no ToolResult for it.
+        for tr in &tool_results {
+            match tr {
+                SessionEvent::ToolResult {
+                    tool_use_id, ..
+                } => {
+                    assert_ne!(
+                        tool_use_id, "toolu_sub_1",
+                        "should NOT emit ToolResult for sub-agent tool_use_id 'toolu_sub_1'"
+                    );
+                }
+                _ => unreachable!(),
+            }
+        }
     }
 }
