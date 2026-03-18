@@ -221,6 +221,15 @@ impl RuntimeProvider for MockRuntime {
         }
     }
 
+    async fn read_file(
+        &self,
+        file_path: &str,
+        working_dir: &std::path::Path,
+    ) -> Result<String> {
+        let full_path = working_dir.join(file_path);
+        Ok(tokio::fs::read_to_string(&full_path).await?)
+    }
+
     async fn run_command(
         &self,
         _command: &str,

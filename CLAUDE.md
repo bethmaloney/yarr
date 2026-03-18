@@ -48,7 +48,7 @@ npm run test:e2e
 
 ## Cross-Platform
 
-Yarr runs on Windows (WSL), macOS, and Linux. Path handling, shell commands, and filesystem operations must be cross-platform compatible.
+Yarr runs on Windows (WSL), macOS, and Linux. Path handling, shell commands, and filesystem operations must be cross-platform compatible. All repo file access in the backend must go through `RuntimeProvider` (e.g. `read_file`, `run_command`) — never use `tokio::fs` directly, since the repo may live on a different filesystem (WSL, SSH remote).
 
 ## UI
 

@@ -647,7 +647,8 @@ impl SessionRunner {
 
         // Snapshot plan content if plan_file is configured
         if let Some(ref plan_path) = self.config.plan_file {
-            match tokio::fs::read_to_string(plan_path).await {
+            let working_dir = self.config.effective_working_dir();
+            match runtime.read_file(plan_path, working_dir).await {
                 Ok(content) => {
                     tracing::info!(plan_file = %plan_path, "plan content snapshot captured");
                     trace.plan_content = Some(content);
@@ -760,7 +761,8 @@ impl SessionRunner {
                     });
 
                     if let Some(ref plan_file) = self.config.plan_file {
-                        match tokio::fs::read_to_string(plan_file).await {
+                        let working_dir = self.config.effective_working_dir();
+                        match runtime.read_file(plan_file, working_dir).await {
                             Ok(content) => {
                                 self.emit(SessionEvent::PlanContentUpdated { plan_content: content });
                             }

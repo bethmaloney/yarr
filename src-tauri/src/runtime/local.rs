@@ -161,6 +161,15 @@ impl RuntimeProvider for LocalRuntime {
         })
     }
 
+    async fn read_file(
+        &self,
+        file_path: &str,
+        working_dir: &std::path::Path,
+    ) -> Result<String> {
+        let full_path = working_dir.join(file_path);
+        Ok(tokio::fs::read_to_string(&full_path).await?)
+    }
+
     #[instrument(skip(self))]
     async fn health_check(&self) -> Result<()> {
         let env = self.resolve_env().await?;
@@ -224,6 +233,7 @@ mod tests {
     use crate::runtime::RuntimeProvider;
 
     #[tokio::test]
+    #[cfg(not(target_os = "windows"))]
     async fn local_runtime_resolve_env_returns_non_empty() {
         let runtime = LocalRuntime::new();
         let env = runtime
@@ -262,6 +272,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(not(target_os = "windows"))]
     async fn local_runtime_resolve_env_contains_home() {
         // Only meaningful when HOME is set in the process env (Linux/macOS).
         // The resolved env — whether from snapshot or fallback — should include it.

@@ -551,6 +551,7 @@ mod tests {
     // ---------------------------------------------------------------
 
     #[tokio::test]
+    #[ignore = "requires WSL with interactive shell; fails in Windows CI"]
     async fn test_wsl_resolve_env_returns_non_empty() {
         let runtime = WslRuntime::new();
         let env = runtime

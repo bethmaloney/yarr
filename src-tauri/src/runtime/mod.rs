@@ -100,6 +100,32 @@ pub trait RuntimeProvider: Send + Sync {
         timeout: std::time::Duration,
     ) -> Result<CommandOutput>;
 
+    /// Read a file from the repo filesystem.
+    /// Default implementation uses `cat` via `run_command`; runtimes with
+    /// direct filesystem access (e.g. LocalRuntime) can override for efficiency.
+    async fn read_file(
+        &self,
+        file_path: &str,
+        working_dir: &std::path::Path,
+    ) -> Result<String> {
+        let escaped = ssh::shell_escape(file_path);
+        let output = self
+            .run_command(
+                &format!("cat {escaped}"),
+                working_dir,
+                std::time::Duration::from_secs(10),
+            )
+            .await?;
+        if output.exit_code != 0 {
+            anyhow::bail!(
+                "Failed to read file '{}': {}",
+                file_path,
+                output.stderr.trim()
+            );
+        }
+        Ok(output.stdout)
+    }
+
     /// Resolve environment variables for this runtime.
     /// Default implementation returns the current process environment.
     async fn resolve_env(&self) -> Result<HashMap<String, String>> {

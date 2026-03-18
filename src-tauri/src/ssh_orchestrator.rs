@@ -94,6 +94,11 @@ pub trait SshOps: Send + Sync {
     async fn cleanup_remote(&self, session_id: &str) -> Result<()>;
     /// Get stderr output from remote
     async fn get_stderr(&self, session_id: &str) -> Result<String>;
+    /// Read a file from the repo filesystem.
+    /// Default returns empty string; real runtimes override this.
+    async fn read_file(&self, _file_path: &str, _working_dir: &std::path::Path) -> Result<String> {
+        Ok(String::new())
+    }
 }
 
 #[allow(dead_code)]
@@ -371,6 +376,19 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             None => self.collector.start_session(&repo_str, &self.config.prompt, self.config.plan_file.as_deref()),
         };
 
+        // 5b. Snapshot plan content if plan_file is configured
+        if let Some(ref plan_path) = self.config.plan_file {
+            match self.ops.read_file(plan_path, &self.config.repo_path).await {
+                Ok(content) => {
+                    tracing::info!(plan_file = %plan_path, "plan content snapshot captured");
+                    trace.plan_content = Some(content);
+                }
+                Err(e) => {
+                    tracing::warn!(plan_file = %plan_path, error = %e, "failed to read plan file, continuing without plan content");
+                }
+            }
+        }
+
         // 6. Emit SessionStarted
         tracing::info!(trace_session_id = %trace.session_id, "ssh orchestrator: emitting SessionStarted");
         self.emit(SessionEvent::SessionStarted {
@@ -485,7 +503,21 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
 
             // e. Process the result if we have one
             if let Some((result, ctx_tokens)) = result_for_processing {
-                match self.process_result(&result, iteration, iter_start, &mut trace, ctx_tokens) {
+                let outcome = self.process_result(&result, iteration, iter_start, &mut trace, ctx_tokens);
+
+                // Emit plan content update after each iteration (mirrors session.rs)
+                if let Some(ref plan_file) = self.config.plan_file {
+                    match self.ops.read_file(plan_file, &self.config.repo_path).await {
+                        Ok(content) => {
+                            self.emit(SessionEvent::PlanContentUpdated { plan_content: content });
+                        }
+                        Err(e) => {
+                            tracing::debug!(plan_file = %plan_file, error = %e, "could not read plan file for progress");
+                        }
+                    }
+                }
+
+                match outcome {
                     IterationOutcome::Completed => {
                         state = SessionState::Completed {
                             iterations: iteration,
@@ -644,6 +676,10 @@ impl SshOps for SshRuntime {
 
     async fn get_stderr(&self, session_id: &str) -> Result<String> {
         SshRuntime::get_stderr(self, session_id).await
+    }
+
+    async fn read_file(&self, file_path: &str, working_dir: &std::path::Path) -> Result<String> {
+        RuntimeProvider::read_file(self, file_path, working_dir).await
     }
 }
 
