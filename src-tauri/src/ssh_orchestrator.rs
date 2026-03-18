@@ -861,6 +861,7 @@ mod tests {
                 usage: None,
             },
             session_id: Some("test-session".to_string()),
+            parent_tool_use_id: None,
         })
     }
 
@@ -1298,6 +1299,7 @@ mod tests {
                 }),
             },
             session_id: Some("test-session".to_string()),
+            parent_tool_use_id: None,
         })
     }
 

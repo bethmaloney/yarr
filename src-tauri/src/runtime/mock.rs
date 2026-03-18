@@ -121,6 +121,7 @@ impl RuntimeProvider for MockRuntime {
                     usage: None,
                 },
                 session_id: Some(session_id.clone()),
+                parent_tool_use_id: None,
             }));
         }
 
@@ -142,6 +143,7 @@ impl RuntimeProvider for MockRuntime {
                 }),
             },
             session_id: Some(session_id.clone()),
+            parent_tool_use_id: None,
         }));
 
         // 4. result

@@ -52,6 +52,7 @@ pub struct CompactMetadata {
 pub struct AssistantEvent {
     pub message: AssistantMessage,
     pub session_id: Option<String>,
+    pub parent_tool_use_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -95,6 +96,7 @@ pub struct Usage {
 pub struct UserEvent {
     pub message: Option<serde_json::Value>,
     pub session_id: Option<String>,
+    pub parent_tool_use_id: Option<String>,
 }
 
 // ── rate limit ───────────────────────────────────────────────
@@ -422,6 +424,48 @@ mod tests {
                 assert_eq!(meta.pre_tokens, Some(167000));
             }
             _ => panic!("expected System event"),
+        }
+    }
+
+    #[test]
+    fn parse_assistant_with_parent_tool_use_id() {
+        let json = r#"{"type":"assistant","parent_tool_use_id":"toolu_agent_123","message":{"id":"msg_sub","role":"assistant","model":"claude-opus-4-6","content":[{"type":"text","text":"sub-agent response"}],"stop_reason":null,"usage":{"input_tokens":5,"output_tokens":2}},"session_id":"abc"}"#;
+        let event = StreamEvent::parse_line(json).unwrap();
+        match event {
+            StreamEvent::Assistant(e) => {
+                assert_eq!(
+                    e.parent_tool_use_id.as_deref(),
+                    Some("toolu_agent_123")
+                );
+            }
+            _ => panic!("expected Assistant event"),
+        }
+    }
+
+    #[test]
+    fn parse_main_agent_assistant_has_no_parent_tool_use_id() {
+        let json = r#"{"type":"assistant","parent_tool_use_id":null,"message":{"id":"msg_main","role":"assistant","model":"claude-opus-4-6","content":[{"type":"text","text":"main agent response"}],"stop_reason":null,"usage":{"input_tokens":10,"output_tokens":3}},"session_id":"abc"}"#;
+        let event = StreamEvent::parse_line(json).unwrap();
+        match event {
+            StreamEvent::Assistant(e) => {
+                assert_eq!(e.parent_tool_use_id, None);
+            }
+            _ => panic!("expected Assistant event"),
+        }
+    }
+
+    #[test]
+    fn parse_user_with_parent_tool_use_id() {
+        let json = r#"{"type":"user","parent_tool_use_id":"toolu_agent_456","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_123","content":"result"}]},"session_id":"abc"}"#;
+        let event = StreamEvent::parse_line(json).unwrap();
+        match event {
+            StreamEvent::User(e) => {
+                assert_eq!(
+                    e.parent_tool_use_id.as_deref(),
+                    Some("toolu_agent_456")
+                );
+            }
+            _ => panic!("expected User event"),
         }
     }
 }

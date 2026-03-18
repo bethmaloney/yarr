@@ -100,11 +100,11 @@ Add the field to `AssistantEvent` and `UserEvent` so the Rust parser captures it
 - Add a test confirming main-agent events parse with `parent_tool_use_id: None`
 
 **Checklist:**
-- [ ] Add `parent_tool_use_id` field to `AssistantEvent`
-- [ ] Add `parent_tool_use_id` field to `UserEvent`
-- [ ] Add test for sub-agent assistant event parsing
-- [ ] Add test for main-agent event parsing (field is None)
-- [ ] `cd src-tauri && cargo test`
+- [x] Add `parent_tool_use_id` field to `AssistantEvent`
+- [x] Add `parent_tool_use_id` field to `UserEvent`
+- [x] Add test for sub-agent assistant event parsing
+- [x] Add test for main-agent event parsing (field is None)
+- [x] `cd src-tauri && cargo test`
 
 ---
 
@@ -283,7 +283,7 @@ Add a Playwright test that verifies sub-agent context is displayed correctly for
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add `parent_tool_use_id` to stream event structs | Not Started |
+| 1 | Add `parent_tool_use_id` to stream event structs | Done |
 | 2 | Add `SubAgentContextUpdated` session event variant | Not Started |
 | 3 | Filter sub-agent events in `session.rs` | Not Started |
 | 4 | Mirror sub-agent filtering in `ssh_orchestrator.rs` | Not Started |
