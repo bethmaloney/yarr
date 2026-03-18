@@ -243,7 +243,7 @@ export default function RunDetail() {
 
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
         {/* Events */}
         <EventsList
           events={events}
