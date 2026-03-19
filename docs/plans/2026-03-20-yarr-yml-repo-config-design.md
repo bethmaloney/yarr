@@ -248,12 +248,12 @@ Create the Rust struct for parsing `.yarr.yml` files with serde, and add unit te
 - Handle the `env` field as `Option<HashMap<String, String>>`
 
 **Checklist:**
-- [ ] Add `serde_yaml` dependency to Cargo.toml
-- [ ] Create `yarr_config.rs` with `YarrRepoConfig` struct
-- [ ] Add `parse()` function
-- [ ] Add `mod yarr_config` to lib.rs
-- [ ] Add unit tests: valid YAML, partial YAML, empty file, malformed YAML, unknown fields ignored
-- [ ] `cargo check && cargo test`
+- [x] Add `serde_yaml` dependency to Cargo.toml
+- [x] Create `yarr_config.rs` with `YarrRepoConfig` struct
+- [x] Add `parse()` function
+- [x] Add `mod yarr_config` to lib.rs
+- [x] Add unit tests: valid YAML, partial YAML, empty file, malformed YAML, unknown fields ignored
+- [x] `cargo check && cargo test`
 
 ---
 
@@ -666,7 +666,7 @@ Test the resolve utility and DEFAULTS.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Add serde_yaml + YarrRepoConfig struct | Not Started |
+| 1 | Add serde_yaml + YarrRepoConfig struct | Done |
 | 2 | read_yarr_config IPC command | Not Started |
 | 3 | export_yarr_config IPC command | Not Started |
 | 4 | DEFAULTS, resolve utility, YarrYmlConfig type | Not Started |

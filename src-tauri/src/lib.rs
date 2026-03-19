@@ -6,6 +6,7 @@ pub mod runtime;
 pub mod session;
 pub mod ssh_orchestrator;
 pub mod trace;
+pub mod yarr_config;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
