@@ -394,7 +394,11 @@ impl SessionRunner {
             if self.cancel_token.is_cancelled() {
                 return;
             }
-            let check_name = check.name.clone();
+            let check_name = if check.name.is_empty() {
+                check.command.clone()
+            } else {
+                check.name.clone()
+            };
 
             self.emit(SessionEvent::CheckStarted {
                 iteration,
