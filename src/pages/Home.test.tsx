@@ -1071,10 +1071,12 @@ describe("Home", () => {
 
       await waitFor(() => {
         expect(mockInvoke).toHaveBeenCalledWith("read_file_preview", {
+          repo: { type: "local", path: "/home/beth/repos/my-project" },
           path: "/home/beth/plans/plan-one.md",
           maxLines: 8,
         });
         expect(mockInvoke).toHaveBeenCalledWith("read_file_preview", {
+          repo: { type: "local", path: "/home/beth/repos/my-project" },
           path: "/home/beth/plans/plan-two.md",
           maxLines: 8,
         });
@@ -1152,6 +1154,7 @@ describe("Home", () => {
       // Wait for the invoke to have been called and rejected
       await waitFor(() => {
         expect(mockInvoke).toHaveBeenCalledWith("read_file_preview", {
+          repo: { type: "local", path: "/home/beth/repos/my-project" },
           path: "/home/beth/plans/missing-plan.md",
           maxLines: 8,
         });

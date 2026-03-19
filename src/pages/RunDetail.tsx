@@ -11,6 +11,8 @@ import { parsePlanProgress } from "../plan-progress";
 import { groupEventsByIteration, maxContextPercent } from "../iteration-groups";
 import { sessionContextColor } from "../context-bar";
 import { Loader2 } from "lucide-react";
+import { useAppStore } from "../store";
+import { repoPayload } from "../repos";
 import type { SessionTrace, SessionEvent } from "../types";
 
 function planFilename(path: string | null): string {
@@ -57,6 +59,8 @@ export default function RunDetail() {
     sessionId: string;
   }>();
   const navigate = useNavigate();
+  const repos = useAppStore((s) => s.repos);
+  const repo = repos.find((r) => r.id === repoId);
 
   const [trace, setTrace] = useState<SessionTrace | null>(null);
   const [events, setEvents] = useState<SessionEvent[]>([]);
@@ -118,14 +122,15 @@ export default function RunDetail() {
 
   const tracePlanFile = trace?.plan_file ?? null;
   useEffect(() => {
-    if (!tracePlanFile) {
+    if (!tracePlanFile || !repo) {
       setPlanParsed(null);
       return;
     }
     const currentPath = tracePlanFile;
+    const payload = repoPayload(repo);
 
     function tryPath(path: string) {
-      return invoke("read_file_preview", { path, maxLines: 8 }).then(
+      return invoke("read_file_preview", { repo: payload, path, maxLines: 8 }).then(
         (result) => result as string,
       );
     }
@@ -149,7 +154,7 @@ export default function RunDetail() {
           setPlanParsed(null);
         }
       });
-  }, [tracePlanFile]);
+  }, [tracePlanFile, repo]);
 
   function handleCopy() {
     if (!trace) return;

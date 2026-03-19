@@ -6,6 +6,7 @@ import { useAppStore } from "../store";
 import { useGitStatus } from "../hooks/useGitStatus";
 import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
 import { parsePlanPreview } from "../plan-preview";
+import { repoPayload } from "../repos";
 import { timeAgo } from "../time";
 import { PlanPanel } from "../PlanPanel";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -50,8 +51,11 @@ export default function Home() {
       const newMap = new Map<string, string>();
       for (const [repoId, trace] of latestTraces) {
         if (!trace.plan_file) continue;
+        const repo = repos.find((r) => r.id === repoId);
+        if (!repo) continue;
         try {
           const result = await invoke("read_file_preview", {
+            repo: repoPayload(repo),
             path: trace.plan_file,
             maxLines: 8,
           });
@@ -66,7 +70,7 @@ export default function Home() {
       setPlanPreviews(newMap);
     };
     fetchPreviews();
-  }, [latestTraces]);
+  }, [latestTraces, repos]);
 
   function deriveStatus(repoId: string): RepoStatus {
     const session = sessions.get(repoId);

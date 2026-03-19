@@ -170,19 +170,14 @@ async fn run_session(
             }
 
             let custom_prompt_content = if let Some(ref prompt_file) = implementation_prompt_file {
-                let prompt_path = if Path::new(prompt_file).is_relative() {
-                    repo_path_buf.join(prompt_file)
-                } else {
-                    PathBuf::from(prompt_file)
-                };
-                match tokio::fs::read_to_string(&prompt_path).await {
+                match runtime.read_file(prompt_file, &repo_path_buf).await {
                     Ok(content) => {
-                        tracing::info!(prompt_file = %prompt_path.display(), content_len = content.len(), "loaded custom implementation prompt");
+                        tracing::info!(prompt_file = %prompt_file, content_len = content.len(), "loaded custom implementation prompt");
                         Some(content)
                     }
                     Err(e) => {
                         app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
-                        return Err(format!("Failed to read custom prompt file '{}': {}", prompt_path.display(), e));
+                        return Err(format!("Failed to read custom prompt file '{}': {}", prompt_file, e));
                     }
                 }
             } else {
@@ -1107,13 +1102,16 @@ fn get_trace_events(app: tauri::AppHandle, repo_id: String, session_id: String) 
     TraceCollector::read_events(&base_dir, &repo_id, &session_id).map_err(|e| e.to_string())
 }
 
+fn truncate_lines(content: &str, max_lines: u32) -> String {
+    content.lines().take(max_lines as usize).collect::<Vec<_>>().join("\n")
+}
+
 #[tauri::command]
-fn read_file_preview(path: String, max_lines: Option<u32>) -> Result<String, String> {
+async fn read_file_preview(app: tauri::AppHandle, repo: RepoType, path: String, max_lines: Option<u32>) -> Result<String, String> {
     tracing::debug!(path = %path, "read_file_preview called");
-    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let limit = max_lines.unwrap_or(5) as usize;
-    let result: String = content.lines().take(limit).collect::<Vec<_>>().join("\n");
-    Ok(result)
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
+    let content = rt.read_file(&path, &working_dir).await.map_err(|e| e.to_string())?;
+    Ok(truncate_lines(&content, max_lines.unwrap_or(5)))
 }
 
 #[tauri::command]
@@ -1904,15 +1902,9 @@ mod tests {
     }
 
     #[test]
-    fn read_file_preview_returns_first_n_lines() {
-        use std::io::Write;
-        let mut file = tempfile::NamedTempFile::new().expect("failed to create temp file");
-        for i in 1..=10 {
-            writeln!(file, "line {}", i).expect("failed to write");
-        }
-        let path = file.path().to_string_lossy().to_string();
-
-        let result = read_file_preview(path, Some(3)).expect("should return Ok");
+    fn truncate_lines_returns_first_n_lines() {
+        let content = (1..=10).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let result = truncate_lines(&content, 3);
         let lines: Vec<&str> = result.lines().collect();
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[0], "line 1");
@@ -1920,15 +1912,9 @@ mod tests {
     }
 
     #[test]
-    fn read_file_preview_defaults_to_five_lines() {
-        use std::io::Write;
-        let mut file = tempfile::NamedTempFile::new().expect("failed to create temp file");
-        for i in 1..=10 {
-            writeln!(file, "line {}", i).expect("failed to write");
-        }
-        let path = file.path().to_string_lossy().to_string();
-
-        let result = read_file_preview(path, None).expect("should return Ok");
+    fn truncate_lines_with_five() {
+        let content = (1..=10).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let result = truncate_lines(&content, 5);
         let lines: Vec<&str> = result.lines().collect();
         assert_eq!(lines.len(), 5);
         assert_eq!(lines[0], "line 1");
@@ -1936,14 +1922,9 @@ mod tests {
     }
 
     #[test]
-    fn read_file_preview_returns_all_when_fewer_than_max() {
-        use std::io::Write;
-        let mut file = tempfile::NamedTempFile::new().expect("failed to create temp file");
-        writeln!(file, "first").expect("failed to write");
-        writeln!(file, "second").expect("failed to write");
-        let path = file.path().to_string_lossy().to_string();
-
-        let result = read_file_preview(path, Some(5)).expect("should return Ok");
+    fn truncate_lines_returns_all_when_fewer_than_max() {
+        let content = "first\nsecond";
+        let result = truncate_lines(content, 5);
         let lines: Vec<&str> = result.lines().collect();
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0], "first");
@@ -1951,18 +1932,9 @@ mod tests {
     }
 
     #[test]
-    fn read_file_preview_empty_file() {
-        let file = tempfile::NamedTempFile::new().expect("failed to create temp file");
-        let path = file.path().to_string_lossy().to_string();
-
-        let result = read_file_preview(path, None).expect("should return Ok");
+    fn truncate_lines_empty_content() {
+        let result = truncate_lines("", 5);
         assert_eq!(result, "");
-    }
-
-    #[test]
-    fn read_file_preview_nonexistent_file() {
-        let result = read_file_preview("/tmp/nonexistent_file_that_does_not_exist_12345.txt".to_string(), None);
-        assert!(result.is_err(), "should return Err for nonexistent file");
     }
 
     // --- 1-shot / OneShotConfig / MergeStrategy tests ---

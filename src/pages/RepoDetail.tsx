@@ -72,7 +72,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import type { Check, SessionState, SessionTrace } from "../types";
-import type { RepoConfig } from "../repos";
+import { repoPayload, type RepoConfig } from "../repos";
 import { timeAgo } from "../time";
 
 type ConnectionTestStep = {
@@ -216,13 +216,7 @@ export default function RepoDetail() {
   // Build repo payload for invoke calls
   function buildRepoPayload() {
     if (!repo) return null;
-    return repo.type === "local"
-      ? { type: "local" as const, path: repo.path }
-      : {
-          type: "ssh" as const,
-          sshHost: (repo as Extract<RepoConfig, { type: "ssh" }>).sshHost,
-          remotePath: (repo as Extract<RepoConfig, { type: "ssh" }>).remotePath,
-        };
+    return repoPayload(repo);
   }
 
   // Fetch git status on mount and when repo changes
@@ -282,8 +276,10 @@ export default function RepoDetail() {
       return;
     }
     const currentFile = planFile;
+    const payload = buildRepoPayload();
+    if (!payload) return;
     setPreviewLoading(true);
-    invoke("read_file_preview", { path: currentFile })
+    invoke("read_file_preview", { repo: payload, path: currentFile })
       .then((result) => {
         if (currentFile === planFile) {
           setPreviewContent(result as string);
@@ -307,9 +303,11 @@ export default function RepoDetail() {
       return;
     }
     const currentPath = sessionPlanFile;
+    const payload = buildRepoPayload();
+    if (!payload) return;
 
     function tryPath(path: string) {
-      return invoke("read_file_preview", { path, maxLines: 8 }).then(
+      return invoke("read_file_preview", { repo: payload, path, maxLines: 8 }).then(
         (result) => result as string,
       );
     }

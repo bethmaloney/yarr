@@ -125,3 +125,14 @@ export async function removeRepo(id: string): Promise<void> {
   await store.set("repos", filtered);
   await store.save();
 }
+
+/** Build the minimal repo payload expected by Tauri IPC commands (RepoType). */
+export function repoPayload(repo: RepoConfig) {
+  return repo.type === "local"
+    ? { type: "local" as const, path: repo.path }
+    : {
+        type: "ssh" as const,
+        sshHost: repo.sshHost,
+        remotePath: repo.remotePath,
+      };
+}

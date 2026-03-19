@@ -855,14 +855,13 @@ impl OneShotRunner {
 
         // Snapshot plan content into trace
         trace.plan_file = Some(plan_file_path.clone());
-        let plan_file_abs = format!("{}/{}", wt_path.display(), plan_file_path);
-        match tokio::fs::read_to_string(&plan_file_abs).await {
+        match runtime.read_file(&plan_file_path, &wt_path).await {
             Ok(content) => {
-                tracing::info!(plan_file = %plan_file_abs, "plan content snapshot captured");
+                tracing::info!(plan_file = %plan_file_path, "plan content snapshot captured");
                 trace.plan_content = Some(content);
             }
             Err(e) => {
-                tracing::warn!(plan_file = %plan_file_abs, error = %e, "failed to read plan file, continuing without plan content");
+                tracing::warn!(plan_file = %plan_file_path, error = %e, "failed to read plan file, continuing without plan content");
             }
         }
 
