@@ -1,21 +1,39 @@
 # Yarr — Yet Another Ralph Runner
 
-A desktop app for running [Claude Code](https://docs.anthropic.com/en/docs/claude-code) in a loop. Point it at a repo and a plan file, and Yarr will repeatedly spawn `claude -p` until the work is done — managing iterations, checks, git operations, and cost tracking so you don't have to babysit a terminal.
+Every repo ends up with its own scripts for running [Claude Code](https://docs.anthropic.com/en/docs/claude-code) in a loop — parsing `claude -p` output, wiring up checks, tracking token spend. Same boilerplate, slightly different each time.
+
+Yarr replaces all of that with a single desktop app. Write your plan, point Yarr at a repo, hit start. Built-in prompts handle the orchestration so you don't need to configure anything to get going.
+
+A [Ralph loop](https://ghuntley.com/ralph/) is the pattern of running `claude -p` autonomously in a loop against a codebase with a plan. Yarr manages that loop for you.
 
 Uses your existing Claude subscription auth. No API keys needed.
 
-![Session detail view showing iterations, cost tracking, and result summary](screenshots/oneshot-detail.png)
+<p align="center">
+  <img src="screenshots/home.png" alt="Home dashboard — multiple repos running concurrently with completed one-shots" width="700" />
+</p>
 
-## Why Yarr?
+## Features
 
-Running Claude Code in a loop (a "Ralph loop") means spawning `claude -p` over and over against a repo with a plan. Without tooling, you're left tabbing between terminals, eyeballing token spend, and manually re-running after failures. Yarr takes ownership of that loop:
+- **Works out of the box** — default prompts get you running immediately. Write a plan, pick a repo, start. Customize prompts and checks when you need to.
+- **Multiple repos at once** — one dashboard for all your repos, running in parallel. The multi-repo view you wish your terminal had.
+- **Real-time cost and context tracking** — token counts, dollar spend, and context window usage per iteration.
+- **Checks between iterations** — define shell commands (lint, tests, type checks) that run after each Claude pass. Failures get fed back to Claude automatically.
+- **Git automation** — branch creation, auto-push, and merge conflict resolution handled by Claude.
+- **One-shot mode** — single-purpose runs with a design phase followed by implementation. Resume on failure.
+- **Full session traces** — every run writes a JSON trace to `./traces/`. Browse past runs in the built-in history view.
+- **Cross-platform** — Windows (WSL), macOS, Linux. Local repos and SSH remotes.
 
-- **Multiple repos at once** — Run concurrent sessions across different repositories from a single dashboard.
-- **Cost and context tracking** — See token counts, dollar spend, and context window usage per iteration in real time.
-- **Custom checks between iterations** — Define shell commands (lint, tests, type checks) that run after each iteration. Failed checks trigger automatic fix attempts.
-- **Git workflow automation** — Branch creation, auto-push, and merge conflict resolution handled by Claude.
-- **One-shot mode** — Single-purpose runs with a design phase followed by implementation. Supports resume on failure.
-- **Full session traces** — Every session writes a JSON trace to `./traces/` with per-iteration breakdowns. Browse them in the built-in history view.
+<p align="center">
+  <img src="screenshots/oneshot-detail.png" alt="Session detail — iteration events, cost breakdown, and result summary" width="700" />
+</p>
+
+## Workflow
+
+1. Add a repo (local path or SSH remote) and point it at a plan file — a markdown doc describing what to build.
+2. Hit start. Yarr spawns `claude -p` and streams events to the UI in real time.
+3. After each iteration, configured checks (tests, lint, etc.) run automatically. Failures get fed back to Claude for fixing.
+4. The session ends when Claude signals completion, hits your iteration limit, or you stop it.
+5. Review the full trace in the history view.
 
 ## Getting Started
 
@@ -34,58 +52,13 @@ npm install
 npx tauri dev
 ```
 
-This starts both the Vite dev server and the Tauri desktop app with hot-reload.
-
-### Development commands
+## Development
 
 ```bash
-# Frontend type checking
-npx tsc --noEmit
-
-# Lint and format
-npx eslint .
-npx prettier --check .
-
-# Frontend unit tests (Vitest)
-npm test
-
-# E2E tests (Playwright — starts Vite dev server automatically)
-npm run test:e2e
-
-# Rust checks and tests
-cd src-tauri && cargo check
-cd src-tauri && cargo test
-```
-
-## How it works
-
-1. Add a repo (local path or SSH remote) and select a plan file — a markdown document describing what to build.
-2. Yarr spawns `claude -p` with `--output-format stream-json --verbose`, streaming events back to the UI in real time.
-3. Each iteration is a short-lived `claude -p` process. The loop is owned by Yarr, not Claude's session continuation.
-4. Between iterations, Yarr runs any configured checks and git sync operations.
-5. The session ends when Claude signals completion, hits the max iteration limit, or you stop it manually.
-6. A full trace is written to `./traces/` for later review.
-
-## Project structure
-
-```
-src/                    # React frontend (TypeScript, Tailwind, shadcn/ui)
-  pages/                # Home, RepoDetail, RunDetail, OneShotDetail, History
-  components/           # RepoCard, EventsList, HistoryTable, PlanProgressBar, ...
-  store.ts              # Zustand store (repos, sessions, git status, one-shots)
-
-src-tauri/src/          # Rust backend (Tauri v2, Tokio)
-  lib.rs                # Tauri commands + app setup
-  session.rs            # SessionRunner state machine (idle → running → evaluating → ...)
-  oneshot.rs            # One-shot orchestration (design + implementation phases)
-  output.rs             # Claude stream-json event parsing
-  prompt.rs             # Prompt construction with plan file references
-  trace.rs              # OTel-style session traces (JSON to disk)
-  git_merge.rs          # Git merge conflict resolution via Claude
-  ssh_orchestrator.rs   # SSH session management
-  runtime/
-    local.rs            # Local process execution
-    ssh.rs              # Remote SSH execution
-    wsl.rs              # WSL subprocess management
-    mock.rs             # Mock runtime for tests
+npx tsc --noEmit          # Type checking
+npx eslint .              # Lint
+npx prettier --check .    # Format check
+npm test                  # Frontend unit tests (Vitest)
+npm run test:e2e          # E2E tests (Playwright)
+cd src-tauri && cargo check && cargo test  # Rust
 ```
