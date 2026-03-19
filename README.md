@@ -35,6 +35,14 @@ Uses your existing Claude subscription auth. No API keys needed.
 4. The session ends when Claude signals completion, hits your iteration limit, or you stop it.
 5. Review the full trace in the history view.
 
+## Configuration
+
+**Plans** — Yarr looks for `.md` files in `docs/plans/` by default. Write a plan describing what to build, select it in the UI, and Yarr handles the rest. The plans directory is configurable per repo. Optionally, completed plans auto-move to a `completed/` subfolder.
+
+**Prompts** — Built-in prompts handle design and implementation phases out of the box. To customize, drop your own prompts at `.yarr/prompts/design.md` and `.yarr/prompts/implementation.md` in your repo.
+
+**Checks** — Add shell commands (e.g. `npm test`, `cargo check`) that run between iterations. When a check fails, the output gets fed back to Claude for automatic fixing.
+
 ## Getting Started
 
 ### Prerequisites
