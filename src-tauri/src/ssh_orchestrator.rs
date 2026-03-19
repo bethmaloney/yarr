@@ -568,6 +568,19 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             _ => None,
         };
 
+        // Re-read plan file to capture final state (initial snapshot is pre-session)
+        if let Some(ref plan_path) = self.config.plan_file {
+            match self.ops.read_file(plan_path, &self.config.repo_path).await {
+                Ok(content) => {
+                    tracing::info!(plan_file = %plan_path, "plan content final snapshot captured");
+                    trace.plan_content = Some(content);
+                }
+                Err(e) => {
+                    tracing::debug!(plan_file = %plan_path, error = %e, "could not read plan file for final snapshot");
+                }
+            }
+        }
+
         let outcome = trace.outcome.clone();
         let plan_file = trace.plan_file.clone();
         self.emit(SessionEvent::SessionComplete { outcome, plan_file });

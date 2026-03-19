@@ -983,6 +983,18 @@ impl OneShotRunner {
                 }
             }
 
+            // Re-read plan file to capture final state (initial snapshot is pre-implementation)
+            let plan_file_abs = format!("{}/{}", wt_path.display(), plan_file_path);
+            match tokio::fs::read_to_string(&plan_file_abs).await {
+                Ok(content) => {
+                    tracing::info!(plan_file = %plan_file_abs, "plan content final snapshot captured");
+                    trace.plan_content = Some(content);
+                }
+                Err(e) => {
+                    tracing::debug!(plan_file = %plan_file_abs, error = %e, "could not read plan file for final snapshot");
+                }
+            }
+
             self.emit(SessionEvent::ImplementationPhaseComplete);
 
             // Move plan to completed (best-effort, inside worktree before git finalize)
