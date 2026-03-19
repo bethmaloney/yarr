@@ -237,15 +237,21 @@ fn build_fix_prompt(check: &Check, output: &str) -> String {
             )
         }
         Some(custom) => {
-            format!(
-                "{custom}\n\n\
-                 **Check output:**\n\
-                 ```\n\
-                 {output}\n\
-                 ```",
-                custom = custom,
-                output = output,
-            )
+            let has_output_placeholder = custom.contains("{{output}}");
+            let result = custom
+                .replace("{{name}}", &check.name)
+                .replace("{{command}}", &check.command);
+            if has_output_placeholder {
+                result.replace("{{output}}", output)
+            } else {
+                format!(
+                    "{result}\n\n\
+                     **Check output:**\n\
+                     ```\n\
+                     {output}\n\
+                     ```",
+                )
+            }
         }
     }
 }
@@ -1486,6 +1492,178 @@ mod tests {
         assert!(
             prompt.contains("Fix compilation errors"),
             "prompt should contain custom text even with empty output, got: {prompt}"
+        );
+    }
+
+    #[test]
+    fn build_fix_prompt_custom_with_output_placeholder_replaces_inline() {
+        let check = Check {
+            name: "lint".to_string(),
+            command: "npm run lint".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: Some(
+                "Fix these lint errors:\n{{output}}\nDo not introduce new warnings.".to_string(),
+            ),
+            model: None,
+            timeout_secs: 60,
+            max_retries: 3,
+        };
+        let output = "error: no-unused-vars x is defined but never used";
+
+        let prompt = build_fix_prompt(&check, output);
+
+        assert!(
+            !prompt.contains("{{output}}"),
+            "placeholder {{{{output}}}} should be replaced, got: {prompt}"
+        );
+        assert!(
+            prompt.contains(output),
+            "prompt should contain the actual output, got: {prompt}"
+        );
+        // Output should appear exactly once (inline replacement, not also appended)
+        let count = prompt.matches(output).count();
+        assert_eq!(
+            count, 1,
+            "output should appear exactly once (inline only, not appended), found {count} times in: {prompt}"
+        );
+    }
+
+    #[test]
+    fn build_fix_prompt_custom_with_command_placeholder_replaces() {
+        let check = Check {
+            name: "typecheck".to_string(),
+            command: "npx tsc --noEmit".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: Some("The command `{{command}}` failed. Please fix.".to_string()),
+            model: None,
+            timeout_secs: 120,
+            max_retries: 2,
+        };
+        let output = "error TS2345: type mismatch";
+
+        let prompt = build_fix_prompt(&check, output);
+
+        assert!(
+            !prompt.contains("{{command}}"),
+            "placeholder {{{{command}}}} should be replaced, got: {prompt}"
+        );
+        assert!(
+            prompt.contains("npx tsc --noEmit"),
+            "prompt should contain the actual command, got: {prompt}"
+        );
+        assert!(
+            prompt.contains(output),
+            "output should be appended when no {{{{output}}}} placeholder is present, got: {prompt}"
+        );
+    }
+
+    #[test]
+    fn build_fix_prompt_custom_with_name_placeholder_replaces() {
+        let check = Check {
+            name: "typecheck".to_string(),
+            command: "npx tsc --noEmit".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: Some("The {{name}} check failed. Please fix the errors.".to_string()),
+            model: None,
+            timeout_secs: 120,
+            max_retries: 2,
+        };
+        let output = "error TS2345: type mismatch";
+
+        let prompt = build_fix_prompt(&check, output);
+
+        assert!(
+            !prompt.contains("{{name}}"),
+            "placeholder {{{{name}}}} should be replaced, got: {prompt}"
+        );
+        assert!(
+            prompt.contains("typecheck"),
+            "prompt should contain the check name, got: {prompt}"
+        );
+        assert!(
+            prompt.contains(output),
+            "output should be appended when no {{{{output}}}} placeholder is present, got: {prompt}"
+        );
+    }
+
+    #[test]
+    fn build_fix_prompt_custom_with_output_placeholder_empty_output() {
+        let check = Check {
+            name: "lint".to_string(),
+            command: "npm run lint".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: Some("The check failed with: {{output}}\nPlease fix.".to_string()),
+            model: None,
+            timeout_secs: 60,
+            max_retries: 1,
+        };
+        let output = "";
+
+        let prompt = build_fix_prompt(&check, output);
+
+        assert!(
+            !prompt.contains("{{output}}"),
+            "{{{{output}}}} placeholder should be replaced, got: {prompt}"
+        );
+        assert!(
+            prompt.contains("The check failed with:"),
+            "custom text should be present, got: {prompt}"
+        );
+        // Output was inline-replaced (with empty string), so no appended output block
+        let count = prompt.matches("Check output:").count();
+        assert_eq!(
+            count, 0,
+            "output should not be appended when {{{{output}}}} placeholder was present, got: {prompt}"
+        );
+    }
+
+    #[test]
+    fn build_fix_prompt_custom_with_multiple_placeholders() {
+        let check = Check {
+            name: "lint".to_string(),
+            command: "npm run lint".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: Some(
+                "The {{name}} check (`{{command}}`) failed with:\n{{output}}\nFix all issues."
+                    .to_string(),
+            ),
+            model: None,
+            timeout_secs: 60,
+            max_retries: 3,
+        };
+        let output = "error: no-unused-vars";
+
+        let prompt = build_fix_prompt(&check, output);
+
+        assert!(
+            !prompt.contains("{{output}}"),
+            "{{{{output}}}} should be replaced, got: {prompt}"
+        );
+        assert!(
+            !prompt.contains("{{command}}"),
+            "{{{{command}}}} should be replaced, got: {prompt}"
+        );
+        assert!(
+            !prompt.contains("{{name}}"),
+            "{{{{name}}}} should be replaced, got: {prompt}"
+        );
+        assert!(
+            prompt.contains("npm run lint"),
+            "prompt should contain the command, got: {prompt}"
+        );
+        assert!(
+            prompt.contains("error: no-unused-vars"),
+            "prompt should contain the output, got: {prompt}"
+        );
+        assert!(
+            prompt.contains("lint"),
+            "prompt should contain the check name, got: {prompt}"
+        );
+        // Output should appear exactly once
+        let count = prompt.matches(output).count();
+        assert_eq!(
+            count, 1,
+            "output should appear exactly once when {{{{output}}}} placeholder is used, found {count} in: {prompt}"
         );
     }
 

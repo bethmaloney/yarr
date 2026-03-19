@@ -109,12 +109,12 @@ Add support for `{{output}}` placeholder replacement in custom prompts.
 - Also support `{{command}}` and `{{name}}` for symmetry
 
 **Checklist:**
-- [ ] Add `{{output}}` replacement branch in `build_fix_prompt`
-- [ ] Add `{{command}}` and `{{name}}` replacement support
-- [ ] Add unit test: custom prompt with `{{output}}` does replacement, no appending
-- [ ] Add unit test: custom prompt with `{{output}}` and `{{command}}` does both replacements
-- [ ] Add unit test: custom prompt without `{{output}}` still appends (backward compat — existing test covers this, verify it still passes)
-- [ ] Run `cargo test` in `src-tauri/`
+- [x] Add `{{output}}` replacement branch in `build_fix_prompt`
+- [x] Add `{{command}}` and `{{name}}` replacement support
+- [x] Add unit test: custom prompt with `{{output}}` does replacement, no appending
+- [x] Add unit test: custom prompt with `{{output}}` and `{{command}}` does both replacements
+- [x] Add unit test: custom prompt without `{{output}}` still appends (backward compat — existing test covers this, verify it still passes)
+- [x] Run `cargo test` in `src-tauri/`
 
 ---
 
@@ -198,6 +198,6 @@ The existing E2E tests in `e2e/checks.test.ts` are stale — they reference a `.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Backend: `{{output}}` template variable | Not Started |
+| 1 | Backend: `{{output}}` template variable | Done |
 | 2 | Frontend: "On Failure" collapsible section | Not Started |
 | 3 | Frontend: Update E2E tests | Not Started |
