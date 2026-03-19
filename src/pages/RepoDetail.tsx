@@ -20,7 +20,11 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {} from "@/components/ui/accordion";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -65,6 +69,7 @@ import {
   XCircle,
   Plus,
   FileDown,
+  ChevronRight,
 } from "lucide-react";
 import type { Check, SessionState, SessionTrace } from "../types";
 import type { RepoConfig } from "../repos";
@@ -1414,8 +1419,8 @@ export default function RepoDetail() {
                             <X className="size-3.5" />
                           </Button>
                         </div>
-                        {/* Fields: command + timeout + retries in one row */}
-                        <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 pb-3">
+                        {/* Fields: command + timeout */}
+                        <div className="grid grid-cols-[1fr_auto] gap-2 px-3">
                           <Label className="flex flex-col gap-1">
                             <span className="text-xs text-muted-foreground">
                               Command
@@ -1455,26 +1460,88 @@ export default function RepoDetail() {
                               className="font-mono w-24"
                             />
                           </Label>
-                          <Label className="flex flex-col gap-1">
-                            <span className="text-xs text-muted-foreground">
-                              Retries
-                            </span>
-                            <NumberInput
-                              value={check.maxRetries}
-                              onChange={(e) => {
-                                const updated = [...checks];
-                                updated[i] = {
-                                  ...updated[i],
-                                  maxRetries: Number(e.target.value),
-                                };
-                                setChecks(updated);
-                              }}
-                              min={1}
-                              disabled={session.running}
-                              className="font-mono w-20"
-                            />
-                          </Label>
                         </div>
+
+                        {/* On Failure collapsible section */}
+                        <Collapsible>
+                          <CollapsibleTrigger className="flex items-center gap-1.5 px-3 pb-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none group">
+                            <ChevronRight className="size-3 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                            On Failure
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="bg-card-inset rounded-md p-3 mx-3 mb-3 flex flex-col gap-3">
+                              {/* Row 1: Model + Retries */}
+                              <div className="grid grid-cols-[1fr_auto] gap-2">
+                                <Label className="flex flex-col gap-1">
+                                  <span className="text-xs text-muted-foreground">
+                                    Model
+                                  </span>
+                                  <Input
+                                    type="text"
+                                    value={check.model ?? ""}
+                                    placeholder="Inherit from session"
+                                    onChange={(e) => {
+                                      const updated = [...checks];
+                                      updated[i] = {
+                                        ...updated[i],
+                                        model: e.target.value || undefined,
+                                      };
+                                      setChecks(updated);
+                                    }}
+                                    disabled={session.running}
+                                    className="font-mono"
+                                  />
+                                </Label>
+                                <Label className="flex flex-col gap-1">
+                                  <span className="text-xs text-muted-foreground">
+                                    Retries
+                                  </span>
+                                  <NumberInput
+                                    value={check.maxRetries}
+                                    onChange={(e) => {
+                                      const updated = [...checks];
+                                      updated[i] = {
+                                        ...updated[i],
+                                        maxRetries: Number(e.target.value),
+                                      };
+                                      setChecks(updated);
+                                    }}
+                                    min={1}
+                                    disabled={session.running}
+                                    className="font-mono w-20"
+                                  />
+                                </Label>
+                              </div>
+                              {/* Row 2: Fix Prompt */}
+                              <Label className="flex flex-col gap-1">
+                                <span className="text-xs text-muted-foreground">
+                                  Fix Prompt
+                                </span>
+                                <Textarea
+                                  value={check.prompt ?? ""}
+                                  placeholder="e.g. Fix all lint errors in the codebase."
+                                  onChange={(e) => {
+                                    const updated = [...checks];
+                                    updated[i] = {
+                                      ...updated[i],
+                                      prompt: e.target.value || undefined,
+                                    };
+                                    setChecks(updated);
+                                  }}
+                                  disabled={session.running}
+                                  rows={3}
+                                  className="font-mono"
+                                />
+                                <span className="text-xs text-muted-foreground mt-0.5">
+                                  Leave blank for default prompt. Use{" "}
+                                  {"{{output}}"} to inject check output,{" "}
+                                  {"{{command}}"} for the check command,{" "}
+                                  {"{{name}}"} for the check name.
+                                </span>
+                              </Label>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
                       </div>
                     ))}
                   </div>

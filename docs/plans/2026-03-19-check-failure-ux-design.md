@@ -147,18 +147,18 @@ Add a collapsible section within each check card that exposes the prompt, model,
 - Import `ChevronRight` from lucide-react if not already imported
 
 **Checklist:**
-- [ ] Import Collapsible components
-- [ ] Remove empty accordion import
-- [ ] Restructure command row to `grid-cols-[1fr_auto]` (drop retries)
-- [ ] Add collapsible "On Failure" section with trigger
-- [ ] Add model Input field
-- [ ] Move retries NumberInput into collapsible section
-- [ ] Add prompt Textarea field
-- [ ] Add helper text with `{{output}}` / `{{command}}` explanation
-- [ ] Wire all new fields to check state updates
-- [ ] Verify all fields respect `session.running` disabled state
-- [ ] Run `npx tsc --noEmit`
-- [ ] Run `npx eslint .`
+- [x] Import Collapsible components
+- [x] Remove empty accordion import
+- [x] Restructure command row to `grid-cols-[1fr_auto]` (drop retries)
+- [x] Add collapsible "On Failure" section with trigger
+- [x] Add model Input field
+- [x] Move retries NumberInput into collapsible section
+- [x] Add prompt Textarea field
+- [x] Add helper text with `{{output}}` / `{{command}}` / `{{name}}` explanation
+- [x] Wire all new fields to check state updates
+- [x] Verify all fields respect `session.running` disabled state
+- [x] Run `npx tsc --noEmit`
+- [x] Run `npx eslint .`
 
 ---
 
@@ -184,13 +184,13 @@ The existing E2E tests in `e2e/checks.test.ts` are stale — they reference a `.
   - All "On Failure" fields disabled while running
 
 **Checklist:**
-- [ ] Fix `navigateToRepoDetail` to open settings sheet → Checks tab
-- [ ] Update all selectors to match current UI structure
-- [ ] Update default value tests for new field locations (retries in "On Failure")
-- [ ] Add test: "On Failure" section expands to show model, prompt, retries
-- [ ] Add test: pre-existing check with prompt/model shows values
-- [ ] Add test: prompt and model fields disabled while running
-- [ ] Run `npm run test:e2e`
+- [x] Fix `navigateToRepoDetail` to open settings sheet → Checks tab
+- [x] Update all selectors to match current UI structure
+- [x] Update default value tests for new field locations (retries in "On Failure")
+- [x] Add test: "On Failure" section expands to show model, prompt, retries
+- [x] Add test: pre-existing check with prompt/model shows values
+- [x] Add test: prompt and model fields disabled while running
+- [x] Run `npm run test:e2e`
 
 ---
 
@@ -199,5 +199,5 @@ The existing E2E tests in `e2e/checks.test.ts` are stale — they reference a `.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Backend: `{{output}}` template variable | Done |
-| 2 | Frontend: "On Failure" collapsible section | Not Started |
-| 3 | Frontend: Update E2E tests | Not Started |
+| 2 | Frontend: "On Failure" collapsible section | Done |
+| 3 | Frontend: Update E2E tests | Done |
