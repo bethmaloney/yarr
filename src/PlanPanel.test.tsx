@@ -12,6 +12,9 @@ vi.mock("react-markdown", () => ({
   ),
 }));
 
+// Mock remark-gfm (ESM-only)
+vi.mock("remark-gfm", () => ({ default: () => {} }));
+
 afterEach(() => {
   cleanup();
 });
@@ -67,8 +70,10 @@ describe("PlanPanel", () => {
         }
       />,
     );
-    // Our mock renders children as plain text
-    expect(screen.getByText(/Heading/)).toBeInTheDocument();
+    // Our mock renders children as plain text.
+    // "Heading" appears both in the sheet title (parsed plan name) and the markdown body.
+    const headings = screen.getAllByText(/Heading/);
+    expect(headings.length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/item one/)).toBeInTheDocument();
     expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
   });
