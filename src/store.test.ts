@@ -2965,6 +2965,8 @@ describe("resumeOneShot", () => {
       model: "opus",
       effortLevel: "medium",
       designEffortLevel: "high",
+      designPromptFile: null,
+      implementationPromptFile: null,
       mergeStrategy: "fast-forward",
       envVars: { MY_VAR: "hello" },
       maxIterations: 40,
