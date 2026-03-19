@@ -100,7 +100,7 @@ describe("parseAnsi", () => {
   it("strips malformed escape sequences from output text", () => {
     const result = parseAnsi("\x1b[31mhello\x1b[0m");
     for (const segment of result) {
-      expect(segment.text).not.toMatch(/\x1b/);
+      expect(segment.text).not.toContain("\x1b");
     }
   });
 
@@ -124,7 +124,7 @@ describe("parseAnsi", () => {
   it("strips raw escape chars even with unknown sequences", () => {
     const result = parseAnsi("\x1b[999mweird\x1b[0m");
     for (const segment of result) {
-      expect(segment.text).not.toMatch(/\x1b/);
+      expect(segment.text).not.toContain("\x1b");
     }
   });
 });

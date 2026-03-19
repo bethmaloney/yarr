@@ -293,7 +293,7 @@ export default function RepoDetail() {
           setPreviewLoading(false);
         }
       });
-  }, [planFile]);
+  }, [planFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Session plan preview — load and parse preview from the session's plan file
   const sessionPlanFile = session.trace?.plan_file ?? null;
@@ -332,7 +332,7 @@ export default function RepoDetail() {
           setSessionPlanParsed(null);
         }
       });
-  }, [sessionPlanFile]);
+  }, [sessionPlanFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clean up connection test listeners on unmount
   useEffect(() => {

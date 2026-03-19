@@ -1290,8 +1290,7 @@ describe("IterationGroupComponent", () => {
       const preElements = document.querySelectorAll("pre");
       for (const pre of preElements) {
         const text = pre.textContent ?? "";
-        expect(text).not.toMatch(/\x1b/);
-        expect(text).not.toMatch(/\u001b/);
+        expect(text).not.toContain("\x1b");
       }
     });
 
