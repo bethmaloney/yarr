@@ -59,9 +59,9 @@ Extract the history table rendering from `History.tsx` into a reusable `src/comp
 - Empty/loading/error states render inline (no page wrapper, no breadcrumbs, no h1)
 
 **Checklist:**
-- [ ] Create `src/components/HistoryTable.tsx` with extracted table logic
-- [ ] Export the component as default
-- [ ] Verify `npx tsc --noEmit` passes
+- [x] Create `src/components/HistoryTable.tsx` with extracted table logic
+- [x] Export the component as default
+- [x] Verify `npx tsc --noEmit` passes
 
 ---
 
@@ -82,10 +82,10 @@ Replace the inline table rendering in `History.tsx` with the new shared componen
 - Pass fetched traces, loading, and error state
 
 **Checklist:**
-- [ ] Replace inline table with `<HistoryTable>` component
-- [ ] Remove now-unused local functions and state
-- [ ] Verify `npx tsc --noEmit` passes
-- [ ] Verify `npm test` passes
+- [x] Replace inline table with `<HistoryTable>` component
+- [x] Remove now-unused local functions and state
+- [x] Verify `npx tsc --noEmit` passes
+- [x] Verify `npm test` passes
 
 ---
 
@@ -109,13 +109,13 @@ Add top-level Tabs to the RepoDetail page wrapping the session output area. Add 
 - Style the TabsList to match the design system
 
 **Checklist:**
-- [ ] Add history state (`traces`, `loading`, `error`) and fetch logic
-- [ ] Add `fetchHistory` function using `invoke("list_traces", { repoId })`
-- [ ] Call `fetchHistory` on mount and when session completes
-- [ ] Wrap session output in `<Tabs>` with Session and History tab content
-- [ ] Import and render `HistoryTable` in History tab
-- [ ] Verify `npx tsc --noEmit` passes
-- [ ] Verify `npm test` passes
+- [x] Add history state (`traces`, `loading`, `error`) and fetch logic
+- [x] Add `fetchHistory` function using `invoke("list_traces", { repoId })`
+- [x] Call `fetchHistory` on mount and when session completes
+- [x] Wrap session output in `<Tabs>` with Session and History tab content
+- [x] Import and render `HistoryTable` in History tab
+- [x] Verify `npx tsc --noEmit` passes
+- [x] Verify `npm test` passes
 
 ---
 
@@ -136,8 +136,8 @@ Add an E2E test verifying the history tab appears and displays trace data.
 - Mock `list_traces` via Tauri IPC mock
 
 **Checklist:**
-- [ ] Create E2E test file with history tab test
-- [ ] Verify `npm run test:e2e` passes
+- [x] Create E2E test file with history tab test
+- [x] Verify `npm run test:e2e` passes
 
 ---
 
@@ -145,7 +145,7 @@ Add an E2E test verifying the history tab appears and displays trace data.
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Extract HistoryTable component | Not Started |
-| 2 | Update History page to use HistoryTable | Not Started |
-| 3 | Add Session/History tabs to RepoDetail | Not Started |
-| 4 | E2E test for repo history tab | Not Started |
+| 1 | Extract HistoryTable component | Done |
+| 2 | Update History page to use HistoryTable | Done |
+| 3 | Add Session/History tabs to RepoDetail | Done |
+| 4 | E2E test for repo history tab | Done |

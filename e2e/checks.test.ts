@@ -56,7 +56,7 @@ const repoWithTwoChecks = {
   ],
 };
 
-async function navigateToRepoDetail(
+async function navigateToChecksTab(
   page: import("@playwright/test").Page,
   mockTauri: (opts?: TauriMockOptions) => Promise<void>,
   storeData?: Record<string, unknown>,
@@ -65,9 +65,13 @@ async function navigateToRepoDetail(
   await page.goto("/");
   await page.getByRole("button", { name: /my-app/ }).click();
   await expect(page.locator("h1", { hasText: "my-app" })).toBeVisible();
+  // Open settings sheet
+  await page.locator(".settings").click();
+  // Navigate to Checks tab
+  await page.getByRole("tab", { name: /checks/i }).click();
 }
 
-async function navigateToRepoDetailWithRunning(
+async function navigateToChecksTabWithRunning(
   page: import("@playwright/test").Page,
   mockTauri: (opts?: TauriMockOptions) => Promise<void>,
 ) {
@@ -89,307 +93,308 @@ async function navigateToRepoDetailWithRunning(
 
   // Verify session is running
   await expect(page.getByText("Running...")).toBeVisible();
+
+  // Open settings sheet and go to Checks tab
+  await page.locator(".settings").click();
+  await page.getByRole("tab", { name: /checks/i }).click();
 }
 
-test.describe("Checks settings section", () => {
-  test("checks section renders with summary", async ({ page, mockTauri }) => {
-    await navigateToRepoDetail(page, mockTauri);
-
-    const checksDetails = page.locator(".checks");
-    await expect(checksDetails).toBeVisible();
-
-    const summary = checksDetails.locator('[data-slot="collapsible-trigger"]');
-    await expect(summary).toContainText("Checks");
-  });
-
-  test("shows 0 configured when no checks exist", async ({
-    page,
-    mockTauri,
-  }) => {
-    await navigateToRepoDetail(page, mockTauri, {
+test.describe("Checks settings tab", () => {
+  test("shows empty state when no checks", async ({ page, mockTauri }) => {
+    await navigateToChecksTab(page, mockTauri, {
       repos: [repoWithoutChecks],
     });
 
-    const checksDetails = page.locator(".checks");
-    const summary = checksDetails.locator('[data-slot="collapsible-trigger"]');
-    await expect(summary).toContainText("Checks");
-    await expect(summary).toContainText("0 configured");
+    await expect(page.getByText("No checks configured")).toBeVisible();
+    await expect(page.locator(".check-entry")).toHaveCount(0);
   });
 
-  test("shows correct count with 1 pre-existing check", async ({
+  test("shows check entries for pre-existing checks", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToRepoDetail(page, mockTauri, {
+    await navigateToChecksTab(page, mockTauri, {
       repos: [repoWithOneCheck],
     });
 
-    const checksDetails = page.locator(".checks");
-    const summary = checksDetails.locator('[data-slot="collapsible-trigger"]');
-    await expect(summary).toContainText("Checks");
-    await expect(summary).toContainText("1 configured");
-  });
-
-  test("shows correct count with 2 pre-existing checks", async ({
-    page,
-    mockTauri,
-  }) => {
-    await navigateToRepoDetail(page, mockTauri, {
-      repos: [repoWithTwoChecks],
-    });
-
-    const checksDetails = page.locator(".checks");
-    const summary = checksDetails.locator('[data-slot="collapsible-trigger"]');
-    await expect(summary).toContainText("2 configured");
+    await expect(page.locator(".check-entry")).toHaveCount(1);
   });
 
   test("add check button creates a new check entry", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToRepoDetail(page, mockTauri, {
+    await navigateToChecksTab(page, mockTauri, {
       repos: [repoWithoutChecks],
     });
 
-    // Expand checks section
-    const checksDetails = page.locator(".checks");
-    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
-
     // Initially no check entries
-    await expect(checksDetails.locator(".check-entry")).toHaveCount(0);
+    await expect(page.locator(".check-entry")).toHaveCount(0);
 
     // Click "Add Check" button
     await page.getByRole("button", { name: "Add Check" }).click();
 
     // A new check entry should appear
-    await expect(checksDetails.locator(".check-entry")).toHaveCount(1);
-
-    // Summary should update to show 1 configured
-    await expect(
-      checksDetails.locator('[data-slot="collapsible-trigger"]').first(),
-    ).toContainText("1 configured");
+    await expect(page.locator(".check-entry")).toHaveCount(1);
   });
 
   test("new check has default values", async ({ page, mockTauri }) => {
-    await navigateToRepoDetail(page, mockTauri, {
+    await navigateToChecksTab(page, mockTauri, {
       repos: [repoWithoutChecks],
     });
 
-    // Expand checks section and add a check
-    const checksDetails = page.locator(".checks");
-    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
     await page.getByRole("button", { name: "Add Check" }).click();
 
-    // Expand the new check entry
-    const checkEntry = checksDetails.locator(".check-entry").first();
-    await checkEntry.locator('[data-slot="accordion-trigger"]').click();
+    const checkEntry = page.locator(".check-entry").first();
 
     // Verify default field values
-    const nameInput = checkEntry.getByRole("textbox", { name: /name/i });
-    await expect(nameInput).toHaveValue("");
+    await expect(checkEntry.getByPlaceholder(/Check \d/)).toHaveValue("");
 
-    const commandInput = checkEntry.getByRole("textbox", { name: /command/i });
+    const commandInput = checkEntry.getByLabel("Command");
     await expect(commandInput).toHaveValue("");
-
-    const whenSelect = checkEntry.locator("select");
-    await expect(whenSelect).toHaveValue("each_iteration");
 
     const timeoutInput = checkEntry.getByRole("spinbutton", {
       name: /timeout/i,
     });
     await expect(timeoutInput).toHaveValue("300");
 
-    const retriesInput = checkEntry.getByRole("spinbutton", {
-      name: /retries/i,
-    });
-    await expect(retriesInput).toHaveValue("1");
+    // "Every iteration" should be the active toggle (has primary bg class)
+    await expect(
+      checkEntry.getByRole("button", { name: /every iteration/i }),
+    ).toHaveClass(/bg-primary/);
   });
 
   test("pre-existing check displays its values", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToRepoDetail(page, mockTauri, {
+    await navigateToChecksTab(page, mockTauri, {
       repos: [repoWithOneCheck],
     });
 
-    // Wait for checks to load, then expand checks section
-    const checksDetails = page.locator(".checks");
-    await expect(
-      checksDetails.locator('[data-slot="collapsible-trigger"]'),
-    ).toContainText("1 configured");
-    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
-
-    // Wait for check entry to appear, then expand it
-    const checkEntry = checksDetails.locator(".check-entry").first();
+    const checkEntry = page.locator(".check-entry").first();
     await expect(checkEntry).toBeVisible();
-    await checkEntry.locator('[data-slot="accordion-trigger"]').click();
 
     // Verify the fields are populated with the pre-existing check data
-    const nameInput = checkEntry.getByRole("textbox", { name: /name/i });
-    await expect(nameInput).toHaveValue("clippy");
+    await expect(checkEntry.getByPlaceholder(/Check \d/)).toHaveValue("clippy");
 
-    const commandInput = checkEntry.getByRole("textbox", { name: /command/i });
+    const commandInput = checkEntry.getByLabel("Command");
     await expect(commandInput).toHaveValue(
       "cargo clippy --all-targets -- -D warnings",
     );
-
-    const whenSelect = checkEntry.locator("select");
-    await expect(whenSelect).toHaveValue("each_iteration");
 
     const timeoutInput = checkEntry.getByRole("spinbutton", {
       name: /timeout/i,
     });
     await expect(timeoutInput).toHaveValue("1200");
 
-    const retriesInput = checkEntry.getByRole("spinbutton", {
-      name: /retries/i,
-    });
-    await expect(retriesInput).toHaveValue("3");
+    // "Every iteration" should be active for each_iteration (has primary bg class)
+    await expect(
+      checkEntry.getByRole("button", { name: /every iteration/i }),
+    ).toHaveClass(/bg-primary/);
   });
 
   test("remove button removes a check", async ({ page, mockTauri }) => {
-    await navigateToRepoDetail(page, mockTauri, {
+    await navigateToChecksTab(page, mockTauri, {
       repos: [repoWithOneCheck],
     });
 
-    // Wait for checks to load, then expand checks section
-    const checksDetails = page.locator(".checks");
-    await expect(
-      checksDetails.locator('[data-slot="collapsible-trigger"]'),
-    ).toContainText("1 configured");
-    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
-
-    // Verify one check entry exists
-    await expect(checksDetails.locator(".check-entry")).toHaveCount(1);
+    await expect(page.locator(".check-entry")).toHaveCount(1);
 
     // Click the remove button on the check
-    const checkEntry = checksDetails.locator(".check-entry").first();
+    const checkEntry = page.locator(".check-entry").first();
     await checkEntry
-      .getByRole("button", { name: "\u00d7", exact: true })
+      .getByRole("button", { name: "Remove check" })
       .click();
 
     // Check entry should be removed
-    await expect(checksDetails.locator(".check-entry")).toHaveCount(0);
-
-    // Summary should update to show 0 configured
-    await expect(
-      checksDetails.locator('[data-slot="collapsible-trigger"]').first(),
-    ).toContainText("0 configured");
+    await expect(page.locator(".check-entry")).toHaveCount(0);
   });
 
   test("remove only removes the targeted check", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToRepoDetail(page, mockTauri, {
+    await navigateToChecksTab(page, mockTauri, {
       repos: [repoWithTwoChecks],
     });
 
-    // Wait for checks to load, then expand checks section
-    const checksDetails = page.locator(".checks");
-    await expect(
-      checksDetails.locator('[data-slot="collapsible-trigger"]'),
-    ).toContainText("2 configured");
-    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
-
     // Verify two check entries exist
-    await expect(checksDetails.locator(".check-entry")).toHaveCount(2);
+    await expect(page.locator(".check-entry")).toHaveCount(2);
 
     // Remove the first check (clippy)
-    const firstCheckEntry = checksDetails.locator(".check-entry").first();
+    const firstCheckEntry = page.locator(".check-entry").first();
     await firstCheckEntry
-      .getByRole("button", { name: "\u00d7", exact: true })
+      .getByRole("button", { name: "Remove check" })
       .click();
 
     // Only one check should remain
-    await expect(checksDetails.locator(".check-entry")).toHaveCount(1);
+    await expect(page.locator(".check-entry")).toHaveCount(1);
 
     // The remaining check should be the second one (test)
-    const remainingEntry = checksDetails.locator(".check-entry").first();
-    await remainingEntry.locator('[data-slot="accordion-trigger"]').click();
-    const nameInput = remainingEntry.getByRole("textbox", { name: /name/i });
-    await expect(nameInput).toHaveValue("test");
-
-    // Summary should show 1 configured
-    await expect(
-      checksDetails.locator('[data-slot="collapsible-trigger"]').first(),
-    ).toContainText("1 configured");
+    const remainingEntry = page.locator(".check-entry").first();
+    await expect(remainingEntry.getByPlaceholder(/Check \d/)).toHaveValue(
+      "test",
+    );
   });
+});
 
-  test("check fields are disabled while session is running", async ({
+test.describe("Checks — On Failure section", () => {
+  test("On Failure section expands to show model, prompt, retries", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToRepoDetailWithRunning(page, mockTauri);
+    await navigateToChecksTab(page, mockTauri, {
+      repos: [repoWithoutChecks],
+    });
 
-    // Wait for checks to load, then expand checks section
-    const checksDetails = page.locator(".checks");
+    await page.getByRole("button", { name: "Add Check" }).click();
+
+    const checkEntry = page.locator(".check-entry").first();
+
+    // Expand "On Failure" collapsible
+    await checkEntry
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
+
+    const content = checkEntry.locator('[data-slot="collapsible-content"]');
+
+    // Verify model input, prompt textarea, and retries input are visible
     await expect(
-      checksDetails.locator('[data-slot="collapsible-trigger"]'),
-    ).toContainText("1 configured");
-    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
+      checkEntry.getByPlaceholder("Inherit from session"),
+    ).toBeVisible();
+    await expect(
+      checkEntry.getByPlaceholder(/Fix all lint errors/),
+    ).toBeVisible();
+    await expect(
+      content.getByRole("spinbutton", { name: /retries/i }),
+    ).toBeVisible();
+  });
 
-    // Expand the check entry
-    const checkEntry = checksDetails.locator(".check-entry").first();
+  test("pre-existing check with prompt and model shows values in On Failure", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToChecksTab(page, mockTauri, {
+      repos: [repoWithTwoChecks],
+    });
+
+    // The second check (index 1) has model and prompt set
+    const secondCheck = page.locator(".check-entry").nth(1);
+    await expect(secondCheck).toBeVisible();
+
+    // Expand "On Failure" on the second check
+    await secondCheck
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
+
+    const content = secondCheck.locator('[data-slot="collapsible-content"]');
+
+    // Verify model is "sonnet"
+    await expect(
+      secondCheck.getByPlaceholder("Inherit from session"),
+    ).toHaveValue("sonnet");
+
+    // Verify prompt is "Run full test suite"
+    await expect(
+      secondCheck.getByPlaceholder(/Fix all lint errors/),
+    ).toHaveValue("Run full test suite");
+
+    // Verify retries is 1
+    await expect(
+      content.getByRole("spinbutton", { name: /retries/i }),
+    ).toHaveValue("1");
+  });
+
+  test("new check has empty model and prompt in On Failure", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToChecksTab(page, mockTauri, {
+      repos: [repoWithoutChecks],
+    });
+
+    await page.getByRole("button", { name: "Add Check" }).click();
+
+    const checkEntry = page.locator(".check-entry").first();
+
+    // Expand "On Failure"
+    await checkEntry
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
+
+    // Model should be empty
+    await expect(
+      checkEntry.getByPlaceholder("Inherit from session"),
+    ).toHaveValue("");
+
+    // Prompt should be empty
+    await expect(
+      checkEntry.getByPlaceholder(/Fix all lint errors/),
+    ).toHaveValue("");
+  });
+
+  test("On Failure fields disabled while running", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToChecksTabWithRunning(page, mockTauri);
+
+    const checkEntry = page.locator(".check-entry").first();
     await expect(checkEntry).toBeVisible();
-    await checkEntry.locator('[data-slot="accordion-trigger"]').click();
 
-    // All fields should be disabled
-    const nameInput = checkEntry.getByRole("textbox", { name: /name/i });
-    await expect(nameInput).toBeDisabled();
+    // Expand "On Failure"
+    await checkEntry
+      .locator('[data-slot="collapsible-trigger"]')
+      .click();
 
-    const commandInput = checkEntry.getByRole("textbox", { name: /command/i });
-    await expect(commandInput).toBeDisabled();
+    const content = checkEntry.locator('[data-slot="collapsible-content"]');
 
-    const whenSelect = checkEntry.locator("select");
-    await expect(whenSelect).toBeDisabled();
-
-    const timeoutInput = checkEntry.getByRole("spinbutton", {
-      name: /timeout/i,
-    });
-    await expect(timeoutInput).toBeDisabled();
-
-    const retriesInput = checkEntry.getByRole("spinbutton", {
-      name: /retries/i,
-    });
-    await expect(retriesInput).toBeDisabled();
+    // All On Failure fields should be disabled
+    await expect(
+      checkEntry.getByPlaceholder("Inherit from session"),
+    ).toBeDisabled();
+    await expect(
+      checkEntry.getByPlaceholder(/Fix all lint errors/),
+    ).toBeDisabled();
+    await expect(
+      content.getByRole("spinbutton", { name: /retries/i }),
+    ).toBeDisabled();
   });
+});
 
-  test("add check button is disabled while session is running", async ({
+test.describe("Checks — disabled while running", () => {
+  test("add check button disabled while running", async ({
     page,
     mockTauri,
   }) => {
-    await navigateToRepoDetailWithRunning(page, mockTauri);
+    await navigateToChecksTabWithRunning(page, mockTauri);
 
-    // Expand checks section
-    const checksDetails = page.locator(".checks");
-    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
-
-    // The "Add Check" button should be disabled
     await expect(
-      checksDetails.getByRole("button", { name: "Add Check" }),
+      page.getByRole("button", { name: "Add Check" }),
     ).toBeDisabled();
   });
 
-  test("remove button is disabled while session is running", async ({
-    page,
-    mockTauri,
-  }) => {
-    await navigateToRepoDetailWithRunning(page, mockTauri);
+  test("check fields disabled while running", async ({ page, mockTauri }) => {
+    await navigateToChecksTabWithRunning(page, mockTauri);
 
-    // Wait for checks to load, then expand checks section
-    const checksDetails = page.locator(".checks");
-    await expect(
-      checksDetails.locator('[data-slot="collapsible-trigger"]'),
-    ).toContainText("1 configured");
-    await checksDetails.locator('[data-slot="collapsible-trigger"]').click();
-
-    // The remove button on the check should be disabled
-    const checkEntry = checksDetails.locator(".check-entry").first();
+    const checkEntry = page.locator(".check-entry").first();
     await expect(checkEntry).toBeVisible();
+
+    // Name input disabled
+    await expect(checkEntry.getByPlaceholder(/Check \d/)).toBeDisabled();
+
+    // Command input disabled
+    await expect(checkEntry.getByLabel("Command")).toBeDisabled();
+
+    // Timeout disabled
     await expect(
-      checkEntry.getByRole("button", { name: "\u00d7", exact: true }),
+      checkEntry.getByRole("spinbutton", { name: /timeout/i }),
+    ).toBeDisabled();
+
+    // Remove button disabled
+    await expect(
+      checkEntry.getByRole("button", { name: "Remove check" }),
     ).toBeDisabled();
   });
 });
