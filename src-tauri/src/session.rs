@@ -26,7 +26,9 @@ pub struct Check {
     pub name: String,
     pub command: String,
     pub when: CheckWhen,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default = "default_timeout")]
     pub timeout_secs: u32,
@@ -38,7 +40,9 @@ pub struct Check {
 #[serde(default, rename_all = "camelCase")]
 pub struct GitSyncConfig {
     pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub conflict_prompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     pub max_push_retries: u32,
 }

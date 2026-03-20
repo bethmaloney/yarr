@@ -302,11 +302,11 @@ Backend command to write a `.yarr.yml` file to a repo root from the settings UI.
 - Return `Ok(())` on success
 
 **Checklist:**
-- [ ] Add `Serialize` derive to `YarrRepoConfig`
-- [ ] Add serialization helper in `yarr_config.rs` that produces clean YAML (skip `None` fields)
-- [ ] Add `export_yarr_config` IPC command in lib.rs
-- [ ] Register in `tauri::generate_handler![]`
-- [ ] `cargo check`
+- [x] Add `Serialize` derive to `YarrRepoConfig`
+- [x] Add serialization helper in `yarr_config.rs` that produces clean YAML (skip `None` fields)
+- [x] Add `export_yarr_config` IPC command in lib.rs
+- [x] Register in `tauri::generate_handler![]`
+- [x] `cargo check`
 
 ---
 
@@ -668,7 +668,7 @@ Test the resolve utility and DEFAULTS.
 |------|-------------|--------|
 | 1 | Add serde_yaml + YarrRepoConfig struct | Done |
 | 2 | read_yarr_config IPC command | Done |
-| 3 | export_yarr_config IPC command | Not Started |
+| 3 | export_yarr_config IPC command | Done |
 | 4 | DEFAULTS, resolve utility, YarrYmlConfig type | Not Started |
 | 5 | Make RepoConfig sparse | Not Started |
 | 6 | Backend merge in run_session | Not Started |

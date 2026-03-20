@@ -7,19 +7,33 @@ use crate::session::{Check, GitSyncConfig};
 #[derive(Debug, Clone, serde::Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct YarrRepoConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub effort_level: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub design_effort_level: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_iterations: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub completion_signal: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub create_branch: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_fetch: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub plans_dir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub move_plans_to_completed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub design_prompt_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub implementation_prompt_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub checks: Option<Vec<Check>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub git_sync: Option<GitSyncConfig>,
 }
 
@@ -33,6 +47,10 @@ pub struct YarrConfigResult {
 pub fn parse(yaml: &str) -> anyhow::Result<YarrRepoConfig> {
     let config: YarrRepoConfig = serde_yaml::from_str(yaml)?;
     Ok(config)
+}
+
+pub fn to_yaml(config: &YarrRepoConfig) -> Result<String, serde_yaml::Error> {
+    serde_yaml::to_string(config)
 }
 
 #[cfg(test)]
@@ -300,6 +318,224 @@ gitSync:
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["config"], serde_json::Value::Null);
         assert_eq!(json["error"], serde_json::Value::Null);
+    }
+
+    // ── to_yaml serialization tests ──────────────────────────────────
+
+    #[test]
+    fn serialize_full_config() {
+        let mut env = HashMap::new();
+        env.insert("RUST_LOG".to_string(), "debug".to_string());
+        env.insert("NODE_ENV".to_string(), "test".to_string());
+
+        let config = YarrRepoConfig {
+            model: Some("claude-sonnet-4-20250514".to_string()),
+            effort_level: Some("high".to_string()),
+            design_effort_level: Some("medium".to_string()),
+            max_iterations: Some(10),
+            completion_signal: Some("<done>COMPLETE</done>".to_string()),
+            create_branch: Some(true),
+            auto_fetch: Some(true),
+            plans_dir: Some("plans".to_string()),
+            move_plans_to_completed: Some(true),
+            design_prompt_file: Some("prompts/design.md".to_string()),
+            implementation_prompt_file: Some("prompts/impl.md".to_string()),
+            env: Some(env),
+            checks: Some(vec![Check {
+                name: "lint".to_string(),
+                command: "npm run lint".to_string(),
+                when: CheckWhen::EachIteration,
+                prompt: Some("Fix lint errors".to_string()),
+                model: Some("claude-sonnet-4-20250514".to_string()),
+                timeout_secs: 300,
+                max_retries: 2,
+            }]),
+            git_sync: Some(GitSyncConfig {
+                enabled: true,
+                conflict_prompt: Some("Resolve merge conflicts".to_string()),
+                model: Some("claude-sonnet-4-20250514".to_string()),
+                max_push_retries: 5,
+            }),
+        };
+
+        let yaml = to_yaml(&config).expect("should serialize full config to YAML");
+
+        assert!(yaml.contains("model:"), "should contain model key");
+        assert!(yaml.contains("effortLevel:"), "should contain effortLevel key");
+        assert!(yaml.contains("designEffortLevel:"), "should contain designEffortLevel key");
+        assert!(yaml.contains("maxIterations:"), "should contain maxIterations key");
+        assert!(yaml.contains("completionSignal:"), "should contain completionSignal key");
+        assert!(yaml.contains("createBranch:"), "should contain createBranch key");
+        assert!(yaml.contains("autoFetch:"), "should contain autoFetch key");
+        assert!(yaml.contains("plansDir:"), "should contain plansDir key");
+        assert!(yaml.contains("movePlansToCompleted:"), "should contain movePlansToCompleted key");
+        assert!(yaml.contains("designPromptFile:"), "should contain designPromptFile key");
+        assert!(yaml.contains("implementationPromptFile:"), "should contain implementationPromptFile key");
+        assert!(yaml.contains("env:"), "should contain env key");
+        assert!(yaml.contains("checks:"), "should contain checks key");
+        assert!(yaml.contains("gitSync:"), "should contain gitSync key");
+    }
+
+    #[test]
+    fn serialize_partial_config() {
+        let config = YarrRepoConfig {
+            model: Some("claude-sonnet-4-20250514".to_string()),
+            max_iterations: Some(5),
+            ..Default::default()
+        };
+
+        let yaml = to_yaml(&config).expect("should serialize partial config to YAML");
+
+        assert!(yaml.contains("model:"), "should contain model key");
+        assert!(yaml.contains("maxIterations:"), "should contain maxIterations key");
+        // None fields should be omitted
+        assert!(!yaml.contains("effortLevel:"), "should not contain effortLevel key");
+        assert!(!yaml.contains("completionSignal:"), "should not contain completionSignal key");
+        assert!(!yaml.contains("createBranch:"), "should not contain createBranch key");
+        assert!(!yaml.contains("checks:"), "should not contain checks key");
+        assert!(!yaml.contains("gitSync:"), "should not contain gitSync key");
+        assert!(!yaml.contains("env:"), "should not contain env key");
+    }
+
+    #[test]
+    fn serialize_empty_config() {
+        let config = YarrRepoConfig::default();
+
+        let yaml = to_yaml(&config).expect("should serialize empty/default config to YAML");
+
+        // An all-None config should produce minimal output (e.g. "{}" or empty)
+        assert!(!yaml.contains("model:"), "should not contain model key");
+        assert!(!yaml.contains("maxIterations:"), "should not contain maxIterations key");
+        assert!(!yaml.contains("checks:"), "should not contain checks key");
+        assert!(!yaml.contains("gitSync:"), "should not contain gitSync key");
+    }
+
+    #[test]
+    fn serialize_round_trip() {
+        let mut env = HashMap::new();
+        env.insert("RUST_LOG".to_string(), "info".to_string());
+
+        let original = YarrRepoConfig {
+            model: Some("opus".to_string()),
+            max_iterations: Some(8),
+            effort_level: Some("high".to_string()),
+            create_branch: Some(true),
+            env: Some(env),
+            checks: Some(vec![Check {
+                name: "test".to_string(),
+                command: "cargo test".to_string(),
+                when: CheckWhen::PostCompletion,
+                prompt: None,
+                model: None,
+                timeout_secs: 600,
+                max_retries: 1,
+            }]),
+            git_sync: Some(GitSyncConfig {
+                enabled: true,
+                conflict_prompt: None,
+                model: None,
+                max_push_retries: 3,
+            }),
+            ..Default::default()
+        };
+
+        let yaml = to_yaml(&original).expect("should serialize to YAML");
+        let parsed = parse(&yaml).expect("should parse serialized YAML back");
+
+        assert_eq!(parsed.model, original.model);
+        assert_eq!(parsed.max_iterations, original.max_iterations);
+        assert_eq!(parsed.effort_level, original.effort_level);
+        assert_eq!(parsed.create_branch, original.create_branch);
+        assert_eq!(parsed.env.as_ref().unwrap().get("RUST_LOG").unwrap(), "info");
+
+        let check = &parsed.checks.as_ref().unwrap()[0];
+        assert_eq!(check.name, "test");
+        assert_eq!(check.command, "cargo test");
+        assert_eq!(check.when, CheckWhen::PostCompletion);
+        assert_eq!(check.timeout_secs, 600);
+        assert_eq!(check.max_retries, 1);
+
+        let gs = parsed.git_sync.as_ref().unwrap();
+        assert!(gs.enabled);
+        assert_eq!(gs.max_push_retries, 3);
+    }
+
+    #[test]
+    fn serialize_with_checks() {
+        let config = YarrRepoConfig {
+            checks: Some(vec![
+                Check {
+                    name: "lint".to_string(),
+                    command: "npm run lint".to_string(),
+                    when: CheckWhen::EachIteration,
+                    prompt: Some("Fix lint errors".to_string()),
+                    model: Some("sonnet".to_string()),
+                    timeout_secs: 300,
+                    max_retries: 2,
+                },
+                Check {
+                    name: "typecheck".to_string(),
+                    command: "npx tsc --noEmit".to_string(),
+                    when: CheckWhen::PostCompletion,
+                    prompt: None,
+                    model: None,
+                    timeout_secs: 120,
+                    max_retries: 1,
+                },
+            ]),
+            ..Default::default()
+        };
+
+        let yaml = to_yaml(&config).expect("should serialize config with checks");
+
+        assert!(yaml.contains("checks:"), "should contain checks key");
+        assert!(yaml.contains("lint"), "should contain check name lint");
+        assert!(yaml.contains("typecheck"), "should contain check name typecheck");
+        assert!(yaml.contains("timeoutSecs:"), "should contain camelCase timeoutSecs");
+        assert!(yaml.contains("maxRetries:"), "should contain camelCase maxRetries");
+        // The when field should appear in the output
+        assert!(yaml.contains("when:"), "should contain when field");
+    }
+
+    #[test]
+    fn serialize_with_env() {
+        let mut env = HashMap::new();
+        env.insert("RUST_LOG".to_string(), "debug".to_string());
+        env.insert("DATABASE_URL".to_string(), "postgres://localhost/test".to_string());
+
+        let config = YarrRepoConfig {
+            env: Some(env),
+            ..Default::default()
+        };
+
+        let yaml = to_yaml(&config).expect("should serialize config with env");
+
+        assert!(yaml.contains("env:"), "should contain env key");
+        assert!(yaml.contains("RUST_LOG"), "should contain RUST_LOG env var");
+        assert!(yaml.contains("DATABASE_URL"), "should contain DATABASE_URL env var");
+        assert!(yaml.contains("debug"), "should contain env value debug");
+        assert!(yaml.contains("postgres://localhost/test"), "should contain env value for DATABASE_URL");
+    }
+
+    #[test]
+    fn serialize_with_git_sync() {
+        let config = YarrRepoConfig {
+            git_sync: Some(GitSyncConfig {
+                enabled: true,
+                conflict_prompt: Some("Resolve conflicts carefully".to_string()),
+                model: Some("claude-sonnet-4-20250514".to_string()),
+                max_push_retries: 7,
+            }),
+            ..Default::default()
+        };
+
+        let yaml = to_yaml(&config).expect("should serialize config with gitSync");
+
+        assert!(yaml.contains("gitSync:"), "should contain gitSync key");
+        assert!(yaml.contains("enabled:"), "should contain enabled field");
+        assert!(yaml.contains("conflictPrompt:"), "should contain camelCase conflictPrompt");
+        assert!(yaml.contains("maxPushRetries:"), "should contain camelCase maxPushRetries");
+        assert!(yaml.contains("Resolve conflicts carefully"), "should contain conflict prompt value");
     }
 
     #[test]
