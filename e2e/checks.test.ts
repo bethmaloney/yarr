@@ -203,9 +203,7 @@ test.describe("Checks settings tab", () => {
 
     // Click the remove button on the check
     const checkEntry = page.locator(".check-entry").first();
-    await checkEntry
-      .getByRole("button", { name: "Remove check" })
-      .click();
+    await checkEntry.getByRole("button", { name: "Remove check" }).click();
 
     // Check entry should be removed
     await expect(page.locator(".check-entry")).toHaveCount(0);
@@ -224,9 +222,7 @@ test.describe("Checks settings tab", () => {
 
     // Remove the first check (clippy)
     const firstCheckEntry = page.locator(".check-entry").first();
-    await firstCheckEntry
-      .getByRole("button", { name: "Remove check" })
-      .click();
+    await firstCheckEntry.getByRole("button", { name: "Remove check" }).click();
 
     // Only one check should remain
     await expect(page.locator(".check-entry")).toHaveCount(1);
@@ -253,9 +249,7 @@ test.describe("Checks — On Failure section", () => {
     const checkEntry = page.locator(".check-entry").first();
 
     // Expand "On Failure" collapsible
-    await checkEntry
-      .locator('[data-slot="collapsible-trigger"]')
-      .click();
+    await checkEntry.locator('[data-slot="collapsible-trigger"]').click();
 
     const content = checkEntry.locator('[data-slot="collapsible-content"]');
 
@@ -284,9 +278,7 @@ test.describe("Checks — On Failure section", () => {
     await expect(secondCheck).toBeVisible();
 
     // Expand "On Failure" on the second check
-    await secondCheck
-      .locator('[data-slot="collapsible-trigger"]')
-      .click();
+    await secondCheck.locator('[data-slot="collapsible-trigger"]').click();
 
     const content = secondCheck.locator('[data-slot="collapsible-content"]');
 
@@ -319,9 +311,7 @@ test.describe("Checks — On Failure section", () => {
     const checkEntry = page.locator(".check-entry").first();
 
     // Expand "On Failure"
-    await checkEntry
-      .locator('[data-slot="collapsible-trigger"]')
-      .click();
+    await checkEntry.locator('[data-slot="collapsible-trigger"]').click();
 
     // Model should be empty
     await expect(
@@ -344,9 +334,7 @@ test.describe("Checks — On Failure section", () => {
     await expect(checkEntry).toBeVisible();
 
     // Expand "On Failure"
-    await checkEntry
-      .locator('[data-slot="collapsible-trigger"]')
-      .click();
+    await checkEntry.locator('[data-slot="collapsible-trigger"]').click();
 
     const content = checkEntry.locator('[data-slot="collapsible-content"]');
 

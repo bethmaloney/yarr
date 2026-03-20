@@ -113,9 +113,7 @@ test.describe("Config source badges — yarr-yml source", () => {
     const effortLabel = sheet.locator("span.text-sm.text-muted-foreground", {
       hasText: "Effort Level",
     });
-    await expect(
-      effortLabel.locator("span.text-xs.font-mono"),
-    ).toHaveCount(0);
+    await expect(effortLabel.locator("span.text-xs.font-mono")).toHaveCount(0);
   });
 
   test("yarr-yml fields do not show reset button", async ({
@@ -217,9 +215,7 @@ test.describe("Config source badges — override source", () => {
     const effortLabel = sheet.locator("span.text-sm.text-muted-foreground", {
       hasText: "Effort Level",
     });
-    await expect(
-      effortLabel.locator("span.text-xs.font-mono"),
-    ).toHaveCount(0);
+    await expect(effortLabel.locator("span.text-xs.font-mono")).toHaveCount(0);
   });
 });
 
@@ -292,18 +288,16 @@ test.describe("Config source badges — mixed sources", () => {
     const effortLabel = sheet.locator("span.text-sm.text-muted-foreground", {
       hasText: "Effort Level",
     });
-    await expect(
-      effortLabel.locator("span.text-xs.font-mono"),
-    ).toHaveCount(0);
+    await expect(effortLabel.locator("span.text-xs.font-mono")).toHaveCount(0);
 
     // Completion Signal — default: no badge
     const completionLabel = sheet.locator(
       "span.text-sm.text-muted-foreground",
       { hasText: "Completion Signal" },
     );
-    await expect(
-      completionLabel.locator("span.text-xs.font-mono"),
-    ).toHaveCount(0);
+    await expect(completionLabel.locator("span.text-xs.font-mono")).toHaveCount(
+      0,
+    );
   });
 
   test("override takes precedence over yarr-yml for the same field", async ({

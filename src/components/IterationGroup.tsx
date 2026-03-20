@@ -194,9 +194,7 @@ export function IterationGroupComponent({
             ) : null}
             {group.contextTokens > 0 ? (
               <>
-                {(group.inputTokens || group.outputTokens) && (
-                  <span>·</span>
-                )}
+                {(group.inputTokens || group.outputTokens) && <span>·</span>}
                 <span
                   style={{ color: contextTokensColor(group.contextTokens) }}
                 >
@@ -209,8 +207,7 @@ export function IterationGroupComponent({
               <>
                 <span>·</span>
                 <span>
-                  agents:{" "}
-                  {formatTokenCount(group.subAgentPeakContext)}/
+                  agents: {formatTokenCount(group.subAgentPeakContext)}/
                   {formatTokenCount(group.contextWindow)}
                 </span>
               </>
@@ -241,124 +238,132 @@ export function IterationGroupComponent({
         <ul className="iteration-events list-none p-0 m-0">
           {group.events
             .map((ev, i) => ({ ev, origIndex: i }))
-            .filter(({ ev }) => ev.kind !== "context_updated" && ev.kind !== "sub_agent_context_updated")
+            .filter(
+              ({ ev }) =>
+                ev.kind !== "context_updated" &&
+                ev.kind !== "sub_agent_context_updated",
+            )
             .map(({ ev, origIndex }) => {
-            const globalIndex = globalStartIndex + origIndex;
-            const isExpanded = expandedEvents.has(globalIndex);
-            const colorClass = eventKindColor[ev.kind] ?? "";
+              const globalIndex = globalStartIndex + origIndex;
+              const isExpanded = expandedEvents.has(globalIndex);
+              const colorClass = eventKindColor[ev.kind] ?? "";
 
-            return (
-              <li
-                key={origIndex}
-                className={`event ${ev.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
-              >
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="event-btn flex items-baseline gap-2 w-full px-3 py-1 pl-8 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text hover:bg-background/50 transition-colors duration-150"
-                  onClick={handleSelectableClick(() =>
-                    toggleEvent(globalIndex),
-                  )}
-                  onKeyDown={handleKeyDown(() => toggleEvent(globalIndex))}
+              return (
+                <li
+                  key={origIndex}
+                  className={`event ${ev.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
                 >
-                  <span className="event-emoji shrink-0">
-                    {eventEmoji(ev.kind)}
-                  </span>
-                  <span
-                    className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 pl-8 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text hover:bg-background/50 transition-colors duration-150"
+                    onClick={handleSelectableClick(() =>
+                      toggleEvent(globalIndex),
+                    )}
+                    onKeyDown={handleKeyDown(() => toggleEvent(globalIndex))}
                   >
-                    {eventLabel(ev, repoPath)}
-                  </span>
-                  <span className="event-time shrink-0 text-muted-foreground text-xs">
-                    {formatTime(ev._ts)}
-                  </span>
-                </div>
+                    <span className="event-emoji shrink-0">
+                      {eventEmoji(ev.kind)}
+                    </span>
+                    <span
+                      className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                    >
+                      {eventLabel(ev, repoPath)}
+                    </span>
+                    <span className="event-time shrink-0 text-muted-foreground text-xs">
+                      {formatTime(ev._ts)}
+                    </span>
+                  </div>
 
-                {isExpanded &&
-                  (ev.kind === "tool_use" || ev.kind === "check_fix_tool_use") &&
-                  ev.tool_input &&
-                  ev.tool_name === "Agent" && (
-                    <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded text-xs text-muted-foreground">
-                      {Object.entries(ev.tool_input)
-                        .filter(([key]) => key !== "prompt")
-                        .map(([key, value]) => (
-                          <div key={key} className="flex gap-2 py-0.5">
-                            <span className="font-semibold text-primary">
-                              {key}:
-                            </span>
-                            <span>
-                              {typeof value === "object"
-                                ? JSON.stringify(value)
-                                : String(value)}
-                            </span>
-                          </div>
-                        ))}
-                      {(() => {
-                        const peakCtx = group.events
-                          .filter(
-                            (e) =>
-                              e.kind === "sub_agent_context_updated" &&
-                              e.parent_tool_use_id === ev.tool_use_id,
-                          )
-                          .reduce(
-                            (max, e) =>
-                              Math.max(max, e.context_tokens ?? 0),
-                            0,
+                  {isExpanded &&
+                    (ev.kind === "tool_use" ||
+                      ev.kind === "check_fix_tool_use") &&
+                    ev.tool_input &&
+                    ev.tool_name === "Agent" && (
+                      <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded text-xs text-muted-foreground">
+                        {Object.entries(ev.tool_input)
+                          .filter(([key]) => key !== "prompt")
+                          .map(([key, value]) => (
+                            <div key={key} className="flex gap-2 py-0.5">
+                              <span className="font-semibold text-primary">
+                                {key}:
+                              </span>
+                              <span>
+                                {typeof value === "object"
+                                  ? JSON.stringify(value)
+                                  : String(value)}
+                              </span>
+                            </div>
+                          ))}
+                        {(() => {
+                          const peakCtx = group.events
+                            .filter(
+                              (e) =>
+                                e.kind === "sub_agent_context_updated" &&
+                                e.parent_tool_use_id === ev.tool_use_id,
+                            )
+                            .reduce(
+                              (max, e) => Math.max(max, e.context_tokens ?? 0),
+                              0,
+                            );
+                          if (peakCtx === 0) return null;
+                          return (
+                            <div className="flex gap-2 py-0.5">
+                              <span className="font-semibold text-primary">
+                                context:
+                              </span>
+                              <span>
+                                {formatTokenCount(peakCtx)} /{" "}
+                                {formatTokenCount(group.contextWindow)}
+                              </span>
+                            </div>
                           );
-                        if (peakCtx === 0) return null;
-                        return (
-                          <div className="flex gap-2 py-0.5">
-                            <span className="font-semibold text-primary">
-                              context:
-                            </span>
-                            <span>
-                              {formatTokenCount(peakCtx)} /{" "}
-                              {formatTokenCount(group.contextWindow)}
-                            </span>
+                        })()}
+                        {typeof ev.tool_input.prompt === "string" && (
+                          <div className="mt-2 border-t border-border pt-2">
+                            <Markdown>{ev.tool_input.prompt}</Markdown>
                           </div>
-                        );
-                      })()}
-                      {typeof ev.tool_input.prompt === "string" && (
-                        <div className="mt-2 border-t border-border pt-2">
-                          <Markdown>{ev.tool_input.prompt}</Markdown>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    )}
 
-                {isExpanded &&
-                  (ev.kind === "tool_use" || ev.kind === "check_fix_tool_use") &&
-                  ev.tool_input &&
-                  ev.tool_name !== "Agent" && (
+                  {isExpanded &&
+                    (ev.kind === "tool_use" ||
+                      ev.kind === "check_fix_tool_use") &&
+                    ev.tool_input &&
+                    ev.tool_name !== "Agent" && (
+                      <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
+                        {JSON.stringify(ev.tool_input, null, 2)}
+                      </pre>
+                    )}
+
+                  {isExpanded &&
+                    (ev.kind === "tool_use" ||
+                      ev.kind === "check_fix_tool_use") &&
+                    ev.tool_output && (
+                      <ToolOutputSection
+                        toolOutput={ev.tool_output}
+                        toolName={ev.tool_name ?? ""}
+                        globalIndex={globalIndex}
+                        expandedOutputs={expandedOutputs}
+                        setExpandedOutputs={setExpandedOutputs}
+                      />
+                    )}
+
+                  {isExpanded && ev.kind === "check_failed" && ev.output && (
                     <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
-                      {JSON.stringify(ev.tool_input, null, 2)}
+                      {ev.output}
                     </pre>
                   )}
 
-                {isExpanded && (ev.kind === "tool_use" || ev.kind === "check_fix_tool_use") && ev.tool_output && (
-                  <ToolOutputSection
-                    toolOutput={ev.tool_output}
-                    toolName={ev.tool_name ?? ""}
-                    globalIndex={globalIndex}
-                    expandedOutputs={expandedOutputs}
-                    setExpandedOutputs={setExpandedOutputs}
-                  />
-                )}
-
-                {isExpanded && ev.kind === "check_failed" && ev.output && (
-                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
-                    {ev.output}
-                  </pre>
-                )}
-
-                {isExpanded && ev.kind === "git_sync_failed" && ev.error && (
-                  <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
-                    {ev.error}
-                  </pre>
-                )}
-              </li>
-            );
-          })}
+                  {isExpanded && ev.kind === "git_sync_failed" && ev.error && (
+                    <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
+                      {ev.error}
+                    </pre>
+                  )}
+                </li>
+              );
+            })}
         </ul>
       )}
     </div>

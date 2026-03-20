@@ -169,109 +169,109 @@ export function EventsList({
           className="events-scroll max-h-[calc(100vh-280px)] overflow-y-auto py-1"
           onScroll={handleEventsScroll}
         >
-        <ul className="list-none p-0 m-0">
-          {/* Before standalones */}
-          {grouped.standaloneEvents
-            .filter((s) => s.index === "before")
-            .map((standalone, i) => {
-              const isExpanded = expandedEvents.has(i);
-              const colorClass = eventKindColor[standalone.event.kind] ?? "";
-              return (
-                <li
-                  key={`before-${i}`}
-                  className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
-                >
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text hover:bg-background/50 transition-colors duration-150"
-                    onClick={handleSelectableClick(() => toggleEvent(i))}
-                    onKeyDown={handleKeyDown(() => toggleEvent(i))}
+          <ul className="list-none p-0 m-0">
+            {/* Before standalones */}
+            {grouped.standaloneEvents
+              .filter((s) => s.index === "before")
+              .map((standalone, i) => {
+                const isExpanded = expandedEvents.has(i);
+                const colorClass = eventKindColor[standalone.event.kind] ?? "";
+                return (
+                  <li
+                    key={`before-${i}`}
+                    className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
                   >
-                    <span className="event-emoji shrink-0">
-                      {eventEmoji(standalone.event.kind)}
-                    </span>
-                    <span
-                      className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text hover:bg-background/50 transition-colors duration-150"
+                      onClick={handleSelectableClick(() => toggleEvent(i))}
+                      onKeyDown={handleKeyDown(() => toggleEvent(i))}
                     >
-                      {eventLabel(standalone.event, repoPath)}
-                    </span>
-                    <span className="event-time shrink-0 text-muted-foreground text-xs">
-                      {formatTime(standalone.event._ts)}
-                    </span>
-                  </div>
-                  {isExpanded &&
-                    standalone.event.kind === "git_sync_failed" &&
-                    standalone.event.error && (
-                      <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
-                        {standalone.event.error}
-                      </pre>
-                    )}
-                </li>
-              );
-            })}
+                      <span className="event-emoji shrink-0">
+                        {eventEmoji(standalone.event.kind)}
+                      </span>
+                      <span
+                        className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                      >
+                        {eventLabel(standalone.event, repoPath)}
+                      </span>
+                      <span className="event-time shrink-0 text-muted-foreground text-xs">
+                        {formatTime(standalone.event._ts)}
+                      </span>
+                    </div>
+                    {isExpanded &&
+                      standalone.event.kind === "git_sync_failed" &&
+                      standalone.event.error && (
+                        <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
+                          {standalone.event.error}
+                        </pre>
+                      )}
+                  </li>
+                );
+              })}
 
-          {/* Iteration groups */}
-          {grouped.iterations.map((iter) => (
-            <IterationGroupComponent
-              key={iter.iteration}
-              group={iter}
-              expanded={expandedIterations.has(iter.iteration)}
-              onToggle={() => toggleIteration(iter.iteration)}
-              formatTime={formatTime}
-              expandedEvents={expandedEvents}
-              toggleEvent={toggleEvent}
-              globalStartIndex={
-                iterationGlobalStartIndices.get(iter.iteration) ?? 0
-              }
-              repoPath={repoPath}
-            />
-          ))}
+            {/* Iteration groups */}
+            {grouped.iterations.map((iter) => (
+              <IterationGroupComponent
+                key={iter.iteration}
+                group={iter}
+                expanded={expandedIterations.has(iter.iteration)}
+                onToggle={() => toggleIteration(iter.iteration)}
+                formatTime={formatTime}
+                expandedEvents={expandedEvents}
+                toggleEvent={toggleEvent}
+                globalStartIndex={
+                  iterationGlobalStartIndices.get(iter.iteration) ?? 0
+                }
+                repoPath={repoPath}
+              />
+            ))}
 
-          {/* After standalones */}
-          {grouped.standaloneEvents
-            .filter((s) => s.index === "after")
-            .map((standalone, i) => {
-              const globalIndex = afterStartIndex + i;
-              const isExpanded = expandedEvents.has(globalIndex);
-              const colorClass = eventKindColor[standalone.event.kind] ?? "";
-              return (
-                <li
-                  key={`after-${i}`}
-                  className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
-                >
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text hover:bg-background/50 transition-colors duration-150"
-                    onClick={handleSelectableClick(() =>
-                      toggleEvent(globalIndex),
-                    )}
-                    onKeyDown={handleKeyDown(() => toggleEvent(globalIndex))}
+            {/* After standalones */}
+            {grouped.standaloneEvents
+              .filter((s) => s.index === "after")
+              .map((standalone, i) => {
+                const globalIndex = afterStartIndex + i;
+                const isExpanded = expandedEvents.has(globalIndex);
+                const colorClass = eventKindColor[standalone.event.kind] ?? "";
+                return (
+                  <li
+                    key={`after-${i}`}
+                    className={`event ${standalone.event.kind}${isExpanded ? " expanded" : ""} ${colorClass} border-b border-border last:border-b-0`}
                   >
-                    <span className="event-emoji shrink-0">
-                      {eventEmoji(standalone.event.kind)}
-                    </span>
-                    <span
-                      className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="event-btn flex items-baseline gap-2 w-full px-3 py-1 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left select-text hover:bg-background/50 transition-colors duration-150"
+                      onClick={handleSelectableClick(() =>
+                        toggleEvent(globalIndex),
+                      )}
+                      onKeyDown={handleKeyDown(() => toggleEvent(globalIndex))}
                     >
-                      {eventLabel(standalone.event, repoPath)}
-                    </span>
-                    <span className="event-time shrink-0 text-muted-foreground text-xs">
-                      {formatTime(standalone.event._ts)}
-                    </span>
-                  </div>
-                  {isExpanded &&
-                    standalone.event.kind === "git_sync_failed" &&
-                    standalone.event.error && (
-                      <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
-                        {standalone.event.error}
-                      </pre>
-                    )}
-                </li>
-              );
-            })}
-        </ul>
+                      <span className="event-emoji shrink-0">
+                        {eventEmoji(standalone.event.kind)}
+                      </span>
+                      <span
+                        className={`event-text flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                      >
+                        {eventLabel(standalone.event, repoPath)}
+                      </span>
+                      <span className="event-time shrink-0 text-muted-foreground text-xs">
+                        {formatTime(standalone.event._ts)}
+                      </span>
+                    </div>
+                    {isExpanded &&
+                      standalone.event.kind === "git_sync_failed" &&
+                      standalone.event.error && (
+                        <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
+                          {standalone.event.error}
+                        </pre>
+                      )}
+                  </li>
+                );
+              })}
+          </ul>
         </div>
       </div>
       {!autoScroll && (

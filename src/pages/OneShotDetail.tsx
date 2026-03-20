@@ -55,7 +55,10 @@ function statusBadge(
   entry: { status?: string } | undefined,
   phase: string,
   isRunning: boolean,
-): { label: string; variant: "warning" | "completed" | "failed" | "secondary" } | null {
+): {
+  label: string;
+  variant: "warning" | "completed" | "failed" | "secondary";
+} | null {
   if (entry?.status === "failed") return { label: "Failed", variant: "failed" };
   if (phase === "complete") return { label: "Complete", variant: "completed" };
   if (phase === "failed") return { label: "Failed", variant: "failed" };
@@ -343,7 +346,9 @@ export default function OneShotDetail() {
               </div>
               {ctxPercent !== null && (
                 <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
-                  <dt className="text-muted-foreground text-sm">Peak Context</dt>
+                  <dt className="text-muted-foreground text-sm">
+                    Peak Context
+                  </dt>
                   <dd className="m-0 text-sm font-mono">
                     <span style={{ color: sessionContextColor(ctxPercent) }}>
                       {ctxPercent}%
@@ -361,7 +366,10 @@ export default function OneShotDetail() {
               )}
               <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
                 <dt className="text-muted-foreground text-sm">Session ID</dt>
-                <dd className="m-0 text-sm font-mono truncate" title={displayTrace.session_id}>
+                <dd
+                  className="m-0 text-sm font-mono truncate"
+                  title={displayTrace.session_id}
+                >
                   {displayTrace.session_id}
                 </dd>
               </div>

@@ -395,7 +395,10 @@ export const useAppStore = create<AppStore>((set, get) => {
               sessionEvent.plan_file
             ) {
               const repo = get().repos.find((r) => r.id === repo_id);
-              if (repo && (repo.movePlansToCompleted ?? DEFAULTS.movePlansToCompleted)) {
+              if (
+                repo &&
+                (repo.movePlansToCompleted ?? DEFAULTS.movePlansToCompleted)
+              ) {
                 const plansDir = repo.plansDir || "docs/plans/";
                 const filename =
                   sessionEvent.plan_file.split("/").pop() ||
@@ -590,8 +593,13 @@ export const useAppStore = create<AppStore>((set, get) => {
         repo_id: string;
         error: string;
       }>("yarr-config-warning", (event) => {
-        console.warn("[store] yarr-config-warning:", { repo_id: event.payload.repo_id, error: event.payload.error });
-        toast.warning(`.yarr.yml: ${event.payload.error}`, { id: "yarr-config-warning" });
+        console.warn("[store] yarr-config-warning:", {
+          repo_id: event.payload.repo_id,
+          error: event.payload.error,
+        });
+        toast.warning(`.yarr.yml: ${event.payload.error}`, {
+          id: "yarr-config-warning",
+        });
       });
 
       // 5. Start sync interval

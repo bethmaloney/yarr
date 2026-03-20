@@ -117,14 +117,10 @@ export default function RepoDetail() {
   const yarrConfig = useYarrConfig(repo ?? null);
   const resolvedConfig = useMemo(
     () =>
-      resolveConfig(
-        repo ?? {},
-        yarrConfig.config,
-        {
-          ...DEFAULTS,
-          autoFetch: repo?.type === "local" ? true : DEFAULTS.autoFetch,
-        } as typeof DEFAULTS,
-      ),
+      resolveConfig(repo ?? {}, yarrConfig.config, {
+        ...DEFAULTS,
+        autoFetch: repo?.type === "local" ? true : DEFAULTS.autoFetch,
+      } as typeof DEFAULTS),
     [repo, yarrConfig.config],
   );
   const session: SessionState =
@@ -217,15 +213,21 @@ export default function RepoDetail() {
     setMaxIterations(resolvedConfig.maxIterations.value);
     setCompletionSignal(resolvedConfig.completionSignal.value);
     setEnvVars(
-      Object.entries(resolvedConfig.envVars.value ?? {}).map(([key, value]) => ({
-        key,
-        value,
-      })),
+      Object.entries(resolvedConfig.envVars.value ?? {}).map(
+        ([key, value]) => ({
+          key,
+          value,
+        }),
+      ),
     );
     setChecks(resolvedConfig.checks.value ?? []);
     setCreateBranch(resolvedConfig.createBranch.value);
     setAutoFetch(resolvedConfig.autoFetch.value);
-    setPlansDir(resolvedConfig.plansDir.source === "default" ? "" : resolvedConfig.plansDir.value);
+    setPlansDir(
+      resolvedConfig.plansDir.source === "default"
+        ? ""
+        : resolvedConfig.plansDir.value,
+    );
     setMovePlansToCompleted(resolvedConfig.movePlansToCompleted.value);
     setGitSyncEnabled(resolvedConfig.gitSync.value?.enabled ?? false);
     setGitSyncModel(resolvedConfig.gitSync.value?.model ?? "");
@@ -254,8 +256,12 @@ export default function RepoDetail() {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function resetField(field: string, fallbackValue: unknown, setter: (v: any) => void) {
+  function resetField(
+    field: string,
+    fallbackValue: unknown,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setter: (v: any) => void,
+  ) {
     setter(fallbackValue);
     setDirtyFields((prev) => {
       const next = new Set(prev);
@@ -368,9 +374,11 @@ export default function RepoDetail() {
     let cancelled = false;
 
     function tryPath(path: string) {
-      return invoke("read_file_preview", { repo: payload, path, maxLines: 8 }).then(
-        (result) => result as string,
-      );
+      return invoke("read_file_preview", {
+        repo: payload,
+        path,
+        maxLines: 8,
+      }).then((result) => result as string);
     }
 
     // Build a fallback path with /completed/ inserted before the filename
@@ -495,13 +503,17 @@ export default function RepoDetail() {
     if (dirtyFields.has("model")) update.model = model;
     if (dirtyFields.has("effortLevel")) update.effortLevel = effortLevel;
     if (dirtyFields.has("maxIterations")) update.maxIterations = maxIterations;
-    if (dirtyFields.has("completionSignal")) update.completionSignal = completionSignal;
+    if (dirtyFields.has("completionSignal"))
+      update.completionSignal = completionSignal;
     if (dirtyFields.has("createBranch")) update.createBranch = createBranch;
     if (dirtyFields.has("autoFetch")) update.autoFetch = autoFetch;
     if (dirtyFields.has("plansDir")) update.plansDir = plansDir || undefined;
-    if (dirtyFields.has("movePlansToCompleted")) update.movePlansToCompleted = movePlansToCompleted;
-    if (dirtyFields.has("designPromptFile")) update.designPromptFile = designPromptFile || undefined;
-    if (dirtyFields.has("implementationPromptFile")) update.implementationPromptFile = implementationPromptFile || undefined;
+    if (dirtyFields.has("movePlansToCompleted"))
+      update.movePlansToCompleted = movePlansToCompleted;
+    if (dirtyFields.has("designPromptFile"))
+      update.designPromptFile = designPromptFile || undefined;
+    if (dirtyFields.has("implementationPromptFile"))
+      update.implementationPromptFile = implementationPromptFile || undefined;
 
     if (dirtyFields.has("envVars")) {
       update.envVars = envVarsRecord;
@@ -641,13 +653,22 @@ export default function RepoDetail() {
           (clearUpdate as Record<string, unknown>)[key] = undefined;
         }
       }
-      if (dirtyFields.has("envVars") || resolvedConfig.envVars.source === "override") {
+      if (
+        dirtyFields.has("envVars") ||
+        resolvedConfig.envVars.source === "override"
+      ) {
         clearUpdate.envVars = undefined;
       }
-      if (dirtyFields.has("checks") || resolvedConfig.checks.source === "override") {
+      if (
+        dirtyFields.has("checks") ||
+        resolvedConfig.checks.source === "override"
+      ) {
         clearUpdate.checks = undefined;
       }
-      if (dirtyFields.has("gitSync") || resolvedConfig.gitSync.source === "override") {
+      if (
+        dirtyFields.has("gitSync") ||
+        resolvedConfig.gitSync.source === "override"
+      ) {
         clearUpdate.gitSync = undefined;
       }
       updateRepo({ ...repo!, ...clearUpdate } as RepoConfig);
@@ -1111,14 +1132,17 @@ export default function RepoDetail() {
               Settings, checks, and git sync for {repo.name}
             </SheetDescription>
             {/* .yarr.yml status banner */}
-            {!yarrConfig.loading && (
-              yarrConfig.config ? (
+            {!yarrConfig.loading &&
+              (yarrConfig.config ? (
                 <div
                   data-testid="yarr-config-banner"
                   className="flex items-center gap-2 text-xs font-mono text-info bg-card-inset rounded-md px-3 py-1.5"
                 >
                   <FileText className="size-3.5" />
-                  .yarr.yml loaded — {countYarrConfigFields(yarrConfig.config)} fields inherited
+                  .yarr.yml loaded — {countYarrConfigFields(
+                    yarrConfig.config,
+                  )}{" "}
+                  fields inherited
                 </div>
               ) : yarrConfig.error ? (
                 <div
@@ -1136,8 +1160,7 @@ export default function RepoDetail() {
                   <FileText className="size-3.5" />
                   .yarr.yml not found
                 </div>
-              )
-            )}
+              ))}
           </SheetHeader>
           <Tabs defaultValue="settings" className="px-4">
             <TabsList variant="line" className="w-full">
@@ -1206,7 +1229,11 @@ export default function RepoDetail() {
                           <ConfigSourceBadge
                             source={effectiveSource("model")}
                             onReset={() => {
-                              const fallback = resolve(undefined, yarrConfig.config?.model, DEFAULTS.model);
+                              const fallback = resolve(
+                                undefined,
+                                yarrConfig.config?.model,
+                                DEFAULTS.model,
+                              );
                               resetField("model", fallback.value, setModel);
                             }}
                           />
@@ -1214,7 +1241,10 @@ export default function RepoDetail() {
                         <Input
                           type="text"
                           value={model}
-                          onChange={(e) => { setModel(e.target.value); markDirty("model"); }}
+                          onChange={(e) => {
+                            setModel(e.target.value);
+                            markDirty("model");
+                          }}
                           disabled={session.running}
                           className="font-mono"
                         />
@@ -1225,14 +1255,25 @@ export default function RepoDetail() {
                           <ConfigSourceBadge
                             source={effectiveSource("effortLevel")}
                             onReset={() => {
-                              const fallback = resolve(undefined, yarrConfig.config?.effortLevel, DEFAULTS.effortLevel);
-                              resetField("effortLevel", fallback.value, setEffortLevel);
+                              const fallback = resolve(
+                                undefined,
+                                yarrConfig.config?.effortLevel,
+                                DEFAULTS.effortLevel,
+                              );
+                              resetField(
+                                "effortLevel",
+                                fallback.value,
+                                setEffortLevel,
+                              );
                             }}
                           />
                         </span>
                         <Select
                           value={effortLevel}
-                          onValueChange={(v) => { setEffortLevel(v); markDirty("effortLevel"); }}
+                          onValueChange={(v) => {
+                            setEffortLevel(v);
+                            markDirty("effortLevel");
+                          }}
                           disabled={session.running}
                         >
                           <SelectTrigger className="font-mono">
@@ -1252,8 +1293,16 @@ export default function RepoDetail() {
                           <ConfigSourceBadge
                             source={effectiveSource("maxIterations")}
                             onReset={() => {
-                              const fallback = resolve(undefined, yarrConfig.config?.maxIterations, DEFAULTS.maxIterations);
-                              resetField("maxIterations", fallback.value, setMaxIterations);
+                              const fallback = resolve(
+                                undefined,
+                                yarrConfig.config?.maxIterations,
+                                DEFAULTS.maxIterations,
+                              );
+                              resetField(
+                                "maxIterations",
+                                fallback.value,
+                                setMaxIterations,
+                              );
                             }}
                           />
                         </span>
@@ -1275,15 +1324,26 @@ export default function RepoDetail() {
                         <ConfigSourceBadge
                           source={effectiveSource("completionSignal")}
                           onReset={() => {
-                            const fallback = resolve(undefined, yarrConfig.config?.completionSignal, DEFAULTS.completionSignal);
-                            resetField("completionSignal", fallback.value, setCompletionSignal);
+                            const fallback = resolve(
+                              undefined,
+                              yarrConfig.config?.completionSignal,
+                              DEFAULTS.completionSignal,
+                            );
+                            resetField(
+                              "completionSignal",
+                              fallback.value,
+                              setCompletionSignal,
+                            );
                           }}
                         />
                       </span>
                       <Input
                         type="text"
                         value={completionSignal}
-                        onChange={(e) => { setCompletionSignal(e.target.value); markDirty("completionSignal"); }}
+                        onChange={(e) => {
+                          setCompletionSignal(e.target.value);
+                          markDirty("completionSignal");
+                        }}
                         disabled={session.running}
                         className="font-mono"
                       />
@@ -1309,15 +1369,28 @@ export default function RepoDetail() {
                         <ConfigSourceBadge
                           source={effectiveSource("plansDir")}
                           onReset={() => {
-                            const fallback = resolve(undefined, yarrConfig.config?.plansDir, DEFAULTS.plansDir);
-                            resetField("plansDir", fallback.source === "default" ? "" : fallback.value, setPlansDir);
+                            const fallback = resolve(
+                              undefined,
+                              yarrConfig.config?.plansDir,
+                              DEFAULTS.plansDir,
+                            );
+                            resetField(
+                              "plansDir",
+                              fallback.source === "default"
+                                ? ""
+                                : fallback.value,
+                              setPlansDir,
+                            );
                           }}
                         />
                       </span>
                       <Input
                         type="text"
                         value={plansDir}
-                        onChange={(e) => { setPlansDir(e.target.value); markDirty("plansDir"); }}
+                        onChange={(e) => {
+                          setPlansDir(e.target.value);
+                          markDirty("plansDir");
+                        }}
                         placeholder="docs/plans/"
                         disabled={session.running}
                       />
@@ -1343,8 +1416,16 @@ export default function RepoDetail() {
                         <ConfigSourceBadge
                           source={effectiveSource("movePlansToCompleted")}
                           onReset={() => {
-                            const fallback = resolve(undefined, yarrConfig.config?.movePlansToCompleted, DEFAULTS.movePlansToCompleted);
-                            resetField("movePlansToCompleted", fallback.value, setMovePlansToCompleted);
+                            const fallback = resolve(
+                              undefined,
+                              yarrConfig.config?.movePlansToCompleted,
+                              DEFAULTS.movePlansToCompleted,
+                            );
+                            resetField(
+                              "movePlansToCompleted",
+                              fallback.value,
+                              setMovePlansToCompleted,
+                            );
                           }}
                         />
                       </span>
@@ -1367,8 +1448,16 @@ export default function RepoDetail() {
                         <ConfigSourceBadge
                           source={effectiveSource("designPromptFile")}
                           onReset={() => {
-                            const fallback = resolve(undefined, yarrConfig.config?.designPromptFile, DEFAULTS.designPromptFile);
-                            resetField("designPromptFile", fallback.value, setDesignPromptFile);
+                            const fallback = resolve(
+                              undefined,
+                              yarrConfig.config?.designPromptFile,
+                              DEFAULTS.designPromptFile,
+                            );
+                            resetField(
+                              "designPromptFile",
+                              fallback.value,
+                              setDesignPromptFile,
+                            );
                           }}
                         />
                       </span>
@@ -1376,7 +1465,10 @@ export default function RepoDetail() {
                         <Input
                           type="text"
                           value={designPromptFile}
-                          onChange={(e) => { setDesignPromptFile(e.target.value); markDirty("designPromptFile"); }}
+                          onChange={(e) => {
+                            setDesignPromptFile(e.target.value);
+                            markDirty("designPromptFile");
+                          }}
                           placeholder=".yarr/prompts/design.md"
                           disabled={session.running}
                           className="flex-1"
@@ -1390,10 +1482,13 @@ export default function RepoDetail() {
                             try {
                               const repoPayload = buildRepoPayload();
                               if (!repoPayload) return;
-                              const path = await invoke<string>("export_default_prompt", {
-                                repo: repoPayload,
-                                promptType: "design",
-                              });
+                              const path = await invoke<string>(
+                                "export_default_prompt",
+                                {
+                                  repo: repoPayload,
+                                  promptType: "design",
+                                },
+                              );
                               setDesignPromptFile(path);
                               markDirty("designPromptFile");
                               toast.success("Default design prompt exported");
@@ -1412,8 +1507,16 @@ export default function RepoDetail() {
                         <ConfigSourceBadge
                           source={effectiveSource("implementationPromptFile")}
                           onReset={() => {
-                            const fallback = resolve(undefined, yarrConfig.config?.implementationPromptFile, DEFAULTS.implementationPromptFile);
-                            resetField("implementationPromptFile", fallback.value, setImplementationPromptFile);
+                            const fallback = resolve(
+                              undefined,
+                              yarrConfig.config?.implementationPromptFile,
+                              DEFAULTS.implementationPromptFile,
+                            );
+                            resetField(
+                              "implementationPromptFile",
+                              fallback.value,
+                              setImplementationPromptFile,
+                            );
                           }}
                         />
                       </span>
@@ -1421,7 +1524,10 @@ export default function RepoDetail() {
                         <Input
                           type="text"
                           value={implementationPromptFile}
-                          onChange={(e) => { setImplementationPromptFile(e.target.value); markDirty("implementationPromptFile"); }}
+                          onChange={(e) => {
+                            setImplementationPromptFile(e.target.value);
+                            markDirty("implementationPromptFile");
+                          }}
                           placeholder=".yarr/prompts/implementation.md"
                           disabled={session.running}
                           className="flex-1"
@@ -1435,13 +1541,18 @@ export default function RepoDetail() {
                             try {
                               const repoPayload = buildRepoPayload();
                               if (!repoPayload) return;
-                              const path = await invoke<string>("export_default_prompt", {
-                                repo: repoPayload,
-                                promptType: "implementation",
-                              });
+                              const path = await invoke<string>(
+                                "export_default_prompt",
+                                {
+                                  repo: repoPayload,
+                                  promptType: "implementation",
+                                },
+                              );
                               setImplementationPromptFile(path);
                               markDirty("implementationPromptFile");
-                              toast.success("Default implementation prompt exported");
+                              toast.success(
+                                "Default implementation prompt exported",
+                              );
                             } catch (e) {
                               toast.error(String(e));
                             }
@@ -1473,7 +1584,10 @@ export default function RepoDetail() {
                       <Checkbox
                         id="create-branch"
                         checked={createBranch}
-                        onCheckedChange={(v) => { setCreateBranch(v === true); markDirty("createBranch"); }}
+                        onCheckedChange={(v) => {
+                          setCreateBranch(v === true);
+                          markDirty("createBranch");
+                        }}
                         disabled={session.running}
                       />
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
@@ -1481,8 +1595,16 @@ export default function RepoDetail() {
                         <ConfigSourceBadge
                           source={effectiveSource("createBranch")}
                           onReset={() => {
-                            const fallback = resolve(undefined, yarrConfig.config?.createBranch, DEFAULTS.createBranch);
-                            resetField("createBranch", fallback.value, setCreateBranch);
+                            const fallback = resolve(
+                              undefined,
+                              yarrConfig.config?.createBranch,
+                              DEFAULTS.createBranch,
+                            );
+                            resetField(
+                              "createBranch",
+                              fallback.value,
+                              setCreateBranch,
+                            );
                           }}
                         />
                       </span>
@@ -1495,7 +1617,10 @@ export default function RepoDetail() {
                         <Checkbox
                           id="auto-fetch"
                           checked={autoFetch}
-                          onCheckedChange={(v) => { setAutoFetch(v === true); markDirty("autoFetch"); }}
+                          onCheckedChange={(v) => {
+                            setAutoFetch(v === true);
+                            markDirty("autoFetch");
+                          }}
                           disabled={session.running}
                         />
                         <span className="text-sm text-muted-foreground flex items-center gap-2">
@@ -1503,8 +1628,16 @@ export default function RepoDetail() {
                           <ConfigSourceBadge
                             source={effectiveSource("autoFetch")}
                             onReset={() => {
-                              const fallback = resolve(undefined, yarrConfig.config?.autoFetch, DEFAULTS.autoFetch);
-                              resetField("autoFetch", fallback.value, setAutoFetch);
+                              const fallback = resolve(
+                                undefined,
+                                yarrConfig.config?.autoFetch,
+                                DEFAULTS.autoFetch,
+                              );
+                              resetField(
+                                "autoFetch",
+                                fallback.value,
+                                setAutoFetch,
+                              );
                             }}
                           />
                         </span>
@@ -1529,10 +1662,20 @@ export default function RepoDetail() {
                       onReset={() => {
                         const fallback = yarrConfig.config?.envVars;
                         setEnvVars(
-                          Object.entries(fallback ?? {}).map(([key, value]) => ({ key, value }))
+                          Object.entries(fallback ?? {}).map(
+                            ([key, value]) => ({ key, value }),
+                          ),
                         );
-                        setDirtyFields(prev => { const next = new Set(prev); next.delete("envVars"); return next; });
-                        setRemovedFields(prev => { const next = new Set(prev); next.add("envVars"); return next; });
+                        setDirtyFields((prev) => {
+                          const next = new Set(prev);
+                          next.delete("envVars");
+                          return next;
+                        });
+                        setRemovedFields((prev) => {
+                          const next = new Set(prev);
+                          next.add("envVars");
+                          return next;
+                        });
                       }}
                     />
                   </span>
@@ -1650,8 +1793,16 @@ export default function RepoDetail() {
                       onReset={() => {
                         const fallback = yarrConfig.config?.checks;
                         setChecks(fallback ?? []);
-                        setDirtyFields(prev => { const next = new Set(prev); next.delete("checks"); return next; });
-                        setRemovedFields(prev => { const next = new Set(prev); next.add("checks"); return next; });
+                        setDirtyFields((prev) => {
+                          const next = new Set(prev);
+                          next.delete("checks");
+                          return next;
+                        });
+                        setRemovedFields((prev) => {
+                          const next = new Set(prev);
+                          next.add("checks");
+                          return next;
+                        });
                       }}
                     />
                   </span>
@@ -1921,8 +2072,16 @@ export default function RepoDetail() {
                         setGitSyncModel(fallback?.model ?? "");
                         setGitSyncMaxRetries(fallback?.maxPushRetries ?? 3);
                         setGitSyncPrompt(fallback?.conflictPrompt ?? "");
-                        setDirtyFields(prev => { const next = new Set(prev); next.delete("gitSync"); return next; });
-                        setRemovedFields(prev => { const next = new Set(prev); next.add("gitSync"); return next; });
+                        setDirtyFields((prev) => {
+                          const next = new Set(prev);
+                          next.delete("gitSync");
+                          return next;
+                        });
+                        setRemovedFields((prev) => {
+                          const next = new Set(prev);
+                          next.add("gitSync");
+                          return next;
+                        });
                       }}
                     />
                   </span>
@@ -1936,7 +2095,10 @@ export default function RepoDetail() {
                       <Checkbox
                         id="git-sync-enabled"
                         checked={gitSyncEnabled}
-                        onCheckedChange={(v) => { setGitSyncEnabled(v === true); markDirty("gitSync"); }}
+                        onCheckedChange={(v) => {
+                          setGitSyncEnabled(v === true);
+                          markDirty("gitSync");
+                        }}
                         disabled={session.running}
                       />
                       Enable git sync
@@ -1949,7 +2111,10 @@ export default function RepoDetail() {
                         <Input
                           type="text"
                           value={gitSyncModel}
-                          onChange={(e) => { setGitSyncModel(e.target.value); markDirty("gitSync"); }}
+                          onChange={(e) => {
+                            setGitSyncModel(e.target.value);
+                            markDirty("gitSync");
+                          }}
                           placeholder="sonnet"
                           disabled={session.running || !gitSyncEnabled}
                           className="font-mono"
@@ -1988,7 +2153,10 @@ export default function RepoDetail() {
                       </span>
                       <Textarea
                         value={gitSyncPrompt}
-                        onChange={(e) => { setGitSyncPrompt(e.target.value); markDirty("gitSync"); }}
+                        onChange={(e) => {
+                          setGitSyncPrompt(e.target.value);
+                          markDirty("gitSync");
+                        }}
                         placeholder="Resolve merge conflicts..."
                         disabled={session.running || !gitSyncEnabled}
                         rows={3}

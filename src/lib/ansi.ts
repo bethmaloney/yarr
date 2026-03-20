@@ -13,7 +13,7 @@ export function parseAnsi(raw: string): AnsiSegment[] {
       const classes: string[] = [];
       if (entry.fg) classes.push(`ansi-fg-${entry.fg.replace(/^ansi-/, "")}`);
       if (entry.bg) classes.push(`ansi-bg-${entry.bg.replace(/^ansi-/, "")}`);
-      for (const d of ((entry as { decorations?: string[] }).decorations ?? [])) {
+      for (const d of (entry as { decorations?: string[] }).decorations ?? []) {
         if (d === "bold") classes.push("ansi-bold");
         if (d === "dim") classes.push("ansi-dim");
         if (d === "italic") classes.push("ansi-italic");

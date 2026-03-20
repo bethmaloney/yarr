@@ -257,7 +257,6 @@ describe("resolveConfig", () => {
   });
 });
 
-
 describe("DEFAULTS", () => {
   it('has expected model value "opus"', () => {
     expect(DEFAULTS.model).toBe("opus");

@@ -77,19 +77,31 @@ export function resolveConfig(
   const yml = yarrYml ?? {};
   return {
     model: resolve(repo.model, yml.model, defaults.model),
-    effortLevel: resolve(repo.effortLevel, yml.effortLevel, defaults.effortLevel),
+    effortLevel: resolve(
+      repo.effortLevel,
+      yml.effortLevel,
+      defaults.effortLevel,
+    ),
     designEffortLevel: resolve(
       repo.designEffortLevel,
       yml.designEffortLevel,
       defaults.designEffortLevel,
     ),
-    maxIterations: resolve(repo.maxIterations, yml.maxIterations, defaults.maxIterations),
+    maxIterations: resolve(
+      repo.maxIterations,
+      yml.maxIterations,
+      defaults.maxIterations,
+    ),
     completionSignal: resolve(
       repo.completionSignal,
       yml.completionSignal,
       defaults.completionSignal,
     ),
-    createBranch: resolve(repo.createBranch, yml.createBranch, defaults.createBranch),
+    createBranch: resolve(
+      repo.createBranch,
+      yml.createBranch,
+      defaults.createBranch,
+    ),
     autoFetch: resolve(repo.autoFetch, yml.autoFetch, defaults.autoFetch),
     plansDir: resolve(repo.plansDir, yml.plansDir, defaults.plansDir),
     movePlansToCompleted: resolve(
@@ -112,4 +124,3 @@ export function resolveConfig(
     gitSync: resolve(repo.gitSync, yml.gitSync, undefined),
   };
 }
-

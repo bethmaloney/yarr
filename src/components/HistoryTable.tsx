@@ -67,10 +67,7 @@ function planFilename(path: string | null): string {
   return name;
 }
 
-function traceRepoId(
-  trace: SessionTrace,
-  repoId: string | undefined,
-): string {
+function traceRepoId(trace: SessionTrace, repoId: string | undefined): string {
   if (repoId) return repoId;
   return trace.repo_id ?? "unknown";
 }

@@ -29,7 +29,11 @@ const TRACE = {
 };
 
 const EVENTS = [
-  { kind: "session_started", session_id: "sess-sub-agent-ctx", _ts: 1710842400000 },
+  {
+    kind: "session_started",
+    session_id: "sess-sub-agent-ctx",
+    _ts: 1710842400000,
+  },
   { kind: "iteration_started", iteration: 1, _ts: 1710842401000 },
   {
     kind: "assistant_text",

@@ -2727,18 +2727,18 @@ describe("yarr-config-warning listener", () => {
 
   it("calls toast.warning with the error message when event fires", () => {
     // Capture the yarr-config-warning callback
-    let capturedCallback: ((event: { payload: { repo_id: string; error: string } }) => void) | null = null;
+    let capturedCallback:
+      | ((event: { payload: { repo_id: string; error: string } }) => void)
+      | null = null;
     mockListen.mockImplementation(
-      async (
-        eventName: string,
-        callback: (...args: unknown[]) => void,
-      ) => {
+      async (eventName: string, callback: (...args: unknown[]) => void) => {
         if (eventName === "yarr-config-warning") {
           capturedCallback = callback as typeof capturedCallback;
         }
         // Delegate to original for session-event capture etc.
         if (eventName === "session-event" && mockListenerCallback) {
-          mockListenerCallback.current = callback as typeof mockListenerCallback.current;
+          mockListenerCallback.current =
+            callback as typeof mockListenerCallback.current;
         }
         return mockUnlisten;
       },

@@ -1383,11 +1383,10 @@ describe("IterationGroupComponent", () => {
       const { container } = renderComponent({
         group: makeGroup({ inputTokens: 50000, outputTokens: 12000 }),
       });
-      // The token counts should be wrapped in a span with a title attribute
-      // containing exact comma-separated numbers
-      const statsSpan = container.querySelector(".iteration-stats");
-      expect(statsSpan).not.toBeNull();
-      const titleSpan = statsSpan!.querySelector("span[title]");
+      // The token counts are in a sibling div below .iteration-stats
+      const header = container.querySelector(".iteration-header");
+      expect(header).not.toBeNull();
+      const titleSpan = header!.querySelector("span[title]");
       expect(titleSpan).not.toBeNull();
       expect(titleSpan!.getAttribute("title")).toContain(
         (50000).toLocaleString(),
@@ -1408,10 +1407,10 @@ describe("IterationGroupComponent", () => {
       const { container } = renderComponent({
         group: makeGroup({ contextTokens: 50000 }),
       });
-      const statsSpan = container.querySelector(".iteration-stats");
-      expect(statsSpan).not.toBeNull();
+      const header = container.querySelector(".iteration-header");
+      expect(header).not.toBeNull();
       // Find the element with "ctx" text that has a style.color
-      const allSpans = statsSpan!.querySelectorAll("span");
+      const allSpans = header!.querySelectorAll("span");
       const ctxSpan = Array.from(allSpans).find(
         (el) =>
           el.textContent?.includes("ctx") &&
@@ -1426,9 +1425,9 @@ describe("IterationGroupComponent", () => {
       const { container } = renderComponent({
         group: makeGroup({ contextTokens: 100000 }),
       });
-      const statsSpan = container.querySelector(".iteration-stats");
-      expect(statsSpan).not.toBeNull();
-      const allSpans = statsSpan!.querySelectorAll("span");
+      const header = container.querySelector(".iteration-header");
+      expect(header).not.toBeNull();
+      const allSpans = header!.querySelectorAll("span");
       const ctxSpan = Array.from(allSpans).find(
         (el) =>
           el.textContent?.includes("ctx") &&
@@ -1443,9 +1442,9 @@ describe("IterationGroupComponent", () => {
       const { container } = renderComponent({
         group: makeGroup({ contextTokens: 150000 }),
       });
-      const statsSpan = container.querySelector(".iteration-stats");
-      expect(statsSpan).not.toBeNull();
-      const allSpans = statsSpan!.querySelectorAll("span");
+      const header = container.querySelector(".iteration-header");
+      expect(header).not.toBeNull();
+      const allSpans = header!.querySelectorAll("span");
       const ctxSpan = Array.from(allSpans).find(
         (el) =>
           el.textContent?.includes("ctx") &&
@@ -1509,7 +1508,7 @@ describe("IterationGroupComponent", () => {
           contextWindow: 200000,
         }),
       });
-      expect(screen.getByText(/sub-agents peak:/)).toBeInTheDocument();
+      expect(screen.getByText(/agents:/)).toBeInTheDocument();
       expect(screen.getByText(/45k/)).toBeInTheDocument();
       expect(screen.getAllByText(/200k/).length).toBeGreaterThanOrEqual(1);
     });
@@ -1518,7 +1517,7 @@ describe("IterationGroupComponent", () => {
       renderComponent({
         group: makeGroup({ subAgentPeakContext: 0 }),
       });
-      expect(screen.queryByText(/sub-agents peak/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/agents:/)).not.toBeInTheDocument();
     });
   });
 

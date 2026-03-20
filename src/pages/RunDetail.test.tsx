@@ -227,12 +227,10 @@ describe("RunDetail", () => {
 
       await waitFor(() => {
         // plan_file is "/home/beth/plans/fix-bug.md" => planFilename => "fix bug"
-        expect(
-          screen.getByRole("heading", { level: 1 }),
-        ).toHaveTextContent("fix bug");
-        expect(
-          screen.getAllByText("fix bug").length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+          "fix bug",
+        );
+        expect(screen.getAllByText("fix bug").length).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -241,9 +239,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(
-          screen.getByRole("heading", { level: 1 }),
-        ).toHaveTextContent("My custom title");
+        expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+          "My custom title",
+        );
       });
     });
 
@@ -267,9 +265,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(
-          screen.getByRole("heading", { level: 1 }),
-        ).toHaveTextContent("Run sess-abc-123");
+        expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+          "Run sess-abc-123",
+        );
       });
     });
   });
@@ -285,9 +283,9 @@ describe("RunDetail", () => {
 
       await waitFor(() => {
         // Badge appears in both header and sidebar
-        expect(
-          screen.getAllByText("Completed").length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("Completed").length).toBeGreaterThanOrEqual(
+          1,
+        );
       });
     });
 
@@ -339,9 +337,7 @@ describe("RunDetail", () => {
 
       await waitFor(() => {
         // Duration appears in both header badge area and sidebar
-        expect(
-          screen.getAllByText(/30m.*0s/).length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText(/30m.*0s/).length).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -402,9 +398,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(
-          screen.getAllByText("Completed").length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("Completed").length).toBeGreaterThanOrEqual(
+          1,
+        );
       });
 
       // "Failure" or "Reason" label should not appear
@@ -423,9 +419,9 @@ describe("RunDetail", () => {
 
       await waitFor(() => {
         // Badge appears in both header and sidebar
-        expect(
-          screen.getAllByText("Completed").length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("Completed").length).toBeGreaterThanOrEqual(
+          1,
+        );
       });
     });
 
@@ -434,9 +430,7 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(
-          screen.getAllByText("Failed").length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("Failed").length).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -445,9 +439,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(
-          screen.getAllByText("Max Iters").length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("Max Iters").length).toBeGreaterThanOrEqual(
+          1,
+        );
       });
     });
 
@@ -456,9 +450,9 @@ describe("RunDetail", () => {
       renderRunDetail();
 
       await waitFor(() => {
-        expect(
-          screen.getAllByText("Cancelled").length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("Cancelled").length).toBeGreaterThanOrEqual(
+          1,
+        );
       });
     });
 
@@ -649,9 +643,7 @@ describe("RunDetail", () => {
 
       await waitFor(() => {
         // "plan" appears in multiple places (title, breadcrumb, sidebar)
-        expect(
-          screen.getAllByText("plan").length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("plan").length).toBeGreaterThanOrEqual(1);
       });
 
       // The plan name in the sidebar should NOT be a clickable button when plan_content is null

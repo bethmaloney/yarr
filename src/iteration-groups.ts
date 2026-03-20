@@ -194,7 +194,8 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
       }
       if (ev.kind === "check_fix_tool_result" && ev.tool_use_id) {
         const toolUse = merged.find(
-          (e) => e.kind === "check_fix_tool_use" && e.tool_use_id === ev.tool_use_id,
+          (e) =>
+            e.kind === "check_fix_tool_use" && e.tool_use_id === ev.tool_use_id,
         );
         if (toolUse) {
           const idx = merged.indexOf(toolUse);

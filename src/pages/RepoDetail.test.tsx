@@ -2233,7 +2233,9 @@ describe("RepoDetail", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/override the built-in prompt.*leave empty to use default/i),
+          screen.getByText(
+            /override the built-in prompt.*leave empty to use default/i,
+          ),
         ).toBeInTheDocument();
       });
     });

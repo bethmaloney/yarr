@@ -111,9 +111,8 @@ test.describe("Export .yarr.yml button", () => {
     await navigateToRepo(page, mockTauri, localRepo, {
       read_yarr_config: { config: null, error: null },
       export_yarr_config: (args: Record<string, unknown>) => {
-        (
-          window as unknown as Record<string, unknown>
-        ).__capturedExportArgs = args;
+        (window as unknown as Record<string, unknown>).__capturedExportArgs =
+          args;
         return null;
       },
     });
@@ -204,11 +203,9 @@ test.describe("Export .yarr.yml button", () => {
   }) => {
     await navigateToRepo(page, mockTauri, localRepo, {
       read_yarr_config: () => {
-        (window as unknown as Record<string, number>)
-          .__readYarrConfigCount =
-          ((
-            window as unknown as Record<string, number>
-          ).__readYarrConfigCount || 0) + 1;
+        (window as unknown as Record<string, number>).__readYarrConfigCount =
+          ((window as unknown as Record<string, number>)
+            .__readYarrConfigCount || 0) + 1;
         return { config: null, error: null };
       },
       export_yarr_config: () => null,
@@ -266,9 +263,8 @@ test.describe("Export .yarr.yml button", () => {
       {
         read_yarr_config: { config: existingYaml, error: null },
         export_yarr_config: (args: Record<string, unknown>) => {
-          (
-            window as unknown as Record<string, unknown>
-          ).__capturedExportArgs = args;
+          (window as unknown as Record<string, unknown>).__capturedExportArgs =
+            args;
           return null;
         },
       },
@@ -313,9 +309,8 @@ test.describe("Export .yarr.yml button", () => {
       {
         read_yarr_config: { config: null, error: null },
         export_yarr_config: (args: Record<string, unknown>) => {
-          (
-            window as unknown as Record<string, unknown>
-          ).__capturedExportArgs = args;
+          (window as unknown as Record<string, unknown>).__capturedExportArgs =
+            args;
           return null;
         },
       },

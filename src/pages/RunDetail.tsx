@@ -130,9 +130,11 @@ export default function RunDetail() {
     let cancelled = false;
 
     function tryPath(path: string) {
-      return invoke("read_file_preview", { repo: payload, path, maxLines: 8 }).then(
-        (result) => result as string,
-      );
+      return invoke("read_file_preview", {
+        repo: payload,
+        path,
+        maxLines: 8,
+      }).then((result) => result as string);
     }
 
     function completedVariant(path: string): string {
@@ -172,7 +174,7 @@ export default function RunDetail() {
   const displayTitle = trace
     ? planFilename(trace.plan_file) !== "\u2014"
       ? planFilename(trace.plan_file)
-      : trace.title ?? trace.prompt?.slice(0, 80) ?? `Run ${sessionId}`
+      : (trace.title ?? trace.prompt?.slice(0, 80) ?? `Run ${sessionId}`)
     : `Run ${sessionId}`;
 
   const breadcrumbs = [
@@ -248,7 +250,6 @@ export default function RunDetail() {
             </span>
           </div>
         )}
-
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
@@ -342,7 +343,10 @@ export default function RunDetail() {
 
             <div className="grid grid-cols-[auto_1fr] gap-x-4 py-2">
               <dt className="text-muted-foreground text-sm">Session ID</dt>
-              <dd className="m-0 text-sm font-mono truncate" title={trace.session_id}>
+              <dd
+                className="m-0 text-sm font-mono truncate"
+                title={trace.session_id}
+              >
                 {trace.session_id}
                 <button
                   className="text-xs px-1.5 py-0.5 bg-secondary text-muted-foreground border border-border rounded cursor-pointer ml-2 align-middle"

@@ -30,15 +30,9 @@ export function PlanPanel({
   planContent,
   planFile,
 }: PlanPanelProps) {
-  const progress = useMemo(
-    () => parsePlanProgress(planContent),
-    [planContent],
-  );
+  const progress = useMemo(() => parsePlanProgress(planContent), [planContent]);
 
-  const preview = useMemo(
-    () => parsePlanPreview(planContent),
-    [planContent],
-  );
+  const preview = useMemo(() => parsePlanPreview(planContent), [planContent]);
 
   const displayName = useMemo(
     () => planDisplayName(planFile, preview.name),
@@ -61,8 +55,7 @@ export function PlanPanel({
           const num = parseInt(taskMatch[1], 10);
           const task = progress?.tasks.find((t) => t.number === num);
           const done = task && task.completed === task.total;
-          const active =
-            task && progress?.currentTask?.number === task.number;
+          const active = task && progress?.currentTask?.number === task.number;
           return (
             <h2
               id={`plan-task-${num}`}
@@ -98,11 +91,7 @@ export function PlanPanel({
         if (taskMatch) {
           const num = parseInt(taskMatch[1], 10);
           return (
-            <h3
-              id={`plan-task-${num}`}
-              className="scroll-mt-24"
-              {...props}
-            >
+            <h3 id={`plan-task-${num}`} className="scroll-mt-24" {...props}>
               {children}
             </h3>
           );

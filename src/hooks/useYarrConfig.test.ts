@@ -92,7 +92,10 @@ describe("useYarrConfig", () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.config).toEqual({ model: "sonnet", maxIterations: 10 });
+    expect(result.current.config).toEqual({
+      model: "sonnet",
+      maxIterations: 10,
+    });
     expect(result.current.error).toBeNull();
   });
 
@@ -198,14 +201,18 @@ describe("useYarrConfig", () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith("read_yarr_config", { repo: repo1 });
+    expect(mockInvoke).toHaveBeenCalledWith("read_yarr_config", {
+      repo: repo1,
+    });
 
     mockInvoke.mockClear();
     mockInvoke.mockResolvedValue({ config: { model: "sonnet" }, error: null });
 
     rerender({ repo: repo2 });
 
-    expect(mockInvoke).toHaveBeenCalledWith("read_yarr_config", { repo: repo2 });
+    expect(mockInvoke).toHaveBeenCalledWith("read_yarr_config", {
+      repo: repo2,
+    });
 
     await waitFor(() => {
       expect(result.current.config).toEqual({ model: "sonnet" });

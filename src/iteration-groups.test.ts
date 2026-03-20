@@ -959,7 +959,11 @@ describe("groupEventsByIteration", () => {
           kind: "iteration_complete",
           iteration: 1,
           _ts: 2000,
-          result: makeResult({ cost: 0.2, inputTokens: 200, outputTokens: 100 }),
+          result: makeResult({
+            cost: 0.2,
+            inputTokens: 200,
+            outputTokens: 100,
+          }),
         }),
       ];
 
@@ -993,7 +997,11 @@ describe("groupEventsByIteration", () => {
           kind: "iteration_complete",
           iteration: 1,
           _ts: 2000,
-          result: makeResult({ cost: 0.3, inputTokens: 300, outputTokens: 150 }),
+          result: makeResult({
+            cost: 0.3,
+            inputTokens: 300,
+            outputTokens: 150,
+          }),
         }),
       ];
 
@@ -1207,7 +1215,11 @@ describe("groupEventsByIteration", () => {
           kind: "iteration_complete",
           iteration: 1,
           _ts: 2000,
-          result: makeResult({ cost: 0.2, inputTokens: 200, outputTokens: 100 }),
+          result: makeResult({
+            cost: 0.2,
+            inputTokens: 200,
+            outputTokens: 100,
+          }),
         }),
       ];
 
@@ -1332,7 +1344,11 @@ describe("groupEventsByIteration", () => {
           kind: "iteration_complete",
           iteration: 1,
           _ts: 2000,
-          result: makeResult({ cost: 0.2, inputTokens: 200, outputTokens: 100 }),
+          result: makeResult({
+            cost: 0.2,
+            inputTokens: 200,
+            outputTokens: 100,
+          }),
         }),
       ];
 
