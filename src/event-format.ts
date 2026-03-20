@@ -94,6 +94,12 @@ export function eventEmoji(kind: string): string {
       return "\u274C";
     case "check_fix_started":
       return "\u{1F6E0}\uFE0F";
+    case "check_fix_tool_use":
+      return "\u{1F527}";
+    case "check_fix_tool_result":
+      return "\u{1F4CB}";
+    case "check_fix_assistant_text":
+      return "\u{1F4AC}";
     case "check_fix_complete":
       return "\u{1F504}";
     case "one_shot_started":
@@ -193,6 +199,12 @@ export function eventLabel(ev: SessionEvent, repoPath?: string): string {
       return `Check failed: ${ev.check_name}`;
     case "check_fix_started":
       return `Fix attempt ${ev.attempt}: ${ev.check_name}`;
+    case "check_fix_tool_use":
+      return `[fix ${ev.attempt}] ${toolSummary(ev, repoPath)}`;
+    case "check_fix_tool_result":
+      return `[fix ${ev.attempt}] Result: ${ev.tool_name ?? "unknown"}`;
+    case "check_fix_assistant_text":
+      return `[fix ${ev.attempt}] ${ev.text}`;
     case "check_fix_complete":
       return `Fix attempt ${ev.attempt} ${ev.success ? "succeeded" : "failed"}: ${ev.check_name}`;
     case "one_shot_started":

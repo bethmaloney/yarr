@@ -192,6 +192,16 @@ export function groupEventsByIteration(events: SessionEvent[]): GroupedEvents {
           continue; // Remove tool_result from the list
         }
       }
+      if (ev.kind === "check_fix_tool_result" && ev.tool_use_id) {
+        const toolUse = merged.find(
+          (e) => e.kind === "check_fix_tool_use" && e.tool_use_id === ev.tool_use_id,
+        );
+        if (toolUse) {
+          const idx = merged.indexOf(toolUse);
+          merged[idx] = { ...toolUse, tool_output: ev.tool_output };
+          continue;
+        }
+      }
       merged.push(ev);
     }
     group.events = merged;

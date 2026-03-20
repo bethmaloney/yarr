@@ -40,6 +40,9 @@ const eventKindColor: Record<string, string> = {
   check_passed: "text-success",
   check_failed: "text-destructive",
   check_fix_started: "text-warning",
+  check_fix_tool_use: "text-primary",
+  check_fix_tool_result: "text-muted-foreground",
+  check_fix_assistant_text: "text-foreground",
   check_fix_complete: "text-primary",
   git_sync_started: "text-muted-foreground",
   git_sync_push_succeeded: "text-success",
@@ -264,7 +267,7 @@ export function IterationGroupComponent({
                 </div>
 
                 {isExpanded &&
-                  ev.kind === "tool_use" &&
+                  (ev.kind === "tool_use" || ev.kind === "check_fix_tool_use") &&
                   ev.tool_input &&
                   ev.tool_name === "Agent" && (
                     <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded text-xs text-muted-foreground">
@@ -316,7 +319,7 @@ export function IterationGroupComponent({
                   )}
 
                 {isExpanded &&
-                  ev.kind === "tool_use" &&
+                  (ev.kind === "tool_use" || ev.kind === "check_fix_tool_use") &&
                   ev.tool_input &&
                   ev.tool_name !== "Agent" && (
                     <pre className="tool-input-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded font-mono text-xs text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
@@ -324,7 +327,7 @@ export function IterationGroupComponent({
                     </pre>
                   )}
 
-                {isExpanded && ev.kind === "tool_use" && ev.tool_output && (
+                {isExpanded && (ev.kind === "tool_use" || ev.kind === "check_fix_tool_use") && ev.tool_output && (
                   <ToolOutputSection
                     toolOutput={ev.tool_output}
                     toolName={ev.tool_name ?? ""}

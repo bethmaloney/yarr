@@ -169,6 +169,12 @@ pub enum SessionEvent {
     CheckFailed { iteration: u32, check_name: String, output: String },
     /// A fix agent has been spawned for a failed check
     CheckFixStarted { iteration: u32, check_name: String, attempt: u32 },
+    /// A fix agent is using a tool
+    CheckFixToolUse { iteration: u32, check_name: String, attempt: u32, tool_name: String, tool_input: Option<serde_json::Value>, #[serde(default)] tool_use_id: String },
+    /// Result/output from a tool invocation during check fix
+    CheckFixToolResult { iteration: u32, check_name: String, attempt: u32, tool_use_id: String, tool_name: String, tool_output: String },
+    /// Fix agent produced text output
+    CheckFixAssistantText { iteration: u32, check_name: String, attempt: u32, text: String },
     /// A fix agent has completed
     CheckFixComplete { iteration: u32, check_name: String, attempt: u32, success: bool },
     /// 1-shot session has started
@@ -330,6 +336,9 @@ impl SessionRunner {
             SessionEvent::CheckPassed { .. } => "check_passed",
             SessionEvent::CheckFailed { .. } => "check_failed",
             SessionEvent::CheckFixStarted { .. } => "check_fix_started",
+            SessionEvent::CheckFixToolUse { .. } => "check_fix_tool_use",
+            SessionEvent::CheckFixToolResult { .. } => "check_fix_tool_result",
+            SessionEvent::CheckFixAssistantText { .. } => "check_fix_assistant_text",
             SessionEvent::CheckFixComplete { .. } => "check_fix_complete",
             SessionEvent::OneShotStarted { .. } => "oneshot_started",
             SessionEvent::DesignPhaseStarted => "design_phase_started",
@@ -469,8 +478,67 @@ impl SessionRunner {
 
                 match runtime.spawn_claude(&fix_invocation).await {
                     Ok(mut process) => {
-                        // Drain events channel
-                        while process.events.recv().await.is_some() {}
+                        // Forward fix agent events to the UI
+                        let mut fix_tool_ids: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+                        loop {
+                            tokio::select! {
+                                event = process.events.recv() => {
+                                    let Some(event) = event else { break };
+                                    match &event {
+                                        StreamEvent::Assistant(assistant) => {
+                                            if assistant.parent_tool_use_id.is_none() {
+                                                for block in &assistant.message.content {
+                                                    match block {
+                                                        ContentBlock::ToolUse { id, name, input } => {
+                                                            tracing::debug!(iteration, check_name = %check_name, attempt, name, id, "check fix tool use");
+                                                            fix_tool_ids.insert(id.clone(), name.clone());
+                                                            self.emit(SessionEvent::CheckFixToolUse {
+                                                                iteration,
+                                                                check_name: check_name.clone(),
+                                                                attempt,
+                                                                tool_name: name.clone(),
+                                                                tool_input: Some(input.clone()),
+                                                                tool_use_id: id.clone(),
+                                                            });
+                                                        }
+                                                        ContentBlock::Text { text } => {
+                                                            self.emit(SessionEvent::CheckFixAssistantText {
+                                                                iteration,
+                                                                check_name: check_name.clone(),
+                                                                attempt,
+                                                                text: text.clone(),
+                                                            });
+                                                        }
+                                                        ContentBlock::Unknown => {}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        StreamEvent::User(user_event) => {
+                                            if user_event.parent_tool_use_id.is_none() {
+                                                if let Some(ref message) = user_event.message {
+                                                    let results = extract_tool_results(message, &fix_tool_ids);
+                                                    for (tool_use_id, tool_name, tool_output) in results {
+                                                        self.emit(SessionEvent::CheckFixToolResult {
+                                                            iteration,
+                                                            check_name: check_name.clone(),
+                                                            attempt,
+                                                            tool_use_id,
+                                                            tool_name,
+                                                            tool_output,
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                _ = self.cancel_token.cancelled() => {
+                                    break;
+                                }
+                            }
+                        }
                         // Wait for completion
                         let _ = process.completion.await;
 
