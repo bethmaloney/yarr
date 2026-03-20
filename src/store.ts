@@ -238,17 +238,24 @@ export const useAppStore = create<AppStore>((set, get) => {
                   s.set(entryId, { ...current, trace, planProgress });
                   set({ sessions: s });
 
-                  // Update entry status if trace outcome indicates completed or failed
-                  if (
-                    trace.outcome === "completed" ||
-                    trace.outcome === "failed"
-                  ) {
+                  // Update entry status if trace outcome indicates a terminal state.
+                  // On init, entries are not active, so "running" outcome means interrupted.
+                  const mappedStatus: "completed" | "failed" | null =
+                    trace.outcome === "completed"
+                      ? "completed"
+                      : trace.outcome === "failed" ||
+                          trace.outcome === "cancelled" ||
+                          trace.outcome === "max_iterations_reached" ||
+                          trace.outcome === "running"
+                        ? "failed"
+                        : null;
+                  if (mappedStatus) {
                     const oneshotEntries = new Map(get().oneShotEntries);
                     const currentEntry = oneshotEntries.get(entryId);
-                    if (currentEntry && currentEntry.status !== trace.outcome) {
+                    if (currentEntry && currentEntry.status !== mappedStatus) {
                       oneshotEntries.set(entryId, {
                         ...currentEntry,
-                        status: trace.outcome as "completed" | "failed",
+                        status: mappedStatus,
                       });
                       set({ oneShotEntries: oneshotEntries });
                       oneShotStore

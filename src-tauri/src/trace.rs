@@ -98,6 +98,9 @@ pub enum SessionOutcome {
 pub struct TraceCollector {
     output_dir: PathBuf,
     repo_id: String,
+    /// When true, `record_iteration()` automatically calls `flush_to_disk()`.
+    /// Phase collectors (design/impl) that write to the repo dir should disable this.
+    flush_after_record: bool,
 }
 
 fn default_session_type() -> String {
@@ -119,7 +122,15 @@ impl TraceCollector {
         Self {
             output_dir: base_dir.into().join("traces").join(repo_id),
             repo_id: repo_id.to_string(),
+            flush_after_record: true,
         }
+    }
+
+    /// Disable automatic flush after `record_iteration()`.
+    /// Use for phase collectors that write to the repo directory, not the app data dir.
+    pub fn without_auto_flush(mut self) -> Self {
+        self.flush_after_record = false;
+        self
     }
 
     /// Create a new session trace with a pre-generated session_id
@@ -187,6 +198,34 @@ impl TraceCollector {
         }
     }
 
+    /// Synchronously write the trace to disk using atomic write (tmp + rename).
+    /// Safe to call from both sync and async contexts for small trace files.
+    pub fn flush_to_disk(&self, trace: &SessionTrace) {
+        if let Err(e) = std::fs::create_dir_all(&self.output_dir) {
+            warn!(error = %e, "flush_to_disk: failed to create output dir");
+            return;
+        }
+        let trace_filename = format!("trace_{}.json", trace.session_id);
+        let trace_path = self.output_dir.join(&trace_filename);
+        let tmp_path = self.output_dir.join(format!(".trace_{}.json.tmp", trace.session_id));
+
+        let json = match serde_json::to_string_pretty(trace) {
+            Ok(j) => j,
+            Err(e) => {
+                warn!(error = %e, "flush_to_disk: failed to serialize trace");
+                return;
+            }
+        };
+
+        if let Err(e) = std::fs::write(&tmp_path, &json) {
+            warn!(error = %e, "flush_to_disk: failed to write tmp file");
+            return;
+        }
+        if let Err(e) = std::fs::rename(&tmp_path, &trace_path) {
+            warn!(error = %e, "flush_to_disk: failed to rename tmp to trace");
+        }
+    }
+
     /// Record a completed iteration span
     pub fn record_iteration(
         &self,
@@ -232,6 +271,10 @@ impl TraceCollector {
         }
 
         trace.iterations.push(span);
+
+        if self.flush_after_record {
+            self.flush_to_disk(trace);
+        }
     }
 
     /// Finalize and persist the session trace to disk
@@ -295,13 +338,8 @@ impl TraceCollector {
             .max()
             .unwrap_or(0);
 
-        tokio::fs::create_dir_all(&self.output_dir).await?;
-
-        let trace_filename = format!("trace_{}.json", trace.session_id);
-        let trace_path = self.output_dir.join(&trace_filename);
-
-        let json = serde_json::to_string_pretty(trace)?;
-        tokio::fs::write(&trace_path, json).await?;
+        let trace_path = self.output_dir.join(format!("trace_{}.json", trace.session_id));
+        self.flush_to_disk(trace);
 
         Ok(trace_path)
     }
@@ -448,6 +486,92 @@ impl TraceCollector {
         let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
         writeln!(file, "{}", serde_json::to_string(event)?)?;
         Ok(())
+    }
+
+    /// Synthesize a minimal trace from the events JSONL file.
+    /// Reconstructs cost/token totals from `IterationComplete` events.
+    pub fn synthesize_trace_from_events(base_dir: &Path, repo_id: &str, session_id: &str) -> Option<SessionTrace> {
+        let events = Self::read_events(base_dir, repo_id, session_id).ok()?;
+        if events.is_empty() {
+            return None;
+        }
+
+        let mut trace = SessionTrace {
+            trace_id: String::new(),
+            root_span_id: String::new(),
+            session_id: session_id.to_string(),
+            repo_path: String::new(),
+            prompt: String::new(),
+            title: None,
+            plan_file: None,
+            plan_content: None,
+            repo_id: Some(repo_id.to_string()),
+            session_type: "ralph_loop".to_string(),
+            start_time: Utc::now(),
+            end_time: None,
+            outcome: SessionOutcome::Running,
+            failure_reason: None,
+            iterations: Vec::new(),
+            total_cost_usd: 0.0,
+            total_iterations: 0,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_cache_read_tokens: 0,
+            total_cache_creation_tokens: 0,
+            context_window: 0,
+            final_context_tokens: 0,
+            max_context_percent: 0,
+        };
+
+        // Extract session_id from SessionStarted if available
+        for event in &events {
+            if let crate::session::SessionEvent::SessionStarted { session_id: sid } = event {
+                trace.session_id = sid.clone();
+                break;
+            }
+        }
+
+        // Accumulate stats from IterationComplete events
+        for event in &events {
+            if let crate::session::SessionEvent::IterationComplete { result, .. } = event {
+                trace.total_cost_usd += result.total_cost_usd.unwrap_or(0.0);
+                trace.total_iterations += 1;
+                if let Some(ref usage_val) = result.usage {
+                    if let Some(input) = usage_val.get("input_tokens").and_then(|v| v.as_u64()) {
+                        trace.total_input_tokens += input;
+                    }
+                    if let Some(output) = usage_val.get("output_tokens").and_then(|v| v.as_u64()) {
+                        trace.total_output_tokens += output;
+                    }
+                    if let Some(cache_read) = usage_val.get("cache_read_input_tokens").and_then(|v| v.as_u64()) {
+                        trace.total_cache_read_tokens += cache_read;
+                    }
+                    if let Some(cache_create) = usage_val.get("cache_creation_input_tokens").and_then(|v| v.as_u64()) {
+                        trace.total_cache_creation_tokens += cache_create;
+                    }
+                }
+            }
+        }
+
+        // Check for terminal outcome in events
+        for event in &events {
+            if let crate::session::SessionEvent::SessionComplete { outcome, .. } = event {
+                trace.outcome = outcome.clone();
+            }
+        }
+
+        Some(trace)
+    }
+
+    /// Try to read a trace file; if not found, fall back to synthesizing from events.
+    pub fn read_trace_or_synthesize(base_dir: &Path, repo_id: &str, session_id: &str) -> anyhow::Result<SessionTrace> {
+        match Self::read_trace(base_dir, repo_id, session_id) {
+            Ok(trace) => Ok(trace),
+            Err(_) => {
+                Self::synthesize_trace_from_events(base_dir, repo_id, session_id)
+                    .ok_or_else(|| anyhow::anyhow!("No trace or events found for session {}", session_id))
+            }
+        }
     }
 }
 
@@ -2114,6 +2238,194 @@ mod tests {
             restored.max_context_percent, 80,
             "finalize should recompute max_context_percent to 80 (the max of 80% and 50%)"
         );
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  Tests for crash-resilient trace persistence
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Test: flush_to_disk writes readable trace ──
+
+    #[test]
+    fn flush_to_disk_writes_readable_trace() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "repo-flush");
+        let trace = collector.start_session("/tmp/repo", "flush test", None);
+        let session_id = trace.session_id.clone();
+
+        collector.flush_to_disk(&trace);
+
+        let restored = TraceCollector::read_trace(tmp.path(), "repo-flush", &session_id)
+            .expect("should read flushed trace");
+        assert_eq!(restored.session_id, session_id);
+        assert_eq!(restored.prompt, "flush test");
+        assert_eq!(restored.outcome, SessionOutcome::Running);
+    }
+
+    // ── Test: flush_to_disk is atomic (tmp file cleaned up) ──
+
+    #[test]
+    fn flush_to_disk_no_tmp_file_left() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "repo-atomic");
+        let trace = collector.start_session("/tmp/repo", "atomic test", None);
+
+        collector.flush_to_disk(&trace);
+
+        let traces_dir = tmp.path().join("traces").join("repo-atomic");
+        let tmp_files: Vec<_> = std::fs::read_dir(&traces_dir)
+            .expect("read dir")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with('.'))
+            .collect();
+        assert!(tmp_files.is_empty(), "no tmp files should remain after flush");
+    }
+
+    // ── Test: record_iteration auto-flushes by default ──
+
+    #[test]
+    fn record_iteration_auto_flushes() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "repo-autoflush");
+        let mut trace = collector.start_session("/tmp/repo", "autoflush test", None);
+        let session_id = trace.session_id.clone();
+
+        let now = Utc::now();
+        let attrs = make_test_span_attrs(1, 50_000, 200_000);
+        collector.record_iteration(&mut trace, now, now + chrono::Duration::seconds(5), attrs, false);
+
+        // Should have been auto-flushed to disk
+        let restored = TraceCollector::read_trace(tmp.path(), "repo-autoflush", &session_id)
+            .expect("should read auto-flushed trace");
+        assert_eq!(restored.total_iterations, 1);
+    }
+
+    // ── Test: without_auto_flush disables auto-flush ──
+
+    #[test]
+    fn without_auto_flush_does_not_write() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "repo-noflush").without_auto_flush();
+        let mut trace = collector.start_session("/tmp/repo", "noflush test", None);
+
+        let now = Utc::now();
+        let attrs = make_test_span_attrs(1, 50_000, 200_000);
+        collector.record_iteration(&mut trace, now, now + chrono::Duration::seconds(5), attrs, false);
+
+        // Should NOT have written to disk
+        let traces_dir = tmp.path().join("traces").join("repo-noflush");
+        assert!(
+            !traces_dir.exists() || std::fs::read_dir(&traces_dir).unwrap().count() == 0,
+            "no trace files should exist when auto-flush is disabled"
+        );
+    }
+
+    // ── Test: finalize uses flush_to_disk (trace readable after finalize) ──
+
+    #[tokio::test]
+    async fn finalize_uses_flush_to_disk() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "repo-finalize-flush");
+        let mut trace = collector.start_session("/tmp/repo", "finalize flush test", None);
+        let session_id = trace.session_id.clone();
+
+        let events: Vec<SessionEvent> = vec![];
+        collector.finalize(&mut trace, &events).await.expect("finalize should succeed");
+
+        let restored = TraceCollector::read_trace(tmp.path(), "repo-finalize-flush", &session_id)
+            .expect("should read finalized trace");
+        assert!(restored.end_time.is_some(), "finalize should set end_time");
+    }
+
+    // ── Test: synthesize_trace_from_events produces trace from JSONL ──
+
+    #[test]
+    fn synthesize_trace_from_events_produces_trace() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "repo-synth");
+        let session_id = "sess-synth-001";
+
+        // Write some events
+        let events = vec![
+            SessionEvent::SessionStarted { session_id: session_id.to_string() },
+            SessionEvent::IterationComplete {
+                iteration: 1,
+                result: make_test_result_event(),
+            },
+            SessionEvent::SessionComplete {
+                outcome: SessionOutcome::Completed,
+                plan_file: None,
+            },
+        ];
+        for event in &events {
+            collector.append_event(session_id, event).expect("append event");
+        }
+
+        // No trace file exists — synthesis should work
+        let trace = TraceCollector::synthesize_trace_from_events(tmp.path(), "repo-synth", session_id)
+            .expect("should synthesize trace");
+        assert_eq!(trace.session_id, session_id);
+        assert_eq!(trace.total_iterations, 1);
+        assert_eq!(trace.total_cost_usd, 0.05);
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+    }
+
+    // ── Test: synthesize returns None when no events exist ──
+
+    #[test]
+    fn synthesize_trace_no_events_returns_none() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let result = TraceCollector::synthesize_trace_from_events(tmp.path(), "nonexistent", "no-session");
+        assert!(result.is_none());
+    }
+
+    // ── Test: read_trace_or_synthesize prefers trace file ──
+
+    #[tokio::test]
+    async fn read_trace_or_synthesize_prefers_trace_file() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "repo-prefer");
+        let mut trace = collector.start_session("/tmp/repo", "prefer file", None);
+        let session_id = trace.session_id.clone();
+        trace.outcome = SessionOutcome::Completed;
+
+        let events: Vec<SessionEvent> = vec![];
+        collector.finalize(&mut trace, &events).await.expect("finalize");
+
+        let restored = TraceCollector::read_trace_or_synthesize(tmp.path(), "repo-prefer", &session_id)
+            .expect("should read trace");
+        assert_eq!(restored.prompt, "prefer file");
+        assert_eq!(restored.outcome, SessionOutcome::Completed);
+    }
+
+    // ── Test: read_trace_or_synthesize falls back to events ──
+
+    #[test]
+    fn read_trace_or_synthesize_falls_back_to_events() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let collector = TraceCollector::new(tmp.path(), "repo-fallback");
+        let session_id = "sess-fallback-001";
+
+        // Write events but no trace file
+        let event = SessionEvent::IterationComplete {
+            iteration: 1,
+            result: make_test_result_event(),
+        };
+        collector.append_event(session_id, &event).expect("append event");
+
+        let trace = TraceCollector::read_trace_or_synthesize(tmp.path(), "repo-fallback", session_id)
+            .expect("should synthesize from events");
+        assert_eq!(trace.total_iterations, 1);
+        assert_eq!(trace.total_cost_usd, 0.05);
+    }
+
+    // ── Test: read_trace_or_synthesize errors when nothing exists ──
+
+    #[test]
+    fn read_trace_or_synthesize_errors_when_nothing_exists() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let result = TraceCollector::read_trace_or_synthesize(tmp.path(), "nonexistent", "no-session");
+        assert!(result.is_err());
     }
 }
 

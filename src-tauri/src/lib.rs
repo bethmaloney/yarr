@@ -1189,7 +1189,7 @@ fn list_latest_traces(app: tauri::AppHandle) -> Result<Vec<trace::SessionTrace>,
 fn get_trace(app: tauri::AppHandle, repo_id: String, session_id: String) -> Result<trace::SessionTrace, String> {
     tracing::info!(repo_id = %repo_id, session_id = %session_id, "get_trace called");
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    TraceCollector::read_trace(&base_dir, &repo_id, &session_id).map_err(|e| e.to_string())
+    TraceCollector::read_trace_or_synthesize(&base_dir, &repo_id, &session_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1831,12 +1831,37 @@ pub fn run() {
             }
         }
         if let RunEvent::Exit = event {
-            // Cancel all cancellation tokens
+            // Cancel all cancellation tokens and finalize active traces as Cancelled
             let active = app.state::<ActiveSessions>();
             if let Ok(guard) = active.tokens.try_lock() {
-                for (repo_id, handle) in guard.iter() {
-                    tracing::info!("Cancelling session for repo {repo_id} on exit");
-                    handle.cancel_token.cancel();
+                // Finalize active traces before killing processes
+                if let Ok(base_dir) = app.path().app_data_dir() {
+                    for (repo_id, handle) in guard.iter() {
+                        tracing::info!("Cancelling session for repo {repo_id} on exit");
+                        handle.cancel_token.cancel();
+
+                        // Read the trace from disk, mark as Cancelled, write back
+                        let session_id = &handle.session_id;
+                        match TraceCollector::read_trace(&base_dir, repo_id, session_id) {
+                            Ok(mut trace) => {
+                                if trace.outcome == trace::SessionOutcome::Running {
+                                    trace.outcome = trace::SessionOutcome::Cancelled;
+                                    trace.end_time = Some(chrono::Utc::now());
+                                    let collector = TraceCollector::new(&base_dir, repo_id);
+                                    collector.flush_to_disk(&trace);
+                                    tracing::info!(repo_id = %repo_id, session_id = %session_id, "finalized active trace as Cancelled on exit");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(repo_id = %repo_id, session_id = %session_id, error = %e, "could not read trace for shutdown finalization");
+                            }
+                        }
+                    }
+                } else {
+                    for (repo_id, handle) in guard.iter() {
+                        tracing::info!("Cancelling session for repo {repo_id} on exit");
+                        handle.cancel_token.cancel();
+                    }
                 }
             }
             // Directly abort all child processes (kills WSL-side processes too)

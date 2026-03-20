@@ -547,6 +547,9 @@ impl OneShotRunner {
         *self.session_id.lock().unwrap() = Some(session_id.clone());
         tracing::info!(oneshot_id = %self.config.repo_id, session_id = %session_id, "trace session created");
 
+        // Flush initial trace to disk so it survives a crash before the first iteration
+        self.collector.flush_to_disk(&trace);
+
         let (wt_path, branch) = if let Some(ref resume) = self.resume_state {
             tracing::info!(
                 oneshot_id = %self.config.repo_id,
@@ -752,10 +755,14 @@ impl OneShotRunner {
                 ..SessionConfig::default()
             };
 
-            let design_collector = TraceCollector::new(&self.config.repo_path, &self.config.repo_id);
+            let design_collector = TraceCollector::new(&self.config.repo_path, &self.config.repo_id)
+                .without_auto_flush();
 
             tracing::info!(oneshot_id = %self.config.repo_id, title = %self.config.title, "starting design phase runner");
             let design_evts = self.run_phase(design_config, design_collector, runtime, &mut trace).await?;
+
+            // Flush the oneshot's own trace after design phase completes
+            self.collector.flush_to_disk(&trace);
 
             // Check design phase outcome
             match trace.outcome {
@@ -944,10 +951,14 @@ impl OneShotRunner {
                 ..SessionConfig::default()
             };
 
-            let impl_collector = TraceCollector::new(&self.config.repo_path, &self.config.repo_id);
+            let impl_collector = TraceCollector::new(&self.config.repo_path, &self.config.repo_id)
+                .without_auto_flush();
 
             tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %plan_file_path, "starting implementation phase runner");
             let _impl_events = self.run_phase(impl_config, impl_collector, runtime, &mut trace).await?;
+
+            // Flush the oneshot's own trace after implementation phase completes
+            self.collector.flush_to_disk(&trace);
 
             // Check implementation phase outcome
             match trace.outcome {

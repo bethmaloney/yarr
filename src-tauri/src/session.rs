@@ -678,6 +678,9 @@ impl SessionRunner {
 
         *self.session_id.lock().unwrap() = Some(trace.session_id.clone());
 
+        // Flush initial trace to disk so it survives a crash before the first iteration completes
+        self.collector.flush_to_disk(&trace);
+
         self.emit(SessionEvent::SessionStarted {
             session_id: trace.session_id.clone(),
         });
@@ -3308,20 +3311,28 @@ mod tests {
             trace.end_time
         );
 
-        // No trace files should be written to disk
+        // Incremental flush writes trace files to disk (crash resilience),
+        // but finalize was NOT called, so end_time remains None in the on-disk file
         let traces_dir = tmp.path().join("traces").join("test-repo");
         if traces_dir.exists() {
-            let entries: Vec<_> = std::fs::read_dir(&traces_dir)
+            let trace_files: Vec<_> = std::fs::read_dir(&traces_dir)
                 .expect("read traces dir")
                 .filter_map(|e| e.ok())
+                .filter(|e| e.file_name().to_string_lossy().starts_with("trace_"))
                 .collect();
             assert!(
-                entries.is_empty(),
-                "no trace files should be written to disk by run_with_trace, found: {:?}",
-                entries.iter().map(|e| e.file_name()).collect::<Vec<_>>()
+                !trace_files.is_empty(),
+                "incremental flush should have written a trace file"
+            );
+            // The on-disk trace should have no end_time (finalize was not called)
+            let on_disk: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(trace_files[0].path()).expect("read trace file")
+            ).expect("parse trace JSON");
+            assert!(
+                on_disk["end_time"].is_null(),
+                "on-disk trace end_time should be null (finalize not called)"
             );
         }
-        // If the traces dir doesn't exist at all, that's also correct
     }
 
     #[tokio::test]
