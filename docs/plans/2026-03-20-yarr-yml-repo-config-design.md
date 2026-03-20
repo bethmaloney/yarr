@@ -478,10 +478,10 @@ Reusable component for showing source indicators on settings fields.
 - Reset button: `size-3.5`, `text-muted-foreground hover:text-foreground transition-colors duration-150`
 
 **Checklist:**
-- [ ] Create `ConfigSourceBadge.tsx`
-- [ ] Handle all three source states
-- [ ] Ensure accessible: reset button has `aria-label="Reset to default"`
-- [ ] `npx tsc --noEmit`
+- [x] Create `ConfigSourceBadge.tsx`
+- [x] Handle all three source states
+- [x] Ensure accessible: reset button has `aria-label="Reset to default"`
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -676,7 +676,7 @@ Test the resolve utility and DEFAULTS.
 | 7 | Backend merge in run_oneshot + resume_oneshot | Done |
 | 8 | Store.ts sends sparse config | Done |
 | 9 | useYarrConfig hook | Done |
-| 10 | ConfigSourceBadge component | Not Started |
+| 10 | ConfigSourceBadge component | Done |
 | 11 | Config status banner in settings sheet | Not Started |
 | 12 | Wire source indicators to settings fields | Not Started |
 | 13 | Update save handler for sparse storage | Not Started |
