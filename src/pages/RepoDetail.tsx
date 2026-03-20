@@ -271,41 +271,42 @@ export default function RepoDetail() {
 
   // Plan file preview
   useEffect(() => {
-    if (!planFile) {
+    if (!planFile || !repo) {
       setPreviewContent("");
       setPreviewLoading(false);
       return;
     }
-    const currentFile = planFile;
-    const payload = buildRepoPayload();
-    if (!payload) return;
+    const payload = repoPayload(repo);
+    let cancelled = false;
     setPreviewLoading(true);
-    invoke("read_file_preview", { repo: payload, path: currentFile })
+    invoke("read_file_preview", { repo: payload, path: planFile })
       .then((result) => {
-        if (currentFile === planFile) {
+        if (!cancelled) {
           setPreviewContent(result as string);
           setPreviewLoading(false);
         }
       })
       .catch((e) => {
         console.warn("[RepoDetail] failed to load file preview:", e);
-        if (currentFile === planFile) {
+        if (!cancelled) {
           setPreviewContent("");
           setPreviewLoading(false);
         }
       });
-  }, [planFile]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
+  }, [planFile, repo]);
 
   // Session plan preview — load and parse preview from the session's plan file
   const sessionPlanFile = session.trace?.plan_file ?? null;
   useEffect(() => {
-    if (!sessionPlanFile) {
+    if (!sessionPlanFile || !repo) {
       setSessionPlanParsed(null);
       return;
     }
-    const currentPath = sessionPlanFile;
-    const payload = buildRepoPayload();
-    if (!payload) return;
+    const payload = repoPayload(repo);
+    let cancelled = false;
 
     function tryPath(path: string) {
       return invoke("read_file_preview", { repo: payload, path, maxLines: 8 }).then(
@@ -320,20 +321,23 @@ export default function RepoDetail() {
       return path.slice(0, lastSep) + "/completed" + path.slice(lastSep);
     }
 
-    tryPath(currentPath)
-      .catch(() => tryPath(completedVariant(currentPath)))
+    tryPath(sessionPlanFile)
+      .catch(() => tryPath(completedVariant(sessionPlanFile)))
       .then((content) => {
-        if (currentPath === sessionPlanFile) {
+        if (!cancelled) {
           setSessionPlanParsed(parsePlanPreview(content));
         }
       })
       .catch((e) => {
         console.warn("[RepoDetail] failed to load file preview:", e);
-        if (currentPath === sessionPlanFile) {
+        if (!cancelled) {
           setSessionPlanParsed(null);
         }
       });
-  }, [sessionPlanFile]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionPlanFile, repo]);
 
   // Clean up connection test listeners on unmount
   useEffect(() => {

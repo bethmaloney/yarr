@@ -126,8 +126,8 @@ export default function RunDetail() {
       setPlanParsed(null);
       return;
     }
-    const currentPath = tracePlanFile;
     const payload = repoPayload(repo);
+    let cancelled = false;
 
     function tryPath(path: string) {
       return invoke("read_file_preview", { repo: payload, path, maxLines: 8 }).then(
@@ -141,19 +141,22 @@ export default function RunDetail() {
       return path.slice(0, lastSep) + "/completed" + path.slice(lastSep);
     }
 
-    tryPath(currentPath)
-      .catch(() => tryPath(completedVariant(currentPath)))
+    tryPath(tracePlanFile)
+      .catch(() => tryPath(completedVariant(tracePlanFile)))
       .then((content) => {
-        if (currentPath === tracePlanFile) {
+        if (!cancelled) {
           setPlanParsed(parsePlanPreview(content));
         }
       })
       .catch((e) => {
         console.warn("[RunDetail] failed to load plan preview:", e);
-        if (currentPath === tracePlanFile) {
+        if (!cancelled) {
           setPlanParsed(null);
         }
       });
+    return () => {
+      cancelled = true;
+    };
   }, [tracePlanFile, repo]);
 
   function handleCopy() {
