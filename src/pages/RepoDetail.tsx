@@ -73,6 +73,7 @@ import {
 } from "lucide-react";
 import type { Check, SessionState, SessionTrace } from "../types";
 import { repoPayload, type RepoConfig } from "../repos";
+import { DEFAULTS } from "../config";
 import { timeAgo } from "../time";
 
 type ConnectionTestStep = {
@@ -187,10 +188,10 @@ export default function RepoDetail() {
     if (!repo) return;
     setNameInput(repo.name);
     setEditingName(false);
-    setModel(repo.model);
-    setEffortLevel(repo.effortLevel ?? "medium");
-    setMaxIterations(repo.maxIterations);
-    setCompletionSignal(repo.completionSignal);
+    setModel(repo.model ?? DEFAULTS.model);
+    setEffortLevel(repo.effortLevel ?? DEFAULTS.effortLevel);
+    setMaxIterations(repo.maxIterations ?? DEFAULTS.maxIterations);
+    setCompletionSignal(repo.completionSignal ?? DEFAULTS.completionSignal);
     setEnvVars(
       Object.entries(repo.envVars ?? {}).map(([key, value]) => ({
         key,
@@ -198,19 +199,19 @@ export default function RepoDetail() {
       })),
     );
     setChecks(repo.checks ?? []);
-    setCreateBranch(repo.createBranch ?? true);
+    setCreateBranch(repo.createBranch ?? DEFAULTS.createBranch);
     setAutoFetch(repo.autoFetch ?? (repo.type === "local" ? true : false));
     setPlansDir(repo.plansDir ?? "");
-    setMovePlansToCompleted(repo.movePlansToCompleted ?? true);
+    setMovePlansToCompleted(repo.movePlansToCompleted ?? DEFAULTS.movePlansToCompleted);
     setGitSyncEnabled(repo.gitSync?.enabled ?? false);
     setGitSyncModel(repo.gitSync?.model ?? "");
     setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
     setGitSyncPrompt(repo.gitSync?.conflictPrompt ?? "");
     setDesignPromptFile(repo.designPromptFile ?? "");
     setImplementationPromptFile(repo.implementationPromptFile ?? "");
-    setOneShotModel(repo.model);
-    setOneShotDesignEffortLevel(repo.designEffortLevel ?? "high");
-    setOneShotEffortLevel(repo.effortLevel ?? "medium");
+    setOneShotModel(repo.model ?? DEFAULTS.model);
+    setOneShotDesignEffortLevel(repo.designEffortLevel ?? DEFAULTS.designEffortLevel);
+    setOneShotEffortLevel(repo.effortLevel ?? DEFAULTS.effortLevel);
   }, [repo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build repo payload for invoke calls

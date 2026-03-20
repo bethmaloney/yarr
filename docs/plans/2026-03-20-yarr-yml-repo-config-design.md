@@ -355,12 +355,12 @@ Change `model`, `maxIterations`, and `completionSignal` from required to optiona
 - Fix any TypeScript errors from the optionality change — callers that assume required fields need `?? DEFAULTS.x` or to use `resolveConfig()`
 
 **Checklist:**
-- [ ] Update `LocalRepoConfig` type — make `model`, `maxIterations`, `completionSignal` optional
-- [ ] Update `SshRepoConfig` type — same changes
-- [ ] Update `addLocalRepo` to store sparse config
-- [ ] Update `addSshRepo` to store sparse config
-- [ ] Fix TypeScript compilation errors throughout codebase
-- [ ] `npx tsc --noEmit`
+- [x] Update `LocalRepoConfig` type — make `model`, `maxIterations`, `completionSignal` optional
+- [x] Update `SshRepoConfig` type — same changes
+- [x] Update `addLocalRepo` to store sparse config
+- [x] Update `addSshRepo` to store sparse config
+- [x] Fix TypeScript compilation errors throughout codebase
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -671,7 +671,7 @@ Test the resolve utility and DEFAULTS.
 | 2 | read_yarr_config IPC command | Done |
 | 3 | export_yarr_config IPC command | Done |
 | 4 | DEFAULTS, resolve utility, YarrYmlConfig type | Done |
-| 5 | Make RepoConfig sparse | Not Started |
+| 5 | Make RepoConfig sparse | Done |
 | 6 | Backend merge in run_session | Not Started |
 | 7 | Backend merge in run_oneshot + resume_oneshot | Not Started |
 | 8 | Store.ts sends sparse config | Not Started |

@@ -208,11 +208,11 @@ describe("addLocalRepo", () => {
     expect(repo.name).toBe("project");
   });
 
-  it("applies defaults for model, maxIterations, and completionSignal", async () => {
+  it("does not include model, maxIterations, or completionSignal", async () => {
     const repo = await addLocalRepo("/home/beth/repos/yarr");
-    expect(repo.model).toBe("opus");
-    expect(repo.maxIterations).toBe(40);
-    expect(repo.completionSignal).toBe("ALL TODO ITEMS COMPLETE");
+    expect(repo.model).toBeUndefined();
+    expect(repo.maxIterations).toBeUndefined();
+    expect(repo.completionSignal).toBeUndefined();
   });
 
   it("appends to existing repos", async () => {
@@ -237,31 +237,25 @@ describe("addLocalRepo", () => {
     expect(stored[1].name).toBe("second");
   });
 
-  it("applies effort level defaults", async () => {
+  it("does not include effort level defaults", async () => {
     const repo = await addLocalRepo("/home/beth/repos/yarr");
-    expect(repo).toHaveProperty("effortLevel", "medium");
-    expect(repo).toHaveProperty("designEffortLevel", "high");
+    expect(repo.effortLevel).toBeUndefined();
+    expect(repo.designEffortLevel).toBeUndefined();
   });
 
-  it("returns the created RepoConfig", async () => {
+  it("returns the created RepoConfig with only identity fields", async () => {
     const repo = await addLocalRepo("/home/beth/repos/yarr");
     expect(repo).toEqual({
       type: "local",
       id: expect.any(String),
       path: "/home/beth/repos/yarr",
       name: "yarr",
-      model: "opus",
-      effortLevel: "medium",
-      designEffortLevel: "high",
-      maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
-      checks: [],
     });
   });
 
-  it("includes checks: [] in defaults", async () => {
+  it("does not include checks in defaults", async () => {
     const repo = await addLocalRepo("/home/beth/repos/yarr");
-    expect(repo).toHaveProperty("checks", []);
+    expect(repo.checks).toBeUndefined();
   });
 });
 
@@ -295,11 +289,11 @@ describe("addSshRepo", () => {
     expect(repo.name).toBe("project");
   });
 
-  it("applies defaults for model, maxIterations, and completionSignal", async () => {
+  it("does not include model, maxIterations, or completionSignal", async () => {
     const repo = await addSshRepo("dev-server", "/home/beth/repos/project");
-    expect(repo.model).toBe("opus");
-    expect(repo.maxIterations).toBe(40);
-    expect(repo.completionSignal).toBe("ALL TODO ITEMS COMPLETE");
+    expect(repo.model).toBeUndefined();
+    expect(repo.maxIterations).toBeUndefined();
+    expect(repo.completionSignal).toBeUndefined();
   });
 
   it("appends to existing repos", async () => {
@@ -324,13 +318,13 @@ describe("addSshRepo", () => {
     expect(stored[1].name).toBe("second");
   });
 
-  it("applies effort level defaults", async () => {
+  it("does not include effort level defaults", async () => {
     const repo = await addSshRepo("dev-server", "/home/beth/repos/project");
-    expect(repo).toHaveProperty("effortLevel", "medium");
-    expect(repo).toHaveProperty("designEffortLevel", "high");
+    expect(repo.effortLevel).toBeUndefined();
+    expect(repo.designEffortLevel).toBeUndefined();
   });
 
-  it("returns the created RepoConfig", async () => {
+  it("returns the created RepoConfig with only identity fields", async () => {
     const repo = await addSshRepo("dev-server", "/home/beth/repos/project");
     expect(repo).toEqual({
       type: "ssh",
@@ -338,18 +332,12 @@ describe("addSshRepo", () => {
       sshHost: "dev-server",
       remotePath: "/home/beth/repos/project",
       name: "project",
-      model: "opus",
-      effortLevel: "medium",
-      designEffortLevel: "high",
-      maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
-      checks: [],
     });
   });
 
-  it("includes checks: [] in defaults", async () => {
+  it("does not include checks in defaults", async () => {
     const repo = await addSshRepo("dev-server", "/home/beth/repos/project");
-    expect(repo).toHaveProperty("checks", []);
+    expect(repo.checks).toBeUndefined();
   });
 });
 

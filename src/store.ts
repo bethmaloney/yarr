@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { toast } from "sonner";
+import { DEFAULTS } from "./config";
 import { saveRecent } from "./recents";
 import {
   loadRepos as reposLoadRepos,
@@ -387,7 +388,7 @@ export const useAppStore = create<AppStore>((set, get) => {
               sessionEvent.plan_file
             ) {
               const repo = get().repos.find((r) => r.id === repo_id);
-              if (repo && (repo.movePlansToCompleted ?? true)) {
+              if (repo && (repo.movePlansToCompleted ?? DEFAULTS.movePlansToCompleted)) {
                 const plansDir = repo.plansDir || "docs/plans/";
                 const filename =
                   sessionEvent.plan_file.split("/").pop() ||
@@ -741,12 +742,12 @@ export const useAppStore = create<AppStore>((set, get) => {
             effortLevel,
             designEffortLevel,
             envVars: repo.envVars ?? {},
-            maxIterations: repo.maxIterations,
-            completionSignal: repo.completionSignal,
+            maxIterations: repo.maxIterations ?? DEFAULTS.maxIterations,
+            completionSignal: repo.completionSignal ?? DEFAULTS.completionSignal,
             checks: repo.checks ?? [],
             gitSync: repo.gitSync,
-            plansDir: repo.plansDir || "docs/plans/",
-            movePlansToCompleted: repo.movePlansToCompleted ?? true,
+            plansDir: repo.plansDir || DEFAULTS.plansDir,
+            movePlansToCompleted: repo.movePlansToCompleted ?? DEFAULTS.movePlansToCompleted,
             designPromptFile: repo.designPromptFile || null,
             implementationPromptFile: repo.implementationPromptFile || null,
           },
@@ -870,12 +871,12 @@ export const useAppStore = create<AppStore>((set, get) => {
             designEffortLevel: entry.designEffortLevel,
             mergeStrategy: entry.mergeStrategy,
             envVars: repo.envVars ?? {},
-            maxIterations: repo.maxIterations,
-            completionSignal: repo.completionSignal,
+            maxIterations: repo.maxIterations ?? DEFAULTS.maxIterations,
+            completionSignal: repo.completionSignal ?? DEFAULTS.completionSignal,
             checks: repo.checks ?? [],
             gitSync: repo.gitSync,
-            plansDir: repo.plansDir || "docs/plans/",
-            movePlansToCompleted: repo.movePlansToCompleted ?? true,
+            plansDir: repo.plansDir || DEFAULTS.plansDir,
+            movePlansToCompleted: repo.movePlansToCompleted ?? DEFAULTS.movePlansToCompleted,
             worktreePath: entry.worktreePath,
             branch: entry.branch,
             oldSessionId: entry.session_id ?? "",
@@ -955,14 +956,14 @@ export const useAppStore = create<AppStore>((set, get) => {
             repoId,
             repo: repoPayload,
             planFile,
-            model: repo.model,
-            effortLevel: repo.effortLevel ?? "medium",
-            maxIterations: repo.maxIterations,
-            completionSignal: repo.completionSignal,
+            model: repo.model ?? DEFAULTS.model,
+            effortLevel: repo.effortLevel ?? DEFAULTS.effortLevel,
+            maxIterations: repo.maxIterations ?? DEFAULTS.maxIterations,
+            completionSignal: repo.completionSignal ?? DEFAULTS.completionSignal,
             envVars: repo.envVars ?? {},
             checks: repo.checks ?? [],
             gitSync: repo.gitSync,
-            createBranch: repo.createBranch ?? true,
+            createBranch: repo.createBranch ?? DEFAULTS.createBranch,
             implementationPromptFile: repo.implementationPromptFile || null,
           },
         );

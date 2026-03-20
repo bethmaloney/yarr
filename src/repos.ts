@@ -8,11 +8,11 @@ type LocalRepoConfig = {
   id: string;
   path: string;
   name: string;
-  model: string;
+  model?: string;
   effortLevel?: string;
   designEffortLevel?: string;
-  maxIterations: number;
-  completionSignal: string;
+  maxIterations?: number;
+  completionSignal?: string;
   envVars?: Record<string, string>;
   checks?: Check[];
   gitSync?: GitSyncConfig;
@@ -30,11 +30,11 @@ type SshRepoConfig = {
   sshHost: string;
   remotePath: string;
   name: string;
-  model: string;
+  model?: string;
   effortLevel?: string;
   designEffortLevel?: string;
-  maxIterations: number;
-  completionSignal: string;
+  maxIterations?: number;
+  completionSignal?: string;
   envVars?: Record<string, string>;
   checks?: Check[];
   gitSync?: GitSyncConfig;
@@ -74,12 +74,6 @@ export async function addLocalRepo(path: string): Promise<RepoConfig> {
     id: crypto.randomUUID(),
     path,
     name,
-    model: "opus",
-    effortLevel: "medium",
-    designEffortLevel: "high",
-    maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
-    checks: [],
   };
   repos.push(repo);
   await store.set("repos", repos);
@@ -99,12 +93,6 @@ export async function addSshRepo(
     sshHost,
     remotePath,
     name,
-    model: "opus",
-    effortLevel: "medium",
-    designEffortLevel: "high",
-    maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
-    checks: [],
   };
   repos.push(repo);
   await store.set("repos", repos);

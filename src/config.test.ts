@@ -72,13 +72,13 @@ describe("resolveConfig", () => {
     expect(result.maxIterations.source).toBe("default");
     expect(result.completionSignal.value).toBe("ALL TODO ITEMS COMPLETE");
     expect(result.completionSignal.source).toBe("default");
-    expect(result.createBranch.value).toBe(false);
+    expect(result.createBranch.value).toBe(true);
     expect(result.createBranch.source).toBe("default");
     expect(result.autoFetch.value).toBe(false);
     expect(result.autoFetch.source).toBe("default");
     expect(result.plansDir.value).toBe("docs/plans/");
     expect(result.plansDir.source).toBe("default");
-    expect(result.movePlansToCompleted.value).toBe(false);
+    expect(result.movePlansToCompleted.value).toBe(true);
     expect(result.movePlansToCompleted.source).toBe("default");
     expect(result.designPromptFile.value).toBe("");
     expect(result.designPromptFile.source).toBe("default");

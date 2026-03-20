@@ -6,10 +6,10 @@ export const DEFAULTS = {
   designEffortLevel: "high",
   maxIterations: 40,
   completionSignal: "ALL TODO ITEMS COMPLETE",
-  createBranch: false,
+  createBranch: true,
   autoFetch: false,
   plansDir: "docs/plans/",
-  movePlansToCompleted: false,
+  movePlansToCompleted: true,
   designPromptFile: "",
   implementationPromptFile: "",
 } as const;
