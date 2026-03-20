@@ -606,10 +606,10 @@ Listen for `yarr-config-warning` events from the backend and show toast warnings
 - Add cleanup in the returned cleanup function
 
 **Checklist:**
-- [ ] Add event listener in `initialize()`
-- [ ] Show toast warning with error message
-- [ ] Add cleanup
-- [ ] `npx tsc --noEmit`
+- [x] Add event listener in `initialize()`
+- [x] Show toast warning with error message
+- [x] Add cleanup
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -681,6 +681,6 @@ Test the resolve utility and DEFAULTS.
 | 12 | Wire source indicators to settings fields | Done |
 | 13 | Update save handler for sparse storage | Done |
 | 14 | Export button in settings sheet | Done |
-| 15 | Frontend event listener for config warnings | Not Started |
+| 15 | Frontend event listener for config warnings | Done |
 | 16 | Rust unit tests for merge logic | Not Started |
 | 17 | Frontend unit tests for config resolution | Not Started |

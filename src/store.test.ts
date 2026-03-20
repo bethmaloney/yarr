@@ -2713,6 +2713,67 @@ describe("env-warning listener", () => {
 });
 
 // ===========================================================================
+// yarr-config-warning listener (surface .yarr.yml parse errors)
+// ===========================================================================
+
+describe("yarr-config-warning listener", () => {
+  it("initialize sets up a listener for yarr-config-warning events", () => {
+    useAppStore.getState().initialize();
+    expect(mockListen).toHaveBeenCalledWith(
+      "yarr-config-warning",
+      expect.any(Function),
+    );
+  });
+
+  it("calls toast.warning with the error message when event fires", () => {
+    // Capture the yarr-config-warning callback
+    let capturedCallback: ((event: { payload: { repo_id: string; error: string } }) => void) | null = null;
+    const originalImpl = mockListen.getMockImplementation();
+    mockListen.mockImplementation(
+      async (
+        eventName: string,
+        callback: (...args: unknown[]) => void,
+      ) => {
+        if (eventName === "yarr-config-warning") {
+          capturedCallback = callback as typeof capturedCallback;
+        }
+        // Delegate to original for session-event capture etc.
+        if (eventName === "session-event" && mockListenerCallback) {
+          mockListenerCallback.current = callback as typeof mockListenerCallback.current;
+        }
+        return mockUnlisten;
+      },
+    );
+
+    useAppStore.getState().initialize();
+
+    expect(capturedCallback).not.toBeNull();
+    capturedCallback!({
+      payload: { repo_id: "repo-1", error: "invalid YAML at line 3" },
+    });
+
+    expect(mockToast.warning).toHaveBeenCalledWith(
+      ".yarr.yml: invalid YAML at line 3",
+      { id: "yarr-config-warning" },
+    );
+  });
+
+  it("cleanup unsubscribes the yarr-config-warning listener", async () => {
+    const cleanup = useAppStore.getState().initialize();
+
+    cleanup();
+
+    // mockUnlisten is the function returned by listen() — it should have been
+    // called at least once for yarr-config-warning cleanup (plus others).
+    // Since all listeners share the same mockUnlisten, we just verify it was
+    // called (the env-warning and session-event listeners also call it).
+    await vi.waitFor(() => {
+      expect(mockUnlisten).toHaveBeenCalled();
+    });
+  });
+});
+
+// ===========================================================================
 // 14. gitStatus initial state
 // ===========================================================================
 

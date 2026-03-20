@@ -585,6 +585,15 @@ export const useAppStore = create<AppStore>((set, get) => {
         toast.warning(event.payload, { id: "env-warning" });
       });
 
+      // 4c. Listen for yarr-config-warning events
+      const yarrConfigWarningPromise = listen<{
+        repo_id: string;
+        error: string;
+      }>("yarr-config-warning", (event) => {
+        console.warn("[store] yarr-config-warning:", { repo_id: event.payload.repo_id, error: event.payload.error });
+        toast.warning(`.yarr.yml: ${event.payload.error}`, { id: "yarr-config-warning" });
+      });
+
       // 5. Start sync interval
       const intervalId = setInterval(() => {
         syncActiveSession();
@@ -594,6 +603,7 @@ export const useAppStore = create<AppStore>((set, get) => {
       return () => {
         listenPromise.then((fn) => fn());
         envWarningPromise.then((fn) => fn());
+        yarrConfigWarningPromise.then((fn) => fn());
         clearInterval(intervalId);
       };
     },
