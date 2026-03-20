@@ -76,7 +76,7 @@ import {
 import type { Check, SessionState, SessionTrace } from "../types";
 import { repoPayload, type RepoConfig } from "../repos";
 import { DEFAULTS, resolveConfig, resolve } from "../config";
-import type { YarrYmlConfig } from "../config";
+import type { YarrYmlConfig, ConfigSource, ResolvedConfig } from "../config";
 import { useYarrConfig } from "../hooks/useYarrConfig";
 import { ConfigSourceBadge } from "@/components/ConfigSourceBadge";
 import { timeAgo } from "../time";
@@ -267,6 +267,16 @@ export default function RepoDetail() {
       next.add(field);
       return next;
     });
+  }
+
+  /** Effective config source accounting for unsaved local changes. */
+  function effectiveSource(field: keyof ResolvedConfig): ConfigSource {
+    if (removedFields.has(field)) {
+      const yml = yarrConfig.config ?? {};
+      if (yml[field as keyof YarrYmlConfig] !== undefined) return "yarr-yml";
+      return "default";
+    }
+    return resolvedConfig[field].source;
   }
 
   // Fetch git status on mount and when repo changes
@@ -1108,7 +1118,7 @@ export default function RepoDetail() {
                         <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Model
                           <ConfigSourceBadge
-                            source={resolvedConfig.model.source}
+                            source={effectiveSource("model")}
                             onReset={() => {
                               const fallback = resolve(undefined, yarrConfig.config?.model, DEFAULTS.model);
                               resetField("model", fallback.value, setModel);
@@ -1127,7 +1137,7 @@ export default function RepoDetail() {
                         <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Effort Level
                           <ConfigSourceBadge
-                            source={resolvedConfig.effortLevel.source}
+                            source={effectiveSource("effortLevel")}
                             onReset={() => {
                               const fallback = resolve(undefined, yarrConfig.config?.effortLevel, DEFAULTS.effortLevel);
                               resetField("effortLevel", fallback.value, setEffortLevel);
@@ -1154,7 +1164,7 @@ export default function RepoDetail() {
                         <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Max Iterations
                           <ConfigSourceBadge
-                            source={resolvedConfig.maxIterations.source}
+                            source={effectiveSource("maxIterations")}
                             onReset={() => {
                               const fallback = resolve(undefined, yarrConfig.config?.maxIterations, DEFAULTS.maxIterations);
                               resetField("maxIterations", fallback.value, setMaxIterations);
@@ -1177,7 +1187,7 @@ export default function RepoDetail() {
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Completion Signal
                         <ConfigSourceBadge
-                          source={resolvedConfig.completionSignal.source}
+                          source={effectiveSource("completionSignal")}
                           onReset={() => {
                             const fallback = resolve(undefined, yarrConfig.config?.completionSignal, DEFAULTS.completionSignal);
                             resetField("completionSignal", fallback.value, setCompletionSignal);
@@ -1211,7 +1221,7 @@ export default function RepoDetail() {
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Plans Directory
                         <ConfigSourceBadge
-                          source={resolvedConfig.plansDir.source}
+                          source={effectiveSource("plansDir")}
                           onReset={() => {
                             const fallback = resolve(undefined, yarrConfig.config?.plansDir, DEFAULTS.plansDir);
                             resetField("plansDir", fallback.source === "default" ? "" : fallback.value, setPlansDir);
@@ -1245,7 +1255,7 @@ export default function RepoDetail() {
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Move Plans to Completed
                         <ConfigSourceBadge
-                          source={resolvedConfig.movePlansToCompleted.source}
+                          source={effectiveSource("movePlansToCompleted")}
                           onReset={() => {
                             const fallback = resolve(undefined, yarrConfig.config?.movePlansToCompleted, DEFAULTS.movePlansToCompleted);
                             resetField("movePlansToCompleted", fallback.value, setMovePlansToCompleted);
@@ -1269,7 +1279,7 @@ export default function RepoDetail() {
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Design Prompt File
                         <ConfigSourceBadge
-                          source={resolvedConfig.designPromptFile.source}
+                          source={effectiveSource("designPromptFile")}
                           onReset={() => {
                             const fallback = resolve(undefined, yarrConfig.config?.designPromptFile, DEFAULTS.designPromptFile);
                             resetField("designPromptFile", fallback.value, setDesignPromptFile);
@@ -1314,7 +1324,7 @@ export default function RepoDetail() {
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Implementation Prompt File
                         <ConfigSourceBadge
-                          source={resolvedConfig.implementationPromptFile.source}
+                          source={effectiveSource("implementationPromptFile")}
                           onReset={() => {
                             const fallback = resolve(undefined, yarrConfig.config?.implementationPromptFile, DEFAULTS.implementationPromptFile);
                             resetField("implementationPromptFile", fallback.value, setImplementationPromptFile);
@@ -1383,7 +1393,7 @@ export default function RepoDetail() {
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Create Branch
                         <ConfigSourceBadge
-                          source={resolvedConfig.createBranch.source}
+                          source={effectiveSource("createBranch")}
                           onReset={() => {
                             const fallback = resolve(undefined, yarrConfig.config?.createBranch, DEFAULTS.createBranch);
                             resetField("createBranch", fallback.value, setCreateBranch);
@@ -1405,7 +1415,7 @@ export default function RepoDetail() {
                         <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Auto Fetch
                           <ConfigSourceBadge
-                            source={resolvedConfig.autoFetch.source}
+                            source={effectiveSource("autoFetch")}
                             onReset={() => {
                               const fallback = resolve(undefined, yarrConfig.config?.autoFetch, DEFAULTS.autoFetch);
                               resetField("autoFetch", fallback.value, setAutoFetch);
@@ -1429,7 +1439,7 @@ export default function RepoDetail() {
                     <Variable className="size-3.5" />
                     Environment Variables
                     <ConfigSourceBadge
-                      source={resolvedConfig.envVars.source}
+                      source={effectiveSource("envVars")}
                       onReset={() => {
                         const fallback = yarrConfig.config?.envVars;
                         setEnvVars(
@@ -1550,7 +1560,7 @@ export default function RepoDetail() {
                     <ShieldCheck className="size-3.5" />
                     Validation Checks
                     <ConfigSourceBadge
-                      source={resolvedConfig.checks.source}
+                      source={effectiveSource("checks")}
                       onReset={() => {
                         const fallback = yarrConfig.config?.checks;
                         setChecks(fallback ?? []);
@@ -1818,7 +1828,7 @@ export default function RepoDetail() {
                     <GitBranch className="size-3.5" />
                     Sync Settings
                     <ConfigSourceBadge
-                      source={resolvedConfig.gitSync.source}
+                      source={effectiveSource("gitSync")}
                       onReset={() => {
                         const fallback = yarrConfig.config?.gitSync;
                         setGitSyncEnabled(fallback?.enabled ?? false);
