@@ -222,7 +222,7 @@ export default function RepoDetail() {
     setChecks(resolvedConfig.checks ?? []);
     setCreateBranch(resolvedConfig.createBranch.value);
     setAutoFetch(resolvedConfig.autoFetch.value);
-    setPlansDir(resolvedConfig.plansDir.value);
+    setPlansDir(resolvedConfig.plansDir.source === "default" ? "" : resolvedConfig.plansDir.value);
     setMovePlansToCompleted(resolvedConfig.movePlansToCompleted.value);
     setGitSyncEnabled(resolvedConfig.gitSync?.enabled ?? false);
     setGitSyncModel(resolvedConfig.gitSync?.model ?? "");
