@@ -455,9 +455,9 @@ Frontend hook that calls the `read_yarr_config` IPC command and provides the par
 - **Note:** The Rust `YarrRepoConfig` serializes the `env` field as `"env"` in JSON (camelCase rename doesn't change single-word fields), but the frontend `RepoConfig` uses `envVars`. The hook must map `env` → `envVars` when converting the IPC response to `YarrYmlConfig`.
 
 **Checklist:**
-- [ ] Create `src/hooks/useYarrConfig.ts`
-- [ ] Implement the hook with loading/error/config state
-- [ ] `npx tsc --noEmit`
+- [x] Create `src/hooks/useYarrConfig.ts`
+- [x] Implement the hook with loading/error/config state
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -675,7 +675,7 @@ Test the resolve utility and DEFAULTS.
 | 6 | Backend merge in run_session | Done |
 | 7 | Backend merge in run_oneshot + resume_oneshot | Done |
 | 8 | Store.ts sends sparse config | Done |
-| 9 | useYarrConfig hook | Not Started |
+| 9 | useYarrConfig hook | Done |
 | 10 | ConfigSourceBadge component | Not Started |
 | 11 | Config status banner in settings sheet | Not Started |
 | 12 | Wire source indicators to settings fields | Not Started |
