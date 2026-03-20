@@ -276,10 +276,10 @@ Backend command for the frontend to read and parse `.yarr.yml` from a repo, used
 - Return type: `Result<YarrConfigResult, String>` where `YarrConfigResult = { config: Option<YarrRepoConfig>, error: Option<String> }`
 
 **Checklist:**
-- [ ] Define `YarrConfigResult` response struct with `Serialize`
-- [ ] Add `read_yarr_config` command function
-- [ ] Register in `tauri::generate_handler![]`
-- [ ] `cargo check`
+- [x] Define `YarrConfigResult` response struct with `Serialize`
+- [x] Add `read_yarr_config` command function
+- [x] Register in `tauri::generate_handler![]`
+- [x] `cargo check`
 
 ---
 
@@ -667,7 +667,7 @@ Test the resolve utility and DEFAULTS.
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Add serde_yaml + YarrRepoConfig struct | Done |
-| 2 | read_yarr_config IPC command | Not Started |
+| 2 | read_yarr_config IPC command | Done |
 | 3 | export_yarr_config IPC command | Not Started |
 | 4 | DEFAULTS, resolve utility, YarrYmlConfig type | Not Started |
 | 5 | Make RepoConfig sparse | Not Started |

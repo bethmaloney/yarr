@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::session::{Check, GitSyncConfig};
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, serde::Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct YarrRepoConfig {
     pub model: Option<String>,
@@ -21,6 +21,13 @@ pub struct YarrRepoConfig {
     pub env: Option<HashMap<String, String>>,
     pub checks: Option<Vec<Check>>,
     pub git_sync: Option<GitSyncConfig>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct YarrConfigResult {
+    pub config: Option<YarrRepoConfig>,
+    pub error: Option<String>,
 }
 
 pub fn parse(yaml: &str) -> anyhow::Result<YarrRepoConfig> {
@@ -255,5 +262,76 @@ gitSync:
         assert!(git_sync.conflict_prompt.is_none());
         assert!(git_sync.model.is_none());
         assert_eq!(git_sync.max_push_retries, 3, "default max_push_retries should be 3");
+    }
+
+    #[test]
+    fn config_result_with_config_present() {
+        let config = parse("model: \"opus\"\nmaxIterations: 5\n").unwrap();
+        let result = YarrConfigResult {
+            config: Some(config),
+            error: None,
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["error"], serde_json::Value::Null);
+        let cfg = &json["config"];
+        assert_eq!(cfg["model"], "opus");
+        assert_eq!(cfg["maxIterations"], 5);
+        // Fields not set in YAML should serialize as null
+        assert_eq!(cfg["effortLevel"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn config_result_with_error_no_config() {
+        let result = YarrConfigResult {
+            config: None,
+            error: Some("parse error: invalid YAML at line 3".to_string()),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["config"], serde_json::Value::Null);
+        assert_eq!(json["error"], "parse error: invalid YAML at line 3");
+    }
+
+    #[test]
+    fn config_result_both_none() {
+        let result = YarrConfigResult {
+            config: None,
+            error: None,
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["config"], serde_json::Value::Null);
+        assert_eq!(json["error"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn repo_config_round_trip_yaml_to_json() {
+        let yaml = r#"
+model: "claude-sonnet-4-20250514"
+maxIterations: 8
+createBranch: true
+env:
+  RUST_LOG: debug
+checks:
+  - name: "lint"
+    command: "npm run lint"
+    when: each_iteration
+gitSync:
+  enabled: true
+  maxPushRetries: 4
+"#;
+        let config = parse(yaml).unwrap();
+        let json = serde_json::to_value(&config).unwrap();
+
+        assert_eq!(json["model"], "claude-sonnet-4-20250514");
+        assert_eq!(json["maxIterations"], 8);
+        assert_eq!(json["createBranch"], true);
+        assert_eq!(json["env"]["RUST_LOG"], "debug");
+
+        let checks = json["checks"].as_array().unwrap();
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0]["name"], "lint");
+
+        let git_sync = &json["gitSync"];
+        assert_eq!(git_sync["enabled"], true);
+        assert_eq!(git_sync["maxPushRetries"], 4);
     }
 }

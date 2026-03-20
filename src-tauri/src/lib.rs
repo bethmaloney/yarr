@@ -1611,6 +1611,37 @@ async fn export_default_prompt(app: tauri::AppHandle, repo: RepoType, prompt_typ
     Ok(file_path.to_string())
 }
 
+#[tauri::command]
+async fn read_yarr_config(app: tauri::AppHandle, repo: RepoType) -> Result<yarr_config::YarrConfigResult, String> {
+    tracing::info!(repo = ?repo, "read_yarr_config called");
+    let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
+
+    match rt.read_file(".yarr.yml", &working_dir).await {
+        Ok(content) => {
+            match yarr_config::parse(&content) {
+                Ok(config) => Ok(yarr_config::YarrConfigResult {
+                    config: Some(config),
+                    error: None,
+                }),
+                Err(e) => {
+                    tracing::warn!(error = %e, "failed to parse .yarr.yml");
+                    Ok(yarr_config::YarrConfigResult {
+                        config: None,
+                        error: Some(format!("Failed to parse .yarr.yml: {e}")),
+                    })
+                }
+            }
+        }
+        Err(e) => {
+            tracing::debug!(error = %e, "could not read .yarr.yml, treating as absent");
+            Ok(yarr_config::YarrConfigResult {
+                config: None,
+                error: None,
+            })
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Force a webview to repaint by briefly resizing and restoring the window.
 /// This works around a WebView2 bug on Windows where the rendering surface
@@ -1662,7 +1693,7 @@ pub fn run() {
             inner: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         })
         .manage(SshEnvCache::default())
-        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, resume_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed, export_default_prompt])
+        .invoke_handler(tauri::generate_handler![run_session, run_oneshot, resume_oneshot, stop_session, get_active_sessions, test_ssh_connection_steps, reconnect_session, list_traces, list_latest_traces, get_trace, get_trace_events, read_file_preview, get_repo_git_status, list_local_branches, switch_branch, fast_forward_branch, list_plans, move_plan_to_completed, export_default_prompt, read_yarr_config])
         .build(tauri::generate_context!())
         .expect("error building tauri application");
 
