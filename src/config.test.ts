@@ -5,7 +5,6 @@ import {
   resolve,
   resolveConfig,
   type YarrYmlConfig,
-  type Resolved,
   type ConfigSource,
 } from "./config";
 import type { Check, GitSyncConfig } from "./types";
