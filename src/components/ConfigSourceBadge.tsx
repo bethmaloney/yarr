@@ -21,7 +21,7 @@ export function ConfigSourceBadge({ source, onReset }: ConfigSourceBadgeProps) {
       <button
         onClick={() => onReset?.()}
         aria-label="Reset to default"
-        className="text-muted-foreground hover:text-foreground transition-colors duration-150"
+        className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors duration-150"
       >
         <X className="size-3.5" />
       </button>
