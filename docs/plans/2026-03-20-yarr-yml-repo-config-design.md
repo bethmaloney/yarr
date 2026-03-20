@@ -328,13 +328,13 @@ Frontend foundation for three-tier merge: the defaults, the resolution function,
 - Implement `resolveConfig(repo, yarrYml, defaults)` returning a full resolved config object with sources
 
 **Checklist:**
-- [ ] Create `src/config.ts`
-- [ ] Define `DEFAULTS` constant
-- [ ] Define `YarrYmlConfig` type
-- [ ] Define `ConfigSource`, `Resolved<T>` types
-- [ ] Implement `resolve()` and `resolveConfig()`
-- [ ] Add unit tests in `src/config.test.ts`: override wins, yarr-yml wins, default fallback, undefined handling
-- [ ] `npx tsc --noEmit && npm test`
+- [x] Create `src/config.ts`
+- [x] Define `DEFAULTS` constant
+- [x] Define `YarrYmlConfig` type
+- [x] Define `ConfigSource`, `Resolved<T>` types
+- [x] Implement `resolve()` and `resolveConfig()`
+- [x] Add unit tests in `src/config.test.ts`: override wins, yarr-yml wins, default fallback, undefined handling
+- [x] `npx tsc --noEmit && npm test`
 
 ---
 
@@ -452,6 +452,7 @@ Frontend hook that calls the `read_yarr_config` IPC command and provides the par
 - Calls `invoke<YarrConfigResult>("read_yarr_config", { repo })` on mount and when repo changes
 - Returns `{ config: YarrYmlConfig | null, error: string | null, loading: boolean, refresh: () => void }`
 - Show toast on parse error via the `error` field
+- **Note:** The Rust `YarrRepoConfig` serializes the `env` field as `"env"` in JSON (camelCase rename doesn't change single-word fields), but the frontend `RepoConfig` uses `envVars`. The hook must map `env` → `envVars` when converting the IPC response to `YarrYmlConfig`.
 
 **Checklist:**
 - [ ] Create `src/hooks/useYarrConfig.ts`
@@ -669,7 +670,7 @@ Test the resolve utility and DEFAULTS.
 | 1 | Add serde_yaml + YarrRepoConfig struct | Done |
 | 2 | read_yarr_config IPC command | Done |
 | 3 | export_yarr_config IPC command | Done |
-| 4 | DEFAULTS, resolve utility, YarrYmlConfig type | Not Started |
+| 4 | DEFAULTS, resolve utility, YarrYmlConfig type | Done |
 | 5 | Make RepoConfig sparse | Not Started |
 | 6 | Backend merge in run_session | Not Started |
 | 7 | Backend merge in run_oneshot + resume_oneshot | Not Started |
