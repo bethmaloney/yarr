@@ -74,9 +74,10 @@ import {
 } from "lucide-react";
 import type { Check, SessionState, SessionTrace } from "../types";
 import { repoPayload, type RepoConfig } from "../repos";
-import { DEFAULTS } from "../config";
-import type { YarrYmlConfig } from "../config";
+import { DEFAULTS, resolveConfig } from "../config";
+import type { YarrYmlConfig, ResolvedConfig } from "../config";
 import { useYarrConfig } from "../hooks/useYarrConfig";
+import { ConfigSourceBadge } from "@/components/ConfigSourceBadge";
 import { timeAgo } from "../time";
 
 type ConnectionTestStep = {
@@ -113,6 +114,18 @@ export default function RepoDetail() {
 
   const repo = repos.find((r) => r.id === repoId);
   const yarrConfig = useYarrConfig(repo ?? null);
+  const resolvedConfig = useMemo(
+    () =>
+      resolveConfig(
+        repo ?? {},
+        yarrConfig.config,
+        {
+          ...DEFAULTS,
+          autoFetch: repo?.type === "local" ? true : DEFAULTS.autoFetch,
+        } as typeof DEFAULTS,
+      ),
+    [repo, yarrConfig.config],
+  );
   const session: SessionState =
     (repoId && sessions.get(repoId)) || defaultSession;
 
@@ -196,31 +209,31 @@ export default function RepoDetail() {
     if (!repo) return;
     setNameInput(repo.name);
     setEditingName(false);
-    setModel(repo.model ?? DEFAULTS.model);
-    setEffortLevel(repo.effortLevel ?? DEFAULTS.effortLevel);
-    setMaxIterations(repo.maxIterations ?? DEFAULTS.maxIterations);
-    setCompletionSignal(repo.completionSignal ?? DEFAULTS.completionSignal);
+    setModel(resolvedConfig.model.value);
+    setEffortLevel(resolvedConfig.effortLevel.value);
+    setMaxIterations(resolvedConfig.maxIterations.value);
+    setCompletionSignal(resolvedConfig.completionSignal.value);
     setEnvVars(
-      Object.entries(repo.envVars ?? {}).map(([key, value]) => ({
+      Object.entries(resolvedConfig.envVars ?? {}).map(([key, value]) => ({
         key,
         value,
       })),
     );
-    setChecks(repo.checks ?? []);
-    setCreateBranch(repo.createBranch ?? DEFAULTS.createBranch);
-    setAutoFetch(repo.autoFetch ?? (repo.type === "local" ? true : false));
-    setPlansDir(repo.plansDir ?? "");
-    setMovePlansToCompleted(repo.movePlansToCompleted ?? DEFAULTS.movePlansToCompleted);
-    setGitSyncEnabled(repo.gitSync?.enabled ?? false);
-    setGitSyncModel(repo.gitSync?.model ?? "");
-    setGitSyncMaxRetries(repo.gitSync?.maxPushRetries ?? 3);
-    setGitSyncPrompt(repo.gitSync?.conflictPrompt ?? "");
-    setDesignPromptFile(repo.designPromptFile ?? "");
-    setImplementationPromptFile(repo.implementationPromptFile ?? "");
-    setOneShotModel(repo.model ?? DEFAULTS.model);
-    setOneShotDesignEffortLevel(repo.designEffortLevel ?? DEFAULTS.designEffortLevel);
-    setOneShotEffortLevel(repo.effortLevel ?? DEFAULTS.effortLevel);
-  }, [repo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    setChecks(resolvedConfig.checks ?? []);
+    setCreateBranch(resolvedConfig.createBranch.value);
+    setAutoFetch(resolvedConfig.autoFetch.value);
+    setPlansDir(resolvedConfig.plansDir.value);
+    setMovePlansToCompleted(resolvedConfig.movePlansToCompleted.value);
+    setGitSyncEnabled(resolvedConfig.gitSync?.enabled ?? false);
+    setGitSyncModel(resolvedConfig.gitSync?.model ?? "");
+    setGitSyncMaxRetries(resolvedConfig.gitSync?.maxPushRetries ?? 3);
+    setGitSyncPrompt(resolvedConfig.gitSync?.conflictPrompt ?? "");
+    setDesignPromptFile(resolvedConfig.designPromptFile.value);
+    setImplementationPromptFile(resolvedConfig.implementationPromptFile.value);
+    setOneShotModel(resolvedConfig.model.value);
+    setOneShotDesignEffortLevel(resolvedConfig.designEffortLevel.value);
+    setOneShotEffortLevel(resolvedConfig.effortLevel.value);
+  }, [repo?.id, resolvedConfig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build repo payload for invoke calls
   function buildRepoPayload() {
@@ -997,8 +1010,9 @@ export default function RepoDetail() {
                   >
                     <div className="grid grid-cols-3 gap-3">
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Model
+                          <ConfigSourceBadge source={resolvedConfig.model.source} />
                         </span>
                         <Input
                           type="text"
@@ -1009,8 +1023,9 @@ export default function RepoDetail() {
                         />
                       </Label>
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Effort Level
+                          <ConfigSourceBadge source={resolvedConfig.effortLevel.source} />
                         </span>
                         <Select
                           value={effortLevel}
@@ -1029,8 +1044,9 @@ export default function RepoDetail() {
                         </Select>
                       </Label>
                       <Label className="flex flex-col gap-1">
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Max Iterations
+                          <ConfigSourceBadge source={resolvedConfig.maxIterations.source} />
                         </span>
                         <NumberInput
                           value={maxIterations}
@@ -1044,8 +1060,9 @@ export default function RepoDetail() {
                       </Label>
                     </div>
                     <Label className="flex flex-col gap-1">
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Completion Signal
+                        <ConfigSourceBadge source={resolvedConfig.completionSignal.source} />
                       </span>
                       <Input
                         type="text"
@@ -1071,8 +1088,9 @@ export default function RepoDetail() {
                     className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
                   >
                     <Label className="flex flex-col gap-1">
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Plans Directory
+                        <ConfigSourceBadge source={resolvedConfig.plansDir.source} />
                       </span>
                       <Input
                         type="text"
@@ -1097,7 +1115,10 @@ export default function RepoDetail() {
                         }
                         disabled={session.running}
                       />
-                      Move plans to completed folder after run
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
+                        Move Plans to Completed
+                        <ConfigSourceBadge source={resolvedConfig.movePlansToCompleted.source} />
+                      </span>
                     </Label>
                   </div>
                 </div>
@@ -1112,8 +1133,9 @@ export default function RepoDetail() {
                     className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
                   >
                     <Label className="flex flex-col gap-1">
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Design Prompt File
+                        <ConfigSourceBadge source={resolvedConfig.designPromptFile.source} />
                       </span>
                       <div className="flex gap-2">
                         <Input
@@ -1149,8 +1171,9 @@ export default function RepoDetail() {
                       </div>
                     </Label>
                     <Label className="flex flex-col gap-1">
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Implementation Prompt File
+                        <ConfigSourceBadge source={resolvedConfig.implementationPromptFile.source} />
                       </span>
                       <div className="flex gap-2">
                         <Input
@@ -1210,7 +1233,10 @@ export default function RepoDetail() {
                         onCheckedChange={(v) => setCreateBranch(v === true)}
                         disabled={session.running}
                       />
-                      Create branch on run
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
+                        Create Branch
+                        <ConfigSourceBadge source={resolvedConfig.createBranch.source} />
+                      </span>
                     </Label>
                     <div className="flex flex-col gap-1">
                       <Label
@@ -1223,7 +1249,10 @@ export default function RepoDetail() {
                           onCheckedChange={(v) => setAutoFetch(v === true)}
                           disabled={session.running}
                         />
-                        Auto-fetch from remote
+                        <span className="text-sm text-muted-foreground flex items-center gap-2">
+                          Auto Fetch
+                          <ConfigSourceBadge source={resolvedConfig.autoFetch.source} />
+                        </span>
                       </Label>
                       <span className="text-xs text-muted-foreground ml-6 mt-0.5">
                         Fetches from remote every 30 seconds during a session

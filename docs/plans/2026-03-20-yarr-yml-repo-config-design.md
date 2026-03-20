@@ -527,14 +527,14 @@ Update the settings sheet form to show `ConfigSourceBadge` on every field, using
 - Reset handler: clears the local state for that field back to the resolved non-override value
 
 **Checklist:**
-- [ ] Import `resolveConfig`, `DEFAULTS`, `ConfigSourceBadge`
-- [ ] Add `useMemo` for resolved config
-- [ ] Update useEffect to initialize from resolved values
-- [ ] Add `ConfigSourceBadge` to model, effortLevel, maxIterations, completionSignal fields
-- [ ] Add `ConfigSourceBadge` to createBranch, autoFetch, plansDir, movePlansToCompleted fields
-- [ ] Add `ConfigSourceBadge` to designPromptFile, implementationPromptFile fields
+- [x] Import `resolveConfig`, `DEFAULTS`, `ConfigSourceBadge`
+- [x] Add `useMemo` for resolved config
+- [x] Update useEffect to initialize from resolved values
+- [x] Add `ConfigSourceBadge` to model, effortLevel, maxIterations, completionSignal fields
+- [x] Add `ConfigSourceBadge` to createBranch, autoFetch, plansDir, movePlansToCompleted fields
+- [x] Add `ConfigSourceBadge` to designPromptFile, implementationPromptFile fields
 - [ ] Add `ConfigSourceBadge` to checks, envVars, gitSync fields
-- [ ] `npx tsc --noEmit`
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -678,7 +678,7 @@ Test the resolve utility and DEFAULTS.
 | 9 | useYarrConfig hook | Done |
 | 10 | ConfigSourceBadge component | Done |
 | 11 | Config status banner in settings sheet | Done |
-| 12 | Wire source indicators to settings fields | Not Started |
+| 12 | Wire source indicators to settings fields | In Progress (checks/envVars/gitSync badges remain) |
 | 13 | Update save handler for sparse storage | Not Started |
 | 14 | Export button in settings sheet | Not Started |
 | 15 | Frontend event listener for config warnings | Not Started |
