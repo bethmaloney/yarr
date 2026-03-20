@@ -490,13 +490,13 @@ async fn run_oneshot(
     repo: RepoType,
     title: String,
     prompt: String,
-    model: String,
+    model: Option<String>,
     effort_level: Option<String>,
     design_effort_level: Option<String>,
     merge_strategy: oneshot::MergeStrategy,
     env_vars: Option<HashMap<String, String>>,
-    max_iterations: u32,
-    completion_signal: String,
+    max_iterations: Option<u32>,
+    completion_signal: Option<String>,
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
     plans_dir: Option<String>,
@@ -524,6 +524,39 @@ async fn run_oneshot(
         }
     }
 
+    // Read .yarr.yml and merge with frontend overrides
+    let (rt_for_config, working_dir_for_config) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
+    let (yarr_yml, yarr_yml_error) = yarr_config::read_yarr_config_from_repo(
+        rt_for_config.as_ref(),
+        &working_dir_for_config,
+    ).await;
+
+    if let Some(ref err) = yarr_yml_error {
+        tracing::warn!(oneshot_id = %oneshot_id, repo_id = %repo_id, error = %err, "failed to parse .yarr.yml");
+        let _ = app.emit("yarr-config-warning", serde_json::json!({
+            "repo_id": repo_id,
+            "error": err,
+        }));
+    }
+
+    let frontend_overrides = yarr_config::YarrRepoConfig {
+        model,
+        effort_level,
+        design_effort_level,
+        max_iterations,
+        completion_signal,
+        env: env_vars,
+        checks,
+        git_sync,
+        plans_dir,
+        move_plans_to_completed,
+        design_prompt_file,
+        implementation_prompt_file,
+        ..Default::default()
+    };
+    let merged = yarr_config::merge(&frontend_overrides, &yarr_yml);
+    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, model = %merged.model, effort_level = ?merged.effort_level, "resolved oneshot config after merge");
+
     match &repo {
         RepoType::Local { path } => {
             let repo_path_buf = PathBuf::from(path);
@@ -542,20 +575,20 @@ async fn run_oneshot(
                 repo_path: repo_path_buf,
                 title,
                 prompt,
-                model,
-                effort_level: effort_level.unwrap_or_else(|| "medium".to_string()),
-                design_effort_level: design_effort_level.unwrap_or_else(|| "high".to_string()),
+                model: merged.model.clone(),
+                effort_level: merged.effort_level.clone().unwrap_or_else(|| "medium".to_string()),
+                design_effort_level: merged.design_effort_level.clone().unwrap_or_else(|| "high".to_string()),
                 merge_strategy,
-                env_vars: env_vars.unwrap_or_default(),
-                max_iterations,
-                completion_signal,
-                checks: checks.unwrap_or_default(),
-                git_sync,
-                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
-                move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
+                env_vars: merged.env.clone().unwrap_or_default(),
+                max_iterations: merged.max_iterations,
+                completion_signal: merged.completion_signal.clone(),
+                checks: merged.checks.clone().unwrap_or_default(),
+                git_sync: merged.git_sync.clone(),
+                plans_dir: merged.plans_dir.clone().unwrap_or_else(|| "docs/plans/".to_string()),
+                move_plans_to_completed: merged.move_plans_to_completed.unwrap_or(true),
                 ssh_host: None,
-                design_prompt_file: design_prompt_file.clone(),
-                implementation_prompt_file: implementation_prompt_file.clone(),
+                design_prompt_file: merged.design_prompt_file.clone(),
+                implementation_prompt_file: merged.implementation_prompt_file.clone(),
             };
 
             let base_dir = match app.path().app_data_dir() {
@@ -633,20 +666,20 @@ async fn run_oneshot(
                 repo_path: PathBuf::from(remote_path),
                 title,
                 prompt,
-                model,
-                effort_level: effort_level.unwrap_or_default(),
-                design_effort_level: design_effort_level.unwrap_or_default(),
+                model: merged.model.clone(),
+                effort_level: merged.effort_level.clone().unwrap_or_else(|| "medium".to_string()),
+                design_effort_level: merged.design_effort_level.clone().unwrap_or_else(|| "high".to_string()),
                 merge_strategy,
-                env_vars: env_vars.unwrap_or_default(),
-                max_iterations,
-                completion_signal,
-                checks: checks.unwrap_or_default(),
-                git_sync,
-                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
-                move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
+                env_vars: merged.env.clone().unwrap_or_default(),
+                max_iterations: merged.max_iterations,
+                completion_signal: merged.completion_signal.clone(),
+                checks: merged.checks.clone().unwrap_or_default(),
+                git_sync: merged.git_sync.clone(),
+                plans_dir: merged.plans_dir.clone().unwrap_or_else(|| "docs/plans/".to_string()),
+                move_plans_to_completed: merged.move_plans_to_completed.unwrap_or(true),
                 ssh_host: Some(ssh_host.clone()),
-                design_prompt_file,
-                implementation_prompt_file,
+                design_prompt_file: merged.design_prompt_file.clone(),
+                implementation_prompt_file: merged.implementation_prompt_file.clone(),
             };
 
             let base_dir = match app.path().app_data_dir() {
@@ -742,13 +775,13 @@ async fn resume_oneshot(
     repo: RepoType,
     title: String,
     prompt: String,
-    model: String,
+    model: Option<String>,
     effort_level: Option<String>,
     design_effort_level: Option<String>,
     merge_strategy: oneshot::MergeStrategy,
     env_vars: Option<HashMap<String, String>>,
-    max_iterations: u32,
-    completion_signal: String,
+    max_iterations: Option<u32>,
+    completion_signal: Option<String>,
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
     plans_dir: Option<String>,
@@ -768,6 +801,39 @@ async fn resume_oneshot(
         tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, session_id = %session_id, "inserting resume oneshot into ActiveSessions (placeholder)");
         active.tokens.lock().await.insert(oneshot_id.clone(), SessionHandle { cancel_token: cancel_token.clone(), session_id: session_id.clone(), join_handle: tokio::spawn(async {}) });
     }
+
+    // Read .yarr.yml and merge with frontend overrides
+    let (rt_for_config, working_dir_for_config) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
+    let (yarr_yml, yarr_yml_error) = yarr_config::read_yarr_config_from_repo(
+        rt_for_config.as_ref(),
+        &working_dir_for_config,
+    ).await;
+
+    if let Some(ref err) = yarr_yml_error {
+        tracing::warn!(oneshot_id = %oneshot_id, repo_id = %repo_id, error = %err, "failed to parse .yarr.yml");
+        let _ = app.emit("yarr-config-warning", serde_json::json!({
+            "repo_id": repo_id,
+            "error": err,
+        }));
+    }
+
+    let frontend_overrides = yarr_config::YarrRepoConfig {
+        model,
+        effort_level,
+        design_effort_level,
+        max_iterations,
+        completion_signal,
+        env: env_vars,
+        checks,
+        git_sync,
+        plans_dir,
+        move_plans_to_completed,
+        design_prompt_file,
+        implementation_prompt_file,
+        ..Default::default()
+    };
+    let merged = yarr_config::merge(&frontend_overrides, &yarr_yml);
+    tracing::info!(oneshot_id = %oneshot_id, repo_id = %repo_id, model = %merged.model, effort_level = ?merged.effort_level, "resolved resume oneshot config after merge");
 
     match &repo {
         RepoType::Local { path } => {
@@ -855,20 +921,20 @@ async fn resume_oneshot(
                 repo_path: repo_path_buf,
                 title,
                 prompt,
-                model,
-                effort_level: effort_level.unwrap_or_else(|| "medium".to_string()),
-                design_effort_level: design_effort_level.unwrap_or_else(|| "high".to_string()),
+                model: merged.model.clone(),
+                effort_level: merged.effort_level.clone().unwrap_or_else(|| "medium".to_string()),
+                design_effort_level: merged.design_effort_level.clone().unwrap_or_else(|| "high".to_string()),
                 merge_strategy,
-                env_vars: env_vars.unwrap_or_default(),
-                max_iterations,
-                completion_signal,
-                checks: checks.unwrap_or_default(),
-                git_sync,
-                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
-                move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
+                env_vars: merged.env.clone().unwrap_or_default(),
+                max_iterations: merged.max_iterations,
+                completion_signal: merged.completion_signal.clone(),
+                checks: merged.checks.clone().unwrap_or_default(),
+                git_sync: merged.git_sync.clone(),
+                plans_dir: merged.plans_dir.clone().unwrap_or_else(|| "docs/plans/".to_string()),
+                move_plans_to_completed: merged.move_plans_to_completed.unwrap_or(true),
                 ssh_host: None,
-                design_prompt_file: design_prompt_file.clone(),
-                implementation_prompt_file: implementation_prompt_file.clone(),
+                design_prompt_file: merged.design_prompt_file.clone(),
+                implementation_prompt_file: merged.implementation_prompt_file.clone(),
             };
 
             let collector = TraceCollector::new(base_dir, &oneshot_id);
@@ -1008,20 +1074,20 @@ async fn resume_oneshot(
                 repo_path: repo_path_buf,
                 title,
                 prompt,
-                model,
-                effort_level: effort_level.unwrap_or_default(),
-                design_effort_level: design_effort_level.unwrap_or_default(),
+                model: merged.model,
+                effort_level: merged.effort_level.unwrap_or_else(|| "medium".to_string()),
+                design_effort_level: merged.design_effort_level.unwrap_or_else(|| "high".to_string()),
                 merge_strategy,
-                env_vars: env_vars.unwrap_or_default(),
-                max_iterations,
-                completion_signal,
-                checks: checks.unwrap_or_default(),
-                git_sync,
-                plans_dir: plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
-                move_plans_to_completed: move_plans_to_completed.unwrap_or(true),
+                env_vars: merged.env.unwrap_or_default(),
+                max_iterations: merged.max_iterations,
+                completion_signal: merged.completion_signal,
+                checks: merged.checks.unwrap_or_default(),
+                git_sync: merged.git_sync,
+                plans_dir: merged.plans_dir.unwrap_or_else(|| "docs/plans/".to_string()),
+                move_plans_to_completed: merged.move_plans_to_completed.unwrap_or(true),
                 ssh_host: Some(ssh_host.clone()),
-                design_prompt_file,
-                implementation_prompt_file,
+                design_prompt_file: merged.design_prompt_file,
+                implementation_prompt_file: merged.implementation_prompt_file,
             };
 
             let collector = TraceCollector::new(base_dir, &oneshot_id);

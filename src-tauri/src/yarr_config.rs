@@ -853,4 +853,120 @@ gitSync:
         let gs = merged.git_sync.as_ref().unwrap();
         assert!(gs.enabled, "yarr_yml git_sync passes through");
     }
+
+    // ── oneshot-specific merge tests ────────────────────────────────
+
+    #[test]
+    fn merge_oneshot_fields_from_frontend() {
+        let frontend = YarrRepoConfig {
+            effort_level: Some("high".to_string()),
+            design_effort_level: Some("low".to_string()),
+            plans_dir: Some("frontend-plans".to_string()),
+            move_plans_to_completed: Some(false),
+            ..Default::default()
+        };
+        let yarr_yml = YarrRepoConfig {
+            effort_level: Some("medium".to_string()),
+            design_effort_level: Some("high".to_string()),
+            plans_dir: Some("yml-plans".to_string()),
+            move_plans_to_completed: Some(true),
+            ..Default::default()
+        };
+
+        let merged = merge(&frontend, &yarr_yml);
+
+        assert_eq!(
+            merged.effort_level.as_deref(),
+            Some("high"),
+            "frontend effort_level should win over yarr_yml"
+        );
+        assert_eq!(
+            merged.design_effort_level.as_deref(),
+            Some("low"),
+            "frontend design_effort_level should win over yarr_yml"
+        );
+        assert_eq!(
+            merged.plans_dir.as_deref(),
+            Some("frontend-plans"),
+            "frontend plans_dir should win over yarr_yml"
+        );
+        assert_eq!(
+            merged.move_plans_to_completed,
+            Some(false),
+            "frontend move_plans_to_completed should win over yarr_yml"
+        );
+    }
+
+    #[test]
+    fn merge_oneshot_fields_from_yarr_yml_when_frontend_unset() {
+        let frontend = YarrRepoConfig::default();
+        let yarr_yml = YarrRepoConfig {
+            effort_level: Some("medium".to_string()),
+            design_effort_level: Some("high".to_string()),
+            plans_dir: Some("yml-plans".to_string()),
+            move_plans_to_completed: Some(true),
+            ..Default::default()
+        };
+
+        let merged = merge(&frontend, &yarr_yml);
+
+        assert_eq!(
+            merged.effort_level.as_deref(),
+            Some("medium"),
+            "yarr_yml effort_level should pass through when frontend is None"
+        );
+        assert_eq!(
+            merged.design_effort_level.as_deref(),
+            Some("high"),
+            "yarr_yml design_effort_level should pass through when frontend is None"
+        );
+        assert_eq!(
+            merged.plans_dir.as_deref(),
+            Some("yml-plans"),
+            "yarr_yml plans_dir should pass through when frontend is None"
+        );
+        assert_eq!(
+            merged.move_plans_to_completed,
+            Some(true),
+            "yarr_yml move_plans_to_completed should pass through when frontend is None"
+        );
+    }
+
+    #[test]
+    fn merge_oneshot_fields_default_to_none() {
+        let frontend = YarrRepoConfig::default();
+        let yarr_yml = YarrRepoConfig::default();
+
+        let merged = merge(&frontend, &yarr_yml);
+
+        assert!(
+            merged.effort_level.is_none(),
+            "effort_level should be None when neither source sets it; \
+             the IPC handler applies 'medium' default after merge"
+        );
+        assert!(
+            merged.design_effort_level.is_none(),
+            "design_effort_level should be None when neither source sets it"
+        );
+        assert!(
+            merged.plans_dir.is_none(),
+            "plans_dir should be None when neither source sets it"
+        );
+        assert!(
+            merged.move_plans_to_completed.is_none(),
+            "move_plans_to_completed should be None when neither source sets it"
+        );
+        assert!(
+            merged.auto_fetch.is_none(),
+            "auto_fetch should be None when neither source sets it"
+        );
+        assert!(
+            merged.design_prompt_file.is_none(),
+            "design_prompt_file should be None when neither source sets it"
+        );
+        assert!(
+            merged.implementation_prompt_file.is_none(),
+            "implementation_prompt_file should be None when neither source sets it"
+        );
+    }
 }

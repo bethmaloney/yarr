@@ -407,11 +407,11 @@ Apply the same merge pattern to the one-shot IPC handlers.
 - Same warning event emission pattern
 
 **Checklist:**
-- [ ] Update `run_oneshot` parameter types to optional
-- [ ] Add `.yarr.yml` read + merge to `run_oneshot` handler
-- [ ] Update `resume_oneshot` parameter types to optional
-- [ ] Add `.yarr.yml` read + merge to `resume_oneshot` handler
-- [ ] `cargo check && cargo test`
+- [x] Update `run_oneshot` parameter types to optional
+- [x] Add `.yarr.yml` read + merge to `run_oneshot` handler
+- [x] Update `resume_oneshot` parameter types to optional
+- [x] Add `.yarr.yml` read + merge to `resume_oneshot` handler
+- [x] `cargo check && cargo test`
 
 ---
 
@@ -673,7 +673,7 @@ Test the resolve utility and DEFAULTS.
 | 4 | DEFAULTS, resolve utility, YarrYmlConfig type | Done |
 | 5 | Make RepoConfig sparse | Done |
 | 6 | Backend merge in run_session | Done |
-| 7 | Backend merge in run_oneshot + resume_oneshot | Not Started |
+| 7 | Backend merge in run_oneshot + resume_oneshot | Done |
 | 8 | Store.ts sends sparse config | Not Started |
 | 9 | useYarrConfig hook | Not Started |
 | 10 | ConfigSourceBadge component | Not Started |
