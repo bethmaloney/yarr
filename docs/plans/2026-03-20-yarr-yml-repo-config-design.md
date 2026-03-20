@@ -382,12 +382,12 @@ Update the `run_session` IPC handler to accept sparse frontend params, read `.ya
 - Emit `yarr-config-warning` event to frontend if parse fails (for toast)
 
 **Checklist:**
-- [ ] Add `read_yarr_config_from_repo()` helper in `yarr_config.rs`
-- [ ] Add merge/resolve helper in `yarr_config.rs`
-- [ ] Update `run_session` parameter types to optional
-- [ ] Read `.yarr.yml` and merge before building `SessionConfig`
-- [ ] Emit warning event on parse failure
-- [ ] `cargo check && cargo test`
+- [x] Add `read_yarr_config_from_repo()` helper in `yarr_config.rs`
+- [x] Add merge/resolve helper in `yarr_config.rs`
+- [x] Update `run_session` parameter types to optional
+- [x] Read `.yarr.yml` and merge before building `SessionConfig`
+- [x] Emit warning event on parse failure
+- [x] `cargo check && cargo test`
 
 ---
 
@@ -672,7 +672,7 @@ Test the resolve utility and DEFAULTS.
 | 3 | export_yarr_config IPC command | Done |
 | 4 | DEFAULTS, resolve utility, YarrYmlConfig type | Done |
 | 5 | Make RepoConfig sparse | Done |
-| 6 | Backend merge in run_session | Not Started |
+| 6 | Backend merge in run_session | Done |
 | 7 | Backend merge in run_oneshot + resume_oneshot | Not Started |
 | 8 | Store.ts sends sparse config | Not Started |
 | 9 | useYarrConfig hook | Not Started |

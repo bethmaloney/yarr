@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use serde::Deserialize;
 
+use crate::runtime::RuntimeProvider;
 use crate::session::{Check, GitSyncConfig};
 
 #[derive(Debug, Clone, serde::Serialize, Deserialize, Default)]
@@ -51,6 +53,107 @@ pub fn parse(yaml: &str) -> anyhow::Result<YarrRepoConfig> {
 
 pub fn to_yaml(config: &YarrRepoConfig) -> Result<String, serde_yaml::Error> {
     serde_yaml::to_string(config)
+}
+
+/// Result of the three-tier config merge: frontend override -> .yarr.yml -> hardcoded defaults.
+#[derive(Debug, Clone)]
+pub struct MergedConfig {
+    pub model: String,
+    pub max_iterations: u32,
+    pub completion_signal: String,
+    pub create_branch: bool,
+    pub effort_level: Option<String>,
+    pub design_effort_level: Option<String>,
+    pub auto_fetch: Option<bool>,
+    pub plans_dir: Option<String>,
+    pub move_plans_to_completed: Option<bool>,
+    pub design_prompt_file: Option<String>,
+    pub implementation_prompt_file: Option<String>,
+    pub env: Option<HashMap<String, String>>,
+    pub checks: Option<Vec<Check>>,
+    pub git_sync: Option<GitSyncConfig>,
+}
+
+/// Merge frontend overrides with .yarr.yml values and hardcoded defaults.
+///
+/// Priority: frontend (if Some) > yarr_yml (if Some) > hardcoded default.
+pub fn merge(frontend: &YarrRepoConfig, yarr_yml: &YarrRepoConfig) -> MergedConfig {
+    MergedConfig {
+        model: frontend
+            .model
+            .clone()
+            .or_else(|| yarr_yml.model.clone())
+            .unwrap_or_else(|| "opus".to_string()),
+        max_iterations: frontend
+            .max_iterations
+            .or(yarr_yml.max_iterations)
+            .unwrap_or(40),
+        completion_signal: frontend
+            .completion_signal
+            .clone()
+            .or_else(|| yarr_yml.completion_signal.clone())
+            .unwrap_or_else(|| "<promise>COMPLETE</promise>".to_string()),
+        create_branch: frontend
+            .create_branch
+            .or(yarr_yml.create_branch)
+            .unwrap_or(false),
+        effort_level: frontend
+            .effort_level
+            .clone()
+            .or_else(|| yarr_yml.effort_level.clone()),
+        design_effort_level: frontend
+            .design_effort_level
+            .clone()
+            .or_else(|| yarr_yml.design_effort_level.clone()),
+        auto_fetch: frontend.auto_fetch.or(yarr_yml.auto_fetch),
+        plans_dir: frontend
+            .plans_dir
+            .clone()
+            .or_else(|| yarr_yml.plans_dir.clone()),
+        move_plans_to_completed: frontend
+            .move_plans_to_completed
+            .or(yarr_yml.move_plans_to_completed),
+        design_prompt_file: frontend
+            .design_prompt_file
+            .clone()
+            .or_else(|| yarr_yml.design_prompt_file.clone()),
+        implementation_prompt_file: frontend
+            .implementation_prompt_file
+            .clone()
+            .or_else(|| yarr_yml.implementation_prompt_file.clone()),
+        env: frontend
+            .env
+            .clone()
+            .or_else(|| yarr_yml.env.clone()),
+        checks: frontend
+            .checks
+            .clone()
+            .or_else(|| yarr_yml.checks.clone()),
+        git_sync: frontend
+            .git_sync
+            .clone()
+            .or_else(|| yarr_yml.git_sync.clone()),
+    }
+}
+
+/// Reads and parses `.yarr.yml` from a repo. Returns (config, optional_error_message).
+/// On missing file: returns (Default, None)
+/// On parse error: returns (Default, Some(error_string))
+pub async fn read_yarr_config_from_repo(
+    runtime: &dyn RuntimeProvider,
+    working_dir: &Path,
+) -> (YarrRepoConfig, Option<String>) {
+    match runtime.read_file(".yarr.yml", working_dir).await {
+        Ok(content) => match parse(&content) {
+            Ok(config) => (config, None),
+            Err(e) => {
+                let msg = format!("Failed to parse .yarr.yml: {e}");
+                tracing::warn!(error = %e, "failed to parse .yarr.yml from repo");
+                (YarrRepoConfig::default(), Some(msg))
+            }
+        },
+        Err(_) => (YarrRepoConfig::default(), None),
+    }
 }
 
 #[cfg(test)]
@@ -569,5 +672,185 @@ gitSync:
         let git_sync = &json["gitSync"];
         assert_eq!(git_sync["enabled"], true);
         assert_eq!(git_sync["maxPushRetries"], 4);
+    }
+
+    // ── merge tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn merge_frontend_overrides_win() {
+        let frontend = YarrRepoConfig {
+            model: Some("sonnet".to_string()),
+            max_iterations: Some(20),
+            ..Default::default()
+        };
+        let yarr_yml = YarrRepoConfig {
+            model: Some("opus".to_string()),
+            max_iterations: Some(10),
+            ..Default::default()
+        };
+
+        let merged = merge(&frontend, &yarr_yml);
+
+        assert_eq!(merged.model, "sonnet", "frontend model should win");
+        assert_eq!(merged.max_iterations, 20, "frontend max_iterations should win");
+    }
+
+    #[test]
+    fn merge_yarr_yml_wins_over_defaults() {
+        let frontend = YarrRepoConfig::default();
+        let yarr_yml = YarrRepoConfig {
+            model: Some("haiku".to_string()),
+            max_iterations: Some(15),
+            ..Default::default()
+        };
+
+        let merged = merge(&frontend, &yarr_yml);
+
+        assert_eq!(merged.model, "haiku", "yarr_yml model should win over default");
+        assert_eq!(merged.max_iterations, 15, "yarr_yml max_iterations should win over default");
+    }
+
+    #[test]
+    fn merge_defaults_when_neither_set() {
+        let frontend = YarrRepoConfig::default();
+        let yarr_yml = YarrRepoConfig::default();
+
+        let merged = merge(&frontend, &yarr_yml);
+
+        assert_eq!(merged.model, "opus");
+        assert_eq!(merged.max_iterations, 40);
+        assert_eq!(merged.completion_signal, "<promise>COMPLETE</promise>");
+        assert_eq!(merged.create_branch, false);
+    }
+
+    #[test]
+    fn merge_mixed_sources() {
+        let frontend = YarrRepoConfig {
+            model: Some("sonnet".to_string()),
+            ..Default::default()
+        };
+        let yarr_yml = YarrRepoConfig {
+            max_iterations: Some(25),
+            completion_signal: Some("<done/>".to_string()),
+            ..Default::default()
+        };
+
+        let merged = merge(&frontend, &yarr_yml);
+
+        assert_eq!(merged.model, "sonnet", "model from frontend");
+        assert_eq!(merged.max_iterations, 25, "max_iterations from yarr_yml");
+        assert_eq!(merged.completion_signal, "<done/>", "completion_signal from yarr_yml");
+        assert_eq!(merged.create_branch, false, "create_branch from default");
+    }
+
+    #[test]
+    fn merge_optional_fields_passthrough() {
+        let mut frontend_env = HashMap::new();
+        frontend_env.insert("KEY".to_string(), "frontend_val".to_string());
+
+        let mut yml_env = HashMap::new();
+        yml_env.insert("KEY".to_string(), "yml_val".to_string());
+
+        let frontend = YarrRepoConfig {
+            effort_level: Some("high".to_string()),
+            env: Some(frontend_env),
+            checks: Some(vec![Check {
+                name: "lint".to_string(),
+                command: "npm run lint".to_string(),
+                when: CheckWhen::EachIteration,
+                prompt: None,
+                model: None,
+                timeout_secs: 300,
+                max_retries: 2,
+            }]),
+            git_sync: Some(GitSyncConfig {
+                enabled: true,
+                conflict_prompt: None,
+                model: None,
+                max_push_retries: 3,
+            }),
+            ..Default::default()
+        };
+        let yarr_yml = YarrRepoConfig {
+            effort_level: Some("low".to_string()),
+            env: Some(yml_env),
+            checks: Some(vec![Check {
+                name: "test".to_string(),
+                command: "cargo test".to_string(),
+                when: CheckWhen::PostCompletion,
+                prompt: None,
+                model: None,
+                timeout_secs: 600,
+                max_retries: 1,
+            }]),
+            git_sync: Some(GitSyncConfig {
+                enabled: false,
+                conflict_prompt: Some("resolve".to_string()),
+                model: None,
+                max_push_retries: 5,
+            }),
+            ..Default::default()
+        };
+
+        let merged = merge(&frontend, &yarr_yml);
+
+        assert_eq!(merged.effort_level.as_deref(), Some("high"), "frontend effort_level wins");
+        let env = merged.env.as_ref().unwrap();
+        assert_eq!(env.get("KEY").unwrap(), "frontend_val", "frontend env wins");
+        let checks = merged.checks.as_ref().unwrap();
+        assert_eq!(checks[0].name, "lint", "frontend checks win");
+        let gs = merged.git_sync.as_ref().unwrap();
+        assert!(gs.enabled, "frontend git_sync wins");
+    }
+
+    #[test]
+    fn merge_optional_fields_from_yarr_yml() {
+        let frontend = YarrRepoConfig::default();
+
+        let mut yml_env = HashMap::new();
+        yml_env.insert("RUST_LOG".to_string(), "debug".to_string());
+
+        let yarr_yml = YarrRepoConfig {
+            effort_level: Some("medium".to_string()),
+            design_effort_level: Some("low".to_string()),
+            plans_dir: Some("plans".to_string()),
+            move_plans_to_completed: Some(true),
+            design_prompt_file: Some("design.md".to_string()),
+            implementation_prompt_file: Some("impl.md".to_string()),
+            auto_fetch: Some(true),
+            env: Some(yml_env),
+            checks: Some(vec![Check {
+                name: "build".to_string(),
+                command: "cargo build".to_string(),
+                when: CheckWhen::PostCompletion,
+                prompt: None,
+                model: None,
+                timeout_secs: 1200,
+                max_retries: 3,
+            }]),
+            git_sync: Some(GitSyncConfig {
+                enabled: true,
+                conflict_prompt: None,
+                model: None,
+                max_push_retries: 3,
+            }),
+            ..Default::default()
+        };
+
+        let merged = merge(&frontend, &yarr_yml);
+
+        assert_eq!(merged.effort_level.as_deref(), Some("medium"), "yarr_yml effort_level passes through");
+        assert_eq!(merged.design_effort_level.as_deref(), Some("low"), "yarr_yml design_effort_level passes through");
+        assert_eq!(merged.plans_dir.as_deref(), Some("plans"), "yarr_yml plans_dir passes through");
+        assert_eq!(merged.move_plans_to_completed, Some(true), "yarr_yml move_plans_to_completed passes through");
+        assert_eq!(merged.design_prompt_file.as_deref(), Some("design.md"), "yarr_yml design_prompt_file passes through");
+        assert_eq!(merged.implementation_prompt_file.as_deref(), Some("impl.md"), "yarr_yml implementation_prompt_file passes through");
+        assert_eq!(merged.auto_fetch, Some(true), "yarr_yml auto_fetch passes through");
+        let env = merged.env.as_ref().unwrap();
+        assert_eq!(env.get("RUST_LOG").unwrap(), "debug", "yarr_yml env passes through");
+        let checks = merged.checks.as_ref().unwrap();
+        assert_eq!(checks[0].name, "build", "yarr_yml checks pass through");
+        let gs = merged.git_sync.as_ref().unwrap();
+        assert!(gs.enabled, "yarr_yml git_sync passes through");
     }
 }

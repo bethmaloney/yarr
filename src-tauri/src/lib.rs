@@ -83,17 +83,17 @@ async fn run_session(
     repo_id: String,
     repo: RepoType,
     plan_file: String,
-    model: String,
+    model: Option<String>,
     effort_level: Option<String>,
-    max_iterations: u32,
-    completion_signal: String,
+    max_iterations: Option<u32>,
+    completion_signal: Option<String>,
     env_vars: Option<HashMap<String, String>>,
     checks: Option<Vec<session::Check>>,
     git_sync: Option<session::GitSyncConfig>,
-    create_branch: bool,
+    create_branch: Option<bool>,
     implementation_prompt_file: Option<String>,
 ) -> Result<SessionResult, String> {
-    tracing::info!(repo_id = %repo_id, model = %model, effort_level = ?effort_level, repo_type = ?repo, "run_session called");
+    tracing::info!(repo_id = %repo_id, repo_type = ?repo, "run_session called");
     let cancel_token = CancellationToken::new();
     let session_id = Uuid::new_v4().to_string();
     {
@@ -110,6 +110,36 @@ async fn run_session(
             join_handle: tokio::spawn(async {}),
         });
     }
+
+    // Read .yarr.yml and merge with frontend overrides
+    let (rt_for_config, working_dir_for_config) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
+    let (yarr_yml, yarr_yml_error) = yarr_config::read_yarr_config_from_repo(
+        rt_for_config.as_ref(),
+        &working_dir_for_config,
+    ).await;
+
+    if let Some(ref err) = yarr_yml_error {
+        tracing::warn!(repo_id = %repo_id, error = %err, "failed to parse .yarr.yml");
+        let _ = app.emit("yarr-config-warning", serde_json::json!({
+            "repo_id": repo_id,
+            "error": err,
+        }));
+    }
+
+    let frontend_overrides = yarr_config::YarrRepoConfig {
+        model,
+        effort_level,
+        max_iterations,
+        completion_signal,
+        create_branch,
+        env: env_vars,
+        checks,
+        git_sync,
+        implementation_prompt_file,
+        ..Default::default()
+    };
+    let merged = yarr_config::merge(&frontend_overrides, &yarr_yml);
+    tracing::info!(repo_id = %repo_id, model = %merged.model, effort_level = ?merged.effort_level, "resolved config after merge");
 
     match &repo {
         RepoType::Local { path } => {
@@ -140,7 +170,7 @@ async fn run_session(
                 return Err(format!("Plan file not found: {}", plan_path.display()));
             }
 
-            if create_branch {
+            if merged.create_branch {
                 let branch_name = generate_branch_name(&plan_file);
                 let timeout = std::time::Duration::from_secs(30);
                 let output = runtime
@@ -170,7 +200,7 @@ async fn run_session(
                 }
             }
 
-            let custom_prompt_content = if let Some(ref prompt_file) = implementation_prompt_file {
+            let custom_prompt_content = if let Some(ref prompt_file) = merged.implementation_prompt_file {
                 match runtime.read_file(prompt_file, &repo_path_buf).await {
                     Ok(content) => {
                         tracing::info!(prompt_file = %prompt_file, content_len = content.len(), "loaded custom implementation prompt");
@@ -191,16 +221,16 @@ async fn run_session(
                 repo_path: repo_path_buf,
                 working_dir: None,
                 prompt,
-                max_iterations,
-                completion_signal,
-                model: Some(model),
-                effort_level,
+                max_iterations: merged.max_iterations,
+                completion_signal: merged.completion_signal,
+                model: Some(merged.model),
+                effort_level: merged.effort_level,
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 plan_file: Some(plan_file),
                 inter_iteration_delay_ms: 1000,
-                env_vars: env_vars.unwrap_or_default(),
-                checks: checks.unwrap_or_default(),
-                git_sync,
+                env_vars: merged.env.unwrap_or_default(),
+                checks: merged.checks.unwrap_or_default(),
+                git_sync: merged.git_sync,
                 iteration_offset: 0,
             };
 
@@ -301,7 +331,7 @@ async fn run_session(
             };
 
             // We can't verify the plan file exists on remote, skip the check
-            let custom_prompt_content = if let Some(ref prompt_file) = implementation_prompt_file {
+            let custom_prompt_content = if let Some(ref prompt_file) = merged.implementation_prompt_file {
                 let timeout = std::time::Duration::from_secs(30);
                 let remote_prompt_path = if Path::new(prompt_file).is_relative() {
                     PathBuf::from(remote_path).join(prompt_file)
@@ -332,16 +362,16 @@ async fn run_session(
                 repo_path: PathBuf::from(remote_path),
                 working_dir: None,
                 prompt,
-                max_iterations,
-                completion_signal,
-                model: Some(model),
-                effort_level,
+                max_iterations: merged.max_iterations,
+                completion_signal: merged.completion_signal,
+                model: Some(merged.model),
+                effort_level: merged.effort_level,
                 extra_args: vec!["--dangerously-skip-permissions".to_string()],
                 plan_file: Some(plan_file),
                 inter_iteration_delay_ms: 1000,
-                env_vars: env_vars.unwrap_or_default(),
-                checks: checks.unwrap_or_default(),
-                git_sync,
+                env_vars: merged.env.unwrap_or_default(),
+                checks: merged.checks.unwrap_or_default(),
+                git_sync: merged.git_sync,
                 iteration_offset: 0,
             };
 
