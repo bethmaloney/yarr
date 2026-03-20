@@ -136,7 +136,7 @@ describe("loadRepos", () => {
     }
   });
 
-  it("migrates repos without checks field to have checks: []", async () => {
+  it("repos without checks field keep checks undefined", async () => {
     const reposWithoutChecks = [
       {
         type: "local",
@@ -162,8 +162,8 @@ describe("loadRepos", () => {
 
     const result = await loadRepos();
     expect(result).toHaveLength(2);
-    expect(result[0]).toHaveProperty("checks", []);
-    expect(result[1]).toHaveProperty("checks", []);
+    expect(result[0].checks).toBeUndefined();
+    expect(result[1].checks).toBeUndefined();
   });
 });
 

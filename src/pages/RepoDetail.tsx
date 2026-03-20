@@ -632,6 +632,28 @@ export default function RepoDetail() {
 
     try {
       await invoke("export_yarr_config", { repo: payload, config });
+
+      // Clear overrides that were written to the yaml so they show as
+      // "yarr-yml" source instead of "override" after refresh.
+      const clearUpdate: Partial<RepoConfig> = {};
+      for (const key of simpleFields) {
+        if (dirtyFields.has(key) || resolvedConfig[key].source === "override") {
+          (clearUpdate as Record<string, unknown>)[key] = undefined;
+        }
+      }
+      if (dirtyFields.has("envVars") || resolvedConfig.envVars.source === "override") {
+        clearUpdate.envVars = undefined;
+      }
+      if (dirtyFields.has("checks") || resolvedConfig.checks.source === "override") {
+        clearUpdate.checks = undefined;
+      }
+      if (dirtyFields.has("gitSync") || resolvedConfig.gitSync.source === "override") {
+        clearUpdate.gitSync = undefined;
+      }
+      updateRepo({ ...repo!, ...clearUpdate } as RepoConfig);
+
+      setDirtyFields(new Set());
+      setRemovedFields(new Set());
       toast.success(".yarr.yml written to repo root");
       yarrConfig.refresh();
     } catch (e) {
