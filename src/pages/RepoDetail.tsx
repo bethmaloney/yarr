@@ -69,6 +69,7 @@ import {
   XCircle,
   Plus,
   FileDown,
+  Download,
   ChevronRight,
   AlertTriangle,
 } from "lucide-react";
@@ -512,6 +513,56 @@ export default function RepoDetail() {
     }
 
     updateRepo({ ...repo!, ...update } as RepoConfig);
+  }
+
+  async function handleExport() {
+    const payload = buildRepoPayload();
+    if (!payload) return;
+
+    // Build config from resolved values, omitting fields that match hardcoded defaults
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const config: Record<string, any> = {};
+
+    if (resolvedConfig.model.value !== DEFAULTS.model)
+      config.model = resolvedConfig.model.value;
+    if (resolvedConfig.effortLevel.value !== DEFAULTS.effortLevel)
+      config.effortLevel = resolvedConfig.effortLevel.value;
+    if (resolvedConfig.designEffortLevel.value !== DEFAULTS.designEffortLevel)
+      config.designEffortLevel = resolvedConfig.designEffortLevel.value;
+    if (resolvedConfig.maxIterations.value !== DEFAULTS.maxIterations)
+      config.maxIterations = resolvedConfig.maxIterations.value;
+    if (resolvedConfig.completionSignal.value !== DEFAULTS.completionSignal)
+      config.completionSignal = resolvedConfig.completionSignal.value;
+    if (resolvedConfig.createBranch.value !== DEFAULTS.createBranch)
+      config.createBranch = resolvedConfig.createBranch.value;
+    if (resolvedConfig.autoFetch.value !== DEFAULTS.autoFetch)
+      config.autoFetch = resolvedConfig.autoFetch.value;
+    if (resolvedConfig.plansDir.value !== DEFAULTS.plansDir)
+      config.plansDir = resolvedConfig.plansDir.value;
+    if (resolvedConfig.movePlansToCompleted.value !== DEFAULTS.movePlansToCompleted)
+      config.movePlansToCompleted = resolvedConfig.movePlansToCompleted.value;
+    if (resolvedConfig.designPromptFile.value !== DEFAULTS.designPromptFile)
+      config.designPromptFile = resolvedConfig.designPromptFile.value;
+    if (resolvedConfig.implementationPromptFile.value !== DEFAULTS.implementationPromptFile)
+      config.implementationPromptFile = resolvedConfig.implementationPromptFile.value;
+
+    // Map frontend envVars to backend env
+    if (resolvedConfig.envVars.value && Object.keys(resolvedConfig.envVars.value).length > 0)
+      config.env = resolvedConfig.envVars.value;
+
+    if (resolvedConfig.checks.value && resolvedConfig.checks.value.length > 0)
+      config.checks = resolvedConfig.checks.value;
+
+    if (resolvedConfig.gitSync.value?.enabled)
+      config.gitSync = resolvedConfig.gitSync.value;
+
+    try {
+      await invoke("export_yarr_config", { repo: payload, config });
+      toast.success(".yarr.yml written to repo root");
+      yarrConfig.refresh();
+    } catch (e) {
+      toast.error(String(e));
+    }
   }
 
   async function browsePrompt() {
@@ -1884,6 +1935,17 @@ export default function RepoDetail() {
                 onClick={() => setConfigOpen(false)}
               >
                 Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="export-yarr-config"
+                onClick={handleExport}
+                disabled={session.running}
+              >
+                <Download className="size-4" />
+                Export .yarr.yml
               </Button>
             </div>
           </SheetFooter>

@@ -581,12 +581,12 @@ Add the "Export .yarr.yml" button that writes the effective config to the repo r
 - After export, call `yarrConfig.refresh()` to re-read the file
 
 **Checklist:**
-- [ ] Add export button JSX in SheetFooter
-- [ ] Implement `handleExport` function
-- [ ] Call IPC with effective config
-- [ ] Toast feedback on success/failure
-- [ ] Refresh yarrConfig after export
-- [ ] `npx tsc --noEmit`
+- [x] Add export button JSX in SheetFooter
+- [x] Implement `handleExport` function
+- [x] Call IPC with effective config
+- [x] Toast feedback on success/failure
+- [x] Refresh yarrConfig after export
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -680,7 +680,7 @@ Test the resolve utility and DEFAULTS.
 | 11 | Config status banner in settings sheet | Done |
 | 12 | Wire source indicators to settings fields | Done |
 | 13 | Update save handler for sparse storage | Done |
-| 14 | Export button in settings sheet | Not Started |
+| 14 | Export button in settings sheet | Done |
 | 15 | Frontend event listener for config warnings | Not Started |
 | 16 | Rust unit tests for merge logic | Not Started |
 | 17 | Frontend unit tests for config resolution | Not Started |
