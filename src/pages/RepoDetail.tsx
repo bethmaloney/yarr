@@ -75,7 +75,7 @@ import {
 import type { Check, SessionState, SessionTrace } from "../types";
 import { repoPayload, type RepoConfig } from "../repos";
 import { DEFAULTS, resolveConfig } from "../config";
-import type { YarrYmlConfig, ResolvedConfig } from "../config";
+import type { YarrYmlConfig } from "../config";
 import { useYarrConfig } from "../hooks/useYarrConfig";
 import { ConfigSourceBadge } from "@/components/ConfigSourceBadge";
 import { timeAgo } from "../time";

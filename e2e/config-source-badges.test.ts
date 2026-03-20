@@ -32,20 +32,6 @@ function sheetContent(page: import("@playwright/test").Page) {
   return page.locator('[data-slot="sheet-content"]');
 }
 
-// All configurable field labels as they appear in the settings sheet
-const allFields = [
-  "Model",
-  "Effort Level",
-  "Max Iterations",
-  "Completion Signal",
-  "Create Branch",
-  "Auto Fetch",
-  "Plans Dir",
-  "Move Plans to Completed",
-  "Design Prompt File",
-  "Implementation Prompt File",
-];
-
 // ---------------------------------------------------------------------------
 // 1. Default source — no badges
 // ---------------------------------------------------------------------------

@@ -77,7 +77,7 @@ export function useYarrConfig(repo: RepoConfig | null): {
     return () => {
       cancelled = true;
     };
-  }, [repo?.id, fetchCount]);
+  }, [repo, fetchCount]);
 
   return { config, error, loading, refresh };
 }
