@@ -1334,7 +1334,7 @@ describe("runSession", () => {
     );
   });
 
-  it("defaults effortLevel to medium when repo has no effortLevel", async () => {
+  it("sends null for effortLevel when repo has no effortLevel", async () => {
     const repoNoEffort = makeLocalRepo({ effortLevel: undefined });
     useAppStore.setState({ repos: [repoNoEffort] });
     mockInvoke.mockResolvedValue({ session_id: "test-session-id" });
@@ -1344,7 +1344,34 @@ describe("runSession", () => {
     expect(mockInvoke).toHaveBeenCalledWith(
       "run_session",
       expect.objectContaining({
-        effortLevel: "medium",
+        effortLevel: null,
+      }),
+    );
+  });
+
+  it("sends null for unset optional fields instead of defaults", async () => {
+    const sparseRepo = makeLocalRepo({
+      model: undefined,
+      maxIterations: undefined,
+      completionSignal: undefined,
+      checks: undefined,
+      effortLevel: undefined,
+      createBranch: undefined,
+    });
+    useAppStore.setState({ repos: [sparseRepo] });
+    mockInvoke.mockResolvedValue({ session_id: "test-session-id" });
+
+    await useAppStore.getState().runSession("repo-1", "plan.md");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_session",
+      expect.objectContaining({
+        model: null,
+        maxIterations: null,
+        completionSignal: null,
+        checks: null,
+        effortLevel: null,
+        createBranch: null,
       }),
     );
   });
@@ -1715,7 +1742,7 @@ describe("runOneShot", () => {
     );
   });
 
-  it("defaults plansDir to docs/plans/ when repo config has no plansDir", async () => {
+  it("sends null for plansDir when repo config has no plansDir", async () => {
     const repoWithoutPlansDir = makeLocalRepo({
       maxIterations: 40,
       completionSignal: "ALL TODO ITEMS COMPLETE",
@@ -1742,7 +1769,44 @@ describe("runOneShot", () => {
     expect(mockInvoke).toHaveBeenCalledWith(
       "run_oneshot",
       expect.objectContaining({
-        plansDir: "docs/plans/",
+        plansDir: null,
+      }),
+    );
+  });
+
+  it("sends null for unset repo config fields instead of defaults", async () => {
+    const sparseRepo = makeLocalRepo({
+      model: undefined,
+      maxIterations: undefined,
+      completionSignal: undefined,
+      checks: undefined,
+    });
+    useAppStore.setState({ repos: [sparseRepo] });
+    mockInvoke.mockResolvedValue({
+      oneshot_id: "oneshot-xyz",
+      trace: makeTrace(),
+    });
+
+    await useAppStore
+      .getState()
+      .runOneShot(
+        "repo-1",
+        "Fix bug",
+        "fix it",
+        "opus",
+        "fast-forward",
+        "medium",
+        "high",
+      );
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "run_oneshot",
+      expect.objectContaining({
+        maxIterations: null,
+        completionSignal: null,
+        checks: null,
+        plansDir: null,
+        movePlansToCompleted: null,
       }),
     );
   });
@@ -2924,6 +2988,10 @@ describe("resumeOneShot", () => {
   it("calls invoke with correct arguments", async () => {
     const repo = makeLocalRepo({
       envVars: { MY_VAR: "hello" },
+      maxIterations: undefined,
+      completionSignal: undefined,
+      checks: undefined,
+      movePlansToCompleted: undefined,
       gitSync: {
         enabled: true,
         conflictPrompt: undefined,
@@ -2969,9 +3037,9 @@ describe("resumeOneShot", () => {
       implementationPromptFile: null,
       mergeStrategy: "fast-forward",
       envVars: { MY_VAR: "hello" },
-      maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
-      checks: [],
+      maxIterations: null,
+      completionSignal: null,
+      checks: null,
       gitSync: {
         enabled: true,
         conflictPrompt: undefined,
@@ -2979,7 +3047,7 @@ describe("resumeOneShot", () => {
         maxPushRetries: 3,
       },
       plansDir: "custom/plans/",
-      movePlansToCompleted: true,
+      movePlansToCompleted: null,
       worktreePath: "/tmp/wt",
       branch: "oneshot/fix",
       oldSessionId: "old-sess",
@@ -3111,7 +3179,7 @@ describe("resumeOneShot", () => {
     expect(unchanged.status).toBe("failed");
   });
 
-  it("defaults plansDir to docs/plans/ when repo has no plansDir", async () => {
+  it("sends null for plansDir when repo has no plansDir", async () => {
     const repo = makeLocalRepo({
       maxIterations: 40,
       completionSignal: "ALL TODO ITEMS COMPLETE",
@@ -3140,7 +3208,7 @@ describe("resumeOneShot", () => {
     expect(mockInvoke).toHaveBeenCalledWith(
       "resume_oneshot",
       expect.objectContaining({
-        plansDir: "docs/plans/",
+        plansDir: null,
       }),
     );
   });
@@ -3228,6 +3296,47 @@ describe("resumeOneShot", () => {
       expect.objectContaining({
         effortLevel: "low",
         designEffortLevel: "max",
+      }),
+    );
+  });
+
+  it("sends null for unset repo config fields instead of defaults", async () => {
+    const sparseRepo = makeLocalRepo({
+      model: undefined,
+      maxIterations: undefined,
+      completionSignal: undefined,
+      checks: undefined,
+      movePlansToCompleted: undefined,
+      plansDir: undefined,
+    });
+    const entry = makeOneShotEntry({
+      id: "oneshot-abc",
+      parentRepoId: "repo-1",
+      status: "failed",
+      worktreePath: "/tmp/wt",
+      branch: "oneshot/fix",
+      session_id: "old-sess",
+    });
+    useAppStore.setState({
+      repos: [sparseRepo],
+      oneShotEntries: new Map([["oneshot-abc", entry]]),
+    });
+
+    mockInvoke.mockResolvedValue({
+      oneshot_id: "oneshot-abc",
+      session_id: "new-sess",
+    });
+
+    await useAppStore.getState().resumeOneShot("oneshot-abc");
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "resume_oneshot",
+      expect.objectContaining({
+        maxIterations: null,
+        completionSignal: null,
+        checks: null,
+        plansDir: null,
+        movePlansToCompleted: null,
       }),
     );
   });

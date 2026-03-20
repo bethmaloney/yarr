@@ -431,10 +431,10 @@ Update the frontend store to send only user-overridden fields (not defaults) to 
 - For fields that were previously required by the IPC, pass `null` when undefined (Tauri maps null to `None` in Rust)
 
 **Checklist:**
-- [ ] Update `runSession` IPC call to pass optional fields
-- [ ] Update `runOneShot` IPC call to pass optional fields
-- [ ] Update `resumeOneShot` IPC call to pass optional fields
-- [ ] `npx tsc --noEmit`
+- [x] Update `runSession` IPC call to pass optional fields
+- [x] Update `runOneShot` IPC call to pass optional fields
+- [x] Update `resumeOneShot` IPC call to pass optional fields
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -674,7 +674,7 @@ Test the resolve utility and DEFAULTS.
 | 5 | Make RepoConfig sparse | Done |
 | 6 | Backend merge in run_session | Done |
 | 7 | Backend merge in run_oneshot + resume_oneshot | Done |
-| 8 | Store.ts sends sparse config | Not Started |
+| 8 | Store.ts sends sparse config | Done |
 | 9 | useYarrConfig hook | Not Started |
 | 10 | ConfigSourceBadge component | Not Started |
 | 11 | Config status banner in settings sheet | Not Started |
