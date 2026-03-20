@@ -157,6 +157,11 @@
 .ansi-underline { text-decoration-line: underline; }
 .ansi-strikethrough { text-decoration-line: line-through; }
 
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
 body {
   margin: 0;
   font-family:

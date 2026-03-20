@@ -56,7 +56,7 @@ export async function loadRepos(): Promise<RepoConfig[]> {
       r.type = "local";
     }
     if (!r.checks) {
-      r.checks = [];
+      delete r.checks;
     }
     return r as RepoConfig;
   });
