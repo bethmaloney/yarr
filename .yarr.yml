@@ -1,0 +1,40 @@
+# .yarr.yml — Yarr defaults for this repo
+
+effortLevel: high
+completionSignal: <promise>COMPLETE</promise>
+createBranch: false
+autoFetch: true
+checks:
+- name: 'npm test'
+  command: npm test
+  when: each_iteration
+  timeoutSecs: 300
+  maxRetries: 2
+- name: 'typecheck'
+  command: npx tsc --noEmit
+  when: each_iteration
+  timeoutSecs: 120
+  maxRetries: 2
+- name: 'eslint'
+  command: npx eslint .
+  when: each_iteration
+  timeoutSecs: 120
+  maxRetries: 2
+- name: 'prettier'
+  command: npx prettier --check .
+  when: each_iteration
+  timeoutSecs: 120
+  maxRetries: 2
+- name: 'cargo check'
+  command: cd src-tauri && cargo check
+  when: each_iteration
+  timeoutSecs: 300
+  maxRetries: 1
+- name: 'cargo test'
+  command: cd src-tauri && cargo test
+  when: each_iteration
+  timeoutSecs: 300
+  maxRetries: 1
+gitSync:
+  enabled: true
+  maxPushRetries: 3
