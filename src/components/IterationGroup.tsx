@@ -161,54 +161,62 @@ export function IterationGroupComponent({
       <div
         role="button"
         tabIndex={0}
-        className="iteration-header flex items-center gap-2 w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-border select-text hover:bg-background/50 transition-colors duration-150"
+        className="iteration-header w-full px-3 py-1.5 font-mono text-sm bg-transparent border-none text-inherit cursor-pointer text-left border-b border-border select-text hover:bg-background/50 transition-colors duration-150"
         onClick={handleSelectableClick(onToggle)}
         onKeyDown={handleKeyDown(onToggle)}
       >
-        <ChevronRight
-          className={`iteration-toggle shrink-0 size-4 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
-        />
-        <span className="iteration-title">Iteration {group.iteration}</span>
-        <span className="iteration-stats text-muted-foreground">
-          — {group.events.length} events · ${group.cost.toFixed(2)}
-          {group.inputTokens || group.outputTokens ? (
-            <>
-              {" "}
-              ·{" "}
+        <div className="flex items-center gap-2">
+          <ChevronRight
+            className={`iteration-toggle shrink-0 size-4 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+          />
+          <span className="iteration-title whitespace-nowrap">
+            Iteration {group.iteration}
+          </span>
+          <span className="iteration-stats text-muted-foreground whitespace-nowrap">
+            — {group.events.length} events · ${group.cost.toFixed(2)}
+            {group.startTs && group.endTs ? (
+              <> · {formatDuration(group.endTs - group.startTs)}</>
+            ) : null}
+          </span>
+        </div>
+        {(group.inputTokens > 0 ||
+          group.outputTokens > 0 ||
+          group.contextTokens > 0 ||
+          group.subAgentPeakContext > 0) && (
+          <div className="flex items-center gap-1 pl-6 pt-0.5 text-xs text-muted-foreground">
+            {group.inputTokens || group.outputTokens ? (
               <span
                 title={`${group.inputTokens.toLocaleString()} in / ${group.outputTokens.toLocaleString()} out`}
               >
                 {formatTokenCount(group.inputTokens)} in /{" "}
                 {formatTokenCount(group.outputTokens)} out
               </span>
-            </>
-          ) : null}
-          {group.contextTokens > 0 ? (
-            <>
-              {" "}
-              ·{" "}
-              <span
-                style={{ color: contextTokensColor(group.contextTokens) }}
-              >
-                {formatTokenCount(group.contextTokens)} ctx
-                {group.compacted ? " \u27F3" : ""}
-              </span>
-            </>
-          ) : null}
-          {group.subAgentPeakContext > 0 ? (
-            <>
-              {" "}·{" "}
-              <span className="text-muted-foreground">
-                sub-agents peak:{" "}
-                {formatTokenCount(group.subAgentPeakContext)}/
-                {formatTokenCount(group.contextWindow)}
-              </span>
-            </>
-          ) : null}
-          {group.startTs && group.endTs ? (
-            <> · {formatDuration(group.endTs - group.startTs)}</>
-          ) : null}
-        </span>
+            ) : null}
+            {group.contextTokens > 0 ? (
+              <>
+                {(group.inputTokens || group.outputTokens) && (
+                  <span>·</span>
+                )}
+                <span
+                  style={{ color: contextTokensColor(group.contextTokens) }}
+                >
+                  {formatTokenCount(group.contextTokens)} ctx
+                  {group.compacted ? " \u27F3" : ""}
+                </span>
+              </>
+            ) : null}
+            {group.subAgentPeakContext > 0 ? (
+              <>
+                <span>·</span>
+                <span>
+                  agents:{" "}
+                  {formatTokenCount(group.subAgentPeakContext)}/
+                  {formatTokenCount(group.contextWindow)}
+                </span>
+              </>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {group.contextWindow > 0 && (
