@@ -243,4 +243,106 @@ test.describe("Export .yarr.yml button", () => {
 
     expect(countAfter).toBeGreaterThan(countBefore);
   });
+
+  // -------------------------------------------------------------------------
+  // 7. Export preserves existing yaml fields and merges overrides
+  // -------------------------------------------------------------------------
+  test("export merges existing yaml values with overrides instead of rebuilding from scratch", async ({
+    page,
+    mockTauri,
+  }) => {
+    const existingYaml = {
+      model: "sonnet",
+      effortLevel: "low",
+      maxIterations: 20,
+      checks: [{ name: "lint", command: "npm run lint" }],
+    };
+
+    await navigateToRepo(
+      page,
+      mockTauri,
+      // repo has effortLevel override
+      { ...localRepo, effortLevel: "high" },
+      {
+        read_yarr_config: { config: existingYaml, error: null },
+        export_yarr_config: (args: Record<string, unknown>) => {
+          (
+            window as unknown as Record<string, unknown>
+          ).__capturedExportArgs = args;
+          return null;
+        },
+      },
+    );
+    await openConfigSheet(page);
+
+    const sheet = sheetContent(page);
+    const exportBtn = sheet.getByTestId("export-yarr-config");
+
+    await exportBtn.click();
+
+    const capturedArgs = await page.evaluate(
+      () =>
+        (window as unknown as Record<string, unknown>).__capturedExportArgs as
+          | Record<string, unknown>
+          | undefined,
+    );
+
+    expect(capturedArgs).toBeDefined();
+    const config = capturedArgs!.config as Record<string, unknown>;
+
+    // Override should be applied
+    expect(config.effortLevel).toBe("high");
+
+    // Existing yaml values should be preserved
+    expect(config.model).toBe("sonnet");
+    expect(config.maxIterations).toBe(20);
+    expect(config.checks).toEqual([{ name: "lint", command: "npm run lint" }]);
+  });
+
+  // -------------------------------------------------------------------------
+  // 8. Export without existing yaml still works (no confirmation dialog)
+  // -------------------------------------------------------------------------
+  test("export without existing yaml works without confirmation", async ({
+    page,
+    mockTauri,
+  }) => {
+    await navigateToRepo(
+      page,
+      mockTauri,
+      { ...localRepo, effortLevel: "high" },
+      {
+        read_yarr_config: { config: null, error: null },
+        export_yarr_config: (args: Record<string, unknown>) => {
+          (
+            window as unknown as Record<string, unknown>
+          ).__capturedExportArgs = args;
+          return null;
+        },
+      },
+    );
+    await openConfigSheet(page);
+
+    const sheet = sheetContent(page);
+    const exportBtn = sheet.getByTestId("export-yarr-config");
+
+    await exportBtn.click();
+
+    // Should succeed without dialog
+    const toast = page.locator("[data-sonner-toast]", {
+      hasText: ".yarr.yml written to repo root",
+    });
+    await expect(toast).toBeVisible({ timeout: 5000 });
+
+    const capturedArgs = await page.evaluate(
+      () =>
+        (window as unknown as Record<string, unknown>).__capturedExportArgs as
+          | Record<string, unknown>
+          | undefined,
+    );
+    expect(capturedArgs).toBeDefined();
+    const config = capturedArgs!.config as Record<string, unknown>;
+
+    // Override should be included
+    expect(config.effortLevel).toBe("high");
+  });
 });

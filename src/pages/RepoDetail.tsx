@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, ask } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "../store";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { EventsList } from "@/components/EventsList";
@@ -529,42 +529,106 @@ export default function RepoDetail() {
     const payload = buildRepoPayload();
     if (!payload) return;
 
-    // Build config from resolved values, omitting fields that match hardcoded defaults
+    const existingYml = yarrConfig.config;
+
+    // Warn before overwriting an existing .yarr.yml
+    if (existingYml) {
+      const confirmed = await ask(
+        "A .yarr.yml already exists. Exporting will overwrite it with the merged result of existing settings and your overrides.",
+        { title: "Overwrite .yarr.yml?", kind: "warning" },
+      );
+      if (!confirmed) return;
+    }
+
+    // Save current form values first so the export reflects what the user sees
+    saveSettings();
+
+    // Build config by merging existing yaml values with overrides.
+    // Fields from the existing yaml are preserved; overrides are layered on top.
+    // Since resolvedConfig hasn't re-rendered yet after saveSettings(), use
+    // the local form state directly for dirty fields.
+    const yml = existingYml ?? {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const config: Record<string, any> = {};
 
-    if (resolvedConfig.model.value !== DEFAULTS.model)
-      config.model = resolvedConfig.model.value;
-    if (resolvedConfig.effortLevel.value !== DEFAULTS.effortLevel)
-      config.effortLevel = resolvedConfig.effortLevel.value;
-    if (resolvedConfig.designEffortLevel.value !== DEFAULTS.designEffortLevel)
-      config.designEffortLevel = resolvedConfig.designEffortLevel.value;
-    if (resolvedConfig.maxIterations.value !== DEFAULTS.maxIterations)
-      config.maxIterations = resolvedConfig.maxIterations.value;
-    if (resolvedConfig.completionSignal.value !== DEFAULTS.completionSignal)
-      config.completionSignal = resolvedConfig.completionSignal.value;
-    if (resolvedConfig.createBranch.value !== DEFAULTS.createBranch)
-      config.createBranch = resolvedConfig.createBranch.value;
-    if (resolvedConfig.autoFetch.value !== DEFAULTS.autoFetch)
-      config.autoFetch = resolvedConfig.autoFetch.value;
-    if (resolvedConfig.plansDir.value !== DEFAULTS.plansDir)
-      config.plansDir = resolvedConfig.plansDir.value;
-    if (resolvedConfig.movePlansToCompleted.value !== DEFAULTS.movePlansToCompleted)
-      config.movePlansToCompleted = resolvedConfig.movePlansToCompleted.value;
-    if (resolvedConfig.designPromptFile.value !== DEFAULTS.designPromptFile)
-      config.designPromptFile = resolvedConfig.designPromptFile.value;
-    if (resolvedConfig.implementationPromptFile.value !== DEFAULTS.implementationPromptFile)
-      config.implementationPromptFile = resolvedConfig.implementationPromptFile.value;
+    // Current form values keyed by field name
+    const currentValues: Record<string, unknown> = {
+      model,
+      effortLevel,
+      maxIterations,
+      completionSignal,
+      createBranch,
+      autoFetch,
+      plansDir: plansDir || undefined,
+      movePlansToCompleted,
+      designPromptFile: designPromptFile || undefined,
+      implementationPromptFile: implementationPromptFile || undefined,
+    };
 
-    // Map frontend envVars to backend env
-    if (resolvedConfig.envVars.value && Object.keys(resolvedConfig.envVars.value).length > 0)
-      config.env = resolvedConfig.envVars.value;
+    const simpleFields = [
+      "model",
+      "effortLevel",
+      "designEffortLevel",
+      "maxIterations",
+      "completionSignal",
+      "createBranch",
+      "autoFetch",
+      "plansDir",
+      "movePlansToCompleted",
+      "designPromptFile",
+      "implementationPromptFile",
+    ] as const;
 
-    if (resolvedConfig.checks.value && resolvedConfig.checks.value.length > 0)
-      config.checks = resolvedConfig.checks.value;
+    for (const key of simpleFields) {
+      if (dirtyFields.has(key)) {
+        // User changed this field in the current form — use form value if non-default
+        const val = currentValues[key];
+        if (val !== undefined && val !== DEFAULTS[key]) {
+          config[key] = val;
+        }
+      } else if (removedFields.has(key)) {
+        // User explicitly removed this field — don't include it
+      } else if (resolvedConfig[key].source === "override") {
+        // Previously saved override — include if non-default
+        if (resolvedConfig[key].value !== DEFAULTS[key]) {
+          config[key] = resolvedConfig[key].value;
+        }
+      } else if (yml[key] !== undefined) {
+        // Preserve existing yaml value
+        config[key] = yml[key];
+      }
+    }
 
-    if (resolvedConfig.gitSync.value?.enabled)
-      config.gitSync = resolvedConfig.gitSync.value;
+    // envVars → env (field name mapping)
+    // For complex fields, an empty override (e.g. checks: [] from store defaults)
+    // should not shadow yaml values — fall through to yaml preservation.
+    const envVarsRecord: Record<string, string> = {};
+    for (const { key, value } of envVars) {
+      if (key.trim()) envVarsRecord[key.trim()] = value;
+    }
+
+    if (dirtyFields.has("envVars") && Object.keys(envVarsRecord).length > 0) {
+      config.env = envVarsRecord;
+    } else if (yml.envVars && Object.keys(yml.envVars).length > 0) {
+      config.env = yml.envVars;
+    }
+
+    if (dirtyFields.has("checks") && checks.length > 0) {
+      config.checks = checks;
+    } else if (yml.checks && yml.checks.length > 0) {
+      config.checks = yml.checks;
+    }
+
+    if (dirtyFields.has("gitSync") && gitSyncEnabled) {
+      config.gitSync = {
+        enabled: gitSyncEnabled,
+        model: gitSyncModel || undefined,
+        maxPushRetries: gitSyncMaxRetries,
+        conflictPrompt: gitSyncPrompt || undefined,
+      };
+    } else if (yml.gitSync?.enabled) {
+      config.gitSync = yml.gitSync;
+    }
 
     try {
       await invoke("export_yarr_config", { repo: payload, config });
