@@ -633,10 +633,10 @@ Test the three-tier merge and `.yarr.yml` parsing edge cases.
 - Test merge: default used when neither frontend nor yarr-yml set
 
 **Checklist:**
-- [ ] Add `#[cfg(test)] mod tests` in `yarr_config.rs`
-- [ ] Test parsing: full, partial, empty, invalid, unknown fields
-- [ ] Test merge: all three tiers
-- [ ] `cargo test`
+- [x] Add `#[cfg(test)] mod tests` in `yarr_config.rs`
+- [x] Test parsing: full, partial, empty, invalid, unknown fields
+- [x] Test merge: all three tiers
+- [x] `cargo test`
 
 ---
 
@@ -656,10 +656,10 @@ Test the resolve utility and DEFAULTS.
 - Test DEFAULTS has all expected fields
 
 **Checklist:**
-- [ ] Write tests for `resolve()`
-- [ ] Write tests for `resolveConfig()`
-- [ ] Write tests for DEFAULTS completeness
-- [ ] `npm test`
+- [x] Write tests for `resolve()`
+- [x] Write tests for `resolveConfig()`
+- [x] Write tests for DEFAULTS completeness
+- [x] `npm test`
 
 ---
 
@@ -682,5 +682,5 @@ Test the resolve utility and DEFAULTS.
 | 13 | Update save handler for sparse storage | Done |
 | 14 | Export button in settings sheet | Done |
 | 15 | Frontend event listener for config warnings | Done |
-| 16 | Rust unit tests for merge logic | Not Started |
-| 17 | Frontend unit tests for config resolution | Not Started |
+| 16 | Rust unit tests for merge logic | Done |
+| 17 | Frontend unit tests for config resolution | Done |
