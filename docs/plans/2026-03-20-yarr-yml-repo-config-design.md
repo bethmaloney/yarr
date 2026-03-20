@@ -502,10 +502,10 @@ Show the `.yarr.yml` status at the top of the settings sheet header.
 - Uses `FileText` and `AlertTriangle` icons from lucide-react
 
 **Checklist:**
-- [ ] Wire `useYarrConfig` into RepoDetail
-- [ ] Add status banner JSX in SheetHeader
-- [ ] Handle all three states with correct styling
-- [ ] `npx tsc --noEmit`
+- [x] Wire `useYarrConfig` into RepoDetail
+- [x] Add status banner JSX in SheetHeader
+- [x] Handle all three states with correct styling
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -677,7 +677,7 @@ Test the resolve utility and DEFAULTS.
 | 8 | Store.ts sends sparse config | Done |
 | 9 | useYarrConfig hook | Done |
 | 10 | ConfigSourceBadge component | Done |
-| 11 | Config status banner in settings sheet | Not Started |
+| 11 | Config status banner in settings sheet | Done |
 | 12 | Wire source indicators to settings fields | Not Started |
 | 13 | Update save handler for sparse storage | Not Started |
 | 14 | Export button in settings sheet | Not Started |

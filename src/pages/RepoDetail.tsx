@@ -70,10 +70,13 @@ import {
   Plus,
   FileDown,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import type { Check, SessionState, SessionTrace } from "../types";
 import { repoPayload, type RepoConfig } from "../repos";
 import { DEFAULTS } from "../config";
+import type { YarrYmlConfig } from "../config";
+import { useYarrConfig } from "../hooks/useYarrConfig";
 import { timeAgo } from "../time";
 
 type ConnectionTestStep = {
@@ -90,6 +93,10 @@ const defaultSession: SessionState = {
   error: null,
 };
 
+function countYarrConfigFields(config: YarrYmlConfig): number {
+  return Object.values(config).filter((v) => v !== undefined).length;
+}
+
 export default function RepoDetail() {
   const { repoId } = useParams<{ repoId: string }>();
   const navigate = useNavigate();
@@ -105,6 +112,7 @@ export default function RepoDetail() {
   const fetchGitStatus = useAppStore((s) => s.fetchGitStatus);
 
   const repo = repos.find((r) => r.id === repoId);
+  const yarrConfig = useYarrConfig(repo ?? null);
   const session: SessionState =
     (repoId && sessions.get(repoId)) || defaultSession;
 
@@ -898,6 +906,34 @@ export default function RepoDetail() {
             <SheetDescription>
               Settings, checks, and git sync for {repo.name}
             </SheetDescription>
+            {/* .yarr.yml status banner */}
+            {!yarrConfig.loading && (
+              yarrConfig.config ? (
+                <div
+                  data-testid="yarr-config-banner"
+                  className="flex items-center gap-2 text-xs font-mono text-info bg-card-inset rounded-md px-3 py-1.5"
+                >
+                  <FileText className="size-3.5" />
+                  .yarr.yml loaded — {countYarrConfigFields(yarrConfig.config)} fields inherited
+                </div>
+              ) : yarrConfig.error ? (
+                <div
+                  data-testid="yarr-config-banner"
+                  className="flex items-center gap-2 text-xs font-mono text-warning bg-card-inset rounded-md px-3 py-1.5"
+                >
+                  <AlertTriangle className="size-3.5" />
+                  .yarr.yml parse error — {yarrConfig.error}
+                </div>
+              ) : (
+                <div
+                  data-testid="yarr-config-banner"
+                  className="flex items-center gap-2 text-xs font-mono text-muted-foreground bg-card-inset rounded-md px-3 py-1.5"
+                >
+                  <FileText className="size-3.5" />
+                  .yarr.yml not found
+                </div>
+              )
+            )}
           </SheetHeader>
           <Tabs defaultValue="settings" className="px-4">
             <TabsList variant="line" className="w-full">
