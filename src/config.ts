@@ -50,9 +50,9 @@ export type ResolvedConfig = {
   movePlansToCompleted: Resolved<boolean>;
   designPromptFile: Resolved<string>;
   implementationPromptFile: Resolved<string>;
-  envVars?: Record<string, string>;
-  checks?: Check[];
-  gitSync?: GitSyncConfig;
+  envVars: Resolved<Record<string, string> | undefined>;
+  checks: Resolved<Check[] | undefined>;
+  gitSync: Resolved<GitSyncConfig | undefined>;
 };
 
 export function resolve<T>(
@@ -107,8 +107,9 @@ export function resolveConfig(
       yml.implementationPromptFile,
       defaults.implementationPromptFile,
     ),
-    envVars: repo.envVars ?? yml.envVars ?? undefined,
-    checks: repo.checks ?? yml.checks ?? undefined,
-    gitSync: repo.gitSync ?? yml.gitSync ?? undefined,
+    envVars: resolve(repo.envVars, yml.envVars, undefined),
+    checks: resolve(repo.checks, yml.checks, undefined),
+    gitSync: resolve(repo.gitSync, yml.gitSync, undefined),
   };
 }
+

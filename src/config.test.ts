@@ -148,15 +148,45 @@ describe("resolveConfig", () => {
     expect(result.maxIterations.source).toBe("default");
   });
 
-  it("envVars from repo override (no default to compare against)", () => {
+  it("envVars from repo override with source tracking", () => {
     const repo = {
       envVars: { NODE_ENV: "test", DEBUG: "true" },
     };
     const result = resolveConfig(repo, null, DEFAULTS);
-    expect(result.envVars).toEqual({ NODE_ENV: "test", DEBUG: "true" });
+    expect(result.envVars.value).toEqual({ NODE_ENV: "test", DEBUG: "true" });
+    expect(result.envVars.source).toBe("override");
   });
 
-  it("checks from yarrYml (no default to compare against)", () => {
+  it("envVars from yarrYml when repo has none", () => {
+    const yarrYml: YarrYmlConfig = {
+      envVars: { API_URL: "http://localhost:3000" },
+    };
+    const result = resolveConfig({}, yarrYml, DEFAULTS);
+    expect(result.envVars.value).toEqual({
+      API_URL: "http://localhost:3000",
+    });
+    expect(result.envVars.source).toBe("yarr-yml");
+  });
+
+  it("envVars defaults to undefined when neither repo nor yarrYml has it", () => {
+    const result = resolveConfig({}, null, DEFAULTS);
+    expect(result.envVars.value).toBeUndefined();
+    expect(result.envVars.source).toBe("default");
+  });
+
+  it("envVars from repo override wins over yarrYml", () => {
+    const repo = {
+      envVars: { NODE_ENV: "production" },
+    };
+    const yarrYml: YarrYmlConfig = {
+      envVars: { NODE_ENV: "development", EXTRA: "yes" },
+    };
+    const result = resolveConfig(repo, yarrYml, DEFAULTS);
+    expect(result.envVars.value).toEqual({ NODE_ENV: "production" });
+    expect(result.envVars.source).toBe("override");
+  });
+
+  it("checks from yarrYml with source tracking", () => {
     const checks: Check[] = [
       {
         name: "lint",
@@ -168,10 +198,32 @@ describe("resolveConfig", () => {
     ];
     const yarrYml: YarrYmlConfig = { checks };
     const result = resolveConfig({}, yarrYml, DEFAULTS);
-    expect(result.checks).toEqual(checks);
+    expect(result.checks.value).toEqual(checks);
+    expect(result.checks.source).toBe("yarr-yml");
   });
 
-  it("gitSync from repo override wins over yarrYml", () => {
+  it("checks from repo override with source tracking", () => {
+    const repoChecks: Check[] = [
+      {
+        name: "test",
+        command: "npm test",
+        when: "post_completion",
+        timeoutSecs: 60,
+        maxRetries: 0,
+      },
+    ];
+    const result = resolveConfig({ checks: repoChecks }, null, DEFAULTS);
+    expect(result.checks.value).toEqual(repoChecks);
+    expect(result.checks.source).toBe("override");
+  });
+
+  it("checks defaults to undefined when neither repo nor yarrYml has it", () => {
+    const result = resolveConfig({}, null, DEFAULTS);
+    expect(result.checks.value).toBeUndefined();
+    expect(result.checks.source).toBe("default");
+  });
+
+  it("gitSync from repo override wins over yarrYml with source tracking", () => {
     const repoGitSync: GitSyncConfig = {
       enabled: true,
       maxPushRetries: 5,
@@ -183,9 +235,28 @@ describe("resolveConfig", () => {
     const yarrYml: YarrYmlConfig = { gitSync: ymlGitSync };
     const repo = { gitSync: repoGitSync };
     const result = resolveConfig(repo, yarrYml, DEFAULTS);
-    expect(result.gitSync).toEqual(repoGitSync);
+    expect(result.gitSync.value).toEqual(repoGitSync);
+    expect(result.gitSync.source).toBe("override");
+  });
+
+  it("gitSync from yarrYml when repo has none", () => {
+    const ymlGitSync: GitSyncConfig = {
+      enabled: true,
+      maxPushRetries: 3,
+    };
+    const yarrYml: YarrYmlConfig = { gitSync: ymlGitSync };
+    const result = resolveConfig({}, yarrYml, DEFAULTS);
+    expect(result.gitSync.value).toEqual(ymlGitSync);
+    expect(result.gitSync.source).toBe("yarr-yml");
+  });
+
+  it("gitSync defaults to undefined when neither repo nor yarrYml has it", () => {
+    const result = resolveConfig({}, null, DEFAULTS);
+    expect(result.gitSync.value).toBeUndefined();
+    expect(result.gitSync.source).toBe("default");
   });
 });
+
 
 describe("DEFAULTS", () => {
   it('has expected model value "opus"', () => {

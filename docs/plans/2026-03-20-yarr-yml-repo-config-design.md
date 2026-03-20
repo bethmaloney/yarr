@@ -533,7 +533,7 @@ Update the settings sheet form to show `ConfigSourceBadge` on every field, using
 - [x] Add `ConfigSourceBadge` to model, effortLevel, maxIterations, completionSignal fields
 - [x] Add `ConfigSourceBadge` to createBranch, autoFetch, plansDir, movePlansToCompleted fields
 - [x] Add `ConfigSourceBadge` to designPromptFile, implementationPromptFile fields
-- [ ] Add `ConfigSourceBadge` to checks, envVars, gitSync fields
+- [x] Add `ConfigSourceBadge` to checks, envVars, gitSync fields
 - [x] `npx tsc --noEmit`
 
 ---
@@ -555,11 +555,11 @@ Change the save handler to only persist fields that differ from the `.yarr.yml` 
 - Reset button removes field from `dirtyFields` and resets the form value to the resolved fallback
 
 **Checklist:**
-- [ ] Add `dirtyFields` state tracking
-- [ ] Update `onChange` handlers to mark fields dirty
-- [ ] Update `saveSettings()` to only include dirty fields in the repo update
-- [ ] Implement reset handler that clears field from dirty set
-- [ ] `npx tsc --noEmit`
+- [x] Add `dirtyFields` state tracking
+- [x] Update `onChange` handlers to mark fields dirty
+- [x] Update `saveSettings()` to only include dirty fields in the repo update
+- [x] Implement reset handler that clears field from dirty set
+- [x] `npx tsc --noEmit`
 
 ---
 
@@ -678,8 +678,8 @@ Test the resolve utility and DEFAULTS.
 | 9 | useYarrConfig hook | Done |
 | 10 | ConfigSourceBadge component | Done |
 | 11 | Config status banner in settings sheet | Done |
-| 12 | Wire source indicators to settings fields | In Progress (checks/envVars/gitSync badges remain) |
-| 13 | Update save handler for sparse storage | Not Started |
+| 12 | Wire source indicators to settings fields | Done |
+| 13 | Update save handler for sparse storage | Done |
 | 14 | Export button in settings sheet | Not Started |
 | 15 | Frontend event listener for config warnings | Not Started |
 | 16 | Rust unit tests for merge logic | Not Started |

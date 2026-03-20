@@ -690,7 +690,7 @@ describe("RepoDetail", () => {
       });
     });
 
-    it("Save button calls updateRepo with current values", async () => {
+    it("Save button is a no-op when nothing is dirty", async () => {
       const state = setupMockState({ repos: [makeLocalRepo()] });
       renderRepoDetail();
 
@@ -705,7 +705,7 @@ describe("RepoDetail", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
-      expect(state.updateRepo).toHaveBeenCalled();
+      expect(state.updateRepo).not.toHaveBeenCalled();
     });
 
     it("Test Connection button appears for SSH repos", async () => {
@@ -786,7 +786,7 @@ describe("RepoDetail", () => {
         );
       });
 
-      it("Save omits plansDir when empty", async () => {
+      it("Save is a no-op when plansDir is empty and nothing is dirty", async () => {
         const state = setupMockState({ repos: [makeLocalRepo()] });
         renderRepoDetail();
 
@@ -798,11 +798,10 @@ describe("RepoDetail", () => {
           ).toBeInTheDocument();
         });
 
-        // Leave the plansDir input empty (default)
+        // Leave the plansDir input empty (default) — nothing dirty
         fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
-        const call = state.updateRepo.mock.calls[0][0];
-        expect(call.plansDir === undefined || call.plansDir === "").toBe(true);
+        expect(state.updateRepo).not.toHaveBeenCalled();
       });
 
       it("plansDir input is disabled when session is running", async () => {
@@ -887,7 +886,7 @@ describe("RepoDetail", () => {
         });
       });
 
-      it("Save includes movePlansToCompleted true by default", async () => {
+      it("Save is a no-op when movePlansToCompleted is unchanged", async () => {
         const state = setupMockState({ repos: [makeLocalRepo()] });
         renderRepoDetail();
 
@@ -899,11 +898,10 @@ describe("RepoDetail", () => {
           ).toBeInTheDocument();
         });
 
+        // Click Save without changing anything — nothing dirty
         fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
-        expect(state.updateRepo).toHaveBeenCalledWith(
-          expect.objectContaining({ movePlansToCompleted: true }),
-        );
+        expect(state.updateRepo).not.toHaveBeenCalled();
       });
 
       it("Save includes movePlansToCompleted false after unchecking", async () => {
