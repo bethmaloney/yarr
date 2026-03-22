@@ -94,9 +94,9 @@ Add the updater plugin crate and register it in the Tauri app builder.
 - Register plugin with `app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;` alongside existing plugins
 
 **Checklist:**
-- [ ] Add crate dependency
-- [ ] Register plugin in lib.rs
-- [ ] Verify: `cd src-tauri && cargo check`
+- [x] Add crate dependency
+- [x] Register plugin in lib.rs
+- [x] Verify: `cd src-tauri && cargo check`
 
 ---
 
@@ -106,6 +106,7 @@ Add the bundle and plugin configuration for the updater.
 
 **Files to modify:**
 - `src-tauri/tauri.conf.json`
+- `src-tauri/capabilities/default.json`
 
 **Pattern reference:** `src-tauri/tauri.conf.json` — existing bundle and app config
 
@@ -113,10 +114,12 @@ Add the bundle and plugin configuration for the updater.
 - Add `"createUpdaterArtifacts": true` to the `bundle` section
 - Add `plugins.updater` section with `pubkey`, `endpoints`, and `windows.installMode`
 - The pubkey will be a placeholder until the signing keypair is generated — use `"PLACEHOLDER"` and document that it must be replaced before the first release
+- Add `"updater:default"` to the permissions array in `src-tauri/capabilities/default.json` (required for the frontend JS API to call the updater's IPC commands)
 
 **Checklist:**
 - [ ] Add `createUpdaterArtifacts` to bundle config
 - [ ] Add updater plugin config with endpoint URL and placeholder pubkey
+- [ ] Add `updater:default` permission to capabilities
 - [ ] Verify: JSON is valid
 
 ---
@@ -237,7 +240,7 @@ Test that the update notification renders correctly when the updater plugin repo
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | Rust plugin dependency and registration | Not Started |
+| 1 | Rust plugin dependency and registration | Done |
 | 2 | Updater config in tauri.conf.json | Not Started |
 | 3 | Release workflow signing env vars | Not Started |
 | 4 | JS plugin dependency | Not Started |

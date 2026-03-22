@@ -26,6 +26,7 @@ async-trait = "0.1"
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
 tauri-plugin-log = "2"
+tauri-plugin-updater = "2"
 log = "0.4"
 tokio-util = { version = "0.7.18", features = ["rt"] }
 dashmap = "6"
