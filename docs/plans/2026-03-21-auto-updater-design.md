@@ -205,11 +205,11 @@ Show the current app version and, when an update is available, an install button
 - Button calls `installUpdate()` from the store
 
 **Checklist:**
-- [ ] Add version display to toolbar
-- [ ] Add conditional update button
-- [ ] Add downloading state UI
-- [ ] Verify: `npx tsc --noEmit`
-- [ ] Verify: `npx eslint .`
+- [x] Add version display to toolbar
+- [x] Add conditional update button
+- [x] Add downloading state UI
+- [x] Verify: `npx tsc --noEmit`
+- [x] Verify: `npx eslint .`
 
 ---
 
@@ -229,10 +229,10 @@ Test that the update notification renders correctly when the updater plugin repo
 - Verify the downloading state shows spinner text
 
 **Checklist:**
-- [ ] Create e2e test file with mocked updater
-- [ ] Test update button visibility
-- [ ] Test confirmation flow
-- [ ] Verify: `npm run test:e2e`
+- [x] Create e2e test file with mocked updater
+- [x] Test update button visibility
+- [x] Test confirmation flow
+- [x] Verify: `npm run test:e2e`
 
 ---
 
@@ -245,5 +245,5 @@ Test that the update notification renders correctly when the updater plugin repo
 | 3 | Release workflow signing env vars | Done |
 | 4 | JS plugin dependency | Done |
 | 5 | Zustand store update logic | Done |
-| 6 | Home toolbar version + update button | Not Started |
-| 7 | E2E test for update UI | Not Started |
+| 6 | Home toolbar version + update button | Done |
+| 7 | E2E test for update UI | Done |

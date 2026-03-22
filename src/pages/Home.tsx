@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
+import { Download, Loader2 } from "lucide-react";
 import { useAppStore } from "../store";
 import { useGitStatus } from "../hooks/useGitStatus";
 import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
@@ -29,7 +31,11 @@ export default function Home() {
   const addLocalRepo = useAppStore((s) => s.addLocalRepo);
   const addSshRepo = useAppStore((s) => s.addSshRepo);
   const oneShotEntries = useAppStore((s) => s.oneShotEntries);
+  const updateAvailable = useAppStore((s) => s.updateAvailable);
+  const updateDownloading = useAppStore((s) => s.updateDownloading);
+  const installUpdate = useAppStore((s) => s.installUpdate);
 
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [addMode, setAddMode] = useState<null | "choosing" | "ssh-form">(null);
   const [sshHost, setSshHost] = useState("");
   const [sshRemotePath, setSshRemotePath] = useState("");
@@ -45,6 +51,12 @@ export default function Home() {
   useGitStatus(repos, sessions);
   const gitStatus = useAppStore((s) => s.gitStatus);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    getVersion()
+      .then((v) => setAppVersion(v))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const fetchPreviews = async () => {
@@ -218,8 +230,24 @@ export default function Home() {
           <p className="subtitle text-sm text-muted-foreground mt-1">
             Yet Another Ralph Runner
           </p>
+          {appVersion && (
+            <p className="text-sm text-muted-foreground">v{appVersion}</p>
+          )}
         </div>
         <div className="flex gap-2 items-center pt-2">
+          {updateDownloading ? (
+            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Loader2 className="size-3.5 motion-safe:animate-spin" />
+              Downloading...
+            </span>
+          ) : (
+            updateAvailable && (
+              <Button size="sm" onClick={installUpdate}>
+                <Download className="size-4" />
+                {updateAvailable.version}
+              </Button>
+            )
+          )}
           <Button variant="secondary" onClick={() => navigate("/history")}>
             History
           </Button>
