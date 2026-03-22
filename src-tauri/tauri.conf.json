@@ -25,7 +25,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "PLACEHOLDER",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENCNTAyRTQ4REYxQTg3RDYKUldUV2h4cmZTQzVReXpWcjVTSStwdUgrUk50dGhEM2xqbDVDelQ0UGpaTWNTeE5xYklvY0dqazgK",
       "endpoints": [
         "https://github.com/bethmaloney/yarr/releases/latest/download/latest.json"
       ],
