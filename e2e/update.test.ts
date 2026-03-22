@@ -75,10 +75,7 @@ test.describe("Version and update UI", () => {
     await expect(page.getByText("Downloading...")).toBeVisible();
   });
 
-  test("shows downloading state with spinner", async ({
-    page,
-    mockTauri,
-  }) => {
+  test("shows downloading state with spinner", async ({ page, mockTauri }) => {
     // Use a handler that never resolves to keep the downloading state visible
     await mockTauri({
       invokeHandlers: {
