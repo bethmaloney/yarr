@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Yarr Social Preview</title>
+<style>
+  @font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 300;
+    src: url(fonts/outfit-300.ttf) format('truetype');
+  }
+  @font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 600;
+    src: url(fonts/outfit-600.ttf) format('truetype');
+  }
+  @font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 700;
+    src: url(fonts/outfit-700.ttf) format('truetype');
+  }
+  @font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 400;
+    src: url(fonts/jetbrains-mono-400.ttf) format('truetype');
+  }
+  @font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 500;
+    src: url(fonts/jetbrains-mono-500.ttf) format('truetype');
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1280px;
+    height: 640px;
+    overflow: hidden;
+    background: #333139;
+    font-family: 'Outfit', sans-serif;
+    color: #e8e6ea;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  /* Subtle grid pattern */
+  body::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Gold glow top-left */
+  .glow-1 {
+    position: absolute;
+    top: -120px;
+    left: -80px;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(218,175,62,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* Subtle glow bottom-right */
+  .glow-2 {
+    position: absolute;
+    bottom: -100px;
+    right: -60px;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(218,175,62,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    text-align: center;
+    padding: 0 80px;
+  }
+
+  .app-name {
+    font-size: 96px;
+    font-weight: 700;
+    letter-spacing: -2px;
+    color: #dab13e;
+    line-height: 1;
+    text-shadow: 0 0 60px rgba(218,175,62,0.3);
+  }
+
+  .full-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 400;
+    color: #8a8690;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  .tagline {
+    font-size: 30px;
+    font-weight: 300;
+    color: #c4c0c9;
+    line-height: 1.5;
+    max-width: 850px;
+  }
+
+  .tech-pills {
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid #5e5a64;
+    color: #b5b2b8;
+    background: rgba(255,255,255,0.04);
+  }
+
+  /* Terminal prompt element */
+  .terminal {
+    position: absolute;
+    bottom: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+  }
+
+  .terminal-prompt {
+    color: #dab13e;
+    font-weight: 500;
+  }
+
+  .terminal-cmd {
+    color: #706c76;
+  }
+
+  .terminal-cursor {
+    display: inline-block;
+    width: 10px;
+    height: 20px;
+    background: #dab13e;
+    opacity: 0.7;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    border-radius: 1px;
+  }
+</style>
+</head>
+<body>
+  <div class="glow-1"></div>
+  <div class="glow-2"></div>
+
+  <div class="content">
+    <div class="full-name">Yet Another Ralph Runner</div>
+    <div class="app-name">yarr</div>
+    <div class="tagline">
+      Orchestrate Claude Code sessions from your desktop.<br>
+      Real-time streaming. No API keys required.
+    </div>
+    <div class="tech-pills">
+      <span class="pill">Tauri</span>
+      <span class="pill">Rust</span>
+      <span class="pill">React</span>
+      <span class="pill">TypeScript</span>
+    </div>
+  </div>
+
+  <div class="terminal">
+    <span class="terminal-prompt">&gt;_ </span>
+    <span class="terminal-cmd">claude -p</span>
+    <span class="terminal-cursor"></span>
+  </div>
+</body>
+</html>
