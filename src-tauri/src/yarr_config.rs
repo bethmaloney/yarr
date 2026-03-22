@@ -76,7 +76,8 @@ pub struct MergedConfig {
 
 /// Merge frontend overrides with .yarr.yml values and hardcoded defaults.
 ///
-/// Priority: frontend (if Some) > yarr_yml (if Some) > hardcoded default.
+/// Priority: frontend (if Some) > `yarr_yml` (if Some) > hardcoded default.
+#[must_use] 
 pub fn merge(frontend: &YarrRepoConfig, yarr_yml: &YarrRepoConfig) -> MergedConfig {
     MergedConfig {
         model: frontend
@@ -136,9 +137,9 @@ pub fn merge(frontend: &YarrRepoConfig, yarr_yml: &YarrRepoConfig) -> MergedConf
     }
 }
 
-/// Reads and parses `.yarr.yml` from a repo. Returns (config, optional_error_message).
+/// Reads and parses `.yarr.yml` from a repo. Returns (config, `optional_error_message`).
 /// On missing file: returns (Default, None)
-/// On parse error: returns (Default, Some(error_string))
+/// On parse error: returns (Default, `Some(error_string)`)
 pub async fn read_yarr_config_from_repo(
     runtime: &dyn RuntimeProvider,
     working_dir: &Path,

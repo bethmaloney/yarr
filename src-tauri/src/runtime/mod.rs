@@ -46,7 +46,7 @@ impl AbortHandle for TaskAbortHandle {
 pub struct RunningProcess {
     /// Receive stream-json events as they arrive
     pub events: mpsc::Receiver<StreamEvent>,
-    /// Wait for the process to exit. Returns (exit_code, wall_time_ms).
+    /// Wait for the process to exit. Returns (`exit_code`, `wall_time_ms`).
     pub completion: tokio::task::JoinHandle<Result<ProcessExit>>,
     /// Abort handle that kills the child process and cleans up
     pub abort_handle: Box<dyn AbortHandle>,
@@ -60,8 +60,9 @@ pub struct ProcessExit {
 }
 
 /// Returns the appropriate runtime for the current platform:
-/// - Windows → WslRuntime (shells into WSL to run claude)
-/// - Linux/macOS → LocalRuntime (runs claude directly)
+/// - Windows → `WslRuntime` (shells into WSL to run claude)
+/// - Linux/macOS → `LocalRuntime` (runs claude directly)
+#[must_use] 
 pub fn default_runtime() -> Box<dyn RuntimeProvider> {
     if cfg!(target_os = "windows") {
         Box::new(WslRuntime::new())
@@ -102,7 +103,7 @@ pub trait RuntimeProvider: Send + Sync {
 
     /// Read a file from the repo filesystem.
     /// Default implementation uses `cat` via `run_command`; runtimes with
-    /// direct filesystem access (e.g. LocalRuntime) can override for efficiency.
+    /// direct filesystem access (e.g. `LocalRuntime`) can override for efficiency.
     async fn read_file(
         &self,
         file_path: &str,
@@ -171,7 +172,7 @@ pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
                     tracing::debug!(cmd = %cmd, "spawning env snapshot command");
                     let output = if cfg!(target_os = "windows") {
                         tokio::process::Command::new("wsl")
-                            .args(&["-e", "bash", "-c", &cmd])
+                            .args(["-e", "bash", "-c", &cmd])
                             .output()
                             .await?
                     } else {
@@ -234,6 +235,7 @@ pub struct SshEnvCache(std::sync::Arc<dashmap::DashMap<String, HashMap<String, S
 
 impl SshEnvCache {
     /// Returns a clone of the inner `Arc`, suitable for passing to `SshRuntime::new()`.
+    #[must_use] 
     pub fn cache_ref(&self) -> std::sync::Arc<dashmap::DashMap<String, HashMap<String, String>>> {
         self.0.clone()
     }

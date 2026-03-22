@@ -1,3 +1,14 @@
+#![warn(clippy::pedantic)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use,
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::module_name_repetitions
+)]
+
 pub mod git_merge;
 pub mod oneshot;
 pub mod output;
@@ -47,7 +58,7 @@ pub(crate) struct SshTestStep {
     error: Option<String>,
 }
 
-/// Shared state tracking cancellation tokens for all active sessions, keyed by repo_id
+/// Shared state tracking cancellation tokens for all active sessions, keyed by `repo_id`
 struct SessionHandle {
     cancel_token: CancellationToken,
     session_id: String,
@@ -192,8 +203,7 @@ async fn run_session(
                     Err(e) => {
                         app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
                         return Err(format!(
-                            "Failed to create branch '{}': {}",
-                            branch_name, e
+                            "Failed to create branch '{branch_name}': {e}"
                         ));
                     }
                     Ok(_) => {} // success, continue
@@ -208,7 +218,7 @@ async fn run_session(
                     }
                     Err(e) => {
                         app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
-                        return Err(format!("Failed to read custom prompt file '{}': {}", prompt_file, e));
+                        return Err(format!("Failed to read custom prompt file '{prompt_file}': {e}"));
                     }
                 }
             } else {
@@ -271,7 +281,7 @@ async fn run_session(
                 let _guard = scopeguard::guard((), {
                     let app = app_bg.clone();
                     let repo_id = repo_id_bg.clone();
-                    move |_| {
+                    move |()| {
                         let app = app.clone();
                         let repo_id = repo_id.clone();
                         tokio::spawn(async move {
@@ -349,7 +359,7 @@ async fn run_session(
                     }
                     Err(e) => {
                         app.state::<ActiveSessions>().tokens.lock().await.remove(&repo_id);
-                        return Err(format!("Failed to read custom prompt file '{}': {}", prompt_file, e));
+                        return Err(format!("Failed to read custom prompt file '{prompt_file}': {e}"));
                     }
                 }
             } else {
@@ -424,7 +434,7 @@ async fn run_session(
                 let _guard = scopeguard::guard((), {
                     let app = app_bg.clone();
                     let repo_id = repo_id_bg.clone();
-                    move |_| {
+                    move |()| {
                         // Clean up ActiveSshSessions (std::sync::Mutex — synchronous)
                         {
                             let ssh_sessions = app.state::<ActiveSshSessions>();
@@ -623,7 +633,7 @@ async fn run_oneshot(
                 let _guard = scopeguard::guard((), {
                     let app = app_bg.clone();
                     let oneshot_id = oneshot_id_bg.clone();
-                    move |_| {
+                    move |()| {
                         let app = app.clone();
                         let oneshot_id = oneshot_id.clone();
                         tokio::spawn(async move {
@@ -730,7 +740,7 @@ async fn run_oneshot(
                 let _guard = scopeguard::guard((), {
                     let app = app_bg.clone();
                     let oneshot_id = oneshot_id_bg.clone();
-                    move |_| {
+                    move |()| {
                         // Clean up ActiveSshSessions (std::sync::Mutex — synchronous)
                         {
                             let ssh_sessions = app.state::<ActiveSshSessions>();
@@ -904,7 +914,7 @@ async fn resume_oneshot(
             tracing::info!(oneshot_id = %oneshot_id, worktree_path = %worktree_path, "verifying worktree exists");
             let wt_check = runtime
                 .run_command(
-                    &format!("test -d {}", worktree_path),
+                    &format!("test -d {worktree_path}"),
                     &repo_path_buf,
                     std::time::Duration::from_secs(10),
                 )
@@ -962,7 +972,7 @@ async fn resume_oneshot(
                 let _guard = scopeguard::guard((), {
                     let app = app_bg.clone();
                     let oneshot_id = oneshot_id_bg.clone();
-                    move |_| {
+                    move |()| {
                         let app = app.clone();
                         let oneshot_id = oneshot_id.clone();
                         tokio::spawn(async move {
@@ -1057,7 +1067,7 @@ async fn resume_oneshot(
             let repo_path_buf = PathBuf::from(remote_path);
             let wt_check = ssh_runtime
                 .run_command(
-                    &format!("test -d {}", worktree_path),
+                    &format!("test -d {worktree_path}"),
                     &repo_path_buf,
                     std::time::Duration::from_secs(10),
                 )
@@ -1130,7 +1140,7 @@ async fn resume_oneshot(
                 let _guard = scopeguard::guard((), {
                     let app = app_bg.clone();
                     let oneshot_id = oneshot_id_bg.clone();
-                    move |_| {
+                    move |()| {
                         // Clean up ActiveSshSessions (std::sync::Mutex — synchronous)
                         {
                             let ssh_sessions = app.state::<ActiveSshSessions>();
@@ -1168,6 +1178,7 @@ async fn resume_oneshot(
 }
 
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 fn list_traces(app: tauri::AppHandle, repo_id: Option<String>) -> Result<Vec<trace::SessionTrace>, String> {
     tracing::info!(repo_id = ?repo_id, "list_traces called");
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -1177,6 +1188,7 @@ fn list_traces(app: tauri::AppHandle, repo_id: Option<String>) -> Result<Vec<tra
 }
 
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 fn list_latest_traces(app: tauri::AppHandle) -> Result<Vec<trace::SessionTrace>, String> {
     tracing::info!("list_latest_traces called");
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -1186,6 +1198,7 @@ fn list_latest_traces(app: tauri::AppHandle) -> Result<Vec<trace::SessionTrace>,
 }
 
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 fn get_trace(app: tauri::AppHandle, repo_id: String, session_id: String) -> Result<trace::SessionTrace, String> {
     tracing::info!(repo_id = %repo_id, session_id = %session_id, "get_trace called");
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -1193,6 +1206,7 @@ fn get_trace(app: tauri::AppHandle, repo_id: String, session_id: String) -> Resu
 }
 
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 fn get_trace_events(app: tauri::AppHandle, repo_id: String, session_id: String) -> Result<Vec<session::SessionEvent>, String> {
     tracing::info!(repo_id = %repo_id, session_id = %session_id, "get_trace_events called");
     let base_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -1231,16 +1245,13 @@ async fn stop_session(app: tauri::AppHandle, repo_id: String) -> Result<(), Stri
         let sessions = active.tokens.lock().await;
         sessions.get(&repo_id).map(|h| h.cancel_token.clone())
     };
-    match token {
-        Some(t) => {
-            t.cancel();
-            tracing::info!(repo_id = %repo_id, "stop_session: cancellation token triggered");
-            Ok(())
-        }
-        None => {
-            tracing::warn!(repo_id = %repo_id, "stop_session: no active session found");
-            Err("No active session to stop".to_string())
-        }
+    if let Some(t) = token {
+        t.cancel();
+        tracing::info!(repo_id = %repo_id, "stop_session: cancellation token triggered");
+        Ok(())
+    } else {
+        tracing::warn!(repo_id = %repo_id, "stop_session: no active session found");
+        Err("No active session to stop".to_string())
     }
 }
 
@@ -1261,8 +1272,7 @@ async fn diagnose_path_failure(ssh_host: &str, remote_path: &str) -> String {
     let trimmed = remote_path.trim();
     let escaped = ssh_shell_escape(trimmed);
     let diag_cmd = format!(
-        "if [ -e {0} ]; then if [ -d {0} ]; then if [ -r {0} ] && [ -x {0} ]; then echo ACCESSIBLE; else echo PERM_ISSUE; fi; else echo NOT_A_DIR; fi; else echo NOT_FOUND; fi",
-        escaped
+        "if [ -e {escaped} ]; then if [ -d {escaped} ]; then if [ -r {escaped} ] && [ -x {escaped} ]; then echo ACCESSIBLE; else echo PERM_ISSUE; fi; else echo NOT_A_DIR; fi; else echo NOT_FOUND; fi"
     );
     let output = ssh_command_raw(ssh_host, &diag_cmd).output().await;
     match output {
@@ -1272,7 +1282,6 @@ async fn diagnose_path_failure(ssh_host: &str, remote_path: &str) -> String {
                 "NOT_FOUND" => format!("Directory does not exist: {trimmed}"),
                 "NOT_A_DIR" => format!("Path exists but is not a directory: {trimmed}"),
                 "PERM_ISSUE" => format!("Directory exists but is not accessible (check permissions): {trimmed}"),
-                "ACCESSIBLE" => format!("Path check failed for: {trimmed}"),
                 _ => format!("Path check failed for: {trimmed}"),
             }
         }
@@ -1329,16 +1338,13 @@ async fn reconnect_session(app: tauri::AppHandle, repo_id: String) -> Result<(),
         let guard = ssh_sessions.sessions.lock().unwrap();
         guard.get(&repo_id).cloned()
     };
-    match notify {
-        Some(n) => {
-            n.notify_one();
-            tracing::info!(repo_id = %repo_id, "reconnect_session: notify sent");
-            Ok(())
-        }
-        None => {
-            tracing::warn!(repo_id = %repo_id, "reconnect_session: no active SSH session found");
-            Err(format!("No active SSH session for repo {repo_id}"))
-        }
+    if let Some(n) = notify {
+        n.notify_one();
+        tracing::info!(repo_id = %repo_id, "reconnect_session: notify sent");
+        Ok(())
+    } else {
+        tracing::warn!(repo_id = %repo_id, "reconnect_session: no active SSH session found");
+        Err(format!("No active SSH session for repo {repo_id}"))
     }
 }
 
@@ -1354,10 +1360,13 @@ fn parse_rev_list_output(output: &str) -> (Option<u32>, Option<u32>) {
 }
 
 fn count_porcelain_lines(output: &str) -> u32 {
-    output
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .count() as u32
+    u32::try_from(
+        output
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
+    )
+    .unwrap_or(u32::MAX)
 }
 
 fn resolve_runtime(repo: &RepoType, ssh_env_cache: &SshEnvCache) -> (Box<dyn RuntimeProvider>, PathBuf) {
@@ -1371,9 +1380,7 @@ fn resolve_runtime(repo: &RepoType, ssh_env_cache: &SshEnvCache) -> (Box<dyn Run
 
 fn generate_branch_name(plan_file: &str) -> String {
     let stem = Path::new(plan_file)
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "session".to_string());
+        .file_stem().map_or_else(|| "session".to_string(), |s| s.to_string_lossy().to_string());
     let slug = oneshot::slugify(&stem);
     let short_id = oneshot::generate_short_id();
     format!("yarr/{slug}-{short_id}")
@@ -1529,8 +1536,7 @@ pub(crate) async fn list_plans_impl(
     // Use -exec basename instead of -printf for macOS (BSD find) compatibility.
     // pipefail ensures find errors propagate through the pipe to sort.
     let cmd = format!(
-        "set -o pipefail && find {} -maxdepth 1 -name '*.md' -type f -exec basename {{}} \\; | sort",
-        escaped_path
+        "set -o pipefail && find {escaped_path} -maxdepth 1 -name '*.md' -type f -exec basename {{}} \\; | sort"
     );
     tracing::info!(cmd = %cmd, working_dir = %working_dir.display(), "list_plans_impl running command");
     let timeout = std::time::Duration::from_secs(30);
@@ -1632,7 +1638,7 @@ pub(crate) async fn move_plan_to_completed_impl(
 
     if commit {
         // Commit
-        let commit_msg = ssh_shell_escape(&format!("move plan to completed: {}", filename));
+        let commit_msg = ssh_shell_escape(&format!("move plan to completed: {filename}"));
         let commit_cmd = format!("git commit -m {commit_msg} --no-verify");
         let commit_output = rt.run_command(&commit_cmd, working_dir, timeout).await;
         if let Ok(output) = &commit_output {
@@ -1682,6 +1688,8 @@ async fn move_plan_to_completed(app: tauri::AppHandle, repo: RepoType, plans_dir
 
 #[tauri::command]
 async fn export_default_prompt(app: tauri::AppHandle, repo: RepoType, prompt_type: String) -> Result<String, String> {
+    use base64::Engine;
+
     tracing::info!(repo = ?repo, prompt_type = %prompt_type, "export_default_prompt called");
     let (file_path, content) = prompt::export_prompt_details(&prompt_type)?;
     let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
@@ -1693,9 +1701,8 @@ async fn export_default_prompt(app: tauri::AppHandle, repo: RepoType, prompt_typ
         return Err(format!("Failed to create .yarr/prompts directory: {}", mkdir_output.stderr));
     }
 
-    use base64::Engine;
     let encoded = base64::engine::general_purpose::STANDARD.encode(content);
-    let write_cmd = format!("echo '{}' | base64 -d > {}", encoded, file_path);
+    let write_cmd = format!("echo '{encoded}' | base64 -d > {file_path}");
     let output = rt.run_command(&write_cmd, &working_dir, timeout).await
         .map_err(|e| format!("Failed to write prompt file: {e}"))?;
 
@@ -1740,20 +1747,21 @@ async fn read_yarr_config(app: tauri::AppHandle, repo: RepoType) -> Result<yarr_
 
 #[tauri::command]
 async fn export_yarr_config(app: tauri::AppHandle, repo: RepoType, config: yarr_config::YarrRepoConfig) -> Result<(), String> {
+    use base64::Engine;
+
     tracing::info!(repo = ?repo, "export_yarr_config called");
 
     let yaml_content = yarr_config::to_yaml(&config)
         .map_err(|e| format!("Failed to serialize config: {e}"))?;
 
     let header = "# .yarr.yml — Yarr defaults for this repo\n\n";
-    let full_content = format!("{}{}", header, yaml_content);
+    let full_content = format!("{header}{yaml_content}");
 
     let (rt, working_dir) = resolve_runtime(&repo, &app.state::<SshEnvCache>());
     let timeout = std::time::Duration::from_secs(30);
 
-    use base64::Engine;
     let encoded = base64::engine::general_purpose::STANDARD.encode(&full_content);
-    let write_cmd = format!("echo '{}' | base64 -d > .yarr.yml", encoded);
+    let write_cmd = format!("echo '{encoded}' | base64 -d > .yarr.yml");
     let output = rt.run_command(&write_cmd, &working_dir, timeout).await
         .map_err(|e| format!("Failed to write .yarr.yml: {e}"))?;
 
@@ -1767,7 +1775,7 @@ async fn export_yarr_config(app: tauri::AppHandle, repo: RepoType, config: yarr_
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Force a webview to repaint by briefly resizing and restoring the window.
-/// This works around a WebView2 bug on Windows where the rendering surface
+/// This works around a `WebView2` bug on Windows where the rendering surface
 /// goes blank after laptop sleep/resume.
 fn force_webview_repaint(window: &WebviewWindow) {
     if let Ok(size) = window.outer_size() {

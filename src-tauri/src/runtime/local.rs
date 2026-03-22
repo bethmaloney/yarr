@@ -16,7 +16,14 @@ pub struct LocalRuntime {
     claude_bin: String,
 }
 
+impl Default for LocalRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LocalRuntime {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             claude_bin: "claude".to_string(),
@@ -26,7 +33,7 @@ impl LocalRuntime {
 
 #[async_trait::async_trait]
 impl RuntimeProvider for LocalRuntime {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "local"
     }
 
@@ -145,10 +152,10 @@ impl RuntimeProvider for LocalRuntime {
             let _ = reader_task.await;
             let elapsed = start.elapsed();
 
-            tracing::debug!(exit_code = exit_code, wall_time_ms = elapsed.as_millis() as u64, "process completed successfully");
+            tracing::debug!(exit_code = exit_code, wall_time_ms = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()), "process completed successfully");
             Ok(ProcessExit {
                 exit_code,
-                wall_time_ms: elapsed.as_millis() as u64,
+                wall_time_ms: elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()),
                 stderr: stderr_buf,
             })
         });
@@ -221,7 +228,7 @@ impl RuntimeProvider for LocalRuntime {
             Err(_) => {
                 // child is dropped here, kill_on_drop(true) ensures cleanup
                 tracing::warn!(command = %command, timeout_secs = timeout.as_secs(), "command timed out");
-                anyhow::bail!("Command timed out after {:?}", timeout)
+                anyhow::bail!("Command timed out after {timeout:?}")
             }
         }
     }

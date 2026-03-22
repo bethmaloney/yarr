@@ -132,6 +132,7 @@ If you look at the plan document at Step 1 and **every task is already checked o
 Do NOT output `<promise>COMPLETE</promise>` unless literally every task is done. Do NOT continue to another task after outputting your iteration summary."#;
 
 /// Build the full prompt by appending a plan document file reference.
+#[must_use] 
 pub fn build_prompt(plan_file: &str, custom_prompt: Option<&str>) -> String {
     let base = custom_prompt.unwrap_or(IMPLEMENTATION_PROMPT);
     format!("{base}\n\n---\n\n**Plan document:** @{plan_file}")
@@ -199,7 +200,8 @@ When the plan is fully written to disk, output exactly:
 - **One plan file** — write everything to a single Markdown file.
 - **Do NOT implement anything** — this phase is design only. Do not write code, tests, or make changes beyond the plan document."#;
 
-/// Build the full design prompt by combining DESIGN_PROMPT with the user's task and title.
+/// Build the full design prompt by combining `DESIGN_PROMPT` with the user's task and title.
+#[must_use] 
 pub fn build_design_prompt(user_prompt: &str, title: &str, plans_dir: &str, custom_prompt: Option<&str>) -> String {
     let base = custom_prompt.unwrap_or(DESIGN_PROMPT);
     let prompt = base.replace("{plans_dir}", plans_dir);
@@ -207,7 +209,7 @@ pub fn build_design_prompt(user_prompt: &str, title: &str, plans_dir: &str, cust
 }
 
 /// Default prompt for resolving merge conflicts during git sync.
-pub const DEFAULT_CONFLICT_PROMPT: &str = r#"Resolve merge conflicts. We are rebasing our local commits onto the updated remote.
+pub const DEFAULT_CONFLICT_PROMPT: &str = r"Resolve merge conflicts. We are rebasing our local commits onto the updated remote.
 
 IMPORTANT: In rebase conflicts, HEAD/ours = remote changes, incoming/theirs = our local work.
 
@@ -221,10 +223,11 @@ For each file:
 4. Remove all conflict markers
 5. Run `git add <file>`
 
-After all conflicts resolved: `git rebase --continue`"#;
+After all conflicts resolved: `git rebase --continue`";
 
 /// Build the conflict resolution prompt, using a custom prompt if provided.
 /// The conflict file list is always appended.
+#[must_use] 
 pub fn build_conflict_prompt(custom_prompt: Option<&str>, conflict_files: &str) -> String {
     match custom_prompt {
         Some(prompt) => format!("{prompt}\n\nConflicting files:\n{conflict_files}"),
@@ -236,7 +239,7 @@ pub fn export_prompt_details(prompt_type: &str) -> Result<(&'static str, &'stati
     match prompt_type {
         "design" => Ok((".yarr/prompts/design.md", DESIGN_PROMPT)),
         "implementation" => Ok((".yarr/prompts/implementation.md", IMPLEMENTATION_PROMPT)),
-        _ => Err(format!("Invalid prompt_type: {}", prompt_type)),
+        _ => Err(format!("Invalid prompt_type: {prompt_type}")),
     }
 }
 

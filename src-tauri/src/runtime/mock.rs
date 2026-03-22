@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
 use super::{ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
-use crate::output::*;
+use crate::output::{StreamEvent, SystemEvent, CompactMetadata, AssistantEvent, AssistantMessage, ContentBlock, Usage, ResultEvent};
 
 pub struct MockRuntime {
     scenarios: Vec<MockScenario>,
@@ -14,7 +14,7 @@ pub struct MockRuntime {
     command_call_count: AtomicUsize,
     pub env_override: Option<HashMap<String, String>>,
     pub captured_commands: Arc<Mutex<Vec<String>>>,
-    /// If set, inject a compact_boundary system event during each iteration.
+    /// If set, inject a `compact_boundary` system event during each iteration.
     inject_compaction: Option<(u64, String)>,
 }
 
@@ -28,20 +28,21 @@ struct MockScenario {
 
 impl MockRuntime {
     /// Create a mock that simulates N working iterations then a completion
+    #[must_use] 
     pub fn completing_after(iterations: usize) -> Self {
         let mut scenarios = Vec::new();
         for i in 0..iterations {
             scenarios.push(MockScenario {
                 text: format!("Working on task... iteration {}", i + 1),
                 is_error: false,
-                num_turns: i as u32 + 1,
+                num_turns: u32::try_from(i).unwrap_or(u32::MAX) + 1,
                 tool_uses: vec!["Read".to_string(), "Edit".to_string()],
             });
         }
         scenarios.push(MockScenario {
             text: "All tasks complete. <promise>COMPLETE</promise>".to_string(),
             is_error: false,
-            num_turns: iterations as u32 + 1,
+            num_turns: u32::try_from(iterations).unwrap_or(u32::MAX) + 1,
             tool_uses: vec!["Read".to_string(), "Write".to_string()],
         });
         Self {
@@ -65,7 +66,7 @@ impl MockRuntime {
 
 #[async_trait::async_trait]
 impl RuntimeProvider for MockRuntime {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "mock"
     }
 
@@ -74,8 +75,8 @@ impl RuntimeProvider for MockRuntime {
         let scenario = &self.scenarios[idx.min(self.scenarios.len() - 1)];
 
         let session_id = uuid::Uuid::new_v4().to_string();
-        let cost = 0.002 * scenario.num_turns as f64;
-        let duration = 800 * scenario.num_turns as u64;
+        let cost = 0.002 * f64::from(scenario.num_turns);
+        let duration = 800 * u64::from(scenario.num_turns);
 
         // Build the events this mock invocation will emit
         let mut events: Vec<StreamEvent> = Vec::new();
@@ -147,8 +148,8 @@ impl RuntimeProvider for MockRuntime {
         }));
 
         // 4. result
-        let input_tokens = 5000 + 2000 * scenario.num_turns as u64;
-        let output_tokens = 500 * scenario.num_turns as u64;
+        let input_tokens = 5000 + 2000 * u64::from(scenario.num_turns);
+        let output_tokens = 500 * u64::from(scenario.num_turns);
         let cache_read = if idx > 0 { 4000u64 } else { 0u64 };
         let cache_create = if idx == 0 { 5000u64 } else { 1000u64 };
 
@@ -157,6 +158,7 @@ impl RuntimeProvider for MockRuntime {
             subtype: Some(subtype.to_string()),
             is_error: scenario.is_error,
             duration_ms: Some(duration),
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
             duration_api_ms: Some((duration as f64 * 0.7) as u64),
             num_turns: Some(scenario.num_turns),
             result: Some(scenario.text.clone()),
@@ -177,7 +179,7 @@ impl RuntimeProvider for MockRuntime {
                     "cacheReadInputTokens": cache_read,
                     "cacheCreationInputTokens": cache_create,
                     "costUSD": cost,
-                    "contextWindow": 200000,
+                    "contextWindow": 200_000,
                     "maxOutputTokens": 32000,
                 }),
             )])),

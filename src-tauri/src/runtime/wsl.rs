@@ -58,7 +58,14 @@ pub struct WslRuntime {
     claude_bin: String,
 }
 
+impl Default for WslRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WslRuntime {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             claude_bin: "claude".to_string(),
@@ -111,7 +118,7 @@ impl WslRuntime {
 
 #[async_trait::async_trait]
 impl RuntimeProvider for WslRuntime {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "wsl"
     }
 
@@ -209,7 +216,7 @@ impl RuntimeProvider for WslRuntime {
 
             Ok(ProcessExit {
                 exit_code: status.code().unwrap_or(-1),
-                wall_time_ms: elapsed.as_millis() as u64,
+                wall_time_ms: elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()),
                 stderr: stderr_buf,
             })
         });
@@ -293,7 +300,7 @@ impl RuntimeProvider for WslRuntime {
             Err(_) => {
                 tracing::warn!(command = %command, timeout = ?timeout, "WslRuntime::run_command timed out");
                 // child is dropped here, kill_on_drop(true) ensures cleanup
-                anyhow::bail!("Command timed out after {:?}", timeout)
+                anyhow::bail!("Command timed out after {timeout:?}")
             }
         }
     }
@@ -315,10 +322,12 @@ fn to_wsl_path(path: &std::path::Path) -> String {
     }
     // Convert \\wsl.localhost\Distro\home\... or \\wsl$\Distro\home\... -> /home/...
     if s.starts_with("\\\\wsl.localhost\\") || s.starts_with("\\\\wsl$\\") {
-        let without_prefix = if s.starts_with("\\\\wsl.localhost\\") {
-            &s["\\\\wsl.localhost\\".len()..]
+        let without_prefix = if let Some(stripped) = s.strip_prefix("\\\\wsl.localhost\\") {
+            stripped
+        } else if let Some(stripped) = s.strip_prefix("\\\\wsl$\\") {
+            stripped
         } else {
-            &s["\\\\wsl$\\".len()..]
+            unreachable!()
         };
         // Skip the distro name (everything up to the next backslash)
         if let Some(pos) = without_prefix.find('\\') {

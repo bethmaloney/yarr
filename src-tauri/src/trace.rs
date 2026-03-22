@@ -128,12 +128,14 @@ impl TraceCollector {
 
     /// Disable automatic flush after `record_iteration()`.
     /// Use for phase collectors that write to the repo directory, not the app data dir.
+    #[must_use] 
     pub fn without_auto_flush(mut self) -> Self {
         self.flush_after_record = false;
         self
     }
 
-    /// Create a new session trace with a pre-generated session_id
+    /// Create a new session trace with a pre-generated `session_id`
+    #[must_use] 
     pub fn start_session_with_id(&self, session_id: &str, repo_path: &str, prompt: &str, plan_file: Option<&str>) -> SessionTrace {
         let trace_id = Uuid::new_v4().to_string().replace('-', "");
         let root_span_id = Uuid::new_v4().to_string().replace('-', "")[..16].to_string();
@@ -144,7 +146,7 @@ impl TraceCollector {
             repo_path: repo_path.to_string(),
             prompt: prompt.to_string(),
             title: None,
-            plan_file: plan_file.map(|s| s.to_string()),
+            plan_file: plan_file.map(std::string::ToString::to_string),
             plan_content: None,
             repo_id: Some(self.repo_id.clone()),
             session_type: "ralph_loop".to_string(),
@@ -166,6 +168,7 @@ impl TraceCollector {
     }
 
     /// Create a new session trace (call at loop start)
+    #[must_use] 
     pub fn start_session(&self, repo_path: &str, prompt: &str, plan_file: Option<&str>) -> SessionTrace {
         let trace_id = Uuid::new_v4().to_string().replace('-', "");
         let root_span_id = Uuid::new_v4().to_string().replace('-', "")[..16].to_string();
@@ -177,7 +180,7 @@ impl TraceCollector {
             repo_path: repo_path.to_string(),
             prompt: prompt.to_string(),
             title: None,
-            plan_file: plan_file.map(|s| s.to_string()),
+            plan_file: plan_file.map(std::string::ToString::to_string),
             plan_content: None,
             repo_id: Some(self.repo_id.clone()),
             session_type: "ralph_loop".to_string(),
@@ -244,7 +247,7 @@ impl TraceCollector {
             operation_name: format!("ralph.iteration.{}", attrs.iteration),
             start_time,
             end_time,
-            duration_ms: (end_time - start_time).num_milliseconds().max(0) as u64,
+            duration_ms: (end_time - start_time).num_milliseconds().max(0).cast_unsigned(),
             status: if is_error { SpanStatus::Error } else { SpanStatus::Ok },
             attributes: attrs,
         };
@@ -278,6 +281,7 @@ impl TraceCollector {
     }
 
     /// Finalize and persist the session trace to disk
+    #[allow(clippy::unused_async)]
     pub async fn finalize(
         &self,
         trace: &mut SessionTrace,
@@ -344,9 +348,9 @@ impl TraceCollector {
         Ok(trace_path)
     }
 
-    /// List traces. If repo_id is Some, read from base_dir/traces/{repo_id}/.
-    /// If None, read across all repo subdirs under base_dir/traces/.
-    /// Returns sorted by start_time descending.
+    /// List traces. If `repo_id` is Some, read from `base_dir/traces/{repo_id`}/.
+    /// If None, read across all repo subdirs under `base_dir/traces`/.
+    /// Returns sorted by `start_time` descending.
     pub fn list_traces(base_dir: &Path, repo_id: Option<&str>) -> anyhow::Result<Vec<SessionTrace>> {
         let traces_dir = base_dir.join("traces");
 
@@ -381,12 +385,14 @@ impl TraceCollector {
             let dir_name = dir
                 .file_name()
                 .and_then(|n| n.to_str())
-                .map(|s| s.to_string());
+                .map(std::string::ToString::to_string);
             for entry in std::fs::read_dir(&dir)? {
                 let entry = entry?;
                 let path = entry.path();
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with("trace_") && name.ends_with(".json") {
+                    if name.starts_with("trace_") && std::path::Path::new(name)
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("json")) {
                         let contents = match std::fs::read_to_string(&path) {
                             Ok(c) => c,
                             Err(e) => {
@@ -398,7 +404,7 @@ impl TraceCollector {
                             Ok(mut trace) => {
                                 // Backfill repo_id from directory name for old-format traces
                                 if trace.repo_id.is_none() {
-                                    trace.repo_id = dir_name.clone();
+                                    trace.repo_id.clone_from(&dir_name);
                                 }
                                 traces.push(trace);
                             }
@@ -415,7 +421,7 @@ impl TraceCollector {
         Ok(traces)
     }
 
-    /// List only the most recent trace per repo, sorted by start_time descending.
+    /// List only the most recent trace per repo, sorted by `start_time` descending.
     pub fn list_latest_traces(base_dir: &Path) -> anyhow::Result<Vec<SessionTrace>> {
         let all_traces = Self::list_traces(base_dir, None)?;
         let mut latest_by_repo: HashMap<String, SessionTrace> = HashMap::new();
@@ -443,7 +449,7 @@ impl TraceCollector {
         let path = base_dir
             .join("traces")
             .join(repo_id)
-            .join(format!("trace_{}.json", session_id));
+            .join(format!("trace_{session_id}.json"));
         let contents = std::fs::read_to_string(&path)?;
         let trace: SessionTrace = serde_json::from_str(&contents)?;
         Ok(trace)
@@ -456,7 +462,7 @@ impl TraceCollector {
         let path = base_dir
             .join("traces")
             .join(repo_id)
-            .join(format!("events_{}.jsonl", session_id));
+            .join(format!("events_{session_id}.jsonl"));
         let contents = match std::fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -482,7 +488,7 @@ impl TraceCollector {
     pub fn append_event(&self, session_id: &str, event: &crate::session::SessionEvent) -> anyhow::Result<()> {
         validate_path_component(session_id, "session_id")?;
         std::fs::create_dir_all(&self.output_dir)?;
-        let path = self.output_dir.join(format!("events_{}.jsonl", session_id));
+        let path = self.output_dir.join(format!("events_{session_id}.jsonl"));
         let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
         writeln!(file, "{}", serde_json::to_string(event)?)?;
         Ok(())
@@ -490,6 +496,7 @@ impl TraceCollector {
 
     /// Synthesize a minimal trace from the events JSONL file.
     /// Reconstructs cost/token totals from `IterationComplete` events.
+    #[must_use] 
     pub fn synthesize_trace_from_events(base_dir: &Path, repo_id: &str, session_id: &str) -> Option<SessionTrace> {
         let events = Self::read_events(base_dir, repo_id, session_id).ok()?;
         if events.is_empty() {
@@ -526,7 +533,7 @@ impl TraceCollector {
         // Extract session_id from SessionStarted if available
         for event in &events {
             if let crate::session::SessionEvent::SessionStarted { session_id: sid } = event {
-                trace.session_id = sid.clone();
+                sid.clone_into(&mut trace.session_id);
                 break;
             }
         }
@@ -537,16 +544,16 @@ impl TraceCollector {
                 trace.total_cost_usd += result.total_cost_usd.unwrap_or(0.0);
                 trace.total_iterations += 1;
                 if let Some(ref usage_val) = result.usage {
-                    if let Some(input) = usage_val.get("input_tokens").and_then(|v| v.as_u64()) {
+                    if let Some(input) = usage_val.get("input_tokens").and_then(serde_json::Value::as_u64) {
                         trace.total_input_tokens += input;
                     }
-                    if let Some(output) = usage_val.get("output_tokens").and_then(|v| v.as_u64()) {
+                    if let Some(output) = usage_val.get("output_tokens").and_then(serde_json::Value::as_u64) {
                         trace.total_output_tokens += output;
                     }
-                    if let Some(cache_read) = usage_val.get("cache_read_input_tokens").and_then(|v| v.as_u64()) {
+                    if let Some(cache_read) = usage_val.get("cache_read_input_tokens").and_then(serde_json::Value::as_u64) {
                         trace.total_cache_read_tokens += cache_read;
                     }
-                    if let Some(cache_create) = usage_val.get("cache_creation_input_tokens").and_then(|v| v.as_u64()) {
+                    if let Some(cache_create) = usage_val.get("cache_creation_input_tokens").and_then(serde_json::Value::as_u64) {
                         trace.total_cache_creation_tokens += cache_create;
                     }
                 }
@@ -569,7 +576,7 @@ impl TraceCollector {
             Ok(trace) => Ok(trace),
             Err(_) => {
                 Self::synthesize_trace_from_events(base_dir, repo_id, session_id)
-                    .ok_or_else(|| anyhow::anyhow!("No trace or events found for session {}", session_id))
+                    .ok_or_else(|| anyhow::anyhow!("No trace or events found for session {session_id}"))
             }
         }
     }
@@ -2432,9 +2439,7 @@ mod tests {
 /// Log a session trace summary via tracing
 pub fn print_trace_summary(trace: &SessionTrace) {
     let duration_str = trace
-        .end_time
-        .map(|end| format!("{}s", (end - trace.start_time).num_seconds()))
-        .unwrap_or_else(|| "in progress".to_string());
+        .end_time.map_or_else(|| "in progress".to_string(), |end| format!("{}s", (end - trace.start_time).num_seconds()));
 
     tracing::info!(
         trace_id = %trace.trace_id,

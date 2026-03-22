@@ -64,6 +64,7 @@ pub struct ResumeState {
 /// - Collapse multiple hyphens
 /// - Trim leading/trailing hyphens
 /// - Truncate to 50 chars
+#[must_use] 
 pub fn slugify(title: &str) -> String {
     let lowered = title.to_lowercase();
     let mut result = String::new();
@@ -100,26 +101,30 @@ pub fn slugify(title: &str) -> String {
 }
 
 /// Generate a short identifier (first 6 chars of a UUID v4).
+#[must_use] 
 pub fn generate_short_id() -> String {
     let uuid = uuid::Uuid::new_v4().to_string().replace('-', "");
     uuid[..6].to_string()
 }
 
 /// Generate a unique oneshot ID in format "oneshot-XXXXXX" (6 hex chars)
+#[must_use] 
 pub fn generate_oneshot_id() -> String {
     let short = generate_short_id();
-    format!("oneshot-{}", short)
+    format!("oneshot-{short}")
 }
 
-/// Extract a plan file path from a list of SessionEvents.
-/// Looks for ToolUse events with Write/Edit tools that target docs/plans/*.md or *-design.md paths.
+/// Extract a plan file path from a list of `SessionEvents`.
+/// Looks for `ToolUse` events with Write/Edit tools that target docs/plans/*.md or *-design.md paths.
+#[must_use] 
 pub fn extract_plan_file_from_events(events: &[SessionEvent], plans_dir: &str) -> Option<String> {
     for event in events {
         if let SessionEvent::ToolUse { tool_name, tool_input, .. } = event {
             if tool_name == "Write" || tool_name == "Edit" {
                 if let Some(input) = tool_input {
                     if let Some(file_path) = input.get("file_path").and_then(|v| v.as_str()) {
-                        if (file_path.contains(plans_dir) && file_path.ends_with(".md"))
+                        let fp = std::path::Path::new(file_path);
+                        if (file_path.contains(plans_dir) && fp.extension().is_some_and(|e| e.eq_ignore_ascii_case("md")))
                             || file_path.ends_with("-design.md")
                         {
                             return Some(file_path.to_string());
@@ -138,13 +143,13 @@ pub fn extract_plan_file_from_events(events: &[SessionEvent], plans_dir: &str) -
 /// Unix filesystem (directly on Linux/macOS, inside WSL on Windows).
 /// On Windows, queries WSL for `$HOME` since the Windows-side HOME env var
 /// doesn't correspond to the WSL home directory.
+#[must_use] 
 pub fn worktree_path(repo_id: &str, short_id: &str) -> PathBuf {
     let home = resolve_unix_home();
     // Build path with forward slashes explicitly — PathBuf::join uses
     // backslashes on Windows which would break Unix/WSL paths.
     PathBuf::from(format!(
-        "{home}/.yarr/worktrees/{}-oneshot-{short_id}",
-        repo_id
+        "{home}/.yarr/worktrees/{repo_id}-oneshot-{short_id}"
     ))
 }
 
@@ -173,8 +178,7 @@ pub async fn worktree_path_remote(
     }
     if !home.starts_with('/') {
         return Err(anyhow::anyhow!(
-            "Remote $HOME is not an absolute path: {}",
-            home
+            "Remote $HOME is not an absolute path: {home}"
         ));
     }
     tracing::debug!(home, "Resolved remote home directory");
@@ -204,8 +208,9 @@ fn resolve_unix_home() -> String {
 }
 
 /// Compute the branch name: `oneshot/<slug>-<short_id>`
+#[must_use] 
 pub fn branch_name(slug: &str, short_id: &str) -> String {
-    format!("oneshot/{}-{}", slug, short_id)
+    format!("oneshot/{slug}-{short_id}")
 }
 
 /// Detect the default branch for the remote `origin`.
@@ -268,7 +273,8 @@ async fn detect_default_branch(runtime: &dyn RuntimeProvider, repo_path: &std::p
 }
 
 /// Detect which phases have been completed by scanning persisted events.
-/// Returns a ResumeState indicating which phases to skip on resume.
+/// Returns a `ResumeState` indicating which phases to skip on resume.
+#[must_use] 
 pub fn detect_resume_phase(
     events: &[SessionEvent],
     worktree_path: PathBuf,
@@ -301,6 +307,9 @@ pub fn detect_resume_phase(
     }
 }
 
+/// Callback for receiving session events in a oneshot runner.
+type EventCallback = Arc<dyn Fn(&SessionEvent) + Send + Sync>;
+
 /// Orchestrates a 1-shot autonomous implementation session.
 ///
 /// Lifecycle:
@@ -312,7 +321,7 @@ pub struct OneShotRunner {
     config: OneShotConfig,
     collector: TraceCollector,
     cancel_token: CancellationToken,
-    on_event: Option<Arc<dyn Fn(&SessionEvent) + Send + Sync>>,
+    on_event: Option<EventCallback>,
     abort_registry: Option<AbortRegistry>,
     accumulated_events: Arc<std::sync::Mutex<Vec<SessionEvent>>>,
     session_id: Arc<std::sync::Mutex<Option<String>>>,
@@ -322,6 +331,7 @@ pub struct OneShotRunner {
 }
 
 impl OneShotRunner {
+    #[must_use] 
     pub fn new(
         config: OneShotConfig,
         collector: TraceCollector,
@@ -341,6 +351,7 @@ impl OneShotRunner {
         }
     }
 
+    #[must_use] 
     pub fn on_event(mut self, cb: OnSessionEvent) -> Self {
         self.on_event = Some(Arc::from(cb));
         self
@@ -351,11 +362,13 @@ impl OneShotRunner {
         self
     }
 
+    #[must_use] 
     pub fn with_resume_state(mut self, state: ResumeState) -> Self {
         self.resume_state = Some(state);
         self
     }
 
+    #[must_use] 
     pub fn with_ssh_runtime(mut self, runtime: SshRuntime) -> Self {
         self.ssh_runtime = Some(runtime);
         self
@@ -366,29 +379,31 @@ impl OneShotRunner {
         self
     }
 
+    #[must_use] 
     pub fn reconnect_notify(&self) -> Arc<tokio::sync::Notify> {
         self.reconnect_notify.clone()
     }
 
+    #[must_use] 
     pub fn with_session_id(self, id: String) -> Self {
         *self.session_id.lock().unwrap() = Some(id);
         self
     }
 
-    fn emit(&self, event: SessionEvent) {
+    fn emit(&self, event: &SessionEvent) {
         self.accumulated_events.lock().unwrap().push(event.clone());
         if let Some(ref sid) = *self.session_id.lock().unwrap() {
-            if let Err(e) = self.collector.append_event(sid, &event) {
+            if let Err(e) = self.collector.append_event(sid, event) {
                 tracing::warn!("Failed to append event to disk: {e}");
             }
         }
         if let Some(ref cb) = self.on_event {
-            cb(&event);
+            cb(event);
         }
     }
 
-    /// Create an event-forwarding callback that routes inner SessionRunner events
-    /// through this OneShotRunner's emit system (accumulate + persist + forward).
+    /// Create an event-forwarding callback that routes inner `SessionRunner` events
+    /// through this `OneShotRunner`'s emit system (accumulate + persist + forward).
     fn make_event_forwarder(&self) -> OnSessionEvent {
         let accumulated = self.accumulated_events.clone();
         let session_id = self.session_id.clone();
@@ -505,7 +520,7 @@ impl OneShotRunner {
         // Look for a path like docs/plans/something.md
         for word in text.split_whitespace() {
             let cleaned = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '-' && c != '_' && c != '.');
-            if cleaned.contains(plans_dir) && cleaned.ends_with(".md") {
+            if cleaned.contains(plans_dir) && std::path::Path::new(cleaned).extension().is_some_and(|e| e.eq_ignore_ascii_case("md")) {
                 tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %cleaned, "found plan file in output text (whitespace scan)");
                 return Some(cleaned.to_string());
             }
@@ -513,7 +528,7 @@ impl OneShotRunner {
         // Also try to find it with backtick-wrapped paths
         for segment in text.split('`') {
             let trimmed = segment.trim();
-            if trimmed.contains(plans_dir) && trimmed.ends_with(".md") {
+            if trimmed.contains(plans_dir) && std::path::Path::new(trimmed).extension().is_some_and(|e| e.eq_ignore_ascii_case("md")) {
                 tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %trimmed, "found plan file in output text (backtick scan)");
                 return Some(trimmed.to_string());
             }
@@ -567,8 +582,8 @@ impl OneShotRunner {
             let wt = if self.config.ssh_host.is_some() {
                 worktree_path_remote(runtime, &self.config.repo_id, &short_id, &self.config.repo_path).await
                     .map_err(|e| {
-                        self.emit(SessionEvent::OneShotFailed {
-                            reason: format!("Failed to resolve remote worktree path: {}", e),
+                        self.emit(&SessionEvent::OneShotFailed {
+                            reason: format!("Failed to resolve remote worktree path: {e}"),
                         });
                         e
                     })?
@@ -586,7 +601,7 @@ impl OneShotRunner {
         };
 
         // Emit OneShotStarted
-        self.emit(SessionEvent::OneShotStarted {
+        self.emit(&SessionEvent::OneShotStarted {
             title: self.config.title.clone(),
             parent_repo_id: self.config.repo_id.clone(),
             prompt: self.config.prompt.clone(),
@@ -597,7 +612,7 @@ impl OneShotRunner {
 
         // Check cancellation before worktree creation
         if self.cancel_token.is_cancelled() {
-            self.emit(SessionEvent::OneShotFailed {
+            self.emit(&SessionEvent::OneShotFailed {
                 reason: "Cancelled".to_string(),
             });
             trace.outcome = SessionOutcome::Cancelled;
@@ -621,7 +636,7 @@ impl OneShotRunner {
             // Fetch the default branch to ensure ref is up to date
             let _ = runtime
                 .run_command(
-                    &format!("git fetch origin {} --quiet", default_branch_short),
+                    &format!("git fetch origin {default_branch_short} --quiet"),
                     &self.config.repo_path,
                     Duration::from_secs(30),
                 )
@@ -655,14 +670,14 @@ impl OneShotRunner {
                 } else {
                     &output.stderr
                 };
-                let reason = format!("Failed to create worktree: {}", detail);
+                let reason = format!("Failed to create worktree: {detail}");
                 tracing::error!(
                     oneshot_id = %self.config.repo_id,
                     exit_code = output.exit_code,
                     detail = %detail,
                     "worktree creation failed"
                 );
-                self.emit(SessionEvent::OneShotFailed { reason });
+                self.emit(&SessionEvent::OneShotFailed { reason });
                 trace.outcome = SessionOutcome::Failed;
                 trace.end_time = Some(Utc::now());
                 let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
@@ -677,7 +692,7 @@ impl OneShotRunner {
         // Check cancellation after worktree creation
         if self.cancel_token.is_cancelled() {
             self.cleanup_worktree(runtime, &wt_path).await;
-            self.emit(SessionEvent::OneShotFailed {
+            self.emit(&SessionEvent::OneShotFailed {
                 reason: "Cancelled".to_string(),
             });
             trace.outcome = SessionOutcome::Cancelled;
@@ -690,7 +705,7 @@ impl OneShotRunner {
         }
 
         // 2. Design phase
-        let skip_design = self.resume_state.as_ref().map_or(false, |r| r.skip_design);
+        let skip_design = self.resume_state.as_ref().is_some_and(|r| r.skip_design);
 
         let plan_file_path = if skip_design {
             tracing::info!(oneshot_id = %self.config.repo_id, "skipping design phase (resume)");
@@ -703,7 +718,7 @@ impl OneShotRunner {
                     format!("{}{}-{}-design.md", self.config.plans_dir, date, slug)
                 })
         } else {
-            self.emit(SessionEvent::DesignPhaseStarted);
+            self.emit(&SessionEvent::DesignPhaseStarted);
 
             let design_prompt_file = self.config.design_prompt_file.as_deref()
                 .filter(|s| !s.trim().is_empty());
@@ -722,7 +737,7 @@ impl OneShotRunner {
                 ).await {
                     Ok(output) if output.exit_code == 0 => {
                         if output.stdout.trim().is_empty() {
-                            return Err(anyhow::anyhow!("Custom design prompt file '{}' is empty", prompt_file));
+                            return Err(anyhow::anyhow!("Custom design prompt file '{prompt_file}' is empty"));
                         }
                         tracing::info!(prompt_file = %prompt_path.display(), content_len = output.stdout.len(), "loaded custom design prompt");
                         Some(output.stdout)
@@ -731,7 +746,7 @@ impl OneShotRunner {
                         return Err(anyhow::anyhow!("Failed to read custom design prompt file '{}': {}", prompt_file, output.stderr));
                     }
                     Err(e) => {
-                        return Err(anyhow::anyhow!("Failed to read custom design prompt file '{}': {}", prompt_file, e));
+                        return Err(anyhow::anyhow!("Failed to read custom design prompt file '{prompt_file}': {e}"));
                     }
                 }
             } else {
@@ -770,8 +785,8 @@ impl OneShotRunner {
                     let reason = trace.failure_reason.clone().unwrap_or_else(|| "Design phase failed".to_string());
                     tracing::error!(oneshot_id = %self.config.repo_id, reason = %reason, "design phase failed");
                     self.cleanup_worktree(runtime, &wt_path).await;
-                    self.emit(SessionEvent::OneShotFailed {
-                        reason: format!("Design phase failed: {}", reason),
+                    self.emit(&SessionEvent::OneShotFailed {
+                        reason: format!("Design phase failed: {reason}"),
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
@@ -782,7 +797,7 @@ impl OneShotRunner {
                 }
                 SessionOutcome::Cancelled => {
                     self.cleanup_worktree(runtime, &wt_path).await;
-                    self.emit(SessionEvent::OneShotFailed {
+                    self.emit(&SessionEvent::OneShotFailed {
                         reason: "Cancelled".to_string(),
                     });
                     trace.end_time = Some(Utc::now());
@@ -830,7 +845,7 @@ impl OneShotRunner {
                     collected_text.len(),
                 );
                 self.cleanup_worktree(runtime, &wt_path).await;
-                self.emit(SessionEvent::OneShotFailed {
+                self.emit(&SessionEvent::OneShotFailed {
                     reason: format!(
                         "Design phase did not produce a plan file. \
                          Claude output {} chars of text.",
@@ -853,7 +868,7 @@ impl OneShotRunner {
             };
 
             tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %pfp, "design phase complete");
-            self.emit(SessionEvent::DesignPhaseComplete {
+            self.emit(&SessionEvent::DesignPhaseComplete {
                 plan_file: pfp.clone(),
             });
 
@@ -875,7 +890,7 @@ impl OneShotRunner {
         // Check cancellation
         if self.cancel_token.is_cancelled() {
             self.cleanup_worktree(runtime, &wt_path).await;
-            self.emit(SessionEvent::OneShotFailed {
+            self.emit(&SessionEvent::OneShotFailed {
                 reason: "Cancelled".to_string(),
             });
             trace.outcome = SessionOutcome::Cancelled;
@@ -888,11 +903,13 @@ impl OneShotRunner {
         }
 
         // 3. Implementation phase
-        let skip_implementation = self.resume_state.as_ref().map_or(false, |r| r.skip_implementation);
+        let skip_implementation = self.resume_state.as_ref().is_some_and(|r| r.skip_implementation);
 
-        if !skip_implementation {
+        if skip_implementation {
+            tracing::info!(oneshot_id = %self.config.repo_id, "skipping implementation phase (resume)");
+        } else {
             tracing::info!(oneshot_id = %self.config.repo_id, plan_file = %plan_file_path, "starting implementation phase");
-            self.emit(SessionEvent::ImplementationPhaseStarted);
+            self.emit(&SessionEvent::ImplementationPhaseStarted);
 
             // Reset trace outcome for implementation phase
             trace.outcome = SessionOutcome::Running;
@@ -915,7 +932,7 @@ impl OneShotRunner {
                 ).await {
                     Ok(output) if output.exit_code == 0 => {
                         if output.stdout.trim().is_empty() {
-                            return Err(anyhow::anyhow!("Custom implementation prompt file '{}' is empty", prompt_file));
+                            return Err(anyhow::anyhow!("Custom implementation prompt file '{prompt_file}' is empty"));
                         }
                         tracing::info!(prompt_file = %prompt_path.display(), content_len = output.stdout.len(), "loaded custom implementation prompt");
                         Some(output.stdout)
@@ -924,7 +941,7 @@ impl OneShotRunner {
                         return Err(anyhow::anyhow!("Failed to read custom implementation prompt file '{}': {}", prompt_file, output.stderr));
                     }
                     Err(e) => {
-                        return Err(anyhow::anyhow!("Failed to read custom implementation prompt file '{}': {}", prompt_file, e));
+                        return Err(anyhow::anyhow!("Failed to read custom implementation prompt file '{prompt_file}': {e}"));
                     }
                 }
             } else {
@@ -966,8 +983,8 @@ impl OneShotRunner {
                     let reason = trace.failure_reason.clone().unwrap_or_else(|| "Implementation phase failed".to_string());
                     tracing::error!(oneshot_id = %self.config.repo_id, reason = %reason, "implementation phase failed");
                     self.cleanup_worktree(runtime, &wt_path).await;
-                    self.emit(SessionEvent::OneShotFailed {
-                        reason: format!("Implementation phase failed: {}", reason),
+                    self.emit(&SessionEvent::OneShotFailed {
+                        reason: format!("Implementation phase failed: {reason}"),
                     });
                     trace.end_time = Some(Utc::now());
                     let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
@@ -978,7 +995,7 @@ impl OneShotRunner {
                 }
                 SessionOutcome::Cancelled => {
                     self.cleanup_worktree(runtime, &wt_path).await;
-                    self.emit(SessionEvent::OneShotFailed {
+                    self.emit(&SessionEvent::OneShotFailed {
                         reason: "Cancelled".to_string(),
                     });
                     trace.end_time = Some(Utc::now());
@@ -1005,7 +1022,7 @@ impl OneShotRunner {
                 }
             }
 
-            self.emit(SessionEvent::ImplementationPhaseComplete);
+            self.emit(&SessionEvent::ImplementationPhaseComplete);
 
             // Move plan to completed (best-effort, inside worktree before git finalize)
             if self.config.move_plans_to_completed {
@@ -1069,14 +1086,12 @@ impl OneShotRunner {
                     }
                 }
             }
-        } else {
-            tracing::info!(oneshot_id = %self.config.repo_id, "skipping implementation phase (resume)");
         }
 
         // Check cancellation
         if self.cancel_token.is_cancelled() {
             self.cleanup_worktree(runtime, &wt_path).await;
-            self.emit(SessionEvent::OneShotFailed {
+            self.emit(&SessionEvent::OneShotFailed {
                 reason: "Cancelled".to_string(),
             });
             trace.outcome = SessionOutcome::Cancelled;
@@ -1091,7 +1106,7 @@ impl OneShotRunner {
         // 4. Git finalize
         let strategy_str = self.strategy_string();
         tracing::info!(oneshot_id = %self.config.repo_id, strategy = %strategy_str, branch = %branch, "starting git finalize");
-        self.emit(SessionEvent::GitFinalizeStarted {
+        self.emit(&SessionEvent::GitFinalizeStarted {
             strategy: strategy_str.clone(),
         });
 
@@ -1101,9 +1116,9 @@ impl OneShotRunner {
                 // This handles fetch, rebase, conflict resolution via Claude,
                 // and push retries automatically.
                 let default_branch_short = default_branch_ref.strip_prefix("origin/").unwrap_or(&default_branch_ref);
-                let push_cmd = format!("git push origin {}:{}", branch, default_branch_short);
-                let fetch_cmd = format!("git fetch origin {}", default_branch_short);
-                let rebase_cmd = format!("git rebase {}", default_branch_ref);
+                let push_cmd = format!("git push origin {branch}:{default_branch_short}");
+                let fetch_cmd = format!("git fetch origin {default_branch_short}");
+                let rebase_cmd = format!("git rebase {default_branch_ref}");
 
                 tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, fetch_cmd = %fetch_cmd, "git finalize: fetch step");
                 tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, rebase_cmd = %rebase_cmd, "git finalize: rebase step");
@@ -1141,26 +1156,26 @@ impl OneShotRunner {
                 let merge_result = git_merge_push(runtime, &merge_config, |event| {
                     match event {
                         GitMergeEvent::PushSucceeded => {
-                            self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
+                            self.emit(&SessionEvent::GitSyncPushSucceeded { iteration });
                         }
                         GitMergeEvent::ConflictDetected { files } => {
-                            self.emit(SessionEvent::GitSyncConflict { iteration, files });
+                            self.emit(&SessionEvent::GitSyncConflict { iteration, files });
                         }
                         GitMergeEvent::ConflictResolveStarted { attempt } => {
-                            self.emit(SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
+                            self.emit(&SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
                         }
                         GitMergeEvent::ConflictResolveComplete { attempt, success } => {
-                            self.emit(SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
+                            self.emit(&SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
                         }
                         GitMergeEvent::Failed { error } => {
-                            self.emit(SessionEvent::GitSyncFailed { iteration, error });
+                            self.emit(&SessionEvent::GitSyncFailed { iteration, error });
                         }
                     }
                 }).await;
 
                 if let Err(err) = merge_result {
                     tracing::error!(oneshot_id = %self.config.repo_id, error = %err, branch = %branch, "merge to main failed");
-                    self.emit(SessionEvent::OneShotFailed {
+                    self.emit(&SessionEvent::OneShotFailed {
                         reason: format!(
                             "Merge to main failed: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree, rebase manually, then push. Once done, remove the worktree with:\ngit worktree remove {}",
                             err, branch, wt_path.display(), wt_path.display()
@@ -1178,7 +1193,7 @@ impl OneShotRunner {
                 // Clean up: delete branch and remove worktree
                 let _ = runtime
                     .run_command(
-                        &format!("git branch -d {}", branch),
+                        &format!("git branch -d {branch}"),
                         &wt_path,
                         Duration::from_secs(60),
                     )
@@ -1194,10 +1209,10 @@ impl OneShotRunner {
             }
             MergeStrategy::Branch => {
                 // Use shared git_merge_push for robust push-with-retry logic.
-                let push_cmd = format!("git push origin {}", branch);
-                let push_u_cmd = format!("git push -u origin {}", branch);
-                let fetch_cmd = format!("git fetch origin {}", branch);
-                let rebase_cmd = format!("git pull --rebase origin {}", branch);
+                let push_cmd = format!("git push origin {branch}");
+                let push_u_cmd = format!("git push -u origin {branch}");
+                let fetch_cmd = format!("git fetch origin {branch}");
+                let rebase_cmd = format!("git pull --rebase origin {branch}");
 
                 tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, fetch_cmd = %fetch_cmd, "git finalize: fetch step");
                 tracing::debug!(oneshot_id = %self.config.repo_id, branch = %branch, rebase_cmd = %rebase_cmd, "git finalize: rebase step");
@@ -1227,26 +1242,26 @@ impl OneShotRunner {
                 let merge_result = git_merge_push(runtime, &merge_config, |event| {
                     match event {
                         GitMergeEvent::PushSucceeded => {
-                            self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
+                            self.emit(&SessionEvent::GitSyncPushSucceeded { iteration });
                         }
                         GitMergeEvent::ConflictDetected { files } => {
-                            self.emit(SessionEvent::GitSyncConflict { iteration, files });
+                            self.emit(&SessionEvent::GitSyncConflict { iteration, files });
                         }
                         GitMergeEvent::ConflictResolveStarted { attempt } => {
-                            self.emit(SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
+                            self.emit(&SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
                         }
                         GitMergeEvent::ConflictResolveComplete { attempt, success } => {
-                            self.emit(SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
+                            self.emit(&SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
                         }
                         GitMergeEvent::Failed { error } => {
-                            self.emit(SessionEvent::GitSyncFailed { iteration, error });
+                            self.emit(&SessionEvent::GitSyncFailed { iteration, error });
                         }
                     }
                 }).await;
 
                 if let Err(err) = merge_result {
                     tracing::error!(oneshot_id = %self.config.repo_id, error = %err, branch = %branch, "push to branch failed");
-                    self.emit(SessionEvent::OneShotFailed {
+                    self.emit(&SessionEvent::OneShotFailed {
                         reason: format!(
                             "Push to branch failed: {}\n\nYour work is preserved on branch `{}` in the worktree at:\n{}\n\nTo resolve, cd into the worktree, pull/rebase, then push manually. Once done, remove the worktree with:\ngit worktree remove {}",
                             err, branch, wt_path.display(), wt_path.display()
@@ -1273,11 +1288,11 @@ impl OneShotRunner {
         }
 
         tracing::info!(oneshot_id = %self.config.repo_id, "git finalize complete");
-        self.emit(SessionEvent::GitFinalizeComplete);
+        self.emit(&SessionEvent::GitFinalizeComplete);
 
         // 5. Complete
         tracing::info!(oneshot_id = %self.config.repo_id, title = %self.config.title, "oneshot completed successfully");
-        self.emit(SessionEvent::OneShotComplete);
+        self.emit(&SessionEvent::OneShotComplete);
         trace.outcome = SessionOutcome::Completed;
         trace.end_time = Some(Utc::now());
         let events: Vec<SessionEvent> = self.accumulated_events.lock().unwrap().clone();
@@ -2700,7 +2715,7 @@ mod tests {
         ];
 
         for event in &events_to_emit {
-            runner.emit(event.clone());
+            runner.emit(event);
         }
 
         // Read back from disk using TraceCollector::read_events

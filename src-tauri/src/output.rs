@@ -5,8 +5,8 @@ use std::collections::HashMap;
 ///
 /// Each line of stdout is one JSON object. The event types are:
 /// - `system` (subtype `init`) — session metadata at startup
-/// - `assistant` — a message from Claude (text, tool_use, etc.)
-/// - `user` — tool results fed back (tool_result, text)
+/// - `assistant` — a message from Claude (text, `tool_use`, etc.)
+/// - `user` — tool results fed back (`tool_result`, text)
 /// - `rate_limit_event` — rate limit status
 /// - `result` — final summary (same shape as `--output-format json`)
 #[derive(Debug, Clone, Deserialize)]
@@ -158,16 +158,19 @@ pub struct ResultEvent {
 }
 
 impl ResultEvent {
+    #[must_use] 
     pub fn has_completion_signal(&self, signal: &str) -> bool {
         self.result
             .as_ref()
             .is_some_and(|r| r.contains(signal))
     }
 
+    #[must_use] 
     pub fn is_success(&self) -> bool {
         !self.is_error && self.subtype.as_deref() == Some("success")
     }
 
+    #[must_use] 
     pub fn result_text(&self) -> String {
         if let Some(ref result) = self.result {
             result.clone()
@@ -179,6 +182,7 @@ impl ResultEvent {
     }
 
     /// Extract aggregate token usage from the `usage` field
+    #[must_use] 
     pub fn token_usage(&self) -> TokenUsage {
         let Some(ref v) = self.usage else {
             return TokenUsage::default();
@@ -192,13 +196,14 @@ impl ResultEvent {
     }
 
     /// Extract per-model token usage from the `modelUsage` field
+    #[must_use] 
     pub fn model_token_usage(&self) -> HashMap<String, ModelTokenUsage> {
         let Some(ref mu) = self.model_usage else {
             return HashMap::new();
         };
         mu.iter()
-            .filter_map(|(model, v)| {
-                Some((
+            .map(|(model, v)| {
+                (
                     model.clone(),
                     ModelTokenUsage {
                         input_tokens: v["inputTokens"].as_u64().unwrap_or(0),
@@ -211,7 +216,7 @@ impl ResultEvent {
                         context_window: v["contextWindow"].as_u64().unwrap_or(0),
                         max_output_tokens: v["maxOutputTokens"].as_u64().unwrap_or(0),
                     },
-                ))
+                )
             })
             .collect()
     }

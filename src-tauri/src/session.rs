@@ -224,7 +224,7 @@ fn combine_output(stdout: &str, stderr: &str) -> String {
     match (stdout.is_empty(), stderr.is_empty()) {
         (true, _) => stderr.to_string(),
         (_, true) => stdout.to_string(),
-        _ => format!("{}\n{}", stdout, stderr),
+        _ => format!("{stdout}\n{stderr}"),
     }
 }
 
@@ -283,6 +283,7 @@ pub struct SessionRunner {
 }
 
 impl SessionRunner {
+    #[must_use] 
     pub fn new(config: SessionConfig, collector: TraceCollector, cancel_token: CancellationToken) -> Self {
         Self {
             config,
@@ -318,9 +319,9 @@ impl SessionRunner {
         }
     }
 
-    fn emit(&self, event: SessionEvent) {
+    fn emit(&self, event: &SessionEvent) {
         let session_id = self.session_id.lock().unwrap().clone();
-        let event_kind = match &event {
+        let event_kind = match event {
             SessionEvent::SessionStarted { .. } => "session_started",
             SessionEvent::IterationStarted { .. } => "iteration_started",
             SessionEvent::ToolUse { .. } => "tool_use",
@@ -367,12 +368,12 @@ impl SessionRunner {
         );
         self.accumulated_events.lock().unwrap().push(event.clone());
         if let Some(ref sid) = session_id {
-            if let Err(e) = self.collector.append_event(sid, &event) {
+            if let Err(e) = self.collector.append_event(sid, event) {
                 tracing::warn!("Failed to append event to disk: {e}");
             }
         }
         if let Some(ref cb) = self.on_event {
-            cb(&event);
+            cb(event);
         }
     }
 
@@ -409,7 +410,7 @@ impl SessionRunner {
                 check.name.clone()
             };
 
-            self.emit(SessionEvent::CheckStarted {
+            self.emit(&SessionEvent::CheckStarted {
                 iteration,
                 check_name: check_name.clone(),
             });
@@ -418,16 +419,16 @@ impl SessionRunner {
                 .run_command(
                     &check.command,
                     self.config.effective_working_dir(),
-                    Duration::from_secs(check.timeout_secs as u64),
+                    Duration::from_secs(u64::from(check.timeout_secs)),
                 )
                 .await;
 
             let cmd_output = match cmd_result {
                 Ok(o) => o,
                 Err(e) => {
-                    let error_msg = format!("Command error: {}", e);
+                    let error_msg = format!("Command error: {e}");
                     tracing::warn!("Check '{}' command error: {}", check_name, e);
-                    self.emit(SessionEvent::CheckFailed {
+                    self.emit(&SessionEvent::CheckFailed {
                         iteration,
                         check_name: check_name.clone(),
                         output: error_msg,
@@ -438,7 +439,7 @@ impl SessionRunner {
 
             if cmd_output.exit_code == 0 {
                 tracing::info!(iteration, check_name = %check_name, "check passed");
-                self.emit(SessionEvent::CheckPassed {
+                self.emit(&SessionEvent::CheckPassed {
                     iteration,
                     check_name: check_name.clone(),
                 });
@@ -448,7 +449,7 @@ impl SessionRunner {
             // Check failed
             let mut output = combine_output(&cmd_output.stdout, &cmd_output.stderr);
 
-            self.emit(SessionEvent::CheckFailed {
+            self.emit(&SessionEvent::CheckFailed {
                 iteration,
                 check_name: check_name.clone(),
                 output: output.clone(),
@@ -461,7 +462,7 @@ impl SessionRunner {
                 }
                 let fix_prompt = build_fix_prompt(check, &output);
 
-                self.emit(SessionEvent::CheckFixStarted {
+                self.emit(&SessionEvent::CheckFixStarted {
                     iteration,
                     check_name: check_name.clone(),
                     attempt,
@@ -492,7 +493,7 @@ impl SessionRunner {
                                                         ContentBlock::ToolUse { id, name, input } => {
                                                             tracing::debug!(iteration, check_name = %check_name, attempt, name, id, "check fix tool use");
                                                             fix_tool_ids.insert(id.clone(), name.clone());
-                                                            self.emit(SessionEvent::CheckFixToolUse {
+                                                            self.emit(&SessionEvent::CheckFixToolUse {
                                                                 iteration,
                                                                 check_name: check_name.clone(),
                                                                 attempt,
@@ -502,7 +503,7 @@ impl SessionRunner {
                                                             });
                                                         }
                                                         ContentBlock::Text { text } => {
-                                                            self.emit(SessionEvent::CheckFixAssistantText {
+                                                            self.emit(&SessionEvent::CheckFixAssistantText {
                                                                 iteration,
                                                                 check_name: check_name.clone(),
                                                                 attempt,
@@ -519,7 +520,7 @@ impl SessionRunner {
                                                 if let Some(ref message) = user_event.message {
                                                     let results = extract_tool_results(message, &fix_tool_ids);
                                                     for (tool_use_id, tool_name, tool_output) in results {
-                                                        self.emit(SessionEvent::CheckFixToolResult {
+                                                        self.emit(&SessionEvent::CheckFixToolResult {
                                                             iteration,
                                                             check_name: check_name.clone(),
                                                             attempt,
@@ -534,7 +535,7 @@ impl SessionRunner {
                                         _ => {}
                                     }
                                 }
-                                _ = self.cancel_token.cancelled() => {
+                                () = self.cancel_token.cancelled() => {
                                     break;
                                 }
                             }
@@ -543,7 +544,7 @@ impl SessionRunner {
                         let _ = process.completion.await;
 
                         tracing::info!(iteration, check_name = %check_name, attempt, "fix agent succeeded");
-                        self.emit(SessionEvent::CheckFixComplete {
+                        self.emit(&SessionEvent::CheckFixComplete {
                             iteration,
                             check_name: check_name.clone(),
                             attempt,
@@ -552,7 +553,7 @@ impl SessionRunner {
                     }
                     Err(e) => {
                         tracing::warn!("Fix agent for '{}' failed to spawn: {}", check_name, e);
-                        self.emit(SessionEvent::CheckFixComplete {
+                        self.emit(&SessionEvent::CheckFixComplete {
                             iteration,
                             check_name: check_name.clone(),
                             attempt,
@@ -567,7 +568,7 @@ impl SessionRunner {
                     .run_command(
                         &check.command,
                         self.config.effective_working_dir(),
-                        Duration::from_secs(check.timeout_secs as u64),
+                        Duration::from_secs(u64::from(check.timeout_secs)),
                     )
                     .await;
 
@@ -575,20 +576,19 @@ impl SessionRunner {
                     Ok(recheck_output) => {
                         if recheck_output.exit_code == 0 {
                             tracing::info!(iteration, check_name = %check_name, attempt, "check now passing after fix");
-                            self.emit(SessionEvent::CheckPassed {
+                            self.emit(&SessionEvent::CheckPassed {
                                 iteration,
                                 check_name: check_name.clone(),
                             });
                             fixed = true;
                             break;
-                        } else {
-                            output = combine_output(&recheck_output.stdout, &recheck_output.stderr);
-                            self.emit(SessionEvent::CheckFailed {
-                                iteration,
-                                check_name: check_name.clone(),
-                                output: output.clone(),
-                            });
                         }
+                        output = combine_output(&recheck_output.stdout, &recheck_output.stderr);
+                        self.emit(&SessionEvent::CheckFailed {
+                            iteration,
+                            check_name: check_name.clone(),
+                            output: output.clone(),
+                        });
                     }
                     Err(e) => {
                         tracing::warn!("Re-check '{}' command error: {}", check_name, e);
@@ -618,9 +618,8 @@ impl SessionRunner {
     async fn git_sync(&self, runtime: &dyn RuntimeProvider, iteration: u32) {
         tracing::info!(iteration, "git_sync entered");
 
-        let git_sync_config = match &self.config.git_sync {
-            Some(cfg) => cfg,
-            None => return,
+        let Some(git_sync_config) = &self.config.git_sync else {
+            return;
         };
 
         if !git_sync_config.enabled {
@@ -631,7 +630,7 @@ impl SessionRunner {
             return;
         }
 
-        self.emit(SessionEvent::GitSyncStarted { iteration });
+        self.emit(&SessionEvent::GitSyncStarted { iteration });
 
         let timeout = Duration::from_secs(120);
 
@@ -647,23 +646,23 @@ impl SessionRunner {
             }
             Ok(output) => {
                 let error = combine_output(&output.stdout, &output.stderr);
-                self.emit(SessionEvent::GitSyncFailed {
+                self.emit(&SessionEvent::GitSyncFailed {
                     iteration,
-                    error: format!("failed to detect branch: {}", error),
+                    error: format!("failed to detect branch: {error}"),
                 });
                 return;
             }
             Err(e) => {
-                self.emit(SessionEvent::GitSyncFailed {
+                self.emit(&SessionEvent::GitSyncFailed {
                     iteration,
-                    error: format!("failed to detect branch: {}", e),
+                    error: format!("failed to detect branch: {e}"),
                 });
                 return;
             }
         };
 
         if !Self::is_valid_branch_name(&branch) {
-            self.emit(SessionEvent::GitSyncFailed {
+            self.emit(&SessionEvent::GitSyncFailed {
                 iteration,
                 error: "Invalid branch name".to_string(),
             });
@@ -692,19 +691,19 @@ impl SessionRunner {
         let _ = git_merge_push(runtime, &merge_config, |event| {
             match event {
                 GitMergeEvent::PushSucceeded => {
-                    self.emit(SessionEvent::GitSyncPushSucceeded { iteration });
+                    self.emit(&SessionEvent::GitSyncPushSucceeded { iteration });
                 }
                 GitMergeEvent::ConflictDetected { files } => {
-                    self.emit(SessionEvent::GitSyncConflict { iteration, files });
+                    self.emit(&SessionEvent::GitSyncConflict { iteration, files });
                 }
                 GitMergeEvent::ConflictResolveStarted { attempt } => {
-                    self.emit(SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
+                    self.emit(&SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
                 }
                 GitMergeEvent::ConflictResolveComplete { attempt, success } => {
-                    self.emit(SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
+                    self.emit(&SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
                 }
                 GitMergeEvent::Failed { error } => {
-                    self.emit(SessionEvent::GitSyncFailed { iteration, error });
+                    self.emit(&SessionEvent::GitSyncFailed { iteration, error });
                 }
             }
         })
@@ -753,7 +752,7 @@ impl SessionRunner {
         // Flush initial trace to disk so it survives a crash before the first iteration completes
         self.collector.flush_to_disk(&trace);
 
-        self.emit(SessionEvent::SessionStarted {
+        self.emit(&SessionEvent::SessionStarted {
             session_id: trace.session_id.clone(),
         });
 
@@ -776,7 +775,7 @@ impl SessionRunner {
         let outcome = trace.outcome.clone();
         let plan_file = trace.plan_file.clone();
         tracing::info!(outcome = ?outcome, plan_file = ?plan_file, "session complete, emitting SessionComplete");
-        self.emit(SessionEvent::SessionComplete { outcome, plan_file });
+        self.emit(&SessionEvent::SessionComplete { outcome, plan_file });
 
         let events: Vec<SessionEvent> = {
             let guard = self.accumulated_events.lock().unwrap();
@@ -797,7 +796,7 @@ impl SessionRunner {
     /// - call `self.collector.finalize()` (caller handles persistence)
     /// - emit `SessionStarted` or `SessionComplete` events
     ///
-    /// It **does** run checks, git_sync, record iterations, emit iteration-level
+    /// It **does** run checks, `git_sync`, record iterations, emit iteration-level
     /// events, and set `trace.outcome` / `trace.failure_reason`.
     #[instrument(skip(self, runtime, trace), fields(max_iterations = self.config.max_iterations))]
     pub async fn run_with_trace(
@@ -822,7 +821,7 @@ impl SessionRunner {
             let _ = SessionState::Running { iteration };
             tracing::info!(iteration = display_iter, max = self.config.max_iterations + offset, "starting iteration");
 
-            self.emit(SessionEvent::IterationStarted { iteration: display_iter });
+            self.emit(&SessionEvent::IterationStarted { iteration: display_iter });
 
             let iter_start = Utc::now();
 
@@ -854,7 +853,7 @@ impl SessionRunner {
                         is_error,
                     );
 
-                    self.emit(SessionEvent::IterationComplete {
+                    self.emit(&SessionEvent::IterationComplete {
                         iteration: display_iter,
                         result: result.clone(),
                     });
@@ -863,7 +862,7 @@ impl SessionRunner {
                         let working_dir = self.config.effective_working_dir();
                         match runtime.read_file(plan_file, working_dir).await {
                             Ok(content) => {
-                                self.emit(SessionEvent::PlanContentUpdated { plan_content: content });
+                                self.emit(&SessionEvent::PlanContentUpdated { plan_content: content });
                             }
                             Err(e) => {
                                 tracing::debug!(plan_file = %plan_file, error = %e, "could not read plan file for progress");
@@ -906,10 +905,10 @@ impl SessionRunner {
                     // Inter-iteration delay, but cancel-aware
                     if iteration < self.config.max_iterations {
                         tokio::select! {
-                            _ = tokio::time::sleep(tokio::time::Duration::from_millis(
+                            () = tokio::time::sleep(tokio::time::Duration::from_millis(
                                 self.config.inter_iteration_delay_ms,
                             )) => {}
-                            _ = self.cancel_token.cancelled() => {
+                            () = self.cancel_token.cancelled() => {
                                 tracing::info!("session cancelled during inter-iteration delay");
                                 state = SessionState::Cancelled { iteration };
                                 break;
@@ -941,14 +940,14 @@ impl SessionRunner {
                             completion_signal_found: false,
                             exit_code: -1,
                             result_preview: format!("Process error: {e}"),
-                            token_usage: Default::default(),
-                            model_token_usage: Default::default(),
+                            token_usage: crate::output::TokenUsage::default(),
+                            model_token_usage: std::collections::HashMap::default(),
                             final_context_tokens: 0,
                         },
                         true,
                     );
 
-                    self.emit(SessionEvent::IterationFailed {
+                    self.emit(&SessionEvent::IterationFailed {
                         iteration: display_iter,
                         error: e.to_string(),
                     });
@@ -971,14 +970,11 @@ impl SessionRunner {
 
         // Session-exit git_sync: push partial progress for non-completed outcomes
         match &state {
-            SessionState::Failed { iteration, .. } => {
+            SessionState::Failed { iteration, .. } | SessionState::Cancelled { iteration } => {
                 self.git_sync(runtime, *iteration).await;
             }
             SessionState::MaxIterations { iterations } => {
                 self.git_sync(runtime, *iterations).await;
-            }
-            SessionState::Cancelled { iteration } => {
-                self.git_sync(runtime, *iteration).await;
             }
             _ => {}
         }
@@ -1050,7 +1046,7 @@ impl SessionRunner {
                                     .and_then(|m| m.trigger.clone())
                                     .unwrap_or_else(|| "unknown".to_string());
                                 tracing::info!(iteration, pre_tokens, %trigger, "context compacted");
-                                self.emit(SessionEvent::Compacted {
+                                self.emit(&SessionEvent::Compacted {
                                     iteration,
                                     pre_tokens,
                                     trigger,
@@ -1064,7 +1060,7 @@ impl SessionRunner {
                                         ContentBlock::ToolUse { id, name, input } => {
                                             tracing::debug!(iteration, name, id, "tool use");
                                             self.tool_use_ids.lock().unwrap().insert(id.clone(), name.clone());
-                                            self.emit(SessionEvent::ToolUse {
+                                            self.emit(&SessionEvent::ToolUse {
                                                 iteration,
                                                 tool_name: name.clone(),
                                                 tool_input: Some(input.clone()),
@@ -1079,8 +1075,8 @@ impl SessionRunner {
                                                 text.clone()
                                             };
                                             tracing::debug!(iteration, preview, "text output");
-                                            last_assistant_text = text.clone();
-                                            self.emit(SessionEvent::AssistantText {
+                                            last_assistant_text.clone_from(text);
+                                            self.emit(&SessionEvent::AssistantText {
                                                 iteration,
                                                 text: text.clone(),
                                             });
@@ -1093,7 +1089,7 @@ impl SessionRunner {
                                         usage.input_tokens.unwrap_or(0)
                                         + usage.cache_read_input_tokens.unwrap_or(0)
                                         + usage.cache_creation_input_tokens.unwrap_or(0);
-                                    self.emit(SessionEvent::ContextUpdated {
+                                    self.emit(&SessionEvent::ContextUpdated {
                                         iteration,
                                         context_tokens: last_context_tokens,
                                     });
@@ -1107,7 +1103,7 @@ impl SessionRunner {
                                         + usage.cache_creation_input_tokens.unwrap_or(0);
                                     let peak = sub_agent_peaks.entry(parent_id.clone()).or_insert(0);
                                     *peak = (*peak).max(context_tokens);
-                                    self.emit(SessionEvent::SubAgentContextUpdated {
+                                    self.emit(&SessionEvent::SubAgentContextUpdated {
                                         iteration,
                                         parent_tool_use_id: parent_id,
                                         context_tokens,
@@ -1122,7 +1118,7 @@ impl SessionRunner {
                                 // Only surface non-"allowed" rate limits — "allowed" fires every turn
                                 if status != "allowed" {
                                     event_summary.push(format!("rate_limit:{status}/{rl_type}"));
-                                    self.emit(SessionEvent::RateLimited {
+                                    self.emit(&SessionEvent::RateLimited {
                                         iteration,
                                         status: status.to_string(),
                                         rate_limit_type: rl_type.to_string(),
@@ -1146,7 +1142,7 @@ impl SessionRunner {
                                     drop(tool_ids); // Release lock before emitting
                                     for (tool_use_id, tool_name, tool_output) in results {
                                         tracing::debug!(iteration, tool_use_id = %tool_use_id, tool_name = %tool_name, output_len = tool_output.len(), "tool result");
-                                        self.emit(SessionEvent::ToolResult {
+                                        self.emit(&SessionEvent::ToolResult {
                                             iteration,
                                             tool_use_id,
                                             tool_name,
@@ -1159,7 +1155,7 @@ impl SessionRunner {
                         }
                     }
                 }
-                _ = self.cancel_token.cancelled() => {
+                () = self.cancel_token.cancelled() => {
                     // Kill the child process
                     abort_arc.abort();
                     self.unregister_abort(&abort_arc);
@@ -1193,12 +1189,11 @@ impl SessionRunner {
                     "Claude process exited with code {} ({events_desc})",
                     exit.exit_code,
                 );
-            } else {
-                anyhow::bail!(
-                    "Claude process exited with code {} — {output}",
-                    exit.exit_code,
-                );
             }
+            anyhow::bail!(
+                "Claude process exited with code {} — {output}",
+                exit.exit_code,
+            );
         }
 
         if result_event.is_none() {
@@ -1211,17 +1206,16 @@ impl SessionRunner {
     }
 }
 
-/// Extract tool results from a UserEvent message.
-/// Returns Vec of (tool_use_id, tool_name, tool_output) for Bash/Agent tools only.
+/// Extract tool results from a `UserEvent` message.
+/// Returns Vec of (`tool_use_id`, `tool_name`, `tool_output`) for Bash/Agent tools only.
 fn extract_tool_results(
     message: &serde_json::Value,
     tool_use_ids: &std::collections::HashMap<String, String>,
 ) -> Vec<(String, String, String)> {
     let mut results = Vec::new();
 
-    let content = match message.get("content").and_then(|c| c.as_array()) {
-        Some(arr) => arr,
-        None => return results,
+    let Some(content) = message.get("content").and_then(|c| c.as_array()) else {
+        return results;
     };
 
     for item in content {

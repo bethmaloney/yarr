@@ -44,7 +44,7 @@ fn combine_output(stdout: &str, stderr: &str) -> String {
     match (stdout.is_empty(), stderr.is_empty()) {
         (true, _) => stderr.to_string(),
         (_, true) => stdout.to_string(),
-        _ => format!("{}\n{}", stdout, stderr),
+        _ => format!("{stdout}\n{stderr}"),
     }
 }
 
@@ -97,7 +97,7 @@ pub async fn git_merge_push(
             last_error = combine_output(&output.stdout, &output.stderr);
         }
         Err(e) => {
-            last_error = format!("git push command error: {}", e);
+            last_error = format!("git push command error: {e}");
         }
     }
 
@@ -119,7 +119,7 @@ pub async fn git_merge_push(
                 tracing::info!("git push -u failed: {}", last_error);
             }
             Err(e) => {
-                last_error = format!("git push -u command error: {}", e);
+                last_error = format!("git push -u command error: {e}");
                 tracing::info!("git push -u failed: {}", last_error);
             }
         }
@@ -144,7 +144,7 @@ pub async fn git_merge_push(
                 continue;
             }
             Err(e) => {
-                last_error = format!("git fetch command error: {}", e);
+                last_error = format!("git fetch command error: {e}");
                 tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "git fetch error");
                 continue;
             }
@@ -174,7 +174,7 @@ pub async fn git_merge_push(
                         tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "push after rebase failed");
                     }
                     Err(e) => {
-                        last_error = format!("push after rebase command error: {}", e);
+                        last_error = format!("push after rebase command error: {e}");
                         tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "push after rebase failed");
                     }
                 }
@@ -263,7 +263,7 @@ pub async fn git_merge_push(
                                         }
                                         // Just drain, don't need to do anything
                                     }
-                                    _ = config.cancel_token.cancelled() => {
+                                    () = config.cancel_token.cancelled() => {
                                         tracing::info!(attempt, "git_merge_push cancelled during conflict resolution");
                                         process.abort_handle.abort();
                                         let _ = runtime.run_command(
@@ -288,7 +288,7 @@ pub async fn git_merge_push(
                                 )
                                 .await;
                             last_error =
-                                format!("conflict resolution failed to start: {}", e);
+                                format!("conflict resolution failed to start: {e}");
                             continue;
                         }
                     }
@@ -350,8 +350,7 @@ pub async fn git_merge_push(
                             }
                             Err(e) => {
                                 last_error = format!(
-                                    "push after conflict resolution command error: {}",
-                                    e
+                                    "push after conflict resolution command error: {e}"
                                 );
                                 tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "push after conflict resolution failed");
                             }
@@ -370,7 +369,7 @@ pub async fn git_merge_push(
                 }
             }
             Err(e) => {
-                last_error = format!("rebase command error: {}", e);
+                last_error = format!("rebase command error: {e}");
                 tracing::warn!(attempt, max_retries = config.max_retries, error = %last_error, "rebase command error");
             }
         }
@@ -380,7 +379,7 @@ pub async fn git_merge_push(
     let error_msg = if last_error.is_empty() {
         "push failed after all retries".to_string()
     } else {
-        format!("push failed after all retries: {}", last_error)
+        format!("push failed after all retries: {last_error}")
     };
     on_event(GitMergeEvent::Failed {
         error: error_msg.clone(),

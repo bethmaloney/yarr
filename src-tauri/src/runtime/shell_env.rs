@@ -26,9 +26,8 @@ pub fn parse_snapshot_output(
     let first = stdout
         .windows(marker_bytes.len())
         .position(|w| w == marker_bytes);
-    let first = match first {
-        Some(pos) => pos,
-        None => anyhow::bail!("first marker not found in output"),
+    let Some(first) = first else {
+        anyhow::bail!("first marker not found in output")
     };
 
     // Find second occurrence of marker (starting after the first)
@@ -37,9 +36,8 @@ pub fn parse_snapshot_output(
         .windows(marker_bytes.len())
         .position(|w| w == marker_bytes)
         .map(|pos| pos + after_first);
-    let second = match second {
-        Some(pos) => pos,
-        None => anyhow::bail!("second marker not found in output"),
+    let Some(second) = second else {
+        anyhow::bail!("second marker not found in output")
     };
 
     // Extract bytes between the two markers
@@ -107,7 +105,7 @@ where
         };
         let is_fish = std::path::Path::new(&s)
             .file_name()
-            .map_or(false, |n| n == "fish");
+            .is_some_and(|n| n == "fish");
         if is_fish { "bash".to_string() } else { s }
     };
 
@@ -127,18 +125,18 @@ where
 
     let elapsed = start.elapsed();
 
-    if !output.status.success() {
-        tracing::warn!(
-            exit_code = output.status.code().unwrap_or(-1),
-            elapsed_ms = elapsed.as_millis() as u64,
-            stderr = %String::from_utf8_lossy(&output.stderr),
-            "shell env snapshot exited with non-zero status"
-        );
-    } else {
+    if output.status.success() {
         tracing::info!(
-            elapsed_ms = elapsed.as_millis() as u64,
+            elapsed_ms = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()),
             stdout_bytes = output.stdout.len(),
             "shell env snapshot completed"
+        );
+    } else {
+        tracing::warn!(
+            exit_code = output.status.code().unwrap_or(-1),
+            elapsed_ms = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()),
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "shell env snapshot exited with non-zero status"
         );
     }
 

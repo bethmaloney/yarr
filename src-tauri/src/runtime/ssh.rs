@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -22,6 +23,7 @@ pub enum RemoteState {
 }
 
 /// Shell-escapes a string by wrapping in single quotes and escaping embedded single quotes.
+#[must_use] 
 pub fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
@@ -42,6 +44,7 @@ pub fn shell_escape(s: &str) -> String {
 ///
 /// The caller is responsible for properly escaping `remote_cmd` contents
 /// (e.g. using `shell_escape()` for individual arguments within the command).
+#[must_use] 
 pub fn ssh_command(host: &str, remote_cmd: &str) -> Command {
     if cfg!(target_os = "windows") {
         // Double-escape: inner shell_escape quotes for the remote shell (so $SHELL -lc
@@ -72,6 +75,7 @@ pub fn ssh_command(host: &str, remote_cmd: &str) -> Command {
 /// Use this for commands that only need builtins or standard `/usr/bin`
 /// utilities (e.g. `test -d`, `echo`, `stat`) and don't depend on the
 /// remote user's custom PATH from their login shell startup files.
+#[must_use] 
 pub fn ssh_command_raw(host: &str, remote_cmd: &str) -> Command {
     if cfg!(target_os = "windows") {
         let ssh_str = format!(
@@ -124,7 +128,7 @@ impl AbortHandle for SshAbortHandle {
         let ssh_host = self.ssh_host.clone();
         let session_id = self.session_id.clone();
         std::thread::spawn(move || {
-            let kill_cmd = format!("tmux kill-session -t yarr-{}", session_id);
+            let kill_cmd = format!("tmux kill-session -t yarr-{session_id}");
             tracing::info!("Killing remote tmux session yarr-{}", session_id);
             if cfg!(target_os = "windows") {
                 let ssh_str = format!(
@@ -150,6 +154,7 @@ impl AbortHandle for SshAbortHandle {
 }
 
 impl SshRuntime {
+    #[must_use] 
     pub fn new(host: &str, remote_path: &str, env_cache: Arc<dashmap::DashMap<String, HashMap<String, String>>>) -> Self {
         Self {
             ssh_host: host.to_string(),
@@ -159,10 +164,12 @@ impl SshRuntime {
         }
     }
 
+    #[must_use] 
     pub fn build_mkdir_command(&self) -> Command {
         ssh_command(&self.ssh_host, "mkdir -p ~/.yarr/logs")
     }
 
+    #[must_use] 
     pub fn build_tmux_command(&self, session_id: &str, invocation: &ClaudeInvocation, resolved_env: &HashMap<String, String>) -> Command {
         let escaped_prompt = shell_escape(&invocation.prompt);
         let escaped_remote_path = shell_escape(&self.remote_path);
@@ -170,23 +177,23 @@ impl SshRuntime {
         let mut claude_cmd = String::from("claude -p --output-format stream-json --verbose");
 
         if let Some(ref model) = invocation.model {
-            claude_cmd.push_str(&format!(" --model {}", shell_escape(model)));
+            write!(claude_cmd, " --model {}", shell_escape(model)).unwrap();
         }
 
         if let Some(ref effort) = invocation.effort_level {
-            claude_cmd.push_str(&format!(" --effort {}", shell_escape(effort)));
+            write!(claude_cmd, " --effort {}", shell_escape(effort)).unwrap();
         }
 
         for arg in &invocation.extra_args {
-            claude_cmd.push_str(&format!(" {}", shell_escape(arg)));
+            write!(claude_cmd, " {}", shell_escape(arg)).unwrap();
         }
 
-        claude_cmd.push_str(&format!(" {}", escaped_prompt));
+        write!(claude_cmd, " {escaped_prompt}").unwrap();
 
         // Build the inner command that runs inside tmux (executed by sh -c).
         let mut env_exports = String::new();
         for (key, val) in &invocation.env_vars {
-            env_exports.push_str(&format!("export {}={} && ", key, shell_escape(val)));
+            write!(env_exports, "export {}={} && ", key, shell_escape(val)).unwrap();
         }
 
         let tmux_body = format!(
@@ -205,11 +212,13 @@ impl SshRuntime {
         ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
+    #[must_use] 
     pub fn build_tail_command(&self, session_id: &str) -> Command {
         let remote_cmd = format!("tail -f ~/.yarr/logs/yarr-{session_id}.log");
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
+    #[must_use] 
     pub fn build_health_check_command(&self, resolved_env: &HashMap<String, String>) -> Command {
         let mut parts: Vec<String> = Vec::new();
         parts.extend(env_export_parts(resolved_env));
@@ -218,6 +227,7 @@ impl SshRuntime {
         ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
+    #[must_use] 
     pub fn build_check_tmux_command(&self, session_id: &str) -> Command {
         let remote_cmd = format!(
             "tmux has-session -t yarr-{session_id} 2>/dev/null && echo ALIVE || echo DEAD"
@@ -225,21 +235,25 @@ impl SshRuntime {
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
+    #[must_use] 
     pub fn build_tail_last_line_command(&self, session_id: &str) -> Command {
         let remote_cmd = format!("tail -1 ~/.yarr/logs/yarr-{session_id}.log");
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
+    #[must_use] 
     pub fn build_recover_command(&self, session_id: &str, from_line: u64) -> Command {
         let remote_cmd = format!("tail -n +{from_line} ~/.yarr/logs/yarr-{session_id}.log");
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
+    #[must_use] 
     pub fn build_resume_tail_command(&self, session_id: &str, from_line: u64) -> Command {
         let remote_cmd = format!("tail -f -n +{from_line} ~/.yarr/logs/yarr-{session_id}.log");
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
+    #[must_use] 
     pub fn build_cleanup_command(&self, session_id: &str) -> Command {
         let remote_cmd = format!(
             "rm -f ~/.yarr/logs/yarr-{session_id}.log /tmp/yarr-{session_id}.stderr"
@@ -247,22 +261,25 @@ impl SshRuntime {
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
+    #[must_use] 
     pub fn build_get_stderr_command(&self, session_id: &str) -> Command {
         let remote_cmd = format!("cat /tmp/yarr-{session_id}.stderr 2>/dev/null");
         ssh_command(&self.ssh_host, &remote_cmd)
     }
 
+    #[must_use] 
     pub fn build_run_command(&self, command: &str, working_dir: &std::path::Path, resolved_env: &HashMap<String, String>) -> Command {
         let escaped_dir = shell_escape(&working_dir.to_string_lossy());
         let mut parts: Vec<String> = Vec::new();
         parts.extend(env_export_parts(resolved_env));
-        parts.push(format!("cd {}", escaped_dir));
+        parts.push(format!("cd {escaped_dir}"));
         parts.push(command.to_string());
         let remote_cmd = parts.join(" && ");
         ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
-    /// Parse the combined output of tmux check and last log line into a RemoteState.
+    /// Parse the combined output of tmux check and last log line into a `RemoteState`.
+    #[must_use] 
     pub fn parse_remote_state(tmux_output: &str, last_log_line: &str) -> RemoteState {
         if tmux_output.trim().contains("ALIVE") {
             return RemoteState::Alive;
@@ -301,7 +318,7 @@ impl SshRuntime {
             .await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Failed to recover events: {}", stderr);
+            anyhow::bail!("Failed to recover events: {stderr}");
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
         let line_count = stdout.lines().filter(|l| !l.trim().is_empty()).count();
@@ -311,7 +328,8 @@ impl SshRuntime {
         Ok(events)
     }
 
-    /// Resume tailing the log file from the given line, returning a RunningProcess.
+    /// Resume tailing the log file from the given line, returning a `RunningProcess`.
+    #[allow(clippy::unused_async)]
     pub async fn resume_tail(
         &self,
         session_id: &str,
@@ -354,7 +372,7 @@ impl SshRuntime {
             let elapsed = start.elapsed();
             Ok(ProcessExit {
                 exit_code: status.code().unwrap_or(-1),
-                wall_time_ms: elapsed.as_millis() as u64,
+                wall_time_ms: elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()),
                 stderr: String::new(),
             })
         });
@@ -373,7 +391,7 @@ impl SshRuntime {
         let output = self.build_cleanup_command(session_id).output().await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Failed to clean up remote files: {}", stderr);
+            anyhow::bail!("Failed to clean up remote files: {stderr}");
         }
         tracing::debug!(ssh_host = %self.ssh_host, session_id = %session_id, "remote cleanup completed");
         Ok(())
@@ -388,7 +406,7 @@ impl SshRuntime {
 
 #[async_trait::async_trait]
 impl RuntimeProvider for SshRuntime {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "ssh"
     }
 
@@ -413,7 +431,7 @@ impl RuntimeProvider for SshRuntime {
         if !setup_output.status.success() {
             let stderr = String::from_utf8_lossy(&setup_output.stderr);
             tracing::error!(ssh_host = %self.ssh_host, stderr = %stderr, "failed to set up remote log directory");
-            anyhow::bail!("Failed to set up remote log directory: {}", stderr);
+            anyhow::bail!("Failed to set up remote log directory: {stderr}");
         }
 
         // Start tmux session with resolved env
@@ -426,7 +444,7 @@ impl RuntimeProvider for SshRuntime {
         if !tmux_output.status.success() {
             let stderr = String::from_utf8_lossy(&tmux_output.stderr);
             tracing::error!(ssh_host = %self.ssh_host, session_id = %session_id, stderr = %stderr, "failed to start remote tmux session");
-            anyhow::bail!("Failed to start remote tmux session: {}", stderr);
+            anyhow::bail!("Failed to start remote tmux session: {stderr}");
         }
         tracing::info!(ssh_host = %self.ssh_host, session_id = %session_id, "remote tmux session started, tailing log");
 
@@ -468,7 +486,7 @@ impl RuntimeProvider for SshRuntime {
             let elapsed = start.elapsed();
             Ok(ProcessExit {
                 exit_code: status.code().unwrap_or(-1),
-                wall_time_ms: elapsed.as_millis() as u64,
+                wall_time_ms: elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()),
                 stderr: String::new(),
             })
         });
@@ -533,7 +551,7 @@ impl RuntimeProvider for SshRuntime {
             Err(_) => {
                 // child is dropped here, kill_on_drop(true) ensures cleanup
                 tracing::warn!(ssh_host = %self.ssh_host, command = %command, timeout_secs = timeout.as_secs(), "ssh command timed out");
-                anyhow::bail!("Command timed out after {:?}", timeout)
+                anyhow::bail!("Command timed out after {timeout:?}")
             }
         }
     }

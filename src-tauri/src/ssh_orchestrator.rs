@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -48,7 +49,7 @@ fn classify_disconnect(exit: &crate::runtime::ProcessExit) -> String {
 /// Result of consuming events from a running process.
 enum ConsumeResult {
     /// Got a Result event from Claude
-    GotResult(crate::output::ResultEvent, u64),
+    GotResult(Box<crate::output::ResultEvent>, u64),
     /// Process exited without a Result event (disconnect)
     Disconnected(crate::runtime::ProcessExit),
     /// Cancelled via cancel token
@@ -160,15 +161,15 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         self.line_count.load(Ordering::SeqCst)
     }
 
-    fn emit(&self, event: SessionEvent) {
+    fn emit(&self, event: &SessionEvent) {
         self.accumulated_events.lock().unwrap().push(event.clone());
         if let Some(ref sid) = self.trace_session_id {
-            if let Err(e) = self.collector.append_event(sid, &event) {
+            if let Err(e) = self.collector.append_event(sid, event) {
                 tracing::warn!("Failed to append event to disk: {e}");
             }
         }
         if let Some(ref cb) = self.on_event {
-            cb(&event);
+            cb(event);
         }
     }
 
@@ -217,7 +218,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                     .and_then(|m| m.trigger.clone())
                                     .unwrap_or_else(|| "unknown".to_string());
                                 tracing::info!(iteration, pre_tokens, %trigger, "context compacted");
-                                self.emit(SessionEvent::Compacted {
+                                self.emit(&SessionEvent::Compacted {
                                     iteration,
                                     pre_tokens,
                                     trigger,
@@ -230,7 +231,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                     match block {
                                         ContentBlock::ToolUse { id, name, input } => {
                                             tracing::debug!(iteration, name, id, "tool use");
-                                            self.emit(SessionEvent::ToolUse {
+                                            self.emit(&SessionEvent::ToolUse {
                                                 iteration,
                                                 tool_name: name.clone(),
                                                 tool_input: Some(input.clone()),
@@ -239,7 +240,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                         }
                                         ContentBlock::Text { text } => {
                                             tracing::debug!(iteration, "text output");
-                                            self.emit(SessionEvent::AssistantText {
+                                            self.emit(&SessionEvent::AssistantText {
                                                 iteration,
                                                 text: text.clone(),
                                             });
@@ -252,7 +253,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                         usage.input_tokens.unwrap_or(0)
                                         + usage.cache_read_input_tokens.unwrap_or(0)
                                         + usage.cache_creation_input_tokens.unwrap_or(0);
-                                    self.emit(SessionEvent::ContextUpdated {
+                                    self.emit(&SessionEvent::ContextUpdated {
                                         iteration,
                                         context_tokens: last_context_tokens,
                                     });
@@ -267,7 +268,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                     tracing::debug!(iteration, %parent_id, context_tokens, "sub-agent context update");
                                     let peak = sub_agent_peaks.entry(parent_id.clone()).or_insert(0);
                                     *peak = (*peak).max(context_tokens);
-                                    self.emit(SessionEvent::SubAgentContextUpdated {
+                                    self.emit(&SessionEvent::SubAgentContextUpdated {
                                         iteration,
                                         parent_tool_use_id: parent_id,
                                         context_tokens,
@@ -287,7 +288,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                         }
                     }
                 }
-                _ = self.cancel_token.cancelled() => {
+                () = self.cancel_token.cancelled() => {
                     process.abort_handle.abort();
                     return Ok(ConsumeResult::Cancelled);
                 }
@@ -298,7 +299,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         let exit = process.completion.await??;
 
         match result_event {
-            Some(r) => Ok(ConsumeResult::GotResult(r, last_context_tokens)),
+            Some(r) => Ok(ConsumeResult::GotResult(Box::new(r), last_context_tokens)),
             None => Ok(ConsumeResult::Disconnected(exit)),
         }
     }
@@ -338,7 +339,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             is_error,
         );
 
-        self.emit(SessionEvent::IterationComplete {
+        self.emit(&SessionEvent::IterationComplete {
             iteration,
             result: result.clone(),
         });
@@ -391,7 +392,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
 
         // 6. Emit SessionStarted
         tracing::info!(trace_session_id = %trace.session_id, "ssh orchestrator: emitting SessionStarted");
-        self.emit(SessionEvent::SessionStarted {
+        self.emit(&SessionEvent::SessionStarted {
             session_id: trace.session_id.clone(),
         });
 
@@ -414,7 +415,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                 .await?;
 
             // c. Emit IterationStarted
-            self.emit(SessionEvent::IterationStarted { iteration });
+            self.emit(&SessionEvent::IterationStarted { iteration });
 
             let iter_start = Utc::now();
 
@@ -432,16 +433,16 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                     state = SessionState::Cancelled { iteration };
                     break;
                 }
-                ConsumeResult::GotResult(result, ctx_tokens) => Some((result, ctx_tokens)),
+                ConsumeResult::GotResult(result, ctx_tokens) => Some((*result, ctx_tokens)),
                 ConsumeResult::Disconnected(exit) => {
                     // No Result event -- disconnect detected
                     let reason = classify_disconnect(&exit);
-                    self.emit(SessionEvent::Disconnected { iteration, reason: Some(reason) });
+                    self.emit(&SessionEvent::Disconnected { iteration, reason: Some(reason) });
 
                     // Wait on reconnect_notify OR cancel_token
                     let reconnect_result: Option<(crate::output::ResultEvent, u64)> = tokio::select! {
-                        _ = self.reconnect_notify.notified() => {
-                            self.emit(SessionEvent::Reconnecting { iteration });
+                        () = self.reconnect_notify.notified() => {
+                            self.emit(&SessionEvent::Reconnecting { iteration });
 
                             let remote_state = self.ops.check_remote_state(&session_id).await?;
 
@@ -460,7 +461,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                             state = SessionState::Cancelled { iteration };
                                             break;
                                         }
-                                        ConsumeResult::GotResult(result, ctx_tokens) => Some((result, ctx_tokens)),
+                                        ConsumeResult::GotResult(result, ctx_tokens) => Some((*result, ctx_tokens)),
                                         ConsumeResult::Disconnected(_exit) => {
                                             state = SessionState::Failed {
                                                 iteration,
@@ -483,7 +484,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                                 }
                             }
                         }
-                        _ = self.cancel_token.cancelled() => {
+                        () = self.cancel_token.cancelled() => {
                             state = SessionState::Cancelled { iteration };
                             break;
                         }
@@ -509,7 +510,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                 if let Some(ref plan_file) = self.config.plan_file {
                     match self.ops.read_file(plan_file, &self.config.repo_path).await {
                         Ok(content) => {
-                            self.emit(SessionEvent::PlanContentUpdated { plan_content: content });
+                            self.emit(&SessionEvent::PlanContentUpdated { plan_content: content });
                         }
                         Err(e) => {
                             tracing::debug!(plan_file = %plan_file, error = %e, "could not read plan file for progress");
@@ -532,10 +533,10 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                         // Inter-iteration delay
                         if iteration < self.config.max_iterations {
                             tokio::select! {
-                                _ = tokio::time::sleep(tokio::time::Duration::from_millis(
+                                () = tokio::time::sleep(tokio::time::Duration::from_millis(
                                     self.config.inter_iteration_delay_ms,
                                 )) => {}
-                                _ = self.cancel_token.cancelled() => {
+                                () = self.cancel_token.cancelled() => {
                                     state = SessionState::Cancelled { iteration };
                                     break;
                                 }
@@ -583,7 +584,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
 
         let outcome = trace.outcome.clone();
         let plan_file = trace.plan_file.clone();
-        self.emit(SessionEvent::SessionComplete { outcome, plan_file });
+        self.emit(&SessionEvent::SessionComplete { outcome, plan_file });
 
         let events: Vec<SessionEvent> = {
             let guard = self.accumulated_events.lock().unwrap();
@@ -598,7 +599,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         if trace.outcome == SessionOutcome::Failed {
             if let Some(ref reason) = trace.failure_reason {
                 if reason.contains("Remote session died") {
-                    anyhow::bail!("{}", reason);
+                    anyhow::bail!("{reason}");
                 }
             }
         }
@@ -610,7 +611,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
 
 #[async_trait::async_trait]
 impl SshOps for SshRuntime {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "ssh"
     }
 
@@ -625,7 +626,7 @@ impl SshOps for SshRuntime {
         let output = ssh_command(&self.ssh_host, &setup_cmd).output().await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Failed to init session: {}", stderr);
+            anyhow::bail!("Failed to init session: {stderr}");
         }
         Ok(())
     }
@@ -643,14 +644,14 @@ impl SshOps for SshRuntime {
             String::from("claude -p --output-format stream-json --verbose");
 
         if let Some(ref model) = invocation.model {
-            claude_cmd.push_str(&format!(" --model {}", shell_escape(model)));
+            let _ = write!(claude_cmd, " --model {}", shell_escape(model));
         }
 
         for arg in &invocation.extra_args {
-            claude_cmd.push_str(&format!(" {}", shell_escape(arg)));
+            let _ = write!(claude_cmd, " {}", shell_escape(arg));
         }
 
-        claude_cmd.push_str(&format!(" {}", escaped_prompt));
+        let _ = write!(claude_cmd, " {escaped_prompt}");
 
         let tee_flag = if append { " -a" } else { "" };
 
@@ -666,7 +667,7 @@ impl SshOps for SshRuntime {
         let output = ssh_command(&self.ssh_host, &remote_cmd).output().await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Failed to start remote tmux session: {}", stderr);
+            anyhow::bail!("Failed to start remote tmux session: {stderr}");
         }
         Ok(())
     }
