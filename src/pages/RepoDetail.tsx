@@ -2291,7 +2291,7 @@ export default function RepoDetail() {
           <p className="text-sm text-muted-foreground mt-2">Loading...</p>
         )}
         {!previewLoading && previewContent && (
-          <pre className="mt-3 p-3 bg-card border border-border rounded-md text-xs text-foreground overflow-x-auto max-h-48 overflow-y-auto">
+          <pre className="mt-3 p-3 bg-card border border-border rounded-md text-xs text-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
             {previewContent}
           </pre>
         )}
