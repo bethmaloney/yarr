@@ -154,8 +154,8 @@ Install the frontend package for the updater plugin API.
 - Add `@tauri-apps/plugin-updater` to dependencies
 
 **Checklist:**
-- [ ] `npm install @tauri-apps/plugin-updater`
-- [ ] Verify: `npx tsc --noEmit`
+- [x] `npm install @tauri-apps/plugin-updater`
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -177,12 +177,12 @@ Add the update check logic to the store, triggered during `initialize()`.
 - The `check()` call needs to be wrapped in a try/catch — it will throw in dev mode (no updater endpoint) and should fail silently
 
 **Checklist:**
-- [ ] Add update state fields to store interface
-- [ ] Implement `checkForUpdates` with toast notification
-- [ ] Implement `installUpdate` with confirmation dialog and downloading state
-- [ ] Implement `dismissUpdate`
-- [ ] Call `checkForUpdates()` in `initialize()`
-- [ ] Verify: `npx tsc --noEmit`
+- [x] Add update state fields to store interface
+- [x] Implement `checkForUpdates` with toast notification
+- [x] Implement `installUpdate` with confirmation dialog and downloading state
+- [x] Implement `dismissUpdate`
+- [x] Call `checkForUpdates()` in `initialize()`
+- [x] Verify: `npx tsc --noEmit`
 
 ---
 
@@ -243,7 +243,7 @@ Test that the update notification renders correctly when the updater plugin repo
 | 1 | Rust plugin dependency and registration | Done |
 | 2 | Updater config in tauri.conf.json | Done |
 | 3 | Release workflow signing env vars | Done |
-| 4 | JS plugin dependency | Not Started |
-| 5 | Zustand store update logic | Not Started |
+| 4 | JS plugin dependency | Done |
+| 5 | Zustand store update logic | Done |
 | 6 | Home toolbar version + update button | Not Started |
 | 7 | E2E test for update UI | Not Started |

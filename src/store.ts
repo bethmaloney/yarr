@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { check } from "@tauri-apps/plugin-updater";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { DEFAULTS } from "./config";
 import { saveRecent } from "./recents";
@@ -72,12 +74,20 @@ export interface AppStore {
   loadOneShotEntries: () => Promise<void>;
   resumeOneShot: (oneshotId: string) => Promise<void>;
 
+  // --- Auto-Updater ---
+  updateAvailable: { version: string; date: string; body: string } | null;
+  updateDownloading: boolean;
+  checkForUpdates: () => Promise<void>;
+  installUpdate: () => Promise<void>;
+  dismissUpdate: () => void;
+
   // --- Init ---
   initialize: () => () => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => {
   const recoveryInFlight = new Set<string>();
+  let pendingUpdate: Awaited<ReturnType<typeof check>> | null = null;
 
   async function syncActiveSession() {
     console.debug("[store] invoking get_active_sessions");
@@ -167,6 +177,61 @@ export const useAppStore = create<AppStore>((set, get) => {
     latestTraces: new Map(),
     oneShotEntries: new Map(),
     gitStatus: {},
+    updateAvailable: null,
+    updateDownloading: false,
+
+    checkForUpdates: async () => {
+      try {
+        const result = await check();
+        if (result && result.available) {
+          pendingUpdate = result;
+          set({
+            updateAvailable: {
+              version: result.version ?? "",
+              date: result.date ?? "",
+              body: result.body ?? "",
+            },
+          });
+          toast.info("Update available", {
+            description: `Version ${result.version} is ready to install.`,
+            action: {
+              label: "Install",
+              onClick: () => get().installUpdate(),
+            },
+          });
+        }
+      } catch {
+        // Fail silently — this happens in dev mode when no updater endpoint is configured
+      }
+    },
+
+    installUpdate: async () => {
+      if (!pendingUpdate || !get().updateAvailable) return;
+
+      const confirmed = await ask(
+        `Update to v${pendingUpdate.version}? The app will close and restart.`,
+      );
+      if (!confirmed) return;
+
+      set({ updateDownloading: true });
+      try {
+        await pendingUpdate.downloadAndInstall();
+        // updateDownloading intentionally stays true on success — the app restarts after install.
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+        set({ updateDownloading: false });
+      }
+    },
+
+    dismissUpdate: () => {
+      if (pendingUpdate) {
+        if (typeof pendingUpdate.close === "function") {
+          pendingUpdate.close().catch(() => {});
+        }
+        pendingUpdate = null;
+      }
+      set({ updateAvailable: null });
+    },
 
     initialize: () => {
       // 1. Load repos
@@ -607,7 +672,10 @@ export const useAppStore = create<AppStore>((set, get) => {
         syncActiveSession();
       }, 5000);
 
-      // 6. Return cleanup function
+      // 6. Check for updates (fire-and-forget)
+      get().checkForUpdates();
+
+      // 7. Return cleanup function
       return () => {
         listenPromise.then((fn) => fn());
         envWarningPromise.then((fn) => fn());

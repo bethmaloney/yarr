@@ -49,6 +49,14 @@ const { mockToast } = vi.hoisted(() => {
   };
 });
 
+const { mockCheck } = vi.hoisted(() => {
+  return { mockCheck: vi.fn() };
+});
+
+const { mockAsk } = vi.hoisted(() => {
+  return { mockAsk: vi.fn() };
+});
+
 const { mockData } = vi.hoisted(() => {
   return { mockData: new Map<string, unknown>() };
 });
@@ -92,6 +100,14 @@ vi.mock("./recents", () => ({
 
 vi.mock("sonner", () => ({
   toast: mockToast,
+}));
+
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: mockCheck,
+}));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  ask: mockAsk,
 }));
 
 // ---------------------------------------------------------------------------
@@ -221,6 +237,8 @@ beforeEach(() => {
     latestTraces: new Map(),
     oneShotEntries: new Map(),
     gitStatus: {},
+    updateAvailable: null,
+    updateDownloading: false,
   });
 });
 
@@ -3781,5 +3799,163 @@ describe("trace loading sets planProgress from plan_content", () => {
     expect(planProgress!.totalItems).toBe(4);
     expect(planProgress!.completedItems).toBe(4);
     expect(planProgress!.currentTask).toBeNull();
+  });
+});
+
+// ===========================================================================
+// auto-updater
+// ===========================================================================
+
+describe("auto-updater", () => {
+  describe("checkForUpdates", () => {
+    it("sets updateAvailable when an update is available", async () => {
+      const mockDownloadAndInstall = vi.fn();
+      mockCheck.mockResolvedValue({
+        available: true,
+        version: "1.2.0",
+        date: "2026-03-22",
+        body: "Bug fixes",
+        downloadAndInstall: mockDownloadAndInstall,
+      });
+
+      await useAppStore.getState().checkForUpdates();
+
+      expect(useAppStore.getState().updateAvailable).toEqual({
+        version: "1.2.0",
+        date: "2026-03-22",
+        body: "Bug fixes",
+      });
+    });
+
+    it("fires toast.info when update is available", async () => {
+      mockCheck.mockResolvedValue({
+        available: true,
+        version: "1.2.0",
+        date: "2026-03-22",
+        body: "Bug fixes",
+        downloadAndInstall: vi.fn(),
+      });
+
+      await useAppStore.getState().checkForUpdates();
+
+      expect(mockToast.info).toHaveBeenCalled();
+    });
+
+    it("does nothing when no update is available", async () => {
+      mockCheck.mockResolvedValue(null);
+
+      await useAppStore.getState().checkForUpdates();
+
+      expect(useAppStore.getState().updateAvailable).toBeNull();
+      expect(mockToast.info).not.toHaveBeenCalled();
+    });
+
+    it("fails silently when check() throws", async () => {
+      mockCheck.mockRejectedValue(new Error("dev mode"));
+
+      await useAppStore.getState().checkForUpdates();
+
+      expect(useAppStore.getState().updateAvailable).toBeNull();
+      expect(mockToast.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("installUpdate", () => {
+    it("downloads and installs when user confirms", async () => {
+      const mockDownloadAndInstall = vi.fn().mockResolvedValue(undefined);
+      mockCheck.mockResolvedValue({
+        available: true,
+        version: "1.2.0",
+        date: "2026-03-22",
+        body: "Bug fixes",
+        downloadAndInstall: mockDownloadAndInstall,
+      });
+      mockAsk.mockResolvedValue(true);
+
+      // First populate the update ref via checkForUpdates
+      await useAppStore.getState().checkForUpdates();
+
+      await useAppStore.getState().installUpdate();
+
+      expect(mockAsk).toHaveBeenCalled();
+      expect(mockDownloadAndInstall).toHaveBeenCalled();
+      expect(useAppStore.getState().updateDownloading).toBe(true);
+    });
+
+    it("does nothing when user declines", async () => {
+      const mockDownloadAndInstall = vi.fn();
+      mockCheck.mockResolvedValue({
+        available: true,
+        version: "1.2.0",
+        date: "2026-03-22",
+        body: "Bug fixes",
+        downloadAndInstall: mockDownloadAndInstall,
+      });
+      mockAsk.mockResolvedValue(false);
+
+      await useAppStore.getState().checkForUpdates();
+      await useAppStore.getState().installUpdate();
+
+      expect(mockDownloadAndInstall).not.toHaveBeenCalled();
+      expect(useAppStore.getState().updateDownloading).toBe(false);
+    });
+
+    it("shows toast.error on download failure", async () => {
+      const mockDownloadAndInstall = vi
+        .fn()
+        .mockRejectedValue(new Error("network error"));
+      mockCheck.mockResolvedValue({
+        available: true,
+        version: "1.2.0",
+        date: "2026-03-22",
+        body: "Bug fixes",
+        downloadAndInstall: mockDownloadAndInstall,
+      });
+      mockAsk.mockResolvedValue(true);
+
+      await useAppStore.getState().checkForUpdates();
+      await useAppStore.getState().installUpdate();
+
+      expect(mockToast.error).toHaveBeenCalled();
+      expect(useAppStore.getState().updateDownloading).toBe(false);
+    });
+
+    it("does nothing when no update available", async () => {
+      await useAppStore.getState().installUpdate();
+
+      expect(mockAsk).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("dismissUpdate", () => {
+    it("clears updateAvailable", async () => {
+      // Set up an update first
+      mockCheck.mockResolvedValue({
+        available: true,
+        version: "1.2.0",
+        date: "2026-03-22",
+        body: "Bug fixes",
+        downloadAndInstall: vi.fn(),
+      });
+      await useAppStore.getState().checkForUpdates();
+      expect(useAppStore.getState().updateAvailable).not.toBeNull();
+
+      useAppStore.getState().dismissUpdate();
+
+      expect(useAppStore.getState().updateAvailable).toBeNull();
+    });
+  });
+
+  describe("initialize triggers checkForUpdates", () => {
+    it("calls checkForUpdates during initialize", async () => {
+      mockCheck.mockResolvedValue(null);
+
+      useAppStore.getState().initialize();
+
+      // Flush microtasks so the fire-and-forget checkForUpdates completes
+      await vi.waitFor(() => {
+        expect(mockCheck).toHaveBeenCalled();
+      });
+    });
   });
 });
