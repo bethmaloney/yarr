@@ -52,10 +52,14 @@ Uses your existing Claude subscription auth. No API keys needed.
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
 - Platform-specific Tauri v2 dependencies — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
-### Install and run
+### Download
+
+Grab the latest build from [GitHub Releases](https://github.com/bethmaloney/yarr/releases).
+
+### Build from source
 
 ```bash
-git clone <repo-url> && cd yarr2
+git clone https://github.com/bethmaloney/yarr.git && cd yarr
 npm install
 npx tauri dev
 ```
@@ -70,3 +74,7 @@ npm test                  # Frontend unit tests (Vitest)
 npm run test:e2e          # E2E tests (Playwright)
 cd src-tauri && cargo check && cargo test  # Rust
 ```
+
+## License
+
+[MIT](LICENSE)
