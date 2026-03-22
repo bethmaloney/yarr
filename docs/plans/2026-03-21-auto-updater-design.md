@@ -138,8 +138,8 @@ Pass the signing secrets to `tauri-action` so it generates signed artifacts and 
 - These reference GitHub Actions secrets that must be configured in the repo settings
 
 **Checklist:**
-- [ ] Add signing env vars to the build step
-- [ ] Verify: YAML is valid
+- [x] Add signing env vars to the build step
+- [x] Verify: YAML is valid
 
 ---
 
@@ -242,7 +242,7 @@ Test that the update notification renders correctly when the updater plugin repo
 |------|-------------|--------|
 | 1 | Rust plugin dependency and registration | Done |
 | 2 | Updater config in tauri.conf.json | Done |
-| 3 | Release workflow signing env vars | Not Started |
+| 3 | Release workflow signing env vars | Done |
 | 4 | JS plugin dependency | Not Started |
 | 5 | Zustand store update logic | Not Started |
 | 6 | Home toolbar version + update button | Not Started |
