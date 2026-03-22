@@ -8,7 +8,7 @@ use tokio::process::Command;
 use tokio::sync::mpsc;
 use tracing::instrument;
 
-use super::{shell_env, AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
+use super::{shell_env, std_command, tokio_command, AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider, TaskAbortHandle};
 use crate::output::StreamEvent;
 
 /// State of a remote SSH session, determined by checking tmux and log file.
@@ -45,7 +45,7 @@ pub fn shell_escape(s: &str) -> String {
 /// The caller is responsible for properly escaping `remote_cmd` contents
 /// (e.g. using `shell_escape()` for individual arguments within the command).
 #[must_use] 
-pub fn ssh_command(host: &str, remote_cmd: &str) -> Command {
+pub fn ssh_command(host: &str, remote_cmd: &str) -> tokio::process::Command {
     if cfg!(target_os = "windows") {
         // Double-escape: inner shell_escape quotes for the remote shell (so $SHELL -lc
         // receives the full command as one argument), outer shell_escape quotes for WSL bash.
@@ -54,11 +54,11 @@ pub fn ssh_command(host: &str, remote_cmd: &str) -> Command {
             shell_escape(host),
             shell_escape(&shell_escape(remote_cmd))
         );
-        let mut cmd = Command::new("wsl");
+        let mut cmd = tokio_command("wsl");
         cmd.arg("-e").arg("bash").arg("-lc").arg(ssh_str);
         cmd
     } else {
-        let mut cmd = Command::new("ssh");
+        let mut cmd = tokio_command("ssh");
         cmd.arg("-o")
             .arg("BatchMode=yes")
             .arg("-o")
@@ -76,18 +76,18 @@ pub fn ssh_command(host: &str, remote_cmd: &str) -> Command {
 /// utilities (e.g. `test -d`, `echo`, `stat`) and don't depend on the
 /// remote user's custom PATH from their login shell startup files.
 #[must_use] 
-pub fn ssh_command_raw(host: &str, remote_cmd: &str) -> Command {
+pub fn ssh_command_raw(host: &str, remote_cmd: &str) -> tokio::process::Command {
     if cfg!(target_os = "windows") {
         let ssh_str = format!(
             "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} {}",
             shell_escape(host),
             shell_escape(remote_cmd)
         );
-        let mut cmd = Command::new("wsl");
+        let mut cmd = tokio_command("wsl");
         cmd.arg("-e").arg("bash").arg("-lc").arg(ssh_str);
         cmd
     } else {
-        let mut cmd = Command::new("ssh");
+        let mut cmd = tokio_command("ssh");
         cmd.arg("-o")
             .arg("BatchMode=yes")
             .arg("-o")
@@ -136,11 +136,11 @@ impl AbortHandle for SshAbortHandle {
                     shell_escape(&ssh_host),
                     shell_escape(&kill_cmd)
                 );
-                let _ = std::process::Command::new("wsl")
+                let _ = std_command("wsl")
                     .args(["-e", "bash", "-lc", &ssh_str])
                     .output();
             } else {
-                let _ = std::process::Command::new("ssh")
+                let _ = std_command("ssh")
                     .arg("-o")
                     .arg("BatchMode=yes")
                     .arg("-o")

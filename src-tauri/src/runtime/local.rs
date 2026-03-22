@@ -2,13 +2,12 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command;
 use tokio::sync::mpsc;
 use tracing::instrument;
 
 use super::{
-    get_or_init_local_env, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess,
-    RuntimeProvider, TaskAbortHandle,
+    get_or_init_local_env, tokio_command, ClaudeInvocation, CommandOutput, ProcessExit,
+    RunningProcess, RuntimeProvider, TaskAbortHandle,
 };
 use crate::output::StreamEvent;
 
@@ -76,7 +75,7 @@ impl RuntimeProvider for LocalRuntime {
 
         args.extend(invocation.extra_args.clone());
 
-        let mut cmd = Command::new(&self.claude_bin);
+        let mut cmd = tokio_command(&self.claude_bin);
         cmd.args(&args)
             .current_dir(&invocation.working_dir)
             .stdin(Stdio::piped())
@@ -181,7 +180,7 @@ impl RuntimeProvider for LocalRuntime {
     async fn health_check(&self) -> Result<()> {
         let env = self.resolve_env().await?;
         tracing::debug!(claude_bin = %self.claude_bin, "checking for claude binary");
-        let output = Command::new("which")
+        let output = tokio_command("which")
             .arg(&self.claude_bin)
             .envs(&env)
             .output()
@@ -207,7 +206,7 @@ impl RuntimeProvider for LocalRuntime {
     ) -> Result<CommandOutput> {
         tracing::debug!(command = %command, working_dir = %working_dir.display(), timeout_secs = timeout.as_secs(), "running command");
         let env = self.resolve_env().await?;
-        let child = Command::new("bash")
+        let child = tokio_command("bash")
             .arg("-c")
             .arg(command)
             .current_dir(working_dir)

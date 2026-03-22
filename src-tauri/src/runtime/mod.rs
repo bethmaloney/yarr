@@ -15,6 +15,33 @@ use tokio::sync::mpsc;
 
 use crate::output::StreamEvent;
 
+/// Windows constant to suppress console windows when spawning child processes.
+/// In release builds, a Tauri app has no attached console, so Windows creates
+/// a new visible console for each child process — this flag prevents that.
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+/// Create a `tokio::process::Command` that won't flash a console window on Windows.
+pub(crate) fn tokio_command(program: impl AsRef<std::ffi::OsStr>) -> tokio::process::Command {
+    #[allow(unused_mut)]
+    let mut cmd = tokio::process::Command::new(program);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
+/// Create a `std::process::Command` that won't flash a console window on Windows.
+pub(crate) fn std_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// Configuration for a single `claude -p` invocation
 #[derive(Debug, Clone)]
 pub struct ClaudeInvocation {
@@ -171,12 +198,12 @@ pub async fn get_or_init_local_env() -> &'static HashMap<String, String> {
                 |cmd| async move {
                     tracing::debug!(cmd = %cmd, "spawning env snapshot command");
                     let output = if cfg!(target_os = "windows") {
-                        tokio::process::Command::new("wsl")
+                        tokio_command("wsl")
                             .args(["-e", "bash", "-c", &cmd])
                             .output()
                             .await?
                     } else {
-                        tokio::process::Command::new("bash")
+                        tokio_command("bash")
                             .arg("-c")
                             .arg(&cmd)
                             .output()

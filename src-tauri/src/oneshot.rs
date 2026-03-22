@@ -11,7 +11,7 @@ use tracing::instrument;
 use crate::git_merge::{git_merge_push, GitMergeConfig, GitMergeEvent};
 use crate::prompt;
 use crate::runtime::ssh::{shell_escape, SshRuntime};
-use crate::runtime::RuntimeProvider;
+use crate::runtime::{std_command, RuntimeProvider};
 use crate::session::{AbortRegistry, GitSyncConfig, OnSessionEvent, SessionConfig, SessionEvent, SessionRunner};
 use crate::ssh_orchestrator::SshSessionOrchestrator;
 use crate::trace::{SessionOutcome, SessionTrace, TraceCollector};
@@ -192,7 +192,7 @@ pub async fn worktree_path_remote(
 fn resolve_unix_home() -> String {
     if cfg!(windows) {
         // Query WSL for the home directory
-        if let Ok(output) = std::process::Command::new("wsl")
+        if let Ok(output) = std_command("wsl")
             .args(["-e", "bash", "-lc", "echo $HOME"])
             .output()
         {

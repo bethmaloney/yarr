@@ -3,10 +3,9 @@ use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::{get_or_init_local_env, AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider};
+use super::{get_or_init_local_env, std_command, tokio_command, AbortHandle, ClaudeInvocation, CommandOutput, ProcessExit, RunningProcess, RuntimeProvider};
 use crate::output::StreamEvent;
 
 /// Abort handle that kills the WSL child process tree before aborting the task.
@@ -29,7 +28,7 @@ impl AbortHandle for WslAbortHandle {
                 // Use .output() which blocks, but that's fine — this is a
                 // dedicated thread that won't stall the async runtime.
                 // If WSL is hung these threads will linger but won't block anything.
-                let sigterm_result = std::process::Command::new("wsl")
+                let sigterm_result = std_command("wsl")
                     .args(["-e", "kill", "--", &format!("-{pid}")])
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
@@ -39,7 +38,7 @@ impl AbortHandle for WslAbortHandle {
                     Ok(out) => tracing::debug!(pid, success = out.status.success(), "WSL SIGTERM kill result"),
                     Err(e) => tracing::warn!(pid, error = %e, "WSL SIGTERM kill command failed"),
                 }
-                let sigkill_result = std::process::Command::new("wsl")
+                let sigkill_result = std_command("wsl")
                     .args(["-e", "kill", "-9", &pid.to_string()])
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
@@ -129,7 +128,7 @@ impl RuntimeProvider for WslRuntime {
         let prompt = invocation.prompt.clone();
         let start = std::time::Instant::now();
 
-        let mut child = Command::new("wsl")
+        let mut child = tokio_command("wsl")
             .args(["-e", "bash", "-c", &cmd_str])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -239,7 +238,7 @@ impl RuntimeProvider for WslRuntime {
         parts.push(format!("which {}", shell_escape(&self.claude_bin)));
         let cmd_str = parts.join(" && ");
 
-        let output = Command::new("wsl")
+        let output = tokio_command("wsl")
             .args(["-e", "bash", "-c", &cmd_str])
             .output()
             .await?;
@@ -273,7 +272,7 @@ impl RuntimeProvider for WslRuntime {
         parts.push(command.to_string());
         let cmd_str = parts.join(" && ");
 
-        let child = Command::new("wsl")
+        let child = tokio_command("wsl")
             .args(["-e", "bash", "-c", &cmd_str])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
