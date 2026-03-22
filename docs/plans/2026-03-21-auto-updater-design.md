@@ -117,10 +117,10 @@ Add the bundle and plugin configuration for the updater.
 - Add `"updater:default"` to the permissions array in `src-tauri/capabilities/default.json` (required for the frontend JS API to call the updater's IPC commands)
 
 **Checklist:**
-- [ ] Add `createUpdaterArtifacts` to bundle config
-- [ ] Add updater plugin config with endpoint URL and placeholder pubkey
-- [ ] Add `updater:default` permission to capabilities
-- [ ] Verify: JSON is valid
+- [x] Add `createUpdaterArtifacts` to bundle config
+- [x] Add updater plugin config with endpoint URL and placeholder pubkey
+- [x] Add `updater:default` permission to capabilities
+- [x] Verify: JSON is valid
 
 ---
 
@@ -241,7 +241,7 @@ Test that the update notification renders correctly when the updater plugin repo
 | Task | Description | Status |
 |------|-------------|--------|
 | 1 | Rust plugin dependency and registration | Done |
-| 2 | Updater config in tauri.conf.json | Not Started |
+| 2 | Updater config in tauri.conf.json | Done |
 | 3 | Release workflow signing env vars | Not Started |
 | 4 | JS plugin dependency | Not Started |
 | 5 | Zustand store update logic | Not Started |
