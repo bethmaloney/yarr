@@ -109,7 +109,7 @@ function makeLocalRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
     name: "my-project",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
     checks: [],
     ...overrides,
   } as RepoConfig;
@@ -124,7 +124,7 @@ function makeSshRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
     name: "remote-project",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
     checks: [],
     ...overrides,
   } as RepoConfig;

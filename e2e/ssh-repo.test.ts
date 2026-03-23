@@ -72,7 +72,7 @@ test.describe("RepoDetail for SSH repos", () => {
     name: "remote-app",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
   };
 
   test("shows SSH host and remote path in the header", async ({
@@ -145,7 +145,7 @@ test.describe("RepoDetail for Local repos", () => {
     name: "my-app",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
   };
 
   test("does not show Test Connection button for local repos", async ({
@@ -189,7 +189,7 @@ test.describe("Disconnected and Reconnecting states", () => {
     name: "remote-app",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
   };
 
   async function startRunningSession(
@@ -385,7 +385,7 @@ test.describe("Connection test checklist", () => {
     name: "remote-app",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
   };
 
   const stepNames = [

@@ -70,7 +70,7 @@ describe("resolveConfig", () => {
     expect(result.designEffortLevel.source).toBe("default");
     expect(result.maxIterations.value).toBe(40);
     expect(result.maxIterations.source).toBe("default");
-    expect(result.completionSignal.value).toBe("ALL TODO ITEMS COMPLETE");
+    expect(result.completionSignal.value).toBe("<promise>COMPLETE</promise>");
     expect(result.completionSignal.source).toBe("default");
     expect(result.createBranch.value).toBe(true);
     expect(result.createBranch.source).toBe("default");
@@ -267,7 +267,7 @@ describe("DEFAULTS", () => {
   });
 
   it("has expected completionSignal value", () => {
-    expect(DEFAULTS.completionSignal).toBe("ALL TODO ITEMS COMPLETE");
+    expect(DEFAULTS.completionSignal).toBe("<promise>COMPLETE</promise>");
   });
 
   it('has expected effortLevel value "medium"', () => {

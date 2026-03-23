@@ -17,7 +17,7 @@ if (!(window as any).__TAURI_INTERNALS__) {
       path: "/home/user/repos/my-project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
     },
     {
       id: "repo-beta",
@@ -25,7 +25,7 @@ if (!(window as any).__TAURI_INTERNALS__) {
       path: "/home/user/repos/api-service",
       model: "sonnet",
       maxIterations: 10,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
     },
   ];
 

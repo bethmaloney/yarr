@@ -7,7 +7,7 @@ const REPO_FIXTURE = {
   name: "my-project",
   model: "opus",
   maxIterations: 40,
-  completionSignal: "ALL TODO ITEMS COMPLETE",
+  completionSignal: "<promise>COMPLETE</promise>",
 };
 
 const TRACE = {

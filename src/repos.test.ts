@@ -47,7 +47,7 @@ describe("loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         checks: [],
       },
       {
@@ -76,7 +76,7 @@ describe("loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
       {
         id: "legacy-2",
@@ -104,7 +104,7 @@ describe("loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", repos);
@@ -123,7 +123,7 @@ describe("loadRepos", () => {
         name: "project",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", repos);
@@ -145,7 +145,7 @@ describe("loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
       {
         type: "ssh",
@@ -155,7 +155,7 @@ describe("loadRepos", () => {
         name: "project",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", reposWithoutChecks);
@@ -224,7 +224,7 @@ describe("addLocalRepo", () => {
         name: "first",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -305,7 +305,7 @@ describe("addSshRepo", () => {
         name: "first",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -377,7 +377,7 @@ describe("updateRepo", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -409,7 +409,7 @@ describe("updateRepo", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
       {
         type: "ssh",
@@ -419,7 +419,7 @@ describe("updateRepo", () => {
         name: "other",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         checks: [],
       },
     ];
@@ -452,7 +452,7 @@ describe("removeRepo", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -472,7 +472,7 @@ describe("removeRepo", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
       {
         type: "ssh",
@@ -482,7 +482,7 @@ describe("removeRepo", () => {
         name: "other",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         checks: [],
       },
     ];
@@ -513,7 +513,7 @@ describe("gitSync on repo configs", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         gitSync,
       },
     ];
@@ -539,7 +539,7 @@ describe("gitSync on repo configs", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -565,7 +565,7 @@ describe("gitSync on repo configs", () => {
         name: "project",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         gitSync,
       },
     ];
@@ -596,7 +596,7 @@ describe("gitSync on repo configs", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         gitSync,
       },
     ];
@@ -669,7 +669,7 @@ describe("RepoConfig with gitSync field", () => {
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       gitSync: {
         enabled: true,
         conflictPrompt: "fix merge conflicts",
@@ -712,7 +712,7 @@ describe("RepoConfig with gitSync field", () => {
       name: "project",
       model: "opus",
       maxIterations: 30,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       gitSync: {
         enabled: false,
         maxPushRetries: 2,
@@ -776,7 +776,7 @@ describe("RepoConfig with createBranch field", () => {
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       createBranch: true,
     } satisfies RepoConfig;
 
@@ -792,7 +792,7 @@ describe("RepoConfig with createBranch field", () => {
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       createBranch: false,
     } satisfies RepoConfig;
 
@@ -826,7 +826,7 @@ describe("RepoConfig with createBranch field", () => {
       name: "project",
       model: "opus",
       maxIterations: 30,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       createBranch: true,
     } satisfies RepoConfig;
 
@@ -845,7 +845,7 @@ describe("createBranch round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         createBranch: true,
       },
     ];
@@ -867,7 +867,7 @@ describe("createBranch round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -889,7 +889,7 @@ describe("createBranch round-trip through loadRepos", () => {
         name: "project",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         createBranch: false,
       },
     ];
@@ -913,7 +913,7 @@ describe("updateRepo preserves createBranch", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         createBranch: true,
       },
     ];
@@ -949,7 +949,7 @@ describe("RepoConfig with autoFetch field", () => {
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       autoFetch: true,
     } satisfies RepoConfig;
 
@@ -965,7 +965,7 @@ describe("RepoConfig with autoFetch field", () => {
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       autoFetch: false,
     } satisfies RepoConfig;
 
@@ -999,7 +999,7 @@ describe("RepoConfig with autoFetch field", () => {
       name: "project",
       model: "opus",
       maxIterations: 30,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       autoFetch: true,
     } satisfies RepoConfig;
 
@@ -1018,7 +1018,7 @@ describe("autoFetch round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         autoFetch: true,
       },
     ];
@@ -1040,7 +1040,7 @@ describe("autoFetch round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -1062,7 +1062,7 @@ describe("autoFetch round-trip through loadRepos", () => {
         name: "project",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         autoFetch: false,
       },
     ];
@@ -1086,7 +1086,7 @@ describe("updateRepo preserves autoFetch", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         autoFetch: true,
       },
     ];
@@ -1122,7 +1122,7 @@ describe("RepoConfig with movePlansToCompleted field", () => {
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       movePlansToCompleted: true,
     } satisfies RepoConfig;
 
@@ -1138,7 +1138,7 @@ describe("RepoConfig with movePlansToCompleted field", () => {
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       movePlansToCompleted: false,
     } satisfies RepoConfig;
 
@@ -1173,7 +1173,7 @@ describe("RepoConfig with movePlansToCompleted field", () => {
       name: "project",
       model: "opus",
       maxIterations: 30,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       movePlansToCompleted: true,
     } satisfies RepoConfig;
 
@@ -1192,7 +1192,7 @@ describe("movePlansToCompleted round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         movePlansToCompleted: true,
       },
     ];
@@ -1214,7 +1214,7 @@ describe("movePlansToCompleted round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -1236,7 +1236,7 @@ describe("movePlansToCompleted round-trip through loadRepos", () => {
         name: "project",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         movePlansToCompleted: false,
       },
     ];
@@ -1260,7 +1260,7 @@ describe("updateRepo preserves movePlansToCompleted", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         movePlansToCompleted: true,
       },
     ];
@@ -1298,7 +1298,7 @@ describe("RepoConfig with effortLevel fields", () => {
       effortLevel: "high",
       designEffortLevel: "max",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
     } satisfies RepoConfig;
     expect(repo.effortLevel).toBe("high");
     expect(repo.designEffortLevel).toBe("max");
@@ -1334,7 +1334,7 @@ describe("RepoConfig with effortLevel fields", () => {
       effortLevel: "low",
       designEffortLevel: "medium",
       maxIterations: 30,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
     } satisfies RepoConfig;
     expect(repo.type).toBe("ssh");
     expect(repo.effortLevel).toBe("low");
@@ -1351,7 +1351,7 @@ describe("RepoConfig with designPromptFile field", () => {
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       designPromptFile: ".yarr/prompts/design.md",
     } satisfies RepoConfig;
 
@@ -1385,7 +1385,7 @@ describe("RepoConfig with designPromptFile field", () => {
       name: "project",
       model: "opus",
       maxIterations: 30,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       designPromptFile: ".yarr/prompts/design.md",
     } satisfies RepoConfig;
 
@@ -1422,7 +1422,7 @@ describe("designPromptFile round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         designPromptFile: ".yarr/prompts/design.md",
       },
     ];
@@ -1444,7 +1444,7 @@ describe("designPromptFile round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -1466,7 +1466,7 @@ describe("designPromptFile round-trip through loadRepos", () => {
         name: "project",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         designPromptFile: ".yarr/prompts/design.md",
       },
     ];
@@ -1490,7 +1490,7 @@ describe("updateRepo preserves designPromptFile", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         designPromptFile: ".yarr/prompts/design.md",
       },
     ];
@@ -1526,7 +1526,7 @@ describe("RepoConfig with implementationPromptFile field", () => {
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       implementationPromptFile: ".yarr/prompts/implementation.md",
     } satisfies RepoConfig;
 
@@ -1563,7 +1563,7 @@ describe("RepoConfig with implementationPromptFile field", () => {
       name: "project",
       model: "opus",
       maxIterations: 30,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       implementationPromptFile: ".yarr/prompts/implementation.md",
     } satisfies RepoConfig;
 
@@ -1603,7 +1603,7 @@ describe("implementationPromptFile round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         implementationPromptFile: ".yarr/prompts/implementation.md",
       },
     ];
@@ -1627,7 +1627,7 @@ describe("implementationPromptFile round-trip through loadRepos", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ];
     mockData.set("repos", existing);
@@ -1649,7 +1649,7 @@ describe("implementationPromptFile round-trip through loadRepos", () => {
         name: "project",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         implementationPromptFile: ".yarr/prompts/implementation.md",
       },
     ];
@@ -1675,7 +1675,7 @@ describe("updateRepo preserves implementationPromptFile", () => {
         name: "yarr",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         implementationPromptFile: ".yarr/prompts/implementation.md",
       },
     ];
@@ -1713,7 +1713,7 @@ describe("RepoConfig with both designPromptFile and implementationPromptFile", (
       name: "project",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       designPromptFile: ".yarr/prompts/design.md",
       implementationPromptFile: ".yarr/prompts/implementation.md",
     } satisfies RepoConfig;
@@ -1734,7 +1734,7 @@ describe("RepoConfig with both designPromptFile and implementationPromptFile", (
       name: "project",
       model: "opus",
       maxIterations: 30,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       designPromptFile: ".yarr/prompts/design.md",
       implementationPromptFile: ".yarr/prompts/implementation.md",
     } satisfies RepoConfig;

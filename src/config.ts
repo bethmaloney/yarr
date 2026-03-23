@@ -5,7 +5,7 @@ export const DEFAULTS = {
   effortLevel: "medium",
   designEffortLevel: "high",
   maxIterations: 40,
-  completionSignal: "ALL TODO ITEMS COMPLETE",
+  completionSignal: "<promise>COMPLETE</promise>",
   createBranch: true,
   autoFetch: false,
   plansDir: "docs/plans/",
