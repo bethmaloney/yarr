@@ -11,7 +11,7 @@ const repoStoreData = {
       effortLevel: "medium",
       designEffortLevel: "high",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
     },
   ],
 };
@@ -278,7 +278,7 @@ test.describe("Effort level persistence", () => {
           effortLevel: "max",
           designEffortLevel: "high",
           maxIterations: 40,
-          completionSignal: "ALL TODO ITEMS COMPLETE",
+          completionSignal: "<promise>COMPLETE</promise>",
         },
       ],
     };

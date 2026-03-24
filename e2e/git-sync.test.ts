@@ -8,7 +8,7 @@ const localRepo = {
   name: "my-app",
   model: "opus",
   maxIterations: 40,
-  completionSignal: "ALL TODO ITEMS COMPLETE",
+  completionSignal: "<promise>COMPLETE</promise>",
 };
 
 const localRepoWithGitSync = {

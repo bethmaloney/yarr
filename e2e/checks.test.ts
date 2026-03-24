@@ -7,7 +7,7 @@ const repoWithoutChecks = {
   name: "my-app",
   model: "opus",
   maxIterations: 40,
-  completionSignal: "ALL TODO ITEMS COMPLETE",
+  completionSignal: "<promise>COMPLETE</promise>",
   checks: [],
 };
 
@@ -17,7 +17,7 @@ const repoWithOneCheck = {
   name: "my-app",
   model: "opus",
   maxIterations: 40,
-  completionSignal: "ALL TODO ITEMS COMPLETE",
+  completionSignal: "<promise>COMPLETE</promise>",
   checks: [
     {
       name: "clippy",
@@ -35,7 +35,7 @@ const repoWithTwoChecks = {
   name: "my-app",
   model: "opus",
   maxIterations: 40,
-  completionSignal: "ALL TODO ITEMS COMPLETE",
+  completionSignal: "<promise>COMPLETE</promise>",
   checks: [
     {
       name: "clippy",

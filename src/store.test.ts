@@ -128,7 +128,7 @@ function makeLocalRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
     name: "yarr",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
     checks: [],
     ...overrides,
   } as RepoConfig;
@@ -143,7 +143,7 @@ function makeSshRepo(overrides: Partial<RepoConfig> = {}): RepoConfig {
     name: "other",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
     checks: [],
     ...overrides,
   } as RepoConfig;
@@ -1287,7 +1287,7 @@ describe("runSession", () => {
       expect.objectContaining({
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       }),
     );
   });
@@ -1611,7 +1611,7 @@ describe("OneShotEntry initial state", () => {
 describe("runOneShot", () => {
   const repo = makeLocalRepo({
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
     checks: [],
     gitSync: {
       enabled: true,
@@ -1707,7 +1707,7 @@ describe("runOneShot", () => {
       "run_oneshot",
       expect.objectContaining({
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
         checks: [],
         gitSync: {
           enabled: true,
@@ -1723,7 +1723,7 @@ describe("runOneShot", () => {
   it("passes custom plansDir from repo config to invoke", async () => {
     const repoWithPlansDir = makeLocalRepo({
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       checks: [],
       gitSync: {
         enabled: true,
@@ -1763,7 +1763,7 @@ describe("runOneShot", () => {
   it("sends null for plansDir when repo config has no plansDir", async () => {
     const repoWithoutPlansDir = makeLocalRepo({
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       checks: [],
     });
     useAppStore.setState({ repos: [repoWithoutPlansDir] });
@@ -3260,7 +3260,7 @@ describe("resumeOneShot", () => {
   it("sends null for plansDir when repo has no plansDir", async () => {
     const repo = makeLocalRepo({
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
       checks: [],
       // no plansDir
     });

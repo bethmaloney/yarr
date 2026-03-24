@@ -9,7 +9,7 @@ const repoStoreData = {
       name: "my-app",
       model: "opus",
       maxIterations: 40,
-      completionSignal: "ALL TODO ITEMS COMPLETE",
+      completionSignal: "<promise>COMPLETE</promise>",
     },
   ],
 };
@@ -211,7 +211,7 @@ test.describe("1-Shot launch from RepoDetail", () => {
     });
     // Verify repo config is forwarded to the 1-shot backend
     expect(args.maxIterations).toBe(40);
-    expect(args.completionSignal).toBe("ALL TODO ITEMS COMPLETE");
+    expect(args.completionSignal).toBe("<promise>COMPLETE</promise>");
   });
 
   test("after launch, navigates to OneShotDetail page", async ({
@@ -852,7 +852,7 @@ test.describe("SSH 1-Shot happy path", () => {
         remotePath: "/home/user/projects/remote-app",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ],
   };
@@ -928,7 +928,7 @@ test.describe("SSH 1-Shot happy path", () => {
       remotePath: "/home/user/projects/remote-app",
     });
     expect(args.maxIterations).toBe(40);
-    expect(args.completionSignal).toBe("ALL TODO ITEMS COMPLETE");
+    expect(args.completionSignal).toBe("<promise>COMPLETE</promise>");
   });
 
   test("full lifecycle with SSH worktree path displayed with host prefix", async ({
@@ -1031,7 +1031,7 @@ test.describe("SSH 1-Shot stop", () => {
         remotePath: "/home/user/projects/remote-app",
         model: "opus",
         maxIterations: 40,
-        completionSignal: "ALL TODO ITEMS COMPLETE",
+        completionSignal: "<promise>COMPLETE</promise>",
       },
     ],
   };

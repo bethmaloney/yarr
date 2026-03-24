@@ -27,7 +27,7 @@ function makeLocalRepo(
     name: "my-project",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
     checks: [],
     ...overrides,
   } as RepoConfig & { type: "local" };
@@ -45,7 +45,7 @@ function makeSshRepo(
     name: "remote-project",
     model: "opus",
     maxIterations: 40,
-    completionSignal: "ALL TODO ITEMS COMPLETE",
+    completionSignal: "<promise>COMPLETE</promise>",
     checks: [],
     ...overrides,
   } as RepoConfig & { type: "ssh" };
