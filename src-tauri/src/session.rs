@@ -1054,7 +1054,22 @@ impl SessionRunner {
                             }
                         }
                         StreamEvent::Assistant(assistant) => {
-                            if assistant.parent_tool_use_id.is_none() {
+                            if let Some(parent_id) = &assistant.parent_tool_use_id {
+                                let parent_id = parent_id.clone();
+                                if let Some(ref usage) = assistant.message.usage {
+                                    let context_tokens =
+                                        usage.input_tokens.unwrap_or(0)
+                                        + usage.cache_read_input_tokens.unwrap_or(0)
+                                        + usage.cache_creation_input_tokens.unwrap_or(0);
+                                    let peak = sub_agent_peaks.entry(parent_id.clone()).or_insert(0);
+                                    *peak = (*peak).max(context_tokens);
+                                    self.emit(&SessionEvent::SubAgentContextUpdated {
+                                        iteration,
+                                        parent_tool_use_id: parent_id,
+                                        context_tokens,
+                                    });
+                                }
+                            } else {
                                 for block in &assistant.message.content {
                                     match block {
                                         ContentBlock::ToolUse { id, name, input } => {
@@ -1092,21 +1107,6 @@ impl SessionRunner {
                                     self.emit(&SessionEvent::ContextUpdated {
                                         iteration,
                                         context_tokens: last_context_tokens,
-                                    });
-                                }
-                            } else {
-                                let parent_id = assistant.parent_tool_use_id.as_ref().unwrap().clone();
-                                if let Some(ref usage) = assistant.message.usage {
-                                    let context_tokens =
-                                        usage.input_tokens.unwrap_or(0)
-                                        + usage.cache_read_input_tokens.unwrap_or(0)
-                                        + usage.cache_creation_input_tokens.unwrap_or(0);
-                                    let peak = sub_agent_peaks.entry(parent_id.clone()).or_insert(0);
-                                    *peak = (*peak).max(context_tokens);
-                                    self.emit(&SessionEvent::SubAgentContextUpdated {
-                                        iteration,
-                                        parent_tool_use_id: parent_id,
-                                        context_tokens,
                                     });
                                 }
                             }
