@@ -5,4 +5,5 @@ playwright-report/
 test-results/
 .claude/
 docs/
+screenshots/
 *.md
