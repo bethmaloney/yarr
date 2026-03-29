@@ -55,7 +55,7 @@
     "prettier": "^3.8.1",
     "tailwind-merge": "^3",
     "tailwindcss": "^4",
-    "typescript": "^5",
+    "typescript": "^6",
     "typescript-eslint": "^8.57.2",
     "vite": "^6",
     "vitest": "^4.1.1"
