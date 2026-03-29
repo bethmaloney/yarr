@@ -12,6 +12,7 @@ import {
   addLocalRepo as reposAddLocalRepo,
   addSshRepo as reposAddSshRepo,
   updateRepo as reposUpdateRepo,
+  removeRepo as reposRemoveRepo,
   type RepoConfig,
 } from "./repos";
 import type {
@@ -33,6 +34,7 @@ export interface AppStore {
   addLocalRepo: (path: string) => Promise<void>;
   addSshRepo: (host: string, path: string) => Promise<void>;
   updateRepo: (repo: RepoConfig) => Promise<void>;
+  removeRepo: (id: string) => Promise<void>;
 
   // --- Sessions ---
   sessions: Map<string, SessionState>;
@@ -776,6 +778,18 @@ export const useAppStore = create<AppStore>((set, get) => {
       await reposUpdateRepo(repo);
       const repos = await reposLoadRepos();
       set({ repos });
+    },
+
+    removeRepo: async (id: string) => {
+      await reposRemoveRepo(id);
+      const repos = await reposLoadRepos();
+      const sessions = new Map(get().sessions);
+      sessions.delete(id);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [id]: _, ...gitStatus } = get().gitStatus;
+      const latestTraces = new Map(get().latestTraces);
+      latestTraces.delete(id);
+      set({ repos, sessions, gitStatus, latestTraces });
     },
 
     runOneShot: async (

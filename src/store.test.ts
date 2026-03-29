@@ -25,15 +25,21 @@ const { mockInvoke, mockListen, mockListenerCallback, mockUnlisten } =
     };
   });
 
-const { mockLoadRepos, mockAddLocalRepo, mockAddSshRepo, mockUpdateRepo } =
-  vi.hoisted(() => {
-    return {
-      mockLoadRepos: vi.fn(),
-      mockAddLocalRepo: vi.fn(),
-      mockAddSshRepo: vi.fn(),
-      mockUpdateRepo: vi.fn(),
-    };
-  });
+const {
+  mockLoadRepos,
+  mockAddLocalRepo,
+  mockAddSshRepo,
+  mockUpdateRepo,
+  mockRemoveRepo,
+} = vi.hoisted(() => {
+  return {
+    mockLoadRepos: vi.fn(),
+    mockAddLocalRepo: vi.fn(),
+    mockAddSshRepo: vi.fn(),
+    mockUpdateRepo: vi.fn(),
+    mockRemoveRepo: vi.fn(),
+  };
+});
 
 const { mockSaveRecent } = vi.hoisted(() => {
   return { mockSaveRecent: vi.fn() };
@@ -92,6 +98,7 @@ vi.mock("./repos", () => ({
   addLocalRepo: mockAddLocalRepo,
   addSshRepo: mockAddSshRepo,
   updateRepo: mockUpdateRepo,
+  removeRepo: mockRemoveRepo,
 }));
 
 vi.mock("./recents", () => ({
@@ -228,6 +235,7 @@ beforeEach(() => {
   mockAddLocalRepo.mockResolvedValue(undefined);
   mockAddSshRepo.mockResolvedValue(undefined);
   mockUpdateRepo.mockResolvedValue(undefined);
+  mockRemoveRepo.mockResolvedValue(undefined);
   mockSaveRecent.mockResolvedValue(undefined);
 
   // Reset the store state to initial values between tests
@@ -1588,6 +1596,124 @@ describe("repo actions", () => {
 
       expect(mockLoadRepos).toHaveBeenCalled();
       expect(useAppStore.getState().repos).toEqual([updatedRepo]);
+    });
+  });
+
+  describe("removeRepo", () => {
+    it("calls removeRepo from repos.ts", async () => {
+      mockLoadRepos.mockResolvedValue([]);
+
+      await useAppStore.getState().removeRepo("repo-1");
+
+      expect(mockRemoveRepo).toHaveBeenCalledWith("repo-1");
+    });
+
+    it("reloads repos after removing", async () => {
+      const repo1 = makeLocalRepo({ id: "repo-1", name: "yarr" });
+      const repo2 = makeSshRepo({ id: "repo-2", name: "other" });
+      useAppStore.setState({ repos: [repo1, repo2] });
+
+      // After removal, only repo-2 remains
+      mockLoadRepos.mockResolvedValue([repo2]);
+
+      await useAppStore.getState().removeRepo("repo-1");
+
+      expect(mockLoadRepos).toHaveBeenCalled();
+      expect(useAppStore.getState().repos).toEqual([repo2]);
+    });
+
+    it("cleans up sessions entry for removed repo", async () => {
+      useAppStore.setState({
+        sessions: new Map([
+          ["repo-1", { running: false, events: [], trace: null, error: null }],
+        ]),
+      });
+      mockLoadRepos.mockResolvedValue([]);
+
+      await useAppStore.getState().removeRepo("repo-1");
+
+      expect(useAppStore.getState().sessions.has("repo-1")).toBe(false);
+    });
+
+    it("cleans up gitStatus entry for removed repo", async () => {
+      useAppStore.setState({
+        gitStatus: {
+          "repo-1": {
+            status: null,
+            lastChecked: null,
+            loading: false,
+            error: null,
+          },
+        },
+      });
+      mockLoadRepos.mockResolvedValue([]);
+
+      await useAppStore.getState().removeRepo("repo-1");
+
+      expect(useAppStore.getState().gitStatus).not.toHaveProperty("repo-1");
+    });
+
+    it("cleans up latestTraces entry for removed repo", async () => {
+      useAppStore.setState({
+        latestTraces: new Map([["repo-1", makeTrace()]]),
+      });
+      mockLoadRepos.mockResolvedValue([]);
+
+      await useAppStore.getState().removeRepo("repo-1");
+
+      expect(useAppStore.getState().latestTraces.has("repo-1")).toBe(false);
+    });
+
+    it("does not affect other repos' state", async () => {
+      const repo2 = makeSshRepo({ id: "repo-2", name: "other" });
+      const repo2Session = { running: true, events: [], trace: null, error: null };
+      const repo2GitStatus = {
+        status: null,
+        lastChecked: null,
+        loading: false,
+        error: null,
+      };
+      const repo2Trace = makeTrace({
+        session_id: "sess-def",
+        repo_id: "repo-2",
+      });
+
+      useAppStore.setState({
+        sessions: new Map([
+          ["repo-1", { running: false, events: [], trace: null, error: null }],
+          ["repo-2", repo2Session],
+        ]),
+        gitStatus: {
+          "repo-1": {
+            status: null,
+            lastChecked: null,
+            loading: false,
+            error: null,
+          },
+          "repo-2": repo2GitStatus,
+        },
+        latestTraces: new Map([
+          ["repo-1", makeTrace()],
+          ["repo-2", repo2Trace],
+        ]),
+      });
+      mockLoadRepos.mockResolvedValue([repo2]);
+
+      await useAppStore.getState().removeRepo("repo-1");
+
+      // repo-2 entries should be untouched
+      expect(useAppStore.getState().sessions.has("repo-2")).toBe(true);
+      expect(useAppStore.getState().sessions.get("repo-2")).toBe(repo2Session);
+      expect(useAppStore.getState().gitStatus["repo-2"]).toBe(repo2GitStatus);
+      expect(useAppStore.getState().latestTraces.has("repo-2")).toBe(true);
+      expect(useAppStore.getState().latestTraces.get("repo-2")).toBe(
+        repo2Trace,
+      );
+
+      // repo-1 entries should be gone
+      expect(useAppStore.getState().sessions.has("repo-1")).toBe(false);
+      expect(useAppStore.getState().gitStatus).not.toHaveProperty("repo-1");
+      expect(useAppStore.getState().latestTraces.has("repo-1")).toBe(false);
     });
   });
 });
