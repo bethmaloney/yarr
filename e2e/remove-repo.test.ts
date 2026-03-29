@@ -172,13 +172,13 @@ test.describe("RepoCard hover remove button", () => {
     const card = page.getByRole("button", { name: /my-app/ });
     await expect(card).toBeVisible();
 
-    // The remove button should not be visible before hover
+    // The remove button should be transparent before hover (opacity-0)
     const removeBtn = card.getByLabel("Remove repository");
-    await expect(removeBtn).toBeHidden();
+    await expect(removeBtn).toHaveCSS("opacity", "0");
 
     // Hover over the card to reveal the remove button
     await card.hover();
-    await expect(removeBtn).toBeVisible();
+    await expect(removeBtn).toHaveCSS("opacity", "1");
   });
 
   // -------------------------------------------------------------------------
