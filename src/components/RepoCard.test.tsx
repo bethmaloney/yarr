@@ -1078,4 +1078,60 @@ describe("RepoCard", () => {
     const fill = screen.getByTestId("repo-progress-fill");
     expect(fill.style.width).toBe("50%");
   });
+
+  // =========================================================================
+  // 17. onRemove behavior
+  // =========================================================================
+
+  describe("onRemove", () => {
+    it("renders remove button when onRemove is provided", () => {
+      render(
+        <RepoCard
+          repo={makeLocalRepo()}
+          status="idle"
+          onClick={vi.fn()}
+          onRemove={vi.fn()}
+        />,
+      );
+      expect(screen.getByLabelText("Remove repository")).toBeInTheDocument();
+    });
+
+    it("does not render remove button when onRemove is omitted", () => {
+      render(
+        <RepoCard repo={makeLocalRepo()} status="idle" onClick={vi.fn()} />,
+      );
+      expect(
+        screen.queryByLabelText("Remove repository"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("clicking remove button calls onRemove", () => {
+      const mockRemove = vi.fn();
+      render(
+        <RepoCard
+          repo={makeLocalRepo()}
+          status="idle"
+          onClick={vi.fn()}
+          onRemove={mockRemove}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText("Remove repository"));
+      expect(mockRemove).toHaveBeenCalledTimes(1);
+    });
+
+    it("clicking remove button does not call onClick", () => {
+      const mockClick = vi.fn();
+      const mockRemove = vi.fn();
+      render(
+        <RepoCard
+          repo={makeLocalRepo()}
+          status="idle"
+          onClick={mockClick}
+          onRemove={mockRemove}
+        />,
+      );
+      fireEvent.click(screen.getByLabelText("Remove repository"));
+      expect(mockClick).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { timeAgo } from "../time";
 import { sessionContextColor } from "../context-bar";
 import type { RepoConfig } from "../repos";
@@ -20,6 +21,7 @@ interface RepoCardProps {
   planProgress?: PlanProgress | null;
   onClick: () => void;
   onPlanClick?: () => void;
+  onRemove?: () => void;
 }
 
 const statusColors: Record<RepoStatus, string> = {
@@ -54,6 +56,7 @@ export function RepoCard({
   planProgress,
   onClick,
   onPlanClick,
+  onRemove,
 }: RepoCardProps) {
   const repoFullPath =
     repo.type === "ssh" ? `${repo.sshHost}:${repo.remotePath}` : repo.path;
@@ -86,10 +89,24 @@ export function RepoCard({
 
   return (
     <button
-      className="flex flex-col gap-1.5 p-4 px-5 bg-card border border-border rounded-md cursor-pointer text-left w-full h-full transition-colors hover:border-primary hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+      className="group relative flex flex-col gap-1.5 p-4 px-5 bg-card border border-border rounded-md cursor-pointer text-left w-full h-full transition-colors hover:border-primary hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
       onClick={onClick}
       aria-label={`${repo.name} \u2014 ${statusLabels[status]}`}
     >
+      {onRemove && (
+        <div
+          role="button"
+          tabIndex={0}
+          className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-opacity duration-150"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          aria-label="Remove repository"
+        >
+          <X className="size-3.5" />
+        </div>
+      )}
       <div className="flex flex-col gap-1 min-w-0">
         <span className="text-lg font-semibold text-foreground truncate">
           {repo.name}

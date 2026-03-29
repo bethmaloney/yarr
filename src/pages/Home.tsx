@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, ask } from "@tauri-apps/plugin-dialog";
 import { Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useAppStore } from "../store";
 import { useGitStatus } from "../hooks/useGitStatus";
 import { getPhaseFromEvents, phaseLabel } from "../oneshot-helpers";
@@ -34,6 +35,7 @@ export default function Home() {
   const updateAvailable = useAppStore((s) => s.updateAvailable);
   const updateDownloading = useAppStore((s) => s.updateDownloading);
   const installUpdate = useAppStore((s) => s.installUpdate);
+  const removeRepo = useAppStore((s) => s.removeRepo);
 
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [addMode, setAddMode] = useState<null | "choosing" | "ssh-form">(null);
@@ -221,6 +223,20 @@ export default function Home() {
     setAddMode(null);
   }
 
+  async function handleRemoveRepo(repoId: string, repoName: string) {
+    try {
+      const confirmed = await ask(
+        `Remove "${repoName}" from Yarr? The repository on disk will not be affected.`,
+        { title: "Remove Repository?", kind: "warning" },
+      );
+      if (!confirmed) return;
+      await removeRepo(repoId);
+      toast.success("Repository removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   return (
     <main className="max-w-[900px] mx-auto p-8">
       <Breadcrumbs crumbs={[{ label: "Home" }]} />
@@ -311,6 +327,9 @@ export default function Home() {
                   planProgress={sessions.get(item.repo.id)?.planProgress}
                   onClick={() => navigate(`/repo/${item.repo.id}`)}
                   onPlanClick={openPlanPanel(item.repo.id)}
+                  onRemove={() =>
+                    handleRemoveRepo(item.repo.id, item.repo.name)
+                  }
                 />
               ) : (
                 <OneShotCard

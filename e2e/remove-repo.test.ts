@@ -154,3 +154,109 @@ test.describe("Remove Repository button", () => {
     await expect(sheet).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Dashboard card remove button
+// ---------------------------------------------------------------------------
+test.describe("RepoCard hover remove button", () => {
+  // -------------------------------------------------------------------------
+  // 1. Remove button appears on RepoCard hover
+  // -------------------------------------------------------------------------
+  test("remove button appears on RepoCard hover", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({ storeData: { repos: [localRepo] } });
+    await page.goto("/");
+
+    const card = page.getByRole("button", { name: /my-app/ });
+    await expect(card).toBeVisible();
+
+    // The remove button should not be visible before hover
+    const removeBtn = card.getByLabel("Remove repository");
+    await expect(removeBtn).toBeHidden();
+
+    // Hover over the card to reveal the remove button
+    await card.hover();
+    await expect(removeBtn).toBeVisible();
+  });
+
+  // -------------------------------------------------------------------------
+  // 2. Clicking remove button on card shows confirmation and removes repo
+  // -------------------------------------------------------------------------
+  test("clicking remove button on card shows confirmation and removes repo", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({ storeData: { repos: [localRepo] } });
+    await page.goto("/");
+
+    const card = page.getByRole("button", { name: /my-app/ });
+    await card.hover();
+
+    const removeBtn = card.getByLabel("Remove repository");
+    await removeBtn.click();
+
+    // Should stay on the Home page
+    await expect(page).toHaveURL("/");
+
+    // Verify success toast
+    const toast = page.locator("[data-sonner-toast]", {
+      hasText: "Repository removed",
+    });
+    await expect(toast).toBeVisible({ timeout: 5000 });
+
+    // Verify the repo card is no longer visible
+    await expect(card).toBeHidden();
+  });
+
+  // -------------------------------------------------------------------------
+  // 3. Clicking remove button does nothing when dialog is cancelled
+  // -------------------------------------------------------------------------
+  test("clicking remove button does nothing when dialog is cancelled", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({
+      storeData: { repos: [localRepo] },
+      invokeHandlers: {
+        "plugin:dialog|ask": () => false,
+      },
+    });
+    await page.goto("/");
+
+    const card = page.getByRole("button", { name: /my-app/ });
+    await card.hover();
+
+    const removeBtn = card.getByLabel("Remove repository");
+    await removeBtn.click();
+
+    // The repo card should still be visible
+    await expect(card).toBeVisible();
+  });
+
+  // -------------------------------------------------------------------------
+  // 4. Remove button click does not navigate to repo detail
+  // -------------------------------------------------------------------------
+  test("remove button click does not navigate to repo detail", async ({
+    page,
+    mockTauri,
+  }) => {
+    await mockTauri({ storeData: { repos: [localRepo] } });
+    await page.goto("/");
+
+    const card = page.getByRole("button", { name: /my-app/ });
+    await card.hover();
+
+    const removeBtn = card.getByLabel("Remove repository");
+    await removeBtn.click();
+
+    // After confirming removal, the URL should still be "/" (Home), not "/repo/local-repo-1"
+    await expect(page).toHaveURL("/");
+
+    // Verify we did NOT navigate to the repo detail page
+    await expect(
+      page.locator("h1", { hasText: "my-app" }),
+    ).not.toBeVisible();
+  });
+});

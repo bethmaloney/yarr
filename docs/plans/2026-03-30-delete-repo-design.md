@@ -88,46 +88,17 @@ Both surfaces show a native Tauri confirmation dialog before proceeding.
 **Checklist:**
 
 ### RepoCard.tsx
-- [ ] Add `onRemove?: () => void` to `RepoCardProps` interface (line 14-22)
-- [ ] Accept `onRemove` in the destructured props (line 48-57)
-- [ ] Add a small icon button in the card header area (top-right corner of the card) that appears on hover:
-  ```tsx
-  {onRemove && (
-    <button
-      className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-opacity duration-150"
-      onClick={(e) => {
-        e.stopPropagation();
-        onRemove();
-      }}
-      aria-label="Remove repository"
-    >
-      <X className="size-3.5" />
-    </button>
-  )}
-  ```
-- [ ] Add `group` and `relative` to the outer button's className so the hover state works
-- [ ] Import `X` from `lucide-react`
+- [x] Add `onRemove?: () => void` to `RepoCardProps` interface (line 14-22)
+- [x] Accept `onRemove` in the destructured props (line 48-57)
+- [x] Add a small icon button in the card header area (top-right corner of the card) that appears on hover (uses `<div role="button">` instead of nested `<button>` to avoid invalid HTML)
+- [x] Add `group` and `relative` to the outer button's className so the hover state works
+- [x] Import `X` from `lucide-react`
 
 ### Home.tsx
-- [ ] Import `ask` from `@tauri-apps/plugin-dialog` and `toast` from `sonner`
-- [ ] Pull `removeRepo` from the store
-- [ ] Create a `handleRemoveRepo` function:
-  ```ts
-  async function handleRemoveRepo(repoId: string, repoName: string) {
-    const confirmed = await ask(
-      `Remove "${repoName}" from Yarr? The repository on disk will not be affected.`,
-      { title: "Remove Repository?", kind: "warning" },
-    );
-    if (!confirmed) return;
-    try {
-      await removeRepo(repoId);
-      toast.success("Repository removed");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    }
-  }
-  ```
-- [ ] Pass `onRemove={() => handleRemoveRepo(item.repo.id, item.repo.name)}` to `RepoCard` in the render section where repo cards are mapped
+- [x] Import `ask` from `@tauri-apps/plugin-dialog` and `toast` from `sonner`
+- [x] Pull `removeRepo` from the store
+- [x] Create a `handleRemoveRepo` function (with `ask()` inside try/catch for robustness)
+- [x] Pass `onRemove={() => handleRemoveRepo(item.repo.id, item.repo.name)}` to `RepoCard` in the render section where repo cards are mapped
 
 **Design system compliance:**
 - `X` icon at size-3.5 (small, unobtrusive)
@@ -194,6 +165,6 @@ Both surfaces show a native Tauri confirmation dialog before proceeding.
 |------|--------|-------|
 | 1. Wire `removeRepo` into Zustand store | Done | Thin wrapper + state cleanup |
 | 2. Settings sheet "Remove" button | Done | Destructive variant in SheetFooter |
-| 3. RepoCard hover remove action | Not started | Hover-reveal X button + Home handler |
+| 3. RepoCard hover remove action | Done | Hover-reveal X button + Home handler + 4 unit tests + 4 E2E tests |
 | 4. Store integration tests | Done | 6 tests added to store.test.ts |
 | 5. E2E test for remove flow | Done | 4 E2E tests in e2e/remove-repo.test.ts |
