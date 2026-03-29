@@ -255,8 +255,6 @@ test.describe("RepoCard hover remove button", () => {
     await expect(page).toHaveURL("/");
 
     // Verify we did NOT navigate to the repo detail page
-    await expect(
-      page.locator("h1", { hasText: "my-app" }),
-    ).not.toBeVisible();
+    await expect(page.locator("h1", { hasText: "my-app" })).not.toBeVisible();
   });
 });
