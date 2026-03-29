@@ -199,7 +199,7 @@ export function IterationGroupComponent({
                   style={{ color: contextTokensColor(group.contextTokens) }}
                 >
                   {formatTokenCount(group.contextTokens)} ctx
-                  {group.compacted ? " \u27F3" : ""}
+                  {group.compacted ? " \u21BB" : ""}
                 </span>
               </>
             ) : null}
