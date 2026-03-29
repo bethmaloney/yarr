@@ -1,6 +1,6 @@
 {
   "productName": "yarr",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "identifier": "com.yarr.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -19,7 +19,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "dmg"],
     "icon": ["icons/icon.png"],
     "createUpdaterArtifacts": true
   },
