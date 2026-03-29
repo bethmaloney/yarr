@@ -1666,7 +1666,12 @@ describe("repo actions", () => {
 
     it("does not affect other repos' state", async () => {
       const repo2 = makeSshRepo({ id: "repo-2", name: "other" });
-      const repo2Session = { running: true, events: [], trace: null, error: null };
+      const repo2Session = {
+        running: true,
+        events: [],
+        trace: null,
+        error: null,
+      };
       const repo2GitStatus = {
         status: null,
         lastChecked: null,
