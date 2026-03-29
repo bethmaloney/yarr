@@ -72,6 +72,7 @@ import {
   Download,
   ChevronRight,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import type { Check, SessionState, SessionTrace } from "../types";
 import { repoPayload, type RepoConfig } from "../repos";
@@ -109,6 +110,7 @@ export default function RepoDetail() {
   const stopSession = useAppStore((s) => s.stopSession);
   const reconnectSession = useAppStore((s) => s.reconnectSession);
   const updateRepo = useAppStore((s) => s.updateRepo);
+  const removeRepo = useAppStore((s) => s.removeRepo);
   const runOneShot = useAppStore((s) => s.runOneShot);
   const gitStatusMap = useAppStore((s) => s.gitStatus);
   const fetchGitStatus = useAppStore((s) => s.fetchGitStatus);
@@ -535,6 +537,21 @@ export default function RepoDetail() {
     }
 
     updateRepo({ ...repo!, ...update } as RepoConfig);
+  }
+
+  async function handleRemoveRepo() {
+    const confirmed = await ask(
+      "Remove this repository from Yarr? The repository on disk will not be affected.",
+      { title: "Remove Repository?", kind: "warning" },
+    );
+    if (!confirmed) return;
+    try {
+      await removeRepo(repo!.id);
+      toast.success("Repository removed");
+      navigate("/");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
   }
 
   async function handleExport() {
@@ -2210,6 +2227,18 @@ export default function RepoDetail() {
               >
                 <Download className="size-4" />
                 Export .yarr.yml
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                data-testid="remove-repo"
+                onClick={handleRemoveRepo}
+                disabled={session.running}
+                className="ml-auto"
+              >
+                <Trash2 className="size-4" />
+                Remove
               </Button>
             </div>
           </SheetFooter>

@@ -46,15 +46,15 @@ Both surfaces show a native Tauri confirmation dialog before proceeding.
 **Pattern reference:** The existing confirmation dialog pattern using `ask()` from `@tauri-apps/plugin-dialog` at `RepoDetail.tsx:548` and `store.ts:211`. The destructive button variant is defined in `src/components/ui/button.tsx:13-14`.
 
 **Checklist:**
-- [ ] Import `Trash2` icon from `lucide-react` (add to existing icon imports at line 57-75)
-- [ ] Pull `removeRepo` from the store: `const removeRepo = useAppStore((s) => s.removeRepo)`
-- [ ] Add an `async function handleRemoveRepo()` that:
+- [x] Import `Trash2` icon from `lucide-react` (add to existing icon imports at line 57-75)
+- [x] Pull `removeRepo` from the store: `const removeRepo = useAppStore((s) => s.removeRepo)`
+- [x] Add an `async function handleRemoveRepo()` that:
   1. Calls `ask("Remove this repository from Yarr? The repository on disk will not be affected.", { title: "Remove Repository?", kind: "warning" })`
   2. If confirmed, calls `await removeRepo(repo.id)`
   3. Shows a success toast: `toast.success("Repository removed")`
   4. Navigates home: `navigate("/")`
   5. Wraps in try/catch and shows `toast.error(...)` on failure
-- [ ] Add a "Remove Repository" button in the `SheetFooter` (line 2174-2215), positioned at the right end of the footer using `ml-auto` to push it away from the other buttons:
+- [x] Add a "Remove Repository" button in the `SheetFooter` (line 2174-2215), positioned at the right end of the footer using `ml-auto` to push it away from the other buttons:
   ```tsx
   <Button
     type="button"
@@ -67,7 +67,7 @@ Both surfaces show a native Tauri confirmation dialog before proceeding.
     Remove
   </Button>
   ```
-- [ ] The button should be disabled when a session is running (`session.running`) to prevent removing a repo mid-session
+- [x] The button should be disabled when a session is running (`session.running`) to prevent removing a repo mid-session
 
 **Design system compliance:**
 - Uses `variant="destructive"` (red bg, white text) per design system button variants
@@ -163,14 +163,14 @@ Both surfaces show a native Tauri confirmation dialog before proceeding.
 **Pattern reference:** Existing E2E fixtures in `e2e/fixtures.ts` that mock Tauri IPC.
 
 **Checklist:**
-- [ ] Add E2E test that:
+- [x] Add E2E test that:
   1. Navigates to a repo detail page
   2. Opens the settings sheet
   3. Clicks "Remove" button
   4. Confirms the dialog
   5. Verifies navigation back to Home
   6. Verifies the repo is no longer shown in the dashboard
-- [ ] If Tauri dialog `ask()` is not easily mockable in Playwright, test only the button presence and disabled states
+- [x] If Tauri dialog `ask()` is not easily mockable in Playwright, test only the button presence and disabled states
 
 ---
 
@@ -193,7 +193,7 @@ Both surfaces show a native Tauri confirmation dialog before proceeding.
 | Task | Status | Notes |
 |------|--------|-------|
 | 1. Wire `removeRepo` into Zustand store | Done | Thin wrapper + state cleanup |
-| 2. Settings sheet "Remove" button | Not started | Destructive variant in SheetFooter |
+| 2. Settings sheet "Remove" button | Done | Destructive variant in SheetFooter |
 | 3. RepoCard hover remove action | Not started | Hover-reveal X button + Home handler |
 | 4. Store integration tests | Done | 6 tests added to store.test.ts |
-| 5. E2E test for remove flow | Not started | Settings sheet flow |
+| 5. E2E test for remove flow | Done | 4 E2E tests in e2e/remove-repo.test.ts |
