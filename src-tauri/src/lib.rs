@@ -1255,12 +1255,12 @@ async fn stop_session(app: tauri::AppHandle, repo_id: String) -> Result<(), Stri
     }
 }
 
-fn connection_test_steps(ssh_host: &str, remote_path: &str) -> Vec<(String, tokio::process::Command)> {
+fn connection_test_steps(ssh_host: &str, remote_path: &str, env: &std::collections::HashMap<String, String>) -> Vec<(String, tokio::process::Command)> {
     let trimmed_path = remote_path.trim();
     vec![
         ("SSH reachable".to_string(), ssh_command_raw(ssh_host, "echo OK")),
-        ("tmux available".to_string(), ssh_command(ssh_host, "command -v tmux")),
-        ("claude available".to_string(), ssh_command(ssh_host, "command -v claude")),
+        ("tmux available".to_string(), ssh_command(ssh_host, "command -v tmux", env)),
+        ("claude available".to_string(), ssh_command(ssh_host, "command -v claude", env)),
         ("Remote path exists".to_string(), ssh_command_raw(
             ssh_host,
             &format!("test -d {} && echo OK", ssh_shell_escape(trimmed_path))
@@ -1293,7 +1293,14 @@ async fn diagnose_path_failure(ssh_host: &str, remote_path: &str) -> String {
 async fn test_ssh_connection_steps(app: tauri::AppHandle, ssh_host: String, remote_path: String) -> Result<(), String> {
     tracing::info!(ssh_host = %ssh_host, "test_ssh_connection_steps called");
     let remote_path = remote_path.trim().to_string();
-    let steps = connection_test_steps(&ssh_host, &remote_path);
+    // Resolve env for PATH-dependent steps (tmux/claude availability)
+    let env_cache = app.state::<SshEnvCache>().cache_ref();
+    let tmp_runtime = SshRuntime::new(&ssh_host, &remote_path, env_cache);
+    let resolved_env = match RuntimeProvider::resolve_env(&tmp_runtime).await {
+        Ok(env) => env,
+        Err(_) => std::collections::HashMap::new(), // Best-effort: continue with empty env
+    };
+    let steps = connection_test_steps(&ssh_host, &remote_path, &resolved_env);
     for (step_name, mut cmd) in steps {
         let output = cmd.output().await.map_err(|e| e.to_string())?;
         if output.status.success() {
@@ -2523,13 +2530,13 @@ mod tests {
 
     #[test]
     fn connection_test_steps_returns_four_steps() {
-        let steps = connection_test_steps("myhost", "/home/user/project");
+        let steps = connection_test_steps("myhost", "/home/user/project", &HashMap::new());
         assert_eq!(steps.len(), 4, "should return exactly 4 test steps");
     }
 
     #[test]
     fn connection_test_steps_first_step_is_ssh_reachable() {
-        let steps = connection_test_steps("myhost", "/home/user/project");
+        let steps = connection_test_steps("myhost", "/home/user/project", &HashMap::new());
         let (name, cmd) = &steps[0];
 
         assert_eq!(name, "SSH reachable", "first step should be 'SSH reachable'");
@@ -2552,7 +2559,7 @@ mod tests {
 
     #[test]
     fn connection_test_steps_second_step_is_tmux_available() {
-        let steps = connection_test_steps("myhost", "/home/user/project");
+        let steps = connection_test_steps("myhost", "/home/user/project", &HashMap::new());
         let (name, cmd) = &steps[1];
 
         assert_eq!(name, "tmux available", "second step should be 'tmux available'");
@@ -2565,17 +2572,11 @@ mod tests {
             all_args.contains("command -v tmux"),
             "tmux check command should contain 'command -v tmux', got: {all_args}"
         );
-
-        // Step 2 should use ssh_command (login shell wrapping) to find tmux via PATH
-        assert!(
-            all_args.contains("$SHELL -lc"),
-            "tmux available should use ssh_command (login shell), but '$SHELL -lc' not found in: {all_args}"
-        );
     }
 
     #[test]
     fn connection_test_steps_third_step_is_claude_available() {
-        let steps = connection_test_steps("myhost", "/home/user/project");
+        let steps = connection_test_steps("myhost", "/home/user/project", &HashMap::new());
         let (name, cmd) = &steps[2];
 
         assert_eq!(name, "claude available", "third step should be 'claude available'");
@@ -2588,17 +2589,11 @@ mod tests {
             all_args.contains("command -v claude"),
             "claude check command should contain 'command -v claude', got: {all_args}"
         );
-
-        // Step 3 should use ssh_command (login shell wrapping) to find claude via PATH
-        assert!(
-            all_args.contains("$SHELL -lc"),
-            "claude available should use ssh_command (login shell), but '$SHELL -lc' not found in: {all_args}"
-        );
     }
 
     #[test]
     fn connection_test_steps_fourth_step_checks_remote_path() {
-        let steps = connection_test_steps("myhost", "/home/user/project");
+        let steps = connection_test_steps("myhost", "/home/user/project", &HashMap::new());
         let (name, cmd) = &steps[3];
 
         assert_eq!(name, "Remote path exists", "fourth step should be 'Remote path exists'");
@@ -2625,7 +2620,7 @@ mod tests {
 
     #[test]
     fn connection_test_steps_escapes_remote_path_with_spaces() {
-        let steps = connection_test_steps("myhost", "/home/user/my project");
+        let steps = connection_test_steps("myhost", "/home/user/my project", &HashMap::new());
         let (name, cmd) = &steps[3];
 
         assert_eq!(name, "Remote path exists");
@@ -2643,7 +2638,7 @@ mod tests {
 
     #[test]
     fn connection_test_steps_trims_remote_path_whitespace() {
-        let steps = connection_test_steps("myhost", "  /home/user/project  ");
+        let steps = connection_test_steps("myhost", "  /home/user/project  ", &HashMap::new());
         let (name, cmd) = &steps[3];
 
         assert_eq!(name, "Remote path exists");

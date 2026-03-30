@@ -28,53 +28,33 @@ pub fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-/// Builds an SSH command for executing a remote command on the given host.
+/// Builds an SSH command that exports the given environment variables before
+/// executing `remote_cmd`.  This replaces the old `$SHELL -lc` login-shell
+/// wrapper: instead of relying on the remote login shell to source startup
+/// files, we explicitly export the pre-resolved environment (PATH, etc.).
 ///
-/// - On Linux/macOS: `ssh <options> <host> $SHELL -lc '<remote_cmd>'`
-/// - On Windows: `wsl -e bash -lc "ssh <options> <host> \$SHELL -lc '<remote_cmd>'"`
-///
-/// SSH options include `-o BatchMode=yes -o StrictHostKeyChecking=accept-new`
-/// for non-interactive use.
-///
-/// Remote commands are wrapped in `$SHELL -lc` to ensure the remote user's
-/// login shell sources its startup files (`.zshrc`, `.bash_profile`, etc.).
-/// This is necessary because non-interactive SSH commands don't source login
-/// profiles, so binaries installed in user-specific PATH directories (like
-/// `~/.local/bin`) wouldn't be found otherwise.
-///
-/// The caller is responsible for properly escaping `remote_cmd` contents
-/// (e.g. using `shell_escape()` for individual arguments within the command).
-#[must_use] 
-pub fn ssh_command(host: &str, remote_cmd: &str) -> tokio::process::Command {
-    if cfg!(target_os = "windows") {
-        // Double-escape: inner shell_escape quotes for the remote shell (so $SHELL -lc
-        // receives the full command as one argument), outer shell_escape quotes for WSL bash.
-        let ssh_str = format!(
-            "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new {} \\$SHELL -lc {}",
-            shell_escape(host),
-            shell_escape(&shell_escape(remote_cmd))
-        );
-        let mut cmd = tokio_command("wsl");
-        cmd.arg("-e").arg("bash").arg("-lc").arg(ssh_str);
-        cmd
-    } else {
-        let mut cmd = tokio_command("ssh");
-        cmd.arg("-o")
-            .arg("BatchMode=yes")
-            .arg("-o")
-            .arg("StrictHostKeyChecking=accept-new")
-            .arg(host)
-            .arg(format!("$SHELL -lc {}", shell_escape(remote_cmd)));
-        cmd
+/// For commands that don't need user-specific env vars (standard utilities
+/// like `mkdir`, `tail`, `rm`), use `ssh_command_raw` directly instead.
+#[must_use]
+pub fn ssh_command(host: &str, remote_cmd: &str, env: &HashMap<String, String>) -> tokio::process::Command {
+    if env.is_empty() {
+        return ssh_command_raw(host, remote_cmd);
     }
+    let mut parts: Vec<String> = env.iter()
+        .map(|(key, val)| format!("export {}={}", key, shell_escape(val)))
+        .collect();
+    parts.push(remote_cmd.to_string());
+    let full_cmd = parts.join(" && ");
+    ssh_command_raw(host, &full_cmd)
 }
 
-/// Builds an SSH command for executing a remote command **without** the
-/// `$SHELL -lc` login shell wrapper.
+/// Builds an SSH command for executing a remote command on the given host,
+/// without any environment setup.
 ///
-/// Use this for commands that only need builtins or standard `/usr/bin`
-/// utilities (e.g. `test -d`, `echo`, `stat`) and don't depend on the
-/// remote user's custom PATH from their login shell startup files.
+/// Use `ssh_command` (which takes a resolved env) when the remote command
+/// needs user-specific PATH entries (e.g. to find `tmux` or `claude`).
+/// Use this variant for commands that only need standard system utilities
+/// like `mkdir`, `tail`, `rm`, `cat`, etc.
 #[must_use] 
 pub fn ssh_command_raw(host: &str, remote_cmd: &str) -> tokio::process::Command {
     if cfg!(target_os = "windows") {
@@ -96,12 +76,6 @@ pub fn ssh_command_raw(host: &str, remote_cmd: &str) -> tokio::process::Command 
             .arg(remote_cmd);
         cmd
     }
-}
-
-fn env_export_parts(env: &HashMap<String, String>) -> Vec<String> {
-    env.iter()
-        .map(|(key, val)| format!("export {}={}", key, shell_escape(val)))
-        .collect()
 }
 
 pub struct SshRuntime {
@@ -164,9 +138,9 @@ impl SshRuntime {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn build_mkdir_command(&self) -> Command {
-        ssh_command(&self.ssh_host, "mkdir -p ~/.yarr/logs")
+        ssh_command_raw(&self.ssh_host, "mkdir -p ~/.yarr/logs")
     }
 
     #[must_use] 
@@ -200,82 +174,69 @@ impl SshRuntime {
             "cd {escaped_remote_path} && {env_exports}{claude_cmd} 2>/tmp/yarr-{session_id}.stderr | tee ~/.yarr/logs/yarr-{session_id}.log"
         );
 
-        // Build the outer command: env exports + tmux new-session
-        let mut parts: Vec<String> = Vec::new();
-        parts.extend(env_export_parts(resolved_env));
-        parts.push(format!(
+        let tmux_cmd = format!(
             "tmux new-session -d -s yarr-{session_id} {}",
             shell_escape(&tmux_body)
-        ));
-
-        let remote_cmd = parts.join(" && ");
-        ssh_command_raw(&self.ssh_host, &remote_cmd)
+        );
+        ssh_command(&self.ssh_host, &tmux_cmd, resolved_env)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn build_tail_command(&self, session_id: &str) -> Command {
         let remote_cmd = format!("tail -f ~/.yarr/logs/yarr-{session_id}.log");
-        ssh_command(&self.ssh_host, &remote_cmd)
-    }
-
-    #[must_use] 
-    pub fn build_health_check_command(&self, resolved_env: &HashMap<String, String>) -> Command {
-        let mut parts: Vec<String> = Vec::new();
-        parts.extend(env_export_parts(resolved_env));
-        parts.push("command -v tmux && command -v claude && echo OK".to_string());
-        let remote_cmd = parts.join(" && ");
         ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
-    #[must_use] 
-    pub fn build_check_tmux_command(&self, session_id: &str) -> Command {
+    #[must_use]
+    pub fn build_health_check_command(&self, resolved_env: &HashMap<String, String>) -> Command {
+        ssh_command(&self.ssh_host, "command -v tmux && command -v claude && echo OK", resolved_env)
+    }
+
+    #[must_use]
+    pub fn build_check_tmux_command(&self, session_id: &str, env: &HashMap<String, String>) -> Command {
         let remote_cmd = format!(
             "tmux has-session -t yarr-{session_id} 2>/dev/null && echo ALIVE || echo DEAD"
         );
-        ssh_command(&self.ssh_host, &remote_cmd)
+        ssh_command(&self.ssh_host, &remote_cmd, env)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn build_tail_last_line_command(&self, session_id: &str) -> Command {
         let remote_cmd = format!("tail -1 ~/.yarr/logs/yarr-{session_id}.log");
-        ssh_command(&self.ssh_host, &remote_cmd)
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn build_recover_command(&self, session_id: &str, from_line: u64) -> Command {
         let remote_cmd = format!("tail -n +{from_line} ~/.yarr/logs/yarr-{session_id}.log");
-        ssh_command(&self.ssh_host, &remote_cmd)
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn build_resume_tail_command(&self, session_id: &str, from_line: u64) -> Command {
         let remote_cmd = format!("tail -f -n +{from_line} ~/.yarr/logs/yarr-{session_id}.log");
-        ssh_command(&self.ssh_host, &remote_cmd)
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn build_cleanup_command(&self, session_id: &str) -> Command {
         let remote_cmd = format!(
             "rm -f ~/.yarr/logs/yarr-{session_id}.log /tmp/yarr-{session_id}.stderr"
         );
-        ssh_command(&self.ssh_host, &remote_cmd)
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn build_get_stderr_command(&self, session_id: &str) -> Command {
         let remote_cmd = format!("cat /tmp/yarr-{session_id}.stderr 2>/dev/null");
-        ssh_command(&self.ssh_host, &remote_cmd)
+        ssh_command_raw(&self.ssh_host, &remote_cmd)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn build_run_command(&self, command: &str, working_dir: &std::path::Path, resolved_env: &HashMap<String, String>) -> Command {
         let escaped_dir = shell_escape(&working_dir.to_string_lossy());
-        let mut parts: Vec<String> = Vec::new();
-        parts.extend(env_export_parts(resolved_env));
-        parts.push(format!("cd {escaped_dir}"));
-        parts.push(command.to_string());
-        let remote_cmd = parts.join(" && ");
-        ssh_command_raw(&self.ssh_host, &remote_cmd)
+        let remote_cmd = format!("cd {escaped_dir} && {command}");
+        ssh_command(&self.ssh_host, &remote_cmd, resolved_env)
     }
 
     /// Parse the combined output of tmux check and last log line into a `RemoteState`.
@@ -296,7 +257,8 @@ impl SshRuntime {
 
     /// Check if a remote session is still running.
     pub async fn check_remote_state(&self, session_id: &str) -> Result<RemoteState> {
-        let tmux_output = self.build_check_tmux_command(session_id).output().await?;
+        let env = self.resolve_env().await?;
+        let tmux_output = self.build_check_tmux_command(session_id, &env).output().await?;
         let tmux_stdout = String::from_utf8_lossy(&tmux_output.stdout).to_string();
 
         let last_line_output = self.build_tail_last_line_command(session_id).output().await?;
@@ -427,7 +389,7 @@ impl RuntimeProvider for SshRuntime {
         let setup_cmd = format!(
             "mkdir -p ~/.yarr/logs && touch ~/.yarr/logs/yarr-{session_id}.log"
         );
-        let setup_output = ssh_command(&self.ssh_host, &setup_cmd).output().await?;
+        let setup_output = ssh_command_raw(&self.ssh_host, &setup_cmd).output().await?;
         if !setup_output.status.success() {
             let stderr = String::from_utf8_lossy(&setup_output.stderr);
             tracing::error!(ssh_host = %self.ssh_host, stderr = %stderr, "failed to set up remote log directory");
@@ -666,7 +628,7 @@ mod tests {
 
     #[test]
     fn ssh_command_creates_command_with_ssh_program() {
-        let cmd = ssh_command("myhost", "ls");
+        let cmd = ssh_command("myhost", "ls", &HashMap::new());
         let std_cmd = cmd.as_std();
 
         if cfg!(target_os = "windows") {
@@ -686,7 +648,7 @@ mod tests {
 
     #[test]
     fn ssh_command_includes_host_in_args() {
-        let cmd = ssh_command("myhost", "ls");
+        let cmd = ssh_command("myhost", "ls", &HashMap::new());
         let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
 
         let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
@@ -699,7 +661,7 @@ mod tests {
 
     #[test]
     fn ssh_command_includes_remote_command_in_args() {
-        let cmd = ssh_command("myhost", "ls -la");
+        let cmd = ssh_command("myhost", "ls -la", &HashMap::new());
         let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
 
         let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
@@ -712,7 +674,7 @@ mod tests {
 
     #[test]
     fn ssh_command_includes_batch_mode_option() {
-        let cmd = ssh_command("myhost", "ls");
+        let cmd = ssh_command("myhost", "ls", &HashMap::new());
         let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
 
         let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
@@ -726,7 +688,7 @@ mod tests {
 
     #[test]
     fn ssh_command_includes_strict_host_key_checking_option() {
-        let cmd = ssh_command("myhost", "ls");
+        let cmd = ssh_command("myhost", "ls", &HashMap::new());
         let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
 
         let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
@@ -740,7 +702,7 @@ mod tests {
 
     #[test]
     fn ssh_command_with_user_at_host() {
-        let cmd = ssh_command("beth@server", "whoami");
+        let cmd = ssh_command("beth@server", "whoami", &HashMap::new());
         let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
 
         let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
@@ -753,7 +715,7 @@ mod tests {
 
     #[test]
     fn ssh_command_remote_cmd_with_spaces() {
-        let cmd = ssh_command("host", "cat /etc/hostname");
+        let cmd = ssh_command("host", "cat /etc/hostname", &HashMap::new());
         let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
 
         let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
@@ -767,7 +729,7 @@ mod tests {
     #[cfg(not(target_os = "windows"))]
     #[test]
     fn ssh_command_on_unix_does_not_use_wsl() {
-        let cmd = ssh_command("myhost", "ls");
+        let cmd = ssh_command("myhost", "ls", &HashMap::new());
         let std_cmd = cmd.as_std();
 
         assert_eq!(
@@ -785,61 +747,38 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_os = "windows"))]
     #[test]
-    fn ssh_command_wraps_in_login_shell() {
-        let cmd = ssh_command("myhost", "ls -la");
+    fn ssh_command_prepends_env_exports() {
+        let mut env = HashMap::new();
+        env.insert("PATH".to_string(), "/home/user/.local/bin:/usr/bin".to_string());
+        let cmd = ssh_command("myhost", "echo hello", &env);
         let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
         let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
-        let last_arg = args_str.last().expect("should have args");
+        let all_args = args_str.join(" ");
 
         assert!(
-            last_arg.starts_with("$SHELL -lc "),
-            "expected last arg to start with '$SHELL -lc ', got: {}",
-            last_arg
+            all_args.contains("export PATH="),
+            "expected env export in command, got: {}",
+            all_args
         );
         assert!(
-            last_arg.contains("ls -la"),
-            "expected original command in login shell wrapper, got: {}",
-            last_arg
+            all_args.contains("echo hello"),
+            "expected original command after env exports, got: {}",
+            all_args
         );
     }
 
-    #[cfg(not(target_os = "windows"))]
     #[test]
-    fn ssh_command_login_shell_escapes_single_quotes() {
-        let cmd = ssh_command("myhost", "echo 'hello'");
-        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
-        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
-        let last_arg = args_str.last().expect("should have args");
+    fn ssh_command_with_empty_env_delegates_to_raw() {
+        let cmd_with_env = ssh_command("myhost", "echo hello", &HashMap::new());
+        let cmd_raw = ssh_command_raw("myhost", "echo hello");
 
-        // The remote_cmd contains single quotes, which shell_escape wraps
-        // in the pattern: 'echo '\''hello'\'''
-        assert!(
-            last_arg.starts_with("$SHELL -lc "),
-            "expected login shell wrapper, got: {}",
-            last_arg
-        );
-        assert!(
-            last_arg.contains("'\\''"),
-            "expected escaped single quotes in login shell wrapper, got: {}",
-            last_arg
-        );
-    }
+        let args_env: Vec<&std::ffi::OsStr> = cmd_with_env.as_std().get_args().collect();
+        let args_raw: Vec<&std::ffi::OsStr> = cmd_raw.as_std().get_args().collect();
 
-    #[cfg(not(target_os = "windows"))]
-    #[test]
-    fn ssh_command_login_shell_preserves_dollar_sign() {
-        let cmd = ssh_command("myhost", "echo test");
-        let args: Vec<&std::ffi::OsStr> = cmd.as_std().get_args().collect();
-        let args_str: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
-        let last_arg = args_str.last().expect("should have args");
-
-        // On Unix, $SHELL should appear literally in the arg (not expanded)
-        assert!(
-            last_arg.contains("$SHELL"),
-            "expected literal '$SHELL' in arg (not expanded), got: {}",
-            last_arg
+        assert_eq!(
+            args_env, args_raw,
+            "ssh_command with empty env should produce same args as ssh_command_raw"
         );
     }
 
@@ -1703,7 +1642,7 @@ mod tests {
     #[test]
     fn build_check_tmux_command_contains_tmux_has_session() {
         let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
-        let cmd = rt.build_check_tmux_command("abc-123");
+        let cmd = rt.build_check_tmux_command("abc-123", &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1720,7 +1659,7 @@ mod tests {
     #[test]
     fn build_check_tmux_command_echoes_alive_or_dead() {
         let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
-        let cmd = rt.build_check_tmux_command("abc-123");
+        let cmd = rt.build_check_tmux_command("abc-123", &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1742,7 +1681,7 @@ mod tests {
     #[test]
     fn build_check_tmux_command_suppresses_stderr() {
         let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
-        let cmd = rt.build_check_tmux_command("abc-123");
+        let cmd = rt.build_check_tmux_command("abc-123", &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1759,7 +1698,7 @@ mod tests {
     #[test]
     fn build_check_tmux_command_targets_correct_host() {
         let rt = SshRuntime::new("beth@server", "/home/beth/repos", test_cache());
-        let cmd = rt.build_check_tmux_command("sess-1");
+        let cmd = rt.build_check_tmux_command("sess-1", &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();
@@ -1776,7 +1715,7 @@ mod tests {
     fn build_check_tmux_command_substitutes_session_id() {
         let rt = SshRuntime::new("devbox", "/home/user/project", test_cache());
         let session_id = "550e8400-e29b-41d4-a716-446655440000";
-        let cmd = rt.build_check_tmux_command(session_id);
+        let cmd = rt.build_check_tmux_command(session_id, &HashMap::new());
         let std_cmd = cmd.as_std();
 
         let args: Vec<&std::ffi::OsStr> = std_cmd.get_args().collect();

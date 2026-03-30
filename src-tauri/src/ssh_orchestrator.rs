@@ -8,7 +8,7 @@ use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 
 use crate::output::{ContentBlock, StreamEvent};
-use crate::runtime::ssh::{ssh_command, shell_escape, RemoteState, SshRuntime};
+use crate::runtime::ssh::{ssh_command_raw, shell_escape, RemoteState, SshRuntime};
 use crate::runtime::{ClaudeInvocation, RuntimeProvider, RunningProcess};
 use crate::session::{OnSessionEvent, SessionConfig, SessionEvent, SessionState};
 use crate::trace::{self, SessionOutcome, SpanAttributes, TraceCollector};
@@ -623,7 +623,7 @@ impl SshOps for SshRuntime {
         let setup_cmd = format!(
             "mkdir -p ~/.yarr/logs && touch ~/.yarr/logs/yarr-{session_id}.log"
         );
-        let output = ssh_command(&self.ssh_host, &setup_cmd).output().await?;
+        let output = ssh_command_raw(&self.ssh_host, &setup_cmd).output().await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!("Failed to init session: {stderr}");
@@ -647,24 +647,36 @@ impl SshOps for SshRuntime {
             let _ = write!(claude_cmd, " --model {}", shell_escape(model));
         }
 
+        if let Some(ref effort) = invocation.effort_level {
+            let _ = write!(claude_cmd, " --effort {}", shell_escape(effort));
+        }
+
         for arg in &invocation.extra_args {
             let _ = write!(claude_cmd, " {}", shell_escape(arg));
         }
 
         let _ = write!(claude_cmd, " {escaped_prompt}");
 
+        // Export invocation env vars inside tmux body (e.g. auth tokens)
+        let mut env_exports = String::new();
+        for (key, val) in &invocation.env_vars {
+            let _ = write!(env_exports, "export {}={} && ", key, shell_escape(val));
+        }
+
         let tee_flag = if append { " -a" } else { "" };
 
         let tmux_body = format!(
-            "cd {escaped_remote_path} && {claude_cmd} 2>/tmp/yarr-{session_id}.stderr | tee{tee_flag} ~/.yarr/logs/yarr-{session_id}.log"
+            "cd {escaped_remote_path} && {env_exports}{claude_cmd} 2>/tmp/yarr-{session_id}.stderr | tee{tee_flag} ~/.yarr/logs/yarr-{session_id}.log"
         );
 
-        let remote_cmd = format!(
-            "tmux new-session -d -s yarr-{session_id} {escaped_body}",
-            escaped_body = shell_escape(&tmux_body)
+        let resolved_env = RuntimeProvider::resolve_env(self).await?;
+        let tmux_cmd = format!(
+            "tmux new-session -d -s yarr-{session_id} {}",
+            shell_escape(&tmux_body)
         );
-
-        let output = ssh_command(&self.ssh_host, &remote_cmd).output().await?;
+        let output = crate::runtime::ssh::ssh_command(&self.ssh_host, &tmux_cmd, &resolved_env)
+            .output()
+            .await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!("Failed to start remote tmux session: {stderr}");
