@@ -1466,14 +1466,14 @@ describe("IterationGroupComponent", () => {
       renderComponent({
         group: makeGroup({ contextTokens: 100000, compacted: true }),
       });
-      expect(screen.getByText(/⟳/)).toBeInTheDocument();
+      expect(screen.getByText(/↻/)).toBeInTheDocument();
     });
 
     it("does not show compaction icon when group.compacted is false", () => {
       renderComponent({
         group: makeGroup({ contextTokens: 100000, compacted: false }),
       });
-      expect(screen.queryByText(/⟳/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/↻/)).not.toBeInTheDocument();
     });
 
     it("shows both context tokens and compaction icon together", () => {
@@ -1483,7 +1483,7 @@ describe("IterationGroupComponent", () => {
       // Should show context tokens display
       expect(screen.getByText(/142k ctx/)).toBeInTheDocument();
       // Should also show compaction icon
-      expect(screen.getByText(/⟳/)).toBeInTheDocument();
+      expect(screen.getByText(/↻/)).toBeInTheDocument();
     });
 
     it("does not show compaction icon when compacted is true but contextTokens is 0", () => {
@@ -1492,7 +1492,7 @@ describe("IterationGroupComponent", () => {
         group: makeGroup({ contextTokens: 0, compacted: true }),
       });
       // No ctx display means no compaction icon either (since it follows ctx)
-      expect(screen.queryByText(/⟳/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/↻/)).not.toBeInTheDocument();
     });
   });
 

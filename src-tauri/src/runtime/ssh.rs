@@ -36,7 +36,7 @@ pub fn shell_escape(s: &str) -> String {
 /// For commands that don't need user-specific env vars (standard utilities
 /// like `mkdir`, `tail`, `rm`), use `ssh_command_raw` directly instead.
 #[must_use]
-pub fn ssh_command(host: &str, remote_cmd: &str, env: &HashMap<String, String>) -> tokio::process::Command {
+pub fn ssh_command<S: ::std::hash::BuildHasher>(host: &str, remote_cmd: &str, env: &HashMap<String, String, S>) -> tokio::process::Command {
     if env.is_empty() {
         return ssh_command_raw(host, remote_cmd);
     }

@@ -1296,10 +1296,9 @@ async fn test_ssh_connection_steps(app: tauri::AppHandle, ssh_host: String, remo
     // Resolve env for PATH-dependent steps (tmux/claude availability)
     let env_cache = app.state::<SshEnvCache>().cache_ref();
     let tmp_runtime = SshRuntime::new(&ssh_host, &remote_path, env_cache);
-    let resolved_env = match RuntimeProvider::resolve_env(&tmp_runtime).await {
-        Ok(env) => env,
-        Err(_) => std::collections::HashMap::new(), // Best-effort: continue with empty env
-    };
+    // Best-effort: continue with empty env if resolution fails
+    let resolved_env: std::collections::HashMap<String, String> =
+        RuntimeProvider::resolve_env(&tmp_runtime).await.unwrap_or_default();
     let steps = connection_test_steps(&ssh_host, &remote_path, &resolved_env);
     for (step_name, mut cmd) in steps {
         let output = cmd.output().await.map_err(|e| e.to_string())?;
