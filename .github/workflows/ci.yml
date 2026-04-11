@@ -37,6 +37,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Build
+        run: npm run build
+
   rust:
     name: Rust
     runs-on: ubuntu-latest
