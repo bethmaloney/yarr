@@ -340,4 +340,69 @@ test.describe("Export .yarr.yml button", () => {
     // Override should be included
     expect(config.effortLevel).toBe("high");
   });
+
+  // -------------------------------------------------------------------------
+  // 9. Export preserves complex fields (envVars/checks/gitSync) saved as
+  //    repo overrides — regression test for the case where the user clicks
+  //    Save (storing values as overrides) and later clicks Export. Without
+  //    this, the exported file silently dropped those values.
+  // -------------------------------------------------------------------------
+  test("export preserves envVars/checks/gitSync stored as repo overrides", async ({
+    page,
+    mockTauri,
+  }) => {
+    const repoWithOverrides = {
+      ...localRepo,
+      envVars: { OVERRIDE_KEY: "override_value" },
+      checks: [
+        {
+          name: "test",
+          command: "npm test",
+          when: "each_iteration",
+          timeoutSecs: 300,
+          maxRetries: 2,
+        },
+      ],
+      gitSync: {
+        enabled: true,
+        maxPushRetries: 5,
+      },
+    };
+
+    await navigateToRepo(page, mockTauri, repoWithOverrides, {
+      // No existing .yarr.yml
+      read_yarr_config: { config: null, error: null },
+      export_yarr_config: (args: Record<string, unknown>) => {
+        (window as unknown as Record<string, unknown>).__capturedExportArgs =
+          args;
+        return null;
+      },
+    });
+    await openConfigSheet(page);
+
+    const sheet = sheetContent(page);
+    // Click Export without modifying anything — the form is auto-populated
+    // from the override values.
+    await sheet.getByTestId("export-yarr-config").click();
+
+    const capturedArgs = await page.evaluate(
+      () =>
+        (window as unknown as Record<string, unknown>).__capturedExportArgs as
+          | Record<string, unknown>
+          | undefined,
+    );
+
+    expect(capturedArgs).toBeDefined();
+    const config = capturedArgs!.config as Record<string, unknown>;
+
+    // All three complex fields stored as overrides should round-trip into
+    // the exported config.
+    expect(config.env).toEqual({ OVERRIDE_KEY: "override_value" });
+    expect(config.checks).toBeDefined();
+    expect((config.checks as unknown[]).length).toBe(1);
+    expect(config.gitSync).toMatchObject({
+      enabled: true,
+      maxPushRetries: 5,
+    });
+  });
 });

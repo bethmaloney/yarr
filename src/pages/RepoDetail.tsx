@@ -628,35 +628,30 @@ export default function RepoDetail() {
       }
     }
 
+    // For complex fields (envVars, checks, gitSync), the local form state is
+    // already populated from the merged effective config (override → yml →
+    // default), so write it directly. This handles all sources uniformly:
+    // unsaved edits, previously-saved overrides, and pre-existing yml values.
     // envVars → env (field name mapping)
-    // For complex fields, an empty override (e.g. checks: [] from store defaults)
-    // should not shadow yaml values — fall through to yaml preservation.
     const envVarsRecord: Record<string, string> = {};
     for (const { key, value } of envVars) {
       if (key.trim()) envVarsRecord[key.trim()] = value;
     }
-
-    if (dirtyFields.has("envVars") && Object.keys(envVarsRecord).length > 0) {
+    if (Object.keys(envVarsRecord).length > 0) {
       config.env = envVarsRecord;
-    } else if (yml.envVars && Object.keys(yml.envVars).length > 0) {
-      config.env = yml.envVars;
     }
 
-    if (dirtyFields.has("checks") && checks.length > 0) {
+    if (checks.length > 0) {
       config.checks = checks;
-    } else if (yml.checks && yml.checks.length > 0) {
-      config.checks = yml.checks;
     }
 
-    if (dirtyFields.has("gitSync") && gitSyncEnabled) {
+    if (gitSyncEnabled) {
       config.gitSync = {
         enabled: gitSyncEnabled,
         model: gitSyncModel || undefined,
         maxPushRetries: gitSyncMaxRetries,
         conflictPrompt: gitSyncPrompt || undefined,
       };
-    } else if (yml.gitSync?.enabled) {
-      config.gitSync = yml.gitSync;
     }
 
     try {
