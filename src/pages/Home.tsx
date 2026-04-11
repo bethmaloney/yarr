@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { open, ask } from "@tauri-apps/plugin-dialog";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { useAppStore } from "../store";
 import { useGitStatus } from "../hooks/useGitStatus";
@@ -283,21 +283,33 @@ export default function Home() {
       </header>
 
       {addMode === "ssh-form" && (
-        <div className="bg-card border border-border rounded-md p-4 mb-6 flex flex-col gap-3">
-          <Label>
-            SSH Host
-            <Input
-              value={sshHost}
-              onChange={(e) => setSshHost(e.target.value)}
-            />
-          </Label>
-          <Label>
-            Remote Path
-            <Input
-              value={sshRemotePath}
-              onChange={(e) => setSshRemotePath(e.target.value)}
-            />
-          </Label>
+        <div className="bg-card border border-border rounded-md p-6 mb-6 max-w-2xl flex flex-col gap-6">
+          <div className="flex items-center gap-2">
+            <Terminal className="size-4 text-muted-foreground" />
+            <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+              Add SSH Repository
+            </h2>
+          </div>
+          <div className="flex flex-col gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="ssh-host">SSH Host</Label>
+              <Input
+                id="ssh-host"
+                value={sshHost}
+                onChange={(e) => setSshHost(e.target.value)}
+                placeholder="user@hostname or ~/.ssh/config alias"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ssh-remote-path">Remote Path</Label>
+              <Input
+                id="ssh-remote-path"
+                value={sshRemotePath}
+                onChange={(e) => setSshRemotePath(e.target.value)}
+                placeholder="/home/user/projects/my-repo"
+              />
+            </div>
+          </div>
           <div className="flex gap-2">
             <Button onClick={handleAddSshRepo}>Add</Button>
             <Button variant="secondary" onClick={handleCancelAdd}>

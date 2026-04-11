@@ -1193,7 +1193,7 @@ export default function RepoDetail() {
                     <div
                       className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
                     >
-                      <Label className="flex flex-col gap-1">
+                      <Label className="flex flex-col items-start gap-1">
                         <span className="text-sm text-muted-foreground">
                           SSH Host
                         </span>
@@ -1207,7 +1207,7 @@ export default function RepoDetail() {
                           disabled
                         />
                       </Label>
-                      <Label className="flex flex-col gap-1">
+                      <Label className="flex flex-col items-start gap-1">
                         <span className="text-sm text-muted-foreground">
                           Remote Path
                         </span>
@@ -1235,7 +1235,7 @@ export default function RepoDetail() {
                     className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
                   >
                     <div className="grid grid-cols-3 gap-3">
-                      <Label className="flex flex-col gap-1">
+                      <Label className="flex flex-col items-start gap-1">
                         <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Model
                           <ConfigSourceBadge
@@ -1261,7 +1261,7 @@ export default function RepoDetail() {
                           className="font-mono"
                         />
                       </Label>
-                      <Label className="flex flex-col gap-1">
+                      <Label className="flex flex-col items-start gap-1">
                         <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Effort Level
                           <ConfigSourceBadge
@@ -1299,7 +1299,7 @@ export default function RepoDetail() {
                           </SelectContent>
                         </Select>
                       </Label>
-                      <Label className="flex flex-col gap-1">
+                      <Label className="flex flex-col items-start gap-1">
                         <span className="text-sm text-muted-foreground flex items-center gap-2">
                           Max Iterations
                           <ConfigSourceBadge
@@ -1330,7 +1330,7 @@ export default function RepoDetail() {
                         />
                       </Label>
                     </div>
-                    <Label className="flex flex-col gap-1">
+                    <Label className="flex flex-col items-start gap-1">
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Completion Signal
                         <ConfigSourceBadge
@@ -1375,7 +1375,7 @@ export default function RepoDetail() {
                   <div
                     className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
                   >
-                    <Label className="flex flex-col gap-1">
+                    <Label className="flex flex-col items-start gap-1">
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Plans Directory
                         <ConfigSourceBadge
@@ -1454,7 +1454,7 @@ export default function RepoDetail() {
                   <div
                     className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
                   >
-                    <Label className="flex flex-col gap-1">
+                    <Label className="flex flex-col items-start gap-1">
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Design Prompt File
                         <ConfigSourceBadge
@@ -1513,7 +1513,7 @@ export default function RepoDetail() {
                         </Button>
                       </div>
                     </Label>
-                    <Label className="flex flex-col gap-1">
+                    <Label className="flex flex-col items-start gap-1">
                       <span className="text-sm text-muted-foreground flex items-center gap-2">
                         Implementation Prompt File
                         <ConfigSourceBadge
@@ -1936,7 +1936,7 @@ export default function RepoDetail() {
                         </div>
                         {/* Fields: command + timeout */}
                         <div className="grid grid-cols-[1fr_auto] gap-2 px-3">
-                          <Label className="flex flex-col gap-1">
+                          <Label className="flex flex-col items-start gap-1">
                             <span className="text-xs text-muted-foreground">
                               Command
                             </span>
@@ -1957,7 +1957,7 @@ export default function RepoDetail() {
                               className="font-mono"
                             />
                           </Label>
-                          <Label className="flex flex-col gap-1">
+                          <Label className="flex flex-col items-start gap-1">
                             <span className="text-xs text-muted-foreground">
                               Timeout (s)
                             </span>
@@ -1989,7 +1989,7 @@ export default function RepoDetail() {
                             <div className="bg-card-inset rounded-md p-3 mx-3 mb-3 flex flex-col gap-3">
                               {/* Row 1: Model + Retries */}
                               <div className="grid grid-cols-[1fr_auto] gap-2">
-                                <Label className="flex flex-col gap-1">
+                                <Label className="flex flex-col items-start gap-1">
                                   <span className="text-xs text-muted-foreground">
                                     Model
                                   </span>
@@ -2010,7 +2010,7 @@ export default function RepoDetail() {
                                     className="font-mono"
                                   />
                                 </Label>
-                                <Label className="flex flex-col gap-1">
+                                <Label className="flex flex-col items-start gap-1">
                                   <span className="text-xs text-muted-foreground">
                                     Retries
                                   </span>
@@ -2032,7 +2032,7 @@ export default function RepoDetail() {
                                 </Label>
                               </div>
                               {/* Row 2: Fix Prompt */}
-                              <Label className="flex flex-col gap-1">
+                              <Label className="flex flex-col items-start gap-1">
                                 <span className="text-xs text-muted-foreground">
                                   Fix Prompt
                                 </span>
@@ -2116,7 +2116,7 @@ export default function RepoDetail() {
                       Enable git sync
                     </Label>
                     <div className="grid grid-cols-2 gap-3">
-                      <Label className="flex flex-col gap-1">
+                      <Label className="flex flex-col items-start gap-1">
                         <span className="text-sm text-muted-foreground">
                           Model
                         </span>
@@ -2132,7 +2132,7 @@ export default function RepoDetail() {
                           className="font-mono"
                         />
                       </Label>
-                      <Label className="flex flex-col gap-1">
+                      <Label className="flex flex-col items-start gap-1">
                         <span className="text-sm text-muted-foreground">
                           Max Push Retries
                         </span>
@@ -2159,7 +2159,7 @@ export default function RepoDetail() {
                   <div
                     className={`flex flex-col gap-3 ${session.running ? "opacity-60" : ""}`}
                   >
-                    <Label className="flex flex-col gap-1">
+                    <Label className="flex flex-col items-start gap-1">
                       <span className="text-sm text-muted-foreground">
                         Prompt
                       </span>
