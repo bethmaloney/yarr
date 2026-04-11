@@ -1,7 +1,7 @@
 /target
 /traces
 /dist
-/node_modules
+node_modules/
 /src-tauri/target
 /src-tauri/traces
 /src-tauri/gen
