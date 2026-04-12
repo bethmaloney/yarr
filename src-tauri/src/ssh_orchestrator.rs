@@ -113,10 +113,10 @@ pub struct SshSessionOrchestrator<S: SshOps> {
     accumulated_events: std::sync::Mutex<Vec<SessionEvent>>,
     line_count: AtomicU64,
     trace_session_id: Option<String>,
-    /// RuntimeProvider used for between-iteration validation checks and
+    /// `RuntimeProvider` used for between-iteration validation checks and
     /// `git_sync`. In production this is an `SshRuntime` pointing at the same
     /// host as `ops`. Optional so existing tests (which never configure
-    /// checks/git_sync) can omit it.
+    /// `checks/git_sync`) can omit it.
     runtime: Option<Arc<dyn RuntimeProvider>>,
 }
 
