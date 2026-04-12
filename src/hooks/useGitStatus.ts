@@ -17,8 +17,10 @@ export function useGitStatus(
   const prevSessionsRef = useRef<Map<string, SessionState>>(new Map());
   const reposRef = useRef(repos);
   const sessionsRef = useRef(sessions);
-  reposRef.current = repos;
-  sessionsRef.current = sessions;
+  useEffect(() => {
+    reposRef.current = repos;
+    sessionsRef.current = sessions;
+  });
 
   // On mount / when repos change: fetch status for all repos
   useEffect(() => {

@@ -14,6 +14,9 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Disable React Compiler rules — we don't use the compiler
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/preserve-manual-memoization": "off",
       "react-refresh/only-export-components": [
         "warn",
         { allowConstantExport: true },
