@@ -394,13 +394,21 @@ async fn run_session(
             };
             let collector = TraceCollector::new(base_dir, &repo_id);
 
+            // A second SshRuntime for the orchestrator's between-iteration
+            // checks/git_sync. Shares the env cache via `SshEnvCache` so the
+            // resolved shell env (PATH, nvm, etc.) is reused.
+            let runtime_for_checks: std::sync::Arc<dyn RuntimeProvider> = std::sync::Arc::new(
+                SshRuntime::new(ssh_host, remote_path, app.state::<SshEnvCache>().cache_ref()),
+            );
+
             let orchestrator = SshSessionOrchestrator::new(
                 ssh_runtime,
                 config,
                 collector,
                 cancel_token.clone(),
             )
-            .with_trace_session_id(session_id.clone());
+            .with_trace_session_id(session_id.clone())
+            .with_runtime(runtime_for_checks);
 
             // Store reconnect handle
             let reconnect_notify = orchestrator.reconnect_notify();

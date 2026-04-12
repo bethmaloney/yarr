@@ -266,6 +266,351 @@ fn build_fix_prompt(check: &Check, output: &str) -> String {
     }
 }
 
+/// Returns true if `name` is a syntactically valid git branch name we accept
+/// for `git_sync` operations. Restricted to the safe character set so we can
+/// substitute the branch directly into shell commands.
+pub(crate) fn is_valid_branch_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '/' || c == '-')
+}
+
+/// Run validation `checks` matching `when` against `runtime`, emitting
+/// per-check session events through `emit`. On a failed check, spawns a fix
+/// agent (up to `check.max_retries` times), re-runs the check, and reports
+/// the outcome.
+///
+/// Free-function form so it can be invoked from both `SessionRunner` (local
+/// runtime) and `SshSessionOrchestrator` (SSH runtime).
+#[instrument(skip(runtime, config, cancel_token, checks, emit), fields(iteration))]
+pub(crate) async fn run_checks(
+    runtime: &dyn RuntimeProvider,
+    config: &SessionConfig,
+    cancel_token: &CancellationToken,
+    iteration: u32,
+    when: &CheckWhen,
+    checks: &[Check],
+    emit: &(dyn Fn(&SessionEvent) + Send + Sync),
+) {
+    let matching: Vec<&Check> = checks.iter().filter(|c| &c.when == when).collect();
+
+    tracing::info!(iteration, when = ?when, count = matching.len(), "checks starting");
+
+    for check in matching {
+        if cancel_token.is_cancelled() {
+            return;
+        }
+        let check_name = if check.name.is_empty() {
+            check.command.clone()
+        } else {
+            check.name.clone()
+        };
+
+        emit(&SessionEvent::CheckStarted {
+            iteration,
+            check_name: check_name.clone(),
+        });
+
+        let cmd_result = runtime
+            .run_command(
+                &check.command,
+                config.effective_working_dir(),
+                Duration::from_secs(u64::from(check.timeout_secs)),
+            )
+            .await;
+
+        let cmd_output = match cmd_result {
+            Ok(o) => o,
+            Err(e) => {
+                let error_msg = format!("Command error: {e}");
+                tracing::warn!("Check '{}' command error: {}", check_name, e);
+                emit(&SessionEvent::CheckFailed {
+                    iteration,
+                    check_name: check_name.clone(),
+                    output: error_msg,
+                });
+                continue;
+            }
+        };
+
+        if cmd_output.exit_code == 0 {
+            tracing::info!(iteration, check_name = %check_name, "check passed");
+            emit(&SessionEvent::CheckPassed {
+                iteration,
+                check_name: check_name.clone(),
+            });
+            continue;
+        }
+
+        // Check failed
+        let mut output = combine_output(&cmd_output.stdout, &cmd_output.stderr);
+
+        emit(&SessionEvent::CheckFailed {
+            iteration,
+            check_name: check_name.clone(),
+            output: output.clone(),
+        });
+
+        let mut fixed = false;
+        for attempt in 1..=check.max_retries {
+            if cancel_token.is_cancelled() {
+                break;
+            }
+            let fix_prompt = build_fix_prompt(check, &output);
+
+            emit(&SessionEvent::CheckFixStarted {
+                iteration,
+                check_name: check_name.clone(),
+                attempt,
+            });
+
+            let fix_invocation = ClaudeInvocation {
+                prompt: fix_prompt,
+                working_dir: config.effective_working_dir().to_path_buf(),
+                model: check.model.clone().or_else(|| config.model.clone()),
+                effort_level: config.effort_level.clone(),
+                extra_args: vec!["--dangerously-skip-permissions".to_string()],
+                env_vars: config.env_vars.clone(),
+            };
+
+            match runtime.spawn_claude(&fix_invocation).await {
+                Ok(mut process) => {
+                    // Forward fix agent events to the UI
+                    let mut fix_tool_ids: std::collections::HashMap<String, String> =
+                        std::collections::HashMap::new();
+                    loop {
+                        tokio::select! {
+                            event = process.events.recv() => {
+                                let Some(event) = event else { break };
+                                match &event {
+                                    StreamEvent::Assistant(assistant) => {
+                                        if assistant.parent_tool_use_id.is_none() {
+                                            for block in &assistant.message.content {
+                                                match block {
+                                                    ContentBlock::ToolUse { id, name, input } => {
+                                                        tracing::debug!(iteration, check_name = %check_name, attempt, name, id, "check fix tool use");
+                                                        fix_tool_ids.insert(id.clone(), name.clone());
+                                                        emit(&SessionEvent::CheckFixToolUse {
+                                                            iteration,
+                                                            check_name: check_name.clone(),
+                                                            attempt,
+                                                            tool_name: name.clone(),
+                                                            tool_input: Some(input.clone()),
+                                                            tool_use_id: id.clone(),
+                                                        });
+                                                    }
+                                                    ContentBlock::Text { text } => {
+                                                        emit(&SessionEvent::CheckFixAssistantText {
+                                                            iteration,
+                                                            check_name: check_name.clone(),
+                                                            attempt,
+                                                            text: text.clone(),
+                                                        });
+                                                    }
+                                                    ContentBlock::Unknown => {}
+                                                }
+                                            }
+                                        }
+                                    }
+                                    StreamEvent::User(user_event) => {
+                                        if user_event.parent_tool_use_id.is_none() {
+                                            if let Some(ref message) = user_event.message {
+                                                let results = extract_tool_results(message, &fix_tool_ids);
+                                                for (tool_use_id, tool_name, tool_output) in results {
+                                                    emit(&SessionEvent::CheckFixToolResult {
+                                                        iteration,
+                                                        check_name: check_name.clone(),
+                                                        attempt,
+                                                        tool_use_id,
+                                                        tool_name,
+                                                        tool_output,
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            () = cancel_token.cancelled() => {
+                                break;
+                            }
+                        }
+                    }
+                    // Wait for completion
+                    let _ = process.completion.await;
+
+                    tracing::info!(iteration, check_name = %check_name, attempt, "fix agent succeeded");
+                    emit(&SessionEvent::CheckFixComplete {
+                        iteration,
+                        check_name: check_name.clone(),
+                        attempt,
+                        success: true,
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!("Fix agent for '{}' failed to spawn: {}", check_name, e);
+                    emit(&SessionEvent::CheckFixComplete {
+                        iteration,
+                        check_name: check_name.clone(),
+                        attempt,
+                        success: false,
+                    });
+                    continue;
+                }
+            }
+
+            // Re-run the check
+            let recheck = runtime
+                .run_command(
+                    &check.command,
+                    config.effective_working_dir(),
+                    Duration::from_secs(u64::from(check.timeout_secs)),
+                )
+                .await;
+
+            match recheck {
+                Ok(recheck_output) => {
+                    if recheck_output.exit_code == 0 {
+                        tracing::info!(iteration, check_name = %check_name, attempt, "check now passing after fix");
+                        emit(&SessionEvent::CheckPassed {
+                            iteration,
+                            check_name: check_name.clone(),
+                        });
+                        fixed = true;
+                        break;
+                    }
+                    output = combine_output(&recheck_output.stdout, &recheck_output.stderr);
+                    emit(&SessionEvent::CheckFailed {
+                        iteration,
+                        check_name: check_name.clone(),
+                        output: output.clone(),
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!("Re-check '{}' command error: {}", check_name, e);
+                    // Just log and continue retry loop — the re-check failed to execute
+                }
+            }
+        }
+
+        if !fixed {
+            tracing::warn!(
+                "Check '{}' still failing after {} retries, continuing",
+                check_name,
+                check.max_retries
+            );
+        }
+    }
+}
+
+/// Push the current branch to its remote, rebasing on conflicts and spawning
+/// a Claude conflict-resolution agent if needed. Emits `GitSync*` events
+/// through `emit` for UI consumption.
+///
+/// No-op if `config.git_sync` is `None`, disabled, or the cancel token has
+/// been triggered. Free-function form so the SSH orchestrator can call it.
+#[instrument(skip(runtime, config, cancel_token, emit), fields(iteration))]
+pub(crate) async fn git_sync(
+    runtime: &dyn RuntimeProvider,
+    config: &SessionConfig,
+    cancel_token: &CancellationToken,
+    iteration: u32,
+    emit: &(dyn Fn(&SessionEvent) + Send + Sync),
+) {
+    tracing::info!(iteration, "git_sync entered");
+
+    let Some(git_sync_config) = &config.git_sync else {
+        return;
+    };
+
+    if !git_sync_config.enabled {
+        return;
+    }
+
+    if cancel_token.is_cancelled() {
+        return;
+    }
+
+    emit(&SessionEvent::GitSyncStarted { iteration });
+
+    let timeout = Duration::from_secs(120);
+
+    // Step 1: Detect current branch
+    let branch = match runtime
+        .run_command("git branch --show-current", config.effective_working_dir(), timeout)
+        .await
+    {
+        Ok(output) if output.exit_code == 0 => {
+            let b = output.stdout.trim().to_string();
+            tracing::debug!(iteration, branch = %b, "detected current branch");
+            b
+        }
+        Ok(output) => {
+            let error = combine_output(&output.stdout, &output.stderr);
+            emit(&SessionEvent::GitSyncFailed {
+                iteration,
+                error: format!("failed to detect branch: {error}"),
+            });
+            return;
+        }
+        Err(e) => {
+            emit(&SessionEvent::GitSyncFailed {
+                iteration,
+                error: format!("failed to detect branch: {e}"),
+            });
+            return;
+        }
+    };
+
+    if !is_valid_branch_name(&branch) {
+        emit(&SessionEvent::GitSyncFailed {
+            iteration,
+            error: "Invalid branch name".to_string(),
+        });
+        return;
+    }
+
+    // Build command strings for GitMergeConfig
+    let push_cmd = format!("git push origin {branch}");
+    let fetch_cmd = format!("git fetch origin {branch}");
+    let rebase_cmd = format!("git pull --rebase origin {branch}");
+    let push_u_cmd = format!("git push -u origin {branch}");
+
+    let merge_config = GitMergeConfig {
+        working_dir: config.effective_working_dir(),
+        push_command: &push_cmd,
+        fetch_command: &fetch_cmd,
+        rebase_command: &rebase_cmd,
+        push_u_command: Some(&push_u_cmd),
+        conflict_prompt: git_sync_config.conflict_prompt.as_deref(),
+        conflict_model: git_sync_config.model.clone().or(Some("sonnet".to_string())),
+        max_retries: git_sync_config.max_push_retries,
+        cancel_token,
+        env_vars: &config.env_vars,
+    };
+
+    let _ = git_merge_push(runtime, &merge_config, |event| match event {
+        GitMergeEvent::PushSucceeded => {
+            emit(&SessionEvent::GitSyncPushSucceeded { iteration });
+        }
+        GitMergeEvent::ConflictDetected { files } => {
+            emit(&SessionEvent::GitSyncConflict { iteration, files });
+        }
+        GitMergeEvent::ConflictResolveStarted { attempt } => {
+            emit(&SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
+        }
+        GitMergeEvent::ConflictResolveComplete { attempt, success } => {
+            emit(&SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
+        }
+        GitMergeEvent::Failed { error } => {
+            emit(&SessionEvent::GitSyncFailed { iteration, error });
+        }
+    })
+    .await;
+}
+
 /// Shared registry of abort handles for active child processes.
 /// Used to kill processes on app exit.
 pub type AbortRegistry = std::sync::Arc<std::sync::Mutex<Vec<std::sync::Arc<dyn crate::runtime::AbortHandle>>>>;
@@ -396,317 +741,27 @@ impl SessionRunner {
         when: &CheckWhen,
         checks: &[Check],
     ) {
-        let matching: Vec<&Check> = checks.iter().filter(|c| &c.when == when).collect();
-
-        tracing::info!(iteration, when = ?when, count = matching.len(), "checks starting");
-
-        for check in matching {
-            if self.cancel_token.is_cancelled() {
-                return;
-            }
-            let check_name = if check.name.is_empty() {
-                check.command.clone()
-            } else {
-                check.name.clone()
-            };
-
-            self.emit(&SessionEvent::CheckStarted {
-                iteration,
-                check_name: check_name.clone(),
-            });
-
-            let cmd_result = runtime
-                .run_command(
-                    &check.command,
-                    self.config.effective_working_dir(),
-                    Duration::from_secs(u64::from(check.timeout_secs)),
-                )
-                .await;
-
-            let cmd_output = match cmd_result {
-                Ok(o) => o,
-                Err(e) => {
-                    let error_msg = format!("Command error: {e}");
-                    tracing::warn!("Check '{}' command error: {}", check_name, e);
-                    self.emit(&SessionEvent::CheckFailed {
-                        iteration,
-                        check_name: check_name.clone(),
-                        output: error_msg,
-                    });
-                    continue;
-                }
-            };
-
-            if cmd_output.exit_code == 0 {
-                tracing::info!(iteration, check_name = %check_name, "check passed");
-                self.emit(&SessionEvent::CheckPassed {
-                    iteration,
-                    check_name: check_name.clone(),
-                });
-                continue;
-            }
-
-            // Check failed
-            let mut output = combine_output(&cmd_output.stdout, &cmd_output.stderr);
-
-            self.emit(&SessionEvent::CheckFailed {
-                iteration,
-                check_name: check_name.clone(),
-                output: output.clone(),
-            });
-
-            let mut fixed = false;
-            for attempt in 1..=check.max_retries {
-                if self.cancel_token.is_cancelled() {
-                    break;
-                }
-                let fix_prompt = build_fix_prompt(check, &output);
-
-                self.emit(&SessionEvent::CheckFixStarted {
-                    iteration,
-                    check_name: check_name.clone(),
-                    attempt,
-                });
-
-                let fix_invocation = ClaudeInvocation {
-                    prompt: fix_prompt,
-                    working_dir: self.config.effective_working_dir().to_path_buf(),
-                    model: check.model.clone().or_else(|| self.config.model.clone()),
-                    effort_level: self.config.effort_level.clone(),
-                    extra_args: vec!["--dangerously-skip-permissions".to_string()],
-                    env_vars: self.config.env_vars.clone(),
-                };
-
-                match runtime.spawn_claude(&fix_invocation).await {
-                    Ok(mut process) => {
-                        // Forward fix agent events to the UI
-                        let mut fix_tool_ids: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-                        loop {
-                            tokio::select! {
-                                event = process.events.recv() => {
-                                    let Some(event) = event else { break };
-                                    match &event {
-                                        StreamEvent::Assistant(assistant) => {
-                                            if assistant.parent_tool_use_id.is_none() {
-                                                for block in &assistant.message.content {
-                                                    match block {
-                                                        ContentBlock::ToolUse { id, name, input } => {
-                                                            tracing::debug!(iteration, check_name = %check_name, attempt, name, id, "check fix tool use");
-                                                            fix_tool_ids.insert(id.clone(), name.clone());
-                                                            self.emit(&SessionEvent::CheckFixToolUse {
-                                                                iteration,
-                                                                check_name: check_name.clone(),
-                                                                attempt,
-                                                                tool_name: name.clone(),
-                                                                tool_input: Some(input.clone()),
-                                                                tool_use_id: id.clone(),
-                                                            });
-                                                        }
-                                                        ContentBlock::Text { text } => {
-                                                            self.emit(&SessionEvent::CheckFixAssistantText {
-                                                                iteration,
-                                                                check_name: check_name.clone(),
-                                                                attempt,
-                                                                text: text.clone(),
-                                                            });
-                                                        }
-                                                        ContentBlock::Unknown => {}
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        StreamEvent::User(user_event) => {
-                                            if user_event.parent_tool_use_id.is_none() {
-                                                if let Some(ref message) = user_event.message {
-                                                    let results = extract_tool_results(message, &fix_tool_ids);
-                                                    for (tool_use_id, tool_name, tool_output) in results {
-                                                        self.emit(&SessionEvent::CheckFixToolResult {
-                                                            iteration,
-                                                            check_name: check_name.clone(),
-                                                            attempt,
-                                                            tool_use_id,
-                                                            tool_name,
-                                                            tool_output,
-                                                        });
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                () = self.cancel_token.cancelled() => {
-                                    break;
-                                }
-                            }
-                        }
-                        // Wait for completion
-                        let _ = process.completion.await;
-
-                        tracing::info!(iteration, check_name = %check_name, attempt, "fix agent succeeded");
-                        self.emit(&SessionEvent::CheckFixComplete {
-                            iteration,
-                            check_name: check_name.clone(),
-                            attempt,
-                            success: true,
-                        });
-                    }
-                    Err(e) => {
-                        tracing::warn!("Fix agent for '{}' failed to spawn: {}", check_name, e);
-                        self.emit(&SessionEvent::CheckFixComplete {
-                            iteration,
-                            check_name: check_name.clone(),
-                            attempt,
-                            success: false,
-                        });
-                        continue;
-                    }
-                }
-
-                // Re-run the check
-                let recheck = runtime
-                    .run_command(
-                        &check.command,
-                        self.config.effective_working_dir(),
-                        Duration::from_secs(u64::from(check.timeout_secs)),
-                    )
-                    .await;
-
-                match recheck {
-                    Ok(recheck_output) => {
-                        if recheck_output.exit_code == 0 {
-                            tracing::info!(iteration, check_name = %check_name, attempt, "check now passing after fix");
-                            self.emit(&SessionEvent::CheckPassed {
-                                iteration,
-                                check_name: check_name.clone(),
-                            });
-                            fixed = true;
-                            break;
-                        }
-                        output = combine_output(&recheck_output.stdout, &recheck_output.stderr);
-                        self.emit(&SessionEvent::CheckFailed {
-                            iteration,
-                            check_name: check_name.clone(),
-                            output: output.clone(),
-                        });
-                    }
-                    Err(e) => {
-                        tracing::warn!("Re-check '{}' command error: {}", check_name, e);
-                        // Just log and continue retry loop — the re-check failed to execute
-                    }
-                }
-            }
-
-            if !fixed {
-                tracing::warn!(
-                    "Check '{}' still failing after {} retries, continuing",
-                    check_name,
-                    check.max_retries
-                );
-            }
-        }
-    }
-
-    fn is_valid_branch_name(name: &str) -> bool {
-        !name.is_empty()
-            && name
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '/' || c == '-')
+        run_checks(
+            runtime,
+            &self.config,
+            &self.cancel_token,
+            iteration,
+            when,
+            checks,
+            &|e| self.emit(e),
+        )
+        .await;
     }
 
     #[instrument(skip(self, runtime), fields(iteration))]
     async fn git_sync(&self, runtime: &dyn RuntimeProvider, iteration: u32) {
-        tracing::info!(iteration, "git_sync entered");
-
-        let Some(git_sync_config) = &self.config.git_sync else {
-            return;
-        };
-
-        if !git_sync_config.enabled {
-            return;
-        }
-
-        if self.cancel_token.is_cancelled() {
-            return;
-        }
-
-        self.emit(&SessionEvent::GitSyncStarted { iteration });
-
-        let timeout = Duration::from_secs(120);
-
-        // Step 1: Detect current branch
-        let branch = match runtime
-            .run_command("git branch --show-current", self.config.effective_working_dir(), timeout)
-            .await
-        {
-            Ok(output) if output.exit_code == 0 => {
-                let b = output.stdout.trim().to_string();
-                tracing::debug!(iteration, branch = %b, "detected current branch");
-                b
-            }
-            Ok(output) => {
-                let error = combine_output(&output.stdout, &output.stderr);
-                self.emit(&SessionEvent::GitSyncFailed {
-                    iteration,
-                    error: format!("failed to detect branch: {error}"),
-                });
-                return;
-            }
-            Err(e) => {
-                self.emit(&SessionEvent::GitSyncFailed {
-                    iteration,
-                    error: format!("failed to detect branch: {e}"),
-                });
-                return;
-            }
-        };
-
-        if !Self::is_valid_branch_name(&branch) {
-            self.emit(&SessionEvent::GitSyncFailed {
-                iteration,
-                error: "Invalid branch name".to_string(),
-            });
-            return;
-        }
-
-        // Build command strings for GitMergeConfig
-        let push_cmd = format!("git push origin {branch}");
-        let fetch_cmd = format!("git fetch origin {branch}");
-        let rebase_cmd = format!("git pull --rebase origin {branch}");
-        let push_u_cmd = format!("git push -u origin {branch}");
-
-        let merge_config = GitMergeConfig {
-            working_dir: self.config.effective_working_dir(),
-            push_command: &push_cmd,
-            fetch_command: &fetch_cmd,
-            rebase_command: &rebase_cmd,
-            push_u_command: Some(&push_u_cmd),
-            conflict_prompt: git_sync_config.conflict_prompt.as_deref(),
-            conflict_model: git_sync_config.model.clone().or(Some("sonnet".to_string())),
-            max_retries: git_sync_config.max_push_retries,
-            cancel_token: &self.cancel_token,
-            env_vars: &self.config.env_vars,
-        };
-
-        let _ = git_merge_push(runtime, &merge_config, |event| {
-            match event {
-                GitMergeEvent::PushSucceeded => {
-                    self.emit(&SessionEvent::GitSyncPushSucceeded { iteration });
-                }
-                GitMergeEvent::ConflictDetected { files } => {
-                    self.emit(&SessionEvent::GitSyncConflict { iteration, files });
-                }
-                GitMergeEvent::ConflictResolveStarted { attempt } => {
-                    self.emit(&SessionEvent::GitSyncConflictResolveStarted { iteration, attempt });
-                }
-                GitMergeEvent::ConflictResolveComplete { attempt, success } => {
-                    self.emit(&SessionEvent::GitSyncConflictResolveComplete { iteration, attempt, success });
-                }
-                GitMergeEvent::Failed { error } => {
-                    self.emit(&SessionEvent::GitSyncFailed { iteration, error });
-                }
-            }
-        })
+        git_sync(
+            runtime,
+            &self.config,
+            &self.cancel_token,
+            iteration,
+            &|e| self.emit(e),
+        )
         .await;
     }
 

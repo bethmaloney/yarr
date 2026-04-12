@@ -451,9 +451,17 @@ impl OneShotRunner {
                 &ssh_rt.remote_path,
                 ssh_rt.env_cache.clone(),
             );
+            // A second SshRuntime for between-iteration checks/git_sync.
+            // Shares the env cache so PATH/nvm/etc. are reused.
+            let runtime_for_checks: Arc<dyn RuntimeProvider> = Arc::new(SshRuntime::new(
+                &ssh_rt.ssh_host,
+                &ssh_rt.remote_path,
+                ssh_rt.env_cache.clone(),
+            ));
             let orchestrator =
                 SshSessionOrchestrator::new(ssh_runtime_new, config, phase_collector, self.cancel_token.clone())
                     .with_reconnect_notify(self.reconnect_notify.clone())
+                    .with_runtime(runtime_for_checks)
                     .on_event(phase_cb);
 
             let ssh_trace = orchestrator.run().await?;

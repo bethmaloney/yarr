@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 use crate::output::{ContentBlock, StreamEvent};
 use crate::runtime::ssh::{ssh_command_raw, shell_escape, RemoteState, SshRuntime};
 use crate::runtime::{ClaudeInvocation, RuntimeProvider, RunningProcess};
-use crate::session::{OnSessionEvent, SessionConfig, SessionEvent, SessionState};
+use crate::session::{CheckWhen, OnSessionEvent, SessionConfig, SessionEvent, SessionState};
 use crate::trace::{self, SessionOutcome, SpanAttributes, TraceCollector};
 
 /// Truncate a string to at most `max_bytes` bytes without panicking on
@@ -113,6 +113,11 @@ pub struct SshSessionOrchestrator<S: SshOps> {
     accumulated_events: std::sync::Mutex<Vec<SessionEvent>>,
     line_count: AtomicU64,
     trace_session_id: Option<String>,
+    /// RuntimeProvider used for between-iteration validation checks and
+    /// `git_sync`. In production this is an `SshRuntime` pointing at the same
+    /// host as `ops`. Optional so existing tests (which never configure
+    /// checks/git_sync) can omit it.
+    runtime: Option<Arc<dyn RuntimeProvider>>,
 }
 
 #[allow(dead_code)]
@@ -133,6 +138,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             accumulated_events: std::sync::Mutex::new(Vec::new()),
             line_count: AtomicU64::new(1),
             trace_session_id: None,
+            runtime: None,
         }
     }
 
@@ -149,6 +155,51 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
     pub fn with_reconnect_notify(mut self, notify: Arc<Notify>) -> Self {
         self.reconnect_notify = notify;
         self
+    }
+
+    /// Provide a `RuntimeProvider` for running validation checks and
+    /// `git_sync` between iterations. Without this, both are skipped (with a
+    /// debug log) — the orchestrator otherwise has no way to run shell
+    /// commands on the remote outside the tmux iteration loop.
+    pub fn with_runtime(mut self, runtime: Arc<dyn RuntimeProvider>) -> Self {
+        self.runtime = Some(runtime);
+        self
+    }
+
+    /// Run validation checks matching `when` against the configured runtime,
+    /// emitting events through `self.emit`. No-op if no runtime is configured.
+    async fn run_iteration_checks(&self, iteration: u32, when: &CheckWhen) {
+        let Some(ref runtime) = self.runtime else {
+            tracing::debug!(iteration, ?when, "no runtime configured, skipping checks");
+            return;
+        };
+        crate::session::run_checks(
+            &**runtime,
+            &self.config,
+            &self.cancel_token,
+            iteration,
+            when,
+            &self.config.checks,
+            &|e| self.emit(e),
+        )
+        .await;
+    }
+
+    /// Run `git_sync` against the configured runtime. No-op if no runtime is
+    /// configured (or `git_sync` config is None / disabled).
+    async fn run_iteration_git_sync(&self, iteration: u32) {
+        let Some(ref runtime) = self.runtime else {
+            tracing::debug!(iteration, "no runtime configured, skipping git_sync");
+            return;
+        };
+        crate::session::git_sync(
+            &**runtime,
+            &self.config,
+            &self.cancel_token,
+            iteration,
+            &|e| self.emit(e),
+        )
+        .await;
     }
 
     /// Get a handle to signal reconnection from an external caller
@@ -188,8 +239,11 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
     ///
     /// Loops over `process.events.recv()` with `tokio::select!` for
     /// cancellation, emitting session events and tracking the Result event.
-    /// When the channel closes the process completion is awaited and the
-    /// appropriate `ConsumeResult` variant is returned.
+    /// As soon as a `Result` event arrives we abort the tail subprocess and
+    /// return — `tail -f` follows the log file forever and never EOFs on its
+    /// own once claude exits, so we have to stop it explicitly. If the channel
+    /// closes without a Result event, the process completion is awaited and a
+    /// disconnect is reported.
     async fn consume_events(
         &self,
         mut process: RunningProcess,
@@ -198,6 +252,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
         let mut result_event: Option<crate::output::ResultEvent> = None;
         let mut last_context_tokens: u64 = 0;
         let mut sub_agent_peaks: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        let mut got_result = false;
 
         loop {
             tokio::select! {
@@ -278,6 +333,7 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                         }
                         StreamEvent::Result(r) => {
                             result_event = Some(r.clone());
+                            got_result = true;
                         }
                         StreamEvent::RateLimit(_) => {}
                         StreamEvent::User(user_event) => {
@@ -287,6 +343,15 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                             // Sub-agent user events are silently ignored
                         }
                     }
+                    if got_result {
+                        // Result is the last event of the iteration. The remote
+                        // claude process has exited but the local `tail -f`
+                        // subprocess will follow the log file forever, so we
+                        // have to stop it ourselves before moving on.
+                        tracing::debug!(iteration, "result event received, aborting tail subprocess");
+                        process.abort_handle.abort();
+                        break;
+                    }
                 }
                 () = self.cancel_token.cancelled() => {
                     process.abort_handle.abort();
@@ -295,13 +360,17 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             }
         }
 
-        // Channel closed — wait for the process to finish.
-        let exit = process.completion.await??;
-
-        match result_event {
-            Some(r) => Ok(ConsumeResult::GotResult(Box::new(r), last_context_tokens)),
-            None => Ok(ConsumeResult::Disconnected(exit)),
+        // If we have a Result event, return immediately — we already aborted
+        // the tail subprocess above, so awaiting completion would just yield a
+        // JoinError from the cancelled wait task.
+        if let Some(r) = result_event {
+            return Ok(ConsumeResult::GotResult(Box::new(r), last_context_tokens));
         }
+
+        // No Result event — channel closed because the tail process exited
+        // (e.g. SSH disconnect). Wait for completion to capture the exit code.
+        let exit = process.completion.await??;
+        Ok(ConsumeResult::Disconnected(exit))
     }
 
     /// Process a Result event: record the iteration in the trace, emit
@@ -518,8 +587,24 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                     }
                 }
 
+                // Run per-iteration validation checks and git_sync (mirrors
+                // session.rs run_with_trace). These run regardless of outcome
+                // so partial progress is pushed even before a failure break.
+                self.run_iteration_checks(iteration, &CheckWhen::EachIteration).await;
+                self.run_iteration_git_sync(iteration).await;
+
+                if self.cancel_token.is_cancelled() {
+                    state = SessionState::Cancelled { iteration };
+                    break;
+                }
+
                 match outcome {
                     IterationOutcome::Completed => {
+                        // On completion, also run PostCompletion checks + a
+                        // final git_sync before breaking out (mirrors
+                        // session.rs).
+                        self.run_iteration_checks(iteration, &CheckWhen::PostCompletion).await;
+                        self.run_iteration_git_sync(iteration).await;
                         state = SessionState::Completed {
                             iterations: iteration,
                         };
@@ -553,6 +638,19 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
             state = SessionState::MaxIterations {
                 iterations: self.config.max_iterations,
             };
+        }
+
+        // Session-exit git_sync: push partial progress for non-completed
+        // outcomes (mirrors session.rs run_with_trace).
+        match &state {
+            SessionState::Failed { iteration, .. }
+            | SessionState::Cancelled { iteration } => {
+                self.run_iteration_git_sync(*iteration).await;
+            }
+            SessionState::MaxIterations { iterations } => {
+                self.run_iteration_git_sync(*iterations).await;
+            }
+            _ => {}
         }
 
         // 9. Finalize trace
@@ -973,6 +1071,203 @@ mod tests {
     }
 
     // ── Tests ─────────────────────────────────────────────────────
+
+    /// Regression test: a configured `EachIteration` check must run between
+    /// SSH iterations. Before the fix that wired `run_checks` into the SSH
+    /// orchestrator, no `CheckStarted` / `CheckPassed` events were ever
+    /// emitted on the SSH path even when checks were configured.
+    #[tokio::test]
+    async fn ssh_orchestrator_runs_each_iteration_checks_when_runtime_wired() {
+        use crate::runtime::{CommandOutput, MockRuntime};
+        use crate::session::{Check, CheckWhen};
+
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut config = make_config();
+        config.checks = vec![Check {
+            name: "lint".to_string(),
+            command: "just lint".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: None,
+            model: None,
+            timeout_secs: 60,
+            max_retries: 0,
+        }];
+        let collector = make_collector(&tmp);
+        let cancel_token = CancellationToken::new();
+
+        // Mock SSH path: a single iteration that completes immediately.
+        let mock = MockSshOps::new("test-ssh")
+            .push_tail_scenario(make_completing_events(), 0);
+
+        // Mock runtime for checks: returns exit code 0 (check passes).
+        let mut mock_runtime = MockRuntime::completing_after(0);
+        mock_runtime.command_results = vec![CommandOutput {
+            exit_code: 0,
+            stdout: "lint clean".to_string(),
+            stderr: String::new(),
+        }];
+        let runtime: Arc<dyn RuntimeProvider> = Arc::new(mock_runtime);
+
+        // Capture emitted events
+        let events: Arc<std::sync::Mutex<Vec<SessionEvent>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let orchestrator = SshSessionOrchestrator::new(mock, config, collector, cancel_token)
+            .with_runtime(runtime)
+            .on_event(Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }));
+
+        let trace = orchestrator.run().await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let emitted = events.lock().unwrap();
+        let started_count = emitted
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::CheckStarted { check_name, .. } if check_name == "lint"))
+            .count();
+        let passed_count = emitted
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::CheckPassed { check_name, .. } if check_name == "lint"))
+            .count();
+
+        assert!(
+            started_count >= 1,
+            "expected at least one CheckStarted for 'lint', got events: {:?}",
+            *emitted
+        );
+        assert!(
+            passed_count >= 1,
+            "expected at least one CheckPassed for 'lint', got events: {:?}",
+            *emitted
+        );
+    }
+
+    /// Regression test: configured checks must NOT run when no runtime is
+    /// wired in (back-compat with existing tests that don't pass a runtime).
+    #[tokio::test]
+    async fn ssh_orchestrator_skips_checks_without_runtime() {
+        use crate::session::{Check, CheckWhen};
+
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut config = make_config();
+        config.checks = vec![Check {
+            name: "lint".to_string(),
+            command: "just lint".to_string(),
+            when: CheckWhen::EachIteration,
+            prompt: None,
+            model: None,
+            timeout_secs: 60,
+            max_retries: 0,
+        }];
+        let collector = make_collector(&tmp);
+        let cancel_token = CancellationToken::new();
+
+        let mock = MockSshOps::new("test-ssh")
+            .push_tail_scenario(make_completing_events(), 0);
+
+        let events: Arc<std::sync::Mutex<Vec<SessionEvent>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let orchestrator = SshSessionOrchestrator::new(mock, config, collector, cancel_token)
+            .on_event(Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }));
+
+        let trace = orchestrator.run().await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let emitted = events.lock().unwrap();
+        let any_check_event = emitted.iter().any(|e| {
+            matches!(
+                e,
+                SessionEvent::CheckStarted { .. }
+                    | SessionEvent::CheckPassed { .. }
+                    | SessionEvent::CheckFailed { .. }
+            )
+        });
+        assert!(
+            !any_check_event,
+            "expected no Check* events without a runtime, got: {:?}",
+            *emitted
+        );
+    }
+
+    /// Regression test: git_sync must run between SSH iterations when
+    /// enabled and a runtime is wired in.
+    #[tokio::test]
+    async fn ssh_orchestrator_runs_git_sync_when_runtime_wired() {
+        use crate::runtime::{CommandOutput, MockRuntime};
+        use crate::session::GitSyncConfig;
+
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut config = make_config();
+        config.git_sync = Some(GitSyncConfig {
+            enabled: true,
+            conflict_prompt: None,
+            model: None,
+            max_push_retries: 3,
+        });
+        let collector = make_collector(&tmp);
+        let cancel_token = CancellationToken::new();
+
+        // Single completing iteration
+        let mock = MockSshOps::new("test-ssh")
+            .push_tail_scenario(make_completing_events(), 0);
+
+        // git_sync issues two commands per call:
+        //   1. git branch --show-current   (branch detection)
+        //   2. git push origin <branch>    (push)
+        // It runs twice for a completing iteration (EachIteration + PostCompletion).
+        let mut mock_runtime = MockRuntime::completing_after(0);
+        mock_runtime.command_results = vec![
+            // EachIteration git_sync — branch detect
+            CommandOutput { exit_code: 0, stdout: "feature-branch\n".to_string(), stderr: String::new() },
+            // EachIteration git_sync — push
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+            // PostCompletion git_sync — branch detect
+            CommandOutput { exit_code: 0, stdout: "feature-branch\n".to_string(), stderr: String::new() },
+            // PostCompletion git_sync — push
+            CommandOutput { exit_code: 0, stdout: String::new(), stderr: String::new() },
+        ];
+        let runtime: Arc<dyn RuntimeProvider> = Arc::new(mock_runtime);
+
+        let events: Arc<std::sync::Mutex<Vec<SessionEvent>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let events_clone = events.clone();
+
+        let orchestrator = SshSessionOrchestrator::new(mock, config, collector, cancel_token)
+            .with_runtime(runtime)
+            .on_event(Box::new(move |event| {
+                events_clone.lock().unwrap().push(event.clone());
+            }));
+
+        let trace = orchestrator.run().await.expect("run should succeed");
+        assert_eq!(trace.outcome, SessionOutcome::Completed);
+
+        let emitted = events.lock().unwrap();
+        let sync_started = emitted
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::GitSyncStarted { .. }))
+            .count();
+        let push_succeeded = emitted
+            .iter()
+            .filter(|e| matches!(e, SessionEvent::GitSyncPushSucceeded { .. }))
+            .count();
+
+        assert!(
+            sync_started >= 1,
+            "expected at least one GitSyncStarted event, got events: {:?}",
+            *emitted
+        );
+        assert!(
+            push_succeeded >= 1,
+            "expected at least one GitSyncPushSucceeded event, got events: {:?}",
+            *emitted
+        );
+    }
 
     #[tokio::test]
     async fn test_single_iteration_completion() {
