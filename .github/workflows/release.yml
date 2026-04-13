@@ -40,6 +40,10 @@ jobs:
 
       - run: npm ci
 
+      # Lockfile is generated on Linux so only contains the Linux native
+      # binding. Re-resolve @tauri-apps/cli so npm fetches the Windows binary.
+      - run: npm install @tauri-apps/cli --no-save
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -70,6 +74,10 @@ jobs:
           workspaces: src-tauri
 
       - run: npm ci
+
+      # Lockfile is generated on Linux so only contains the Linux native
+      # binding. Re-resolve @tauri-apps/cli so npm fetches the macOS binary.
+      - run: npm install @tauri-apps/cli --no-save
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
