@@ -38,10 +38,12 @@ jobs:
         with:
           workspaces: src-tauri
 
-      # Lockfile is generated on Linux (WSL) and only contains Linux native
-      # bindings. Use `npm install` so npm resolves the correct platform
-      # binaries for packages like @tauri-apps/cli and rolldown.
-      - run: npm install
+      # Lockfile is generated on Linux (WSL) and only resolves Linux native
+      # bindings (e.g. @tauri-apps/cli-linux-x64-gnu, @rolldown/binding-linux-x64-gnu).
+      # npm won't reliably fetch missing platform bindings from a cross-platform
+      # lockfile (https://github.com/npm/cli/issues/4828), so delete it and let
+      # npm do a fresh resolution for the current platform.
+      - run: rm package-lock.json && npm install
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -72,10 +74,8 @@ jobs:
         with:
           workspaces: src-tauri
 
-      # Lockfile is generated on Linux (WSL) and only contains Linux native
-      # bindings. Use `npm install` so npm resolves the correct platform
-      # binaries for packages like @tauri-apps/cli and rolldown.
-      - run: npm install
+      # See Windows job comment — same cross-platform lockfile issue.
+      - run: rm package-lock.json && npm install
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
