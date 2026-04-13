@@ -2927,6 +2927,7 @@ mod tests {
                     "content": "# Design\n..."
                 })),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
             SessionEvent::IterationComplete {
                 iteration: 1,
@@ -2965,6 +2966,7 @@ mod tests {
                     "new_string": "new"
                 })),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
         ];
         let plan_file = extract_plan_file_from_events(&events, "docs/plans/");
@@ -2986,6 +2988,7 @@ mod tests {
                     "content": "fn main() {}"
                 })),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
         ];
         let plan_file = extract_plan_file_from_events(&events, "docs/plans/");
@@ -3006,6 +3009,7 @@ mod tests {
                     "file_path": "src/lib.rs"
                 })),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
             SessionEvent::ToolUse {
                 iteration: 1,
@@ -3015,6 +3019,7 @@ mod tests {
                     "content": "// helper"
                 })),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
             SessionEvent::ToolUse {
                 iteration: 1,
@@ -3024,10 +3029,12 @@ mod tests {
                     "content": "# Login Design"
                 })),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
             SessionEvent::AssistantText {
                 iteration: 1,
                 text: "Done writing the plan.".to_string(),
+                parent_tool_use_id: None,
             },
         ];
         let plan_file = extract_plan_file_from_events(&events, "docs/plans/");
@@ -3049,6 +3056,7 @@ mod tests {
                     "content": "# Foo Plan"
                 })),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
         ];
         let plan_file = extract_plan_file_from_events(&events, "plans/");
@@ -3070,6 +3078,7 @@ mod tests {
                     "content": "# Bar Plan"
                 })),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
         ];
         let plan_file = extract_plan_file_from_events(&events, "other/plans/");

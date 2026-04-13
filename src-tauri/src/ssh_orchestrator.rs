@@ -281,44 +281,49 @@ impl<S: SshOps> SshSessionOrchestrator<S> {
                             }
                         }
                         StreamEvent::Assistant(assistant) => {
-                            if let Some(parent_id) = &assistant.parent_tool_use_id {
-                                let parent_id = parent_id.clone();
+                            let parent_id = assistant.parent_tool_use_id.clone();
+                            if let Some(ref pid) = parent_id {
+                                // Sub-agent context tracking
                                 if let Some(ref usage) = assistant.message.usage {
                                     let context_tokens =
                                         usage.input_tokens.unwrap_or(0)
                                         + usage.cache_read_input_tokens.unwrap_or(0)
                                         + usage.cache_creation_input_tokens.unwrap_or(0);
-                                    tracing::debug!(iteration, %parent_id, context_tokens, "sub-agent context update");
-                                    let peak = sub_agent_peaks.entry(parent_id.clone()).or_insert(0);
+                                    tracing::debug!(iteration, %pid, context_tokens, "sub-agent context update");
+                                    let peak = sub_agent_peaks.entry(pid.clone()).or_insert(0);
                                     *peak = (*peak).max(context_tokens);
                                     self.emit(&SessionEvent::SubAgentContextUpdated {
                                         iteration,
-                                        parent_tool_use_id: parent_id,
+                                        parent_tool_use_id: pid.clone(),
                                         context_tokens,
                                     });
                                 }
-                            } else {
-                                for block in &assistant.message.content {
-                                    match block {
-                                        ContentBlock::ToolUse { id, name, input } => {
-                                            tracing::debug!(iteration, name, id, "tool use");
-                                            self.emit(&SessionEvent::ToolUse {
-                                                iteration,
-                                                tool_name: name.clone(),
-                                                tool_input: Some(input.clone()),
-                                                tool_use_id: id.clone(),
-                                            });
-                                        }
-                                        ContentBlock::Text { text } => {
-                                            tracing::debug!(iteration, "text output");
-                                            self.emit(&SessionEvent::AssistantText {
-                                                iteration,
-                                                text: text.clone(),
-                                            });
-                                        }
-                                        ContentBlock::Unknown => {}
+                            }
+                            // Emit tool/text events for both main and sub-agents
+                            for block in &assistant.message.content {
+                                match block {
+                                    ContentBlock::ToolUse { id, name, input } => {
+                                        tracing::debug!(iteration, name, id, parent = ?parent_id, "tool use");
+                                        self.emit(&SessionEvent::ToolUse {
+                                            iteration,
+                                            tool_name: name.clone(),
+                                            tool_input: Some(input.clone()),
+                                            tool_use_id: id.clone(),
+                                            parent_tool_use_id: parent_id.clone(),
+                                        });
                                     }
+                                    ContentBlock::Text { text } => {
+                                        tracing::debug!(iteration, parent = ?parent_id, "text output");
+                                        self.emit(&SessionEvent::AssistantText {
+                                            iteration,
+                                            text: text.clone(),
+                                            parent_tool_use_id: parent_id.clone(),
+                                        });
+                                    }
+                                    ContentBlock::Unknown => {}
                                 }
+                            }
+                            if parent_id.is_none() {
                                 if let Some(ref usage) = assistant.message.usage {
                                     last_context_tokens =
                                         usage.input_tokens.unwrap_or(0)
@@ -1919,26 +1924,36 @@ mod tests {
 
         let events = emitted.lock().unwrap();
 
-        // --- Main-agent AssistantText should be emitted ---
+        // --- AssistantText should be emitted for both main and sub-agent ---
         let assistant_texts: Vec<&SessionEvent> = events
             .iter()
             .filter(|e| matches!(e, SessionEvent::AssistantText { .. }))
             .collect();
         assert_eq!(
             assistant_texts.len(),
-            1,
-            "Expected exactly 1 AssistantText (main agent only), got {}: {:?}",
+            2,
+            "Expected 2 AssistantText events (main + sub-agent), got {}: {:?}",
             assistant_texts.len(),
             assistant_texts
         );
-        match assistant_texts[0] {
-            SessionEvent::AssistantText { text, .. } => {
+        // Main agent text has no parent
+        match &assistant_texts[0] {
+            SessionEvent::AssistantText { text, parent_tool_use_id, .. } => {
                 assert_eq!(text, "Main agent working");
+                assert_eq!(*parent_tool_use_id, None);
+            }
+            _ => unreachable!(),
+        }
+        // Sub-agent text has parent
+        match &assistant_texts[1] {
+            SessionEvent::AssistantText { text, parent_tool_use_id, .. } => {
+                assert_eq!(text, "Sub agent working");
+                assert_eq!(parent_tool_use_id.as_deref(), Some("toolu_agent_123"));
             }
             _ => unreachable!(),
         }
 
-        // --- Main-agent ContextUpdated should be emitted ---
+        // --- Main-agent ContextUpdated should be emitted (not sub-agent) ---
         let context_updates: Vec<&SessionEvent> = events
             .iter()
             .filter(|e| matches!(e, SessionEvent::ContextUpdated { .. }))
@@ -1992,27 +2007,28 @@ mod tests {
             _ => unreachable!(),
         }
 
-        // --- Sub-agent ToolUse should NOT be emitted ---
+        // --- Sub-agent ToolUse should be emitted with parent_tool_use_id ---
         let tool_uses: Vec<&SessionEvent> = events
             .iter()
             .filter(|e| matches!(e, SessionEvent::ToolUse { .. }))
             .collect();
         assert_eq!(
             tool_uses.len(),
-            0,
-            "Expected no ToolUse events (sub-agent tool uses should be filtered), got {}: {:?}",
+            1,
+            "Expected 1 ToolUse event (sub-agent only in this test), got {}: {:?}",
             tool_uses.len(),
             tool_uses
         );
-
-        // Specifically verify toolu_sub_tool was not emitted
-        let sub_tool_uses: Vec<&SessionEvent> = events
-            .iter()
-            .filter(|e| matches!(e, SessionEvent::ToolUse { tool_use_id, .. } if tool_use_id == "toolu_sub_tool"))
-            .collect();
-        assert!(
-            sub_tool_uses.is_empty(),
-            "Sub-agent tool use 'toolu_sub_tool' should not be emitted as SessionEvent::ToolUse"
-        );
+        match &tool_uses[0] {
+            SessionEvent::ToolUse { tool_use_id, parent_tool_use_id, .. } => {
+                assert_eq!(tool_use_id, "toolu_sub_tool");
+                assert_eq!(
+                    parent_tool_use_id.as_deref(),
+                    Some("toolu_agent_123"),
+                    "Sub-agent ToolUse should have parent_tool_use_id"
+                );
+            }
+            _ => unreachable!(),
+        }
     }
 }

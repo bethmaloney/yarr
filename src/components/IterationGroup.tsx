@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import type { IterationGroup } from "../iteration-groups";
-import { eventEmoji, eventLabel } from "../event-format";
+import type { SessionEvent } from "../types";
+import { eventEmoji, eventLabel, toolSummary } from "../event-format";
 import {
   formatTokenCount,
   contextBarColor,
@@ -137,6 +138,183 @@ function ToolOutputSection({
   );
 }
 
+interface SubAgentEventListProps {
+  events: SessionEvent[];
+  repoPath?: string;
+  formatTime: (ts?: number) => string;
+}
+
+function SubAgentEventList({
+  events,
+  repoPath,
+  formatTime,
+}: SubAgentEventListProps) {
+  const [expandedSet, setExpandedSet] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [expandedOutputs, setExpandedOutputs] = useState<Set<number>>(
+    () => new Set(),
+  );
+
+  const toggle = (i: number) => {
+    setExpandedSet((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  return (
+    <div>
+      <ul className="list-none p-0 m-0 border-l-2 border-border ml-1">
+        {events.map((childEv, ci) => {
+          const isExpanded = expandedSet.has(ci);
+          const isToolUse = childEv.kind === "tool_use";
+          const hasDetail =
+            isToolUse ||
+            childEv.kind === "assistant_text" ||
+            childEv.kind === "tool_result";
+          const colorClass = eventKindColor[childEv.kind] ?? "";
+
+          return (
+            <li key={ci} className={colorClass}>
+              <div
+                role={hasDetail ? "button" : undefined}
+                tabIndex={hasDetail ? 0 : undefined}
+                className={`flex items-baseline gap-1.5 py-0.5 pl-3 pr-1 ${hasDetail ? "cursor-pointer hover:bg-background/40 transition-colors duration-150" : ""}`}
+                onClick={
+                  hasDetail
+                    ? handleSelectableClick(() => toggle(ci))
+                    : undefined
+                }
+                onKeyDown={
+                  hasDetail ? handleKeyDown(() => toggle(ci)) : undefined
+                }
+              >
+                {hasDetail && (
+                  <ChevronRight
+                    className={`shrink-0 size-3 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`}
+                  />
+                )}
+                <span className="shrink-0">
+                  {eventEmoji(childEv.kind)}
+                </span>
+                <span
+                  className={`flex-1 min-w-0 ${isExpanded ? "whitespace-pre-wrap break-words" : "overflow-hidden text-ellipsis whitespace-nowrap"}`}
+                >
+                  {isToolUse
+                    ? toolSummary(childEv, repoPath)
+                    : eventLabel(childEv, repoPath)}
+                </span>
+                {childEv._ts && (
+                  <span className="shrink-0 text-muted-foreground/60">
+                    {formatTime(childEv._ts)}
+                  </span>
+                )}
+              </div>
+
+              {/* Expanded: tool input */}
+              {isExpanded && isToolUse && childEv.tool_input && (
+                <pre className="ml-8 mr-1 mb-1 p-1.5 bg-background/50 border border-border rounded font-mono text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">
+                  {JSON.stringify(childEv.tool_input, null, 2)}
+                </pre>
+              )}
+
+              {/* Expanded: tool output */}
+              {isExpanded &&
+                isToolUse &&
+                childEv.tool_output && (
+                  <SubAgentToolOutput
+                    toolOutput={childEv.tool_output}
+                    toolName={childEv.tool_name ?? ""}
+                    index={ci}
+                    expandedOutputs={expandedOutputs}
+                    setExpandedOutputs={setExpandedOutputs}
+                  />
+                )}
+
+              {/* Expanded: assistant text */}
+              {isExpanded && childEv.kind === "assistant_text" && (
+                <div className="ml-8 mr-1 mb-1 p-1.5 bg-background/50 border border-border rounded text-[11px] text-muted-foreground whitespace-pre-wrap break-words">
+                  <Markdown>{childEv.text ?? ""}</Markdown>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function SubAgentToolOutput({
+  toolOutput,
+  toolName,
+  index,
+  expandedOutputs,
+  setExpandedOutputs,
+}: {
+  toolOutput: string;
+  toolName: string;
+  index: number;
+  expandedOutputs: Set<number>;
+  setExpandedOutputs: React.Dispatch<React.SetStateAction<Set<number>>>;
+}) {
+  const lines = toolOutput.split("\n");
+  const isExpanded = expandedOutputs.has(index);
+  const needsTruncation = lines.length > 12;
+  const displayedLines =
+    needsTruncation && !isExpanded ? lines.slice(0, 12) : lines;
+  const remaining = lines.length - 12;
+
+  return (
+    <div className="ml-8 mr-1 mb-1 p-1.5 bg-background/50 border border-border rounded text-[11px] text-muted-foreground">
+      <div className="text-primary/80 mb-0.5 text-[10px] uppercase tracking-wider font-semibold">
+        Output
+      </div>
+      {toolName === "Agent" ? (
+        <Markdown>
+          {needsTruncation && !isExpanded
+            ? displayedLines.join("\n")
+            : toolOutput}
+        </Markdown>
+      ) : (
+        <pre className="font-mono whitespace-pre-wrap break-words overflow-x-auto">
+          {displayedLines.map((line, li) => (
+            <span key={li}>
+              {parseAnsi(line).map((seg, j) =>
+                seg.classes ? (
+                  <span key={j} className={seg.classes}>
+                    {seg.text}
+                  </span>
+                ) : (
+                  seg.text
+                ),
+              )}
+              {li < displayedLines.length - 1 ? "\n" : ""}
+            </span>
+          ))}
+        </pre>
+      )}
+      {needsTruncation && !isExpanded && (
+        <button
+          className="mt-0.5 text-primary hover:underline cursor-pointer bg-transparent border-none text-[11px] p-0"
+          onClick={() =>
+            setExpandedOutputs((prev) => {
+              const next = new Set(prev);
+              next.add(index);
+              return next;
+            })
+          }
+        >
+          Show more ({remaining} more lines)
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function IterationGroupComponent({
   group,
   expanded,
@@ -150,6 +328,9 @@ export function IterationGroupComponent({
   const [expandedOutputs, setExpandedOutputs] = useState<Set<number>>(
     () => new Set(),
   );
+  const [activeAgentTab, setActiveAgentTab] = useState<
+    Record<number, string>
+  >({});
 
   const percentage =
     group.contextWindow > 0
@@ -241,7 +422,8 @@ export function IterationGroupComponent({
             .filter(
               ({ ev }) =>
                 ev.kind !== "context_updated" &&
-                ev.kind !== "sub_agent_context_updated",
+                ev.kind !== "sub_agent_context_updated" &&
+                !ev.parent_tool_use_id,
             )
             .map(({ ev, origIndex }) => {
               const globalIndex = globalStartIndex + origIndex;
@@ -279,53 +461,129 @@ export function IterationGroupComponent({
                     (ev.kind === "tool_use" ||
                       ev.kind === "check_fix_tool_use") &&
                     ev.tool_input &&
-                    ev.tool_name === "Agent" && (
-                      <div className="agent-detail mx-3 mb-2 ml-9 p-2 bg-card-inset border border-border rounded text-xs text-muted-foreground">
-                        {Object.entries(ev.tool_input)
-                          .filter(([key]) => key !== "prompt")
-                          .map(([key, value]) => (
-                            <div key={key} className="flex gap-2 py-0.5">
-                              <span className="font-semibold text-primary">
-                                {key}:
-                              </span>
-                              <span>
-                                {typeof value === "object"
-                                  ? JSON.stringify(value)
-                                  : String(value)}
-                              </span>
-                            </div>
-                          ))}
-                        {(() => {
-                          const peakCtx = group.events
-                            .filter(
-                              (e) =>
-                                e.kind === "sub_agent_context_updated" &&
-                                e.parent_tool_use_id === ev.tool_use_id,
-                            )
-                            .reduce(
-                              (max, e) => Math.max(max, e.context_tokens ?? 0),
-                              0,
-                            );
-                          if (peakCtx === 0) return null;
-                          return (
-                            <div className="flex gap-2 py-0.5">
-                              <span className="font-semibold text-primary">
-                                context:
-                              </span>
-                              <span>
-                                {formatTokenCount(peakCtx)} /{" "}
-                                {formatTokenCount(group.contextWindow)}
-                              </span>
-                            </div>
-                          );
-                        })()}
-                        {typeof ev.tool_input.prompt === "string" && (
-                          <div className="mt-2 border-t border-border pt-2">
-                            <Markdown>{ev.tool_input.prompt}</Markdown>
+                    ev.tool_name === "Agent" &&
+                    (() => {
+                      const hasPrompt =
+                        typeof ev.tool_input?.prompt === "string";
+                      const hasOutput = !!ev.tool_output;
+                      const childEvents = ev.tool_use_id
+                        ? group.events.filter(
+                            (e) =>
+                              e.parent_tool_use_id === ev.tool_use_id &&
+                              e.kind !== "sub_agent_context_updated",
+                          )
+                        : [];
+                      const hasActivity = childEvents.length > 0;
+
+                      const tabs: { id: string; label: string }[] = [];
+                      if (hasActivity)
+                        tabs.push({ id: "activity", label: "Activity" });
+                      if (hasPrompt)
+                        tabs.push({ id: "prompt", label: "Prompt" });
+                      if (hasOutput)
+                        tabs.push({ id: "output", label: "Output" });
+
+                      const currentTab =
+                        activeAgentTab[globalIndex] ??
+                        (hasActivity ? "activity" : "prompt");
+
+                      return (
+                        <div className="agent-detail mx-3 mb-2 ml-9 bg-card-inset border border-border rounded text-xs text-muted-foreground">
+                          {/* Metadata */}
+                          <div className="p-2 pb-0">
+                            {Object.entries(ev.tool_input)
+                              .filter(([key]) => key !== "prompt")
+                              .map(([key, value]) => (
+                                <div key={key} className="flex gap-2 py-0.5">
+                                  <span className="font-semibold text-primary">
+                                    {key}:
+                                  </span>
+                                  <span>
+                                    {typeof value === "object"
+                                      ? JSON.stringify(value)
+                                      : String(value)}
+                                  </span>
+                                </div>
+                              ))}
+                            {(() => {
+                              const peakCtx = group.events
+                                .filter(
+                                  (e) =>
+                                    e.kind === "sub_agent_context_updated" &&
+                                    e.parent_tool_use_id === ev.tool_use_id,
+                                )
+                                .reduce(
+                                  (max, e) =>
+                                    Math.max(max, e.context_tokens ?? 0),
+                                  0,
+                                );
+                              if (peakCtx === 0) return null;
+                              return (
+                                <div className="flex gap-2 py-0.5">
+                                  <span className="font-semibold text-primary">
+                                    context:
+                                  </span>
+                                  <span>
+                                    {formatTokenCount(peakCtx)} /{" "}
+                                    {formatTokenCount(group.contextWindow)}
+                                  </span>
+                                </div>
+                              );
+                            })()}
                           </div>
-                        )}
-                      </div>
-                    )}
+
+                          {/* Tab bar */}
+                          {tabs.length > 0 && (
+                            <>
+                              <div
+                                className="flex gap-0 border-b border-border mt-2"
+                                role="tablist"
+                              >
+                                {tabs.map((tab) => (
+                                  <button
+                                    key={tab.id}
+                                    role="tab"
+                                    aria-selected={currentTab === tab.id}
+                                    className={`px-3 py-1 text-[11px] font-mono uppercase tracking-widest bg-transparent border-none cursor-pointer transition-colors duration-150 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none ${
+                                      currentTab === tab.id
+                                        ? "text-primary border-b-2 border-primary -mb-px"
+                                        : "text-muted-foreground hover:text-foreground"
+                                    }`}
+                                    onClick={() =>
+                                      setActiveAgentTab((prev) => ({
+                                        ...prev,
+                                        [globalIndex]: tab.id,
+                                      }))
+                                    }
+                                  >
+                                    {tab.label}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Tab content */}
+                              <div className="p-2 overflow-hidden break-words">
+                                {currentTab === "activity" && hasActivity && (
+                                  <SubAgentEventList
+                                    events={childEvents}
+                                    repoPath={repoPath}
+                                    formatTime={formatTime}
+                                  />
+                                )}
+                                {currentTab === "prompt" && hasPrompt && (
+                                  <Markdown>
+                                    {ev.tool_input.prompt as string}
+                                  </Markdown>
+                                )}
+                                {currentTab === "output" && hasOutput && (
+                                  <Markdown>{ev.tool_output!}</Markdown>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                   {isExpanded &&
                     (ev.kind === "tool_use" ||
@@ -340,7 +598,8 @@ export function IterationGroupComponent({
                   {isExpanded &&
                     (ev.kind === "tool_use" ||
                       ev.kind === "check_fix_tool_use") &&
-                    ev.tool_output && (
+                    ev.tool_output &&
+                    ev.tool_name !== "Agent" && (
                       <ToolOutputSection
                         toolOutput={ev.tool_output}
                         toolName={ev.tool_name ?? ""}

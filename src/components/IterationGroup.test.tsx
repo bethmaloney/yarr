@@ -793,6 +793,10 @@ describe("IterationGroupComponent", () => {
       globalStartIndex: 0,
     });
 
+    // Click the Prompt tab to reveal content
+    const promptTab = screen.getByRole("tab", { name: /Prompt/i });
+    fireEvent.click(promptTab);
+
     // The prompt text should appear outside of the raw JSON <pre> block,
     // rendered as content (e.g. via react-markdown or similar).
     function getTextOutsidePre(): string {
@@ -1003,8 +1007,12 @@ describe("IterationGroupComponent", () => {
         globalStartIndex: 0,
       });
 
-      // Should have an "Output" label
-      expect(screen.getByText("Output")).toBeInTheDocument();
+      // Click the Output tab to reveal content
+      const outputTab = screen.getByRole("tab", { name: /Output/i });
+      fireEvent.click(outputTab);
+
+      // Should have an "Output" label inside the expanded section
+      expect(screen.getAllByText("Output").length).toBeGreaterThanOrEqual(1);
 
       // The output text should appear in the document
       expect(
@@ -1345,6 +1353,10 @@ describe("IterationGroupComponent", () => {
         expandedEvents,
         globalStartIndex: 0,
       });
+
+      // Click the Output tab to reveal content
+      const outputTab = screen.getByRole("tab", { name: /Output/i });
+      fireEvent.click(outputTab);
 
       // The text content should appear (Agent renders via Markdown)
       expect(screen.getByText(/red text/)).toBeInTheDocument();

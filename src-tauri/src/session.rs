@@ -139,6 +139,8 @@ pub enum SessionEvent {
         tool_input: Option<serde_json::Value>,
         #[serde(default)]
         tool_use_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_tool_use_id: Option<String>,
     },
     /// Result/output from a tool invocation (Bash/Agent only)
     ToolResult {
@@ -146,9 +148,16 @@ pub enum SessionEvent {
         tool_use_id: String,
         tool_name: String,
         tool_output: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_tool_use_id: Option<String>,
     },
     /// Claude produced text output
-    AssistantText { iteration: u32, text: String },
+    AssistantText {
+        iteration: u32,
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_tool_use_id: Option<String>,
+    },
     /// An iteration completed with its result
     IterationComplete { iteration: u32, result: ResultEvent },
     /// Plan content updated after iteration (for progress tracking)
@@ -385,48 +394,44 @@ pub(crate) async fn run_checks(
                                 let Some(event) = event else { break };
                                 match &event {
                                     StreamEvent::Assistant(assistant) => {
-                                        if assistant.parent_tool_use_id.is_none() {
-                                            for block in &assistant.message.content {
-                                                match block {
-                                                    ContentBlock::ToolUse { id, name, input } => {
-                                                        tracing::debug!(iteration, check_name = %check_name, attempt, name, id, "check fix tool use");
-                                                        fix_tool_ids.insert(id.clone(), name.clone());
-                                                        emit(&SessionEvent::CheckFixToolUse {
-                                                            iteration,
-                                                            check_name: check_name.clone(),
-                                                            attempt,
-                                                            tool_name: name.clone(),
-                                                            tool_input: Some(input.clone()),
-                                                            tool_use_id: id.clone(),
-                                                        });
-                                                    }
-                                                    ContentBlock::Text { text } => {
-                                                        emit(&SessionEvent::CheckFixAssistantText {
-                                                            iteration,
-                                                            check_name: check_name.clone(),
-                                                            attempt,
-                                                            text: text.clone(),
-                                                        });
-                                                    }
-                                                    ContentBlock::Unknown => {}
+                                        for block in &assistant.message.content {
+                                            match block {
+                                                ContentBlock::ToolUse { id, name, input } => {
+                                                    tracing::debug!(iteration, check_name = %check_name, attempt, name, id, "check fix tool use");
+                                                    fix_tool_ids.insert(id.clone(), name.clone());
+                                                    emit(&SessionEvent::CheckFixToolUse {
+                                                        iteration,
+                                                        check_name: check_name.clone(),
+                                                        attempt,
+                                                        tool_name: name.clone(),
+                                                        tool_input: Some(input.clone()),
+                                                        tool_use_id: id.clone(),
+                                                    });
                                                 }
+                                                ContentBlock::Text { text } => {
+                                                    emit(&SessionEvent::CheckFixAssistantText {
+                                                        iteration,
+                                                        check_name: check_name.clone(),
+                                                        attempt,
+                                                        text: text.clone(),
+                                                    });
+                                                }
+                                                ContentBlock::Unknown => {}
                                             }
                                         }
                                     }
                                     StreamEvent::User(user_event) => {
-                                        if user_event.parent_tool_use_id.is_none() {
-                                            if let Some(ref message) = user_event.message {
-                                                let results = extract_tool_results(message, &fix_tool_ids);
-                                                for (tool_use_id, tool_name, tool_output) in results {
-                                                    emit(&SessionEvent::CheckFixToolResult {
-                                                        iteration,
-                                                        check_name: check_name.clone(),
-                                                        attempt,
-                                                        tool_use_id,
-                                                        tool_name,
-                                                        tool_output,
-                                                    });
-                                                }
+                                        if let Some(ref message) = user_event.message {
+                                            let results = extract_tool_results(message, &fix_tool_ids);
+                                            for (tool_use_id, tool_name, tool_output) in results {
+                                                emit(&SessionEvent::CheckFixToolResult {
+                                                    iteration,
+                                                    check_name: check_name.clone(),
+                                                    attempt,
+                                                    tool_use_id,
+                                                    tool_name,
+                                                    tool_output,
+                                                });
                                             }
                                         }
                                     }
@@ -1109,35 +1114,39 @@ impl SessionRunner {
                             }
                         }
                         StreamEvent::Assistant(assistant) => {
-                            if let Some(parent_id) = &assistant.parent_tool_use_id {
-                                let parent_id = parent_id.clone();
+                            let parent_id = assistant.parent_tool_use_id.clone();
+                            if let Some(ref pid) = parent_id {
+                                // Sub-agent context tracking
                                 if let Some(ref usage) = assistant.message.usage {
                                     let context_tokens =
                                         usage.input_tokens.unwrap_or(0)
                                         + usage.cache_read_input_tokens.unwrap_or(0)
                                         + usage.cache_creation_input_tokens.unwrap_or(0);
-                                    let peak = sub_agent_peaks.entry(parent_id.clone()).or_insert(0);
+                                    let peak = sub_agent_peaks.entry(pid.clone()).or_insert(0);
                                     *peak = (*peak).max(context_tokens);
                                     self.emit(&SessionEvent::SubAgentContextUpdated {
                                         iteration,
-                                        parent_tool_use_id: parent_id,
+                                        parent_tool_use_id: pid.clone(),
                                         context_tokens,
                                     });
                                 }
-                            } else {
-                                for block in &assistant.message.content {
-                                    match block {
-                                        ContentBlock::ToolUse { id, name, input } => {
-                                            tracing::debug!(iteration, name, id, "tool use");
-                                            self.tool_use_ids.lock().unwrap().insert(id.clone(), name.clone());
-                                            self.emit(&SessionEvent::ToolUse {
-                                                iteration,
-                                                tool_name: name.clone(),
-                                                tool_input: Some(input.clone()),
-                                                tool_use_id: id.clone(),
-                                            });
-                                        }
-                                        ContentBlock::Text { text } => {
+                            }
+                            // Emit tool/text events for both main and sub-agents
+                            for block in &assistant.message.content {
+                                match block {
+                                    ContentBlock::ToolUse { id, name, input } => {
+                                        tracing::debug!(iteration, name, id, parent = ?parent_id, "tool use");
+                                        self.tool_use_ids.lock().unwrap().insert(id.clone(), name.clone());
+                                        self.emit(&SessionEvent::ToolUse {
+                                            iteration,
+                                            tool_name: name.clone(),
+                                            tool_input: Some(input.clone()),
+                                            tool_use_id: id.clone(),
+                                            parent_tool_use_id: parent_id.clone(),
+                                        });
+                                    }
+                                    ContentBlock::Text { text } => {
+                                        if parent_id.is_none() {
                                             let preview = if text.chars().count() > 100 {
                                                 let truncated: String = text.chars().take(100).collect();
                                                 format!("{truncated}...")
@@ -1146,14 +1155,17 @@ impl SessionRunner {
                                             };
                                             tracing::debug!(iteration, preview, "text output");
                                             last_assistant_text.clone_from(text);
-                                            self.emit(&SessionEvent::AssistantText {
-                                                iteration,
-                                                text: text.clone(),
-                                            });
                                         }
-                                        ContentBlock::Unknown => {}
+                                        self.emit(&SessionEvent::AssistantText {
+                                            iteration,
+                                            text: text.clone(),
+                                            parent_tool_use_id: parent_id.clone(),
+                                        });
                                     }
+                                    ContentBlock::Unknown => {}
                                 }
+                            }
+                            if parent_id.is_none() {
                                 if let Some(ref usage) = assistant.message.usage {
                                     last_context_tokens =
                                         usage.input_tokens.unwrap_or(0)
@@ -1190,23 +1202,22 @@ impl SessionRunner {
                             result_event = Some(r.clone());
                         }
                         StreamEvent::User(user_event) => {
-                            if user_event.parent_tool_use_id.is_none() {
-                                if let Some(ref message) = user_event.message {
-                                    let tool_ids = self.tool_use_ids.lock().unwrap();
-                                    let results = extract_tool_results(message, &tool_ids);
-                                    drop(tool_ids); // Release lock before emitting
-                                    for (tool_use_id, tool_name, tool_output) in results {
-                                        tracing::debug!(iteration, tool_use_id = %tool_use_id, tool_name = %tool_name, output_len = tool_output.len(), "tool result");
-                                        self.emit(&SessionEvent::ToolResult {
-                                            iteration,
-                                            tool_use_id,
-                                            tool_name,
-                                            tool_output,
-                                        });
-                                    }
+                            let parent_id = user_event.parent_tool_use_id.clone();
+                            if let Some(ref message) = user_event.message {
+                                let tool_ids = self.tool_use_ids.lock().unwrap();
+                                let results = extract_tool_results(message, &tool_ids);
+                                drop(tool_ids); // Release lock before emitting
+                                for (tool_use_id, tool_name, tool_output) in results {
+                                    tracing::debug!(iteration, tool_use_id = %tool_use_id, tool_name = %tool_name, parent = ?parent_id, output_len = tool_output.len(), "tool result");
+                                    self.emit(&SessionEvent::ToolResult {
+                                        iteration,
+                                        tool_use_id,
+                                        tool_name,
+                                        tool_output,
+                                        parent_tool_use_id: parent_id.clone(),
+                                    });
                                 }
                             }
-                            // Sub-agent user events are silently ignored
                         }
                     }
                 }
@@ -4597,74 +4608,99 @@ mod tests {
             }
         }
 
-        // --- Assert ToolUse events ---
+        // --- Assert ToolUse events (both main and sub-agent) ---
         let tool_uses: Vec<&SessionEvent> = collected
             .iter()
             .filter(|e| matches!(e, SessionEvent::ToolUse { .. }))
             .collect();
-        // Only 1 ToolUse from the main-agent (event 2), NOT the sub-agent (event 3)
         assert_eq!(
             tool_uses.len(),
-            1,
-            "expected 1 ToolUse event (main-agent only), got {}: {:?}",
+            2,
+            "expected 2 ToolUse events (main + sub-agent), got {}: {:?}",
             tool_uses.len(),
             tool_uses
         );
+        // Main-agent ToolUse has no parent
         match tool_uses[0] {
             SessionEvent::ToolUse {
                 tool_name,
                 tool_use_id,
+                parent_tool_use_id,
                 ..
             } => {
                 assert_eq!(tool_name, "Bash", "main-agent ToolUse should be 'Bash'");
+                assert_eq!(tool_use_id, "toolu_main_1");
+                assert_eq!(*parent_tool_use_id, None, "main-agent ToolUse should have no parent");
+            }
+            _ => unreachable!(),
+        }
+        // Sub-agent ToolUse has parent
+        match tool_uses[1] {
+            SessionEvent::ToolUse {
+                tool_name,
+                tool_use_id,
+                parent_tool_use_id,
+                ..
+            } => {
+                assert_eq!(tool_name, "Read", "sub-agent ToolUse should be 'Read'");
+                assert_eq!(tool_use_id, "toolu_sub_1");
                 assert_eq!(
-                    tool_use_id, "toolu_main_1",
-                    "main-agent ToolUse should have id 'toolu_main_1'"
+                    parent_tool_use_id.as_deref(),
+                    Some("toolu_agent_123"),
+                    "sub-agent ToolUse should have parent_tool_use_id"
                 );
             }
             _ => unreachable!(),
         }
 
-        // --- Assert AssistantText events ---
+        // --- Assert AssistantText events (both main and sub-agent) ---
         let assistant_texts: Vec<&SessionEvent> = collected
             .iter()
             .filter(|e| matches!(e, SessionEvent::AssistantText { .. }))
             .collect();
-        // Only 1 AssistantText from the main-agent (event 5), NOT the sub-agent (event 4)
         assert_eq!(
             assistant_texts.len(),
-            1,
-            "expected 1 AssistantText event (main-agent only), got {}: {:?}",
+            2,
+            "expected 2 AssistantText events (main + sub-agent), got {}: {:?}",
             assistant_texts.len(),
             assistant_texts
         );
-        match assistant_texts[0] {
-            SessionEvent::AssistantText { text, .. } => {
+        // Sub-agent text comes first (event 4 before event 5)
+        match &assistant_texts[0] {
+            SessionEvent::AssistantText { text, parent_tool_use_id, .. } => {
+                assert_eq!(text, "sub-agent thinking...");
                 assert_eq!(
-                    text, "main agent response",
-                    "AssistantText should be from main-agent"
+                    parent_tool_use_id.as_deref(),
+                    Some("toolu_agent_123"),
+                    "sub-agent AssistantText should have parent_tool_use_id"
                 );
             }
             _ => unreachable!(),
         }
+        match &assistant_texts[1] {
+            SessionEvent::AssistantText { text, parent_tool_use_id, .. } => {
+                assert_eq!(text, "main agent response");
+                assert_eq!(*parent_tool_use_id, None, "main-agent AssistantText should have no parent");
+            }
+            _ => unreachable!(),
+        }
 
-        // --- Assert no ToolResult from sub-agent user events ---
+        // --- Assert ToolResult includes sub-agent results ---
+        // The sub-agent user event (event 6) has tool_use_id "toolu_sub_1" for a "Read" tool.
+        // extract_tool_results only emits Bash/Agent results, so Read tool results are still filtered.
         let tool_results: Vec<&SessionEvent> = collected
             .iter()
             .filter(|e| matches!(e, SessionEvent::ToolResult { .. }))
             .collect();
-        // The sub-agent user event (event 6) should NOT produce a ToolResult.
-        // The tool_use_id "toolu_sub_1" was registered by the sub-agent's ToolUse,
-        // but since sub-agent filtering should prevent that registration too,
-        // there should be no ToolResult for it.
         for tr in &tool_results {
             match tr {
                 SessionEvent::ToolResult {
                     tool_use_id, ..
                 } => {
+                    // Read tool results are still filtered by extract_tool_results
                     assert_ne!(
                         tool_use_id, "toolu_sub_1",
-                        "should NOT emit ToolResult for sub-agent tool_use_id 'toolu_sub_1'"
+                        "Read tool results should still be filtered by extract_tool_results"
                     );
                 }
                 _ => unreachable!(),

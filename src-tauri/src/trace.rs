@@ -1029,10 +1029,12 @@ mod tests {
                 tool_name: "Bash".to_string(),
                 tool_input: Some(serde_json::json!({"command": "npm test"})),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
             SessionEvent::AssistantText {
                 iteration: 1,
                 text: "Working on it...".to_string(),
+                parent_tool_use_id: None,
             },
             SessionEvent::SessionComplete {
                 outcome: SessionOutcome::Completed,
@@ -1543,10 +1545,12 @@ mod tests {
                 tool_name: "Bash".to_string(),
                 tool_input: Some(serde_json::json!({"command": "cargo test"})),
                 tool_use_id: String::new(),
+                parent_tool_use_id: None,
             },
             SessionEvent::AssistantText {
                 iteration: 1,
                 text: "Running tests now...".to_string(),
+                parent_tool_use_id: None,
             },
             SessionEvent::IterationComplete {
                 iteration: 1,
@@ -1643,6 +1647,7 @@ mod tests {
             SessionEvent::AssistantText {
                 iteration: 1,
                 text: "Hello world".to_string(),
+                parent_tool_use_id: None,
             },
             SessionEvent::SessionComplete {
                 outcome: SessionOutcome::Completed,
